@@ -13,6 +13,7 @@ interface Company {
   company_type?: string;
   notes?: string;
   attendee_count: number;
+  conference_count: number;
 }
 
 interface AddCompanyForm {
