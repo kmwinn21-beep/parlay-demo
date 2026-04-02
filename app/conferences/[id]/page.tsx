@@ -50,6 +50,8 @@ export default function ConferenceDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'attendees' | 'analytics'>('attendees');
   const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const fetchConference = useCallback(async () => {
     try {
@@ -112,6 +114,53 @@ export default function ConferenceDetailPage() {
     } catch {
       toast.error('Failed to delete conference');
       setIsDeleting(false);
+    }
+  };
+
+  const toggleAttendeeSelect = (aid: number) => {
+    setSelectedAttendeeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(aid)) next.delete(aid); else next.add(aid);
+      return next;
+    });
+  };
+
+  const handleRemoveOne = async (aid: number, name: string) => {
+    if (!confirm(`Remove ${name} from this conference?`)) return;
+    setIsRemoving(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_ids: [aid] }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${name} removed from conference.`);
+      fetchConference();
+    } catch {
+      toast.error('Failed to remove attendee.');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const handleRemoveSelected = async () => {
+    if (!confirm(`Remove ${selectedAttendeeIds.size} attendee(s) from this conference?`)) return;
+    setIsRemoving(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_ids: Array.from(selectedAttendeeIds) }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${selectedAttendeeIds.size} attendee(s) removed.`);
+      setSelectedAttendeeIds(new Set());
+      fetchConference();
+    } catch {
+      toast.error('Failed to remove attendees.');
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -281,18 +330,32 @@ export default function ConferenceDetailPage() {
       {/* Attendees Tab */}
       {activeTab === 'attendees' && (
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Attendee List</h2>
-            <div className="relative">
-              <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                value={attendeeSearch}
-                onChange={(e) => setAttendeeSearch(e.target.value)}
-                placeholder="Search attendees..."
-                className="input-field pl-9 w-56"
-              />
+            <div className="flex items-center gap-3 flex-wrap">
+              {selectedAttendeeIds.size >= 1 && (
+                <button
+                  onClick={handleRemoveSelected}
+                  disabled={isRemoving}
+                  className="btn-danger flex items-center gap-2 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Remove ({selectedAttendeeIds.size})
+                </button>
+              )}
+              <div className="relative">
+                <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  value={attendeeSearch}
+                  onChange={(e) => setAttendeeSearch(e.target.value)}
+                  placeholder="Search attendees..."
+                  className="input-field pl-9 w-56"
+                />
+              </div>
             </div>
           </div>
 
@@ -307,6 +370,17 @@ export default function ConferenceDetailPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectedAttendeeIds.size === filteredAttendees.length && filteredAttendees.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedAttendeeIds(new Set(filteredAttendees.map((a) => a.id)));
+                          else setSelectedAttendeeIds(new Set());
+                        }}
+                        className="accent-procare-bright-blue"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
@@ -317,7 +391,15 @@ export default function ConferenceDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredAttendees.map((attendee) => (
-                    <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedAttendeeIds.has(attendee.id)}
+                          onChange={() => toggleAttendeeSelect(attendee.id)}
+                          className="accent-procare-bright-blue"
+                        />
+                      </td>
                       <td className="px-4 py-3 font-medium text-gray-800">
                         {attendee.first_name} {attendee.last_name}
                       </td>
@@ -361,12 +443,21 @@ export default function ConferenceDetailPage() {
                         })()}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/attendees/${attendee.id}`}
-                          className="text-procare-bright-blue hover:underline text-xs font-medium"
-                        >
-                          View
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/attendees/${attendee.id}`}
+                            className="text-procare-bright-blue hover:underline text-xs font-medium"
+                          >
+                            View
+                          </Link>
+                          <button
+                            onClick={() => handleRemoveOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)}
+                            disabled={isRemoving}
+                            className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
