@@ -2,18 +2,31 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'conference_hub.db');
+function getDataDir(): string {
+  // In serverless environments (Vercel/Lambda), process.cwd() is read-only (/var/task)
+  // Fall back to /tmp which is always writable
+  const candidates = [
+    path.join(process.cwd(), 'data'),
+    '/tmp/conference_hub_data',
+  ];
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    } catch {
+      // try next
+    }
+  }
+  return '/tmp/conference_hub_data';
+}
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
 
-  // Ensure data directory exists
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+  const DATA_DIR = getDataDir();
+  const DB_PATH = path.join(DATA_DIR, 'conference_hub.db');
 
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
