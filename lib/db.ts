@@ -44,6 +44,18 @@ export async function initDb(): Promise<void> {
       PRIMARY KEY (conference_id, attendee_id)
     );
   `);
+
+  // Run migrations — ignore errors if columns already exist
+  const migrations = [
+    `ALTER TABLE attendees ADD COLUMN action TEXT`,
+    `ALTER TABLE attendees ADD COLUMN next_steps TEXT`,
+    `ALTER TABLE attendees ADD COLUMN next_steps_notes TEXT`,
+    `ALTER TABLE attendees ADD COLUMN status TEXT DEFAULT 'Unknown'`,
+    `ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'Unknown'`,
+  ];
+  for (const sql of migrations) {
+    try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
+  }
 }
 
 // Run initDb once at module load so tables exist before any query
@@ -69,6 +81,7 @@ export interface Company {
   profit_type?: string;
   company_type?: string;
   notes?: string;
+  status?: string;
   created_at: string;
   attendee_count?: number;
 }
@@ -83,6 +96,10 @@ export interface Attendee {
   company_type?: string;
   email?: string;
   notes?: string;
+  action?: string;
+  next_steps?: string;
+  next_steps_notes?: string;
+  status?: string;
   created_at: string;
   conference_count?: number;
   conferences?: Array<{ id: number; name: string }>;

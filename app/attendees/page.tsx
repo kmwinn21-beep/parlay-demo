@@ -15,6 +15,10 @@ interface Attendee {
   company_type?: string;
   email?: string;
   notes?: string;
+  status?: string;
+  action?: string;
+  next_steps?: string;
+  next_steps_notes?: string;
   conference_count: number;
   conference_names?: string;
 }

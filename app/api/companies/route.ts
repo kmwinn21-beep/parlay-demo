@@ -5,7 +5,8 @@ export async function GET() {
   try {
     await dbReady;
     const result = await db.execute({
-      sql: `SELECT co.*,
+      sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes,
+              COALESCE(co.status, 'Unknown') as status, co.created_at,
               COUNT(DISTINCT a.id) as attendee_count,
               COUNT(DISTINCT ca.conference_id) as conference_count
             FROM companies co

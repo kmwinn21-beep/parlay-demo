@@ -46,7 +46,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { first_name, last_name, title, company_id, email, notes } = body;
+    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status } = body;
 
     if (!first_name || !last_name) {
       return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
@@ -61,13 +61,99 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ? WHERE id = ? RETURNING *',
-      args: [first_name, last_name, title || null, company_id || null, email || null, notes || null, params.id],
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ? WHERE id = ? RETURNING *',
+      args: [
+        first_name,
+        last_name,
+        title || null,
+        company_id || null,
+        email || null,
+        notes || null,
+        action || null,
+        next_steps || null,
+        next_steps_notes || null,
+        status || 'Unknown',
+        params.id,
+      ],
     });
+
+    if (status && company_id) {
+      await db.execute({
+        sql: 'UPDATE companies SET status = ? WHERE id = ?',
+        args: [status, company_id],
+      });
+    }
 
     return NextResponse.json(updatedResult.rows[0]);
   } catch (error) {
     console.error('PUT /api/attendees/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to update attendee' }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await dbReady;
+    const body = await request.json();
+    const { action, next_steps, next_steps_notes, status, notes, company_id } = body;
+
+    const existingResult = await db.execute({
+      sql: 'SELECT id, company_id FROM attendees WHERE id = ?',
+      args: [params.id],
+    });
+    if (existingResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Attendee not found' }, { status: 404 });
+    }
+
+    const setClauses: string[] = [];
+    const args: (string | number | null)[] = [];
+
+    if ('action' in body) {
+      setClauses.push('action = ?');
+      args.push(action !== undefined ? action : null);
+    }
+    if ('next_steps' in body) {
+      setClauses.push('next_steps = ?');
+      args.push(next_steps !== undefined ? next_steps : null);
+    }
+    if ('next_steps_notes' in body) {
+      setClauses.push('next_steps_notes = ?');
+      args.push(next_steps_notes !== undefined ? next_steps_notes : null);
+    }
+    if ('status' in body) {
+      setClauses.push('status = ?');
+      args.push(status || 'Unknown');
+    }
+    if ('notes' in body) {
+      setClauses.push('notes = ?');
+      args.push(notes !== undefined ? notes : null);
+    }
+
+    if (setClauses.length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
+    args.push(params.id);
+    const updatedResult = await db.execute({
+      sql: `UPDATE attendees SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`,
+      args,
+    });
+
+    // If status was provided and company_id is available, also update company status
+    const effectiveCompanyId = company_id ?? existingResult.rows[0].company_id;
+    if ('status' in body && status && effectiveCompanyId) {
+      await db.execute({
+        sql: 'UPDATE companies SET status = ? WHERE id = ?',
+        args: [status, effectiveCompanyId],
+      });
+    }
+
+    return NextResponse.json(updatedResult.rows[0]);
+  } catch (error) {
+    console.error('PATCH /api/attendees/[id] error:', error);
     return NextResponse.json({ error: 'Failed to update attendee' }, { status: 500 });
   }
 }

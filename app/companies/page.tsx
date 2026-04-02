@@ -12,6 +12,7 @@ interface Company {
   profit_type?: string;
   company_type?: string;
   notes?: string;
+  status?: string;
   attendee_count: number;
   conference_count: number;
 }
