@@ -1,43 +1,12 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import { createClient } from '@libsql/client';
 
-function getDataDir(): string {
-  // In serverless environments (Vercel/Lambda), process.cwd() is read-only (/var/task)
-  // Fall back to /tmp which is always writable
-  const candidates = [
-    path.join(process.cwd(), 'data'),
-    '/tmp/conference_hub_data',
-  ];
-  for (const dir of candidates) {
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    } catch {
-      // try next
-    }
-  }
-  return '/tmp/conference_hub_data';
-}
+export const db = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN!,
+});
 
-let db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (db) return db;
-
-  const DATA_DIR = getDataDir();
-  const DB_PATH = path.join(DATA_DIR, 'conference_hub.db');
-
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
-  initializeSchema(db);
-  return db;
-}
-
-function initializeSchema(database: Database.Database): void {
-  database.exec(`
+export async function initDb(): Promise<void> {
+  await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS conferences (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -76,6 +45,11 @@ function initializeSchema(database: Database.Database): void {
     );
   `);
 }
+
+// Run initDb once at module load so tables exist before any query
+export const dbReady: Promise<void> = initDb().catch((err) => {
+  console.error('Failed to initialize database schema:', err);
+});
 
 export interface Conference {
   id: number;

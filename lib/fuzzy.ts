@@ -1,14 +1,21 @@
 import Fuse from 'fuse.js';
-import { getDb } from './db';
+import { db, dbReady } from './db';
 
-export function findMatchingAttendee(
+export async function findMatchingAttendee(
   firstName: string,
   lastName: string
-): { id: number; first_name: string; last_name: string } | null {
-  const db = getDb();
-  const attendees = db
-    .prepare('SELECT id, first_name, last_name FROM attendees')
-    .all() as Array<{ id: number; first_name: string; last_name: string }>;
+): Promise<{ id: number; first_name: string; last_name: string } | null> {
+  await dbReady;
+  const result = await db.execute({
+    sql: 'SELECT id, first_name, last_name FROM attendees',
+    args: [],
+  });
+
+  const attendees = result.rows.map((r) => ({
+    id: Number(r.id),
+    first_name: String(r.first_name ?? ''),
+    last_name: String(r.last_name ?? ''),
+  }));
 
   if (attendees.length === 0) return null;
 
@@ -33,13 +40,19 @@ export function findMatchingAttendee(
   return null;
 }
 
-export function findMatchingCompany(
+export async function findMatchingCompany(
   companyName: string
-): { id: number; name: string } | null {
-  const db = getDb();
-  const companies = db
-    .prepare('SELECT id, name FROM companies')
-    .all() as Array<{ id: number; name: string }>;
+): Promise<{ id: number; name: string } | null> {
+  await dbReady;
+  const result = await db.execute({
+    sql: 'SELECT id, name FROM companies',
+    args: [],
+  });
+
+  const companies = result.rows.map((r) => ({
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+  }));
 
   if (companies.length === 0) return null;
 
@@ -58,71 +71,66 @@ export function findMatchingCompany(
   return null;
 }
 
-export function getOrCreateCompany(companyName: string): number {
+export async function getOrCreateCompany(companyName: string): Promise<number> {
   if (!companyName || !companyName.trim()) return 0;
 
-  const db = getDb();
-  const match = findMatchingCompany(companyName.trim());
+  await dbReady;
+  const match = await findMatchingCompany(companyName.trim());
 
   if (match) {
     return match.id;
   }
 
-  const result = db
-    .prepare('INSERT INTO companies (name) VALUES (?) RETURNING id')
-    .get(companyName.trim()) as { id: number };
+  const result = await db.execute({
+    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
+    args: [companyName.trim()],
+  });
 
-  return result.id;
+  return Number(result.rows[0].id);
 }
 
-export function getOrCreateAttendee(
+export async function getOrCreateAttendee(
   firstName: string,
   lastName: string,
   title?: string,
   companyId?: number,
   email?: string
-): number {
-  const db = getDb();
-  const match = findMatchingAttendee(firstName, lastName);
+): Promise<number> {
+  await dbReady;
+  const match = await findMatchingAttendee(firstName, lastName);
 
   if (match) {
     // Update with any new info if provided
-    if (title || companyId || email) {
-      const updates: string[] = [];
-      const params: (string | number)[] = [];
+    const updates: string[] = [];
+    const params: (string | number | null)[] = [];
 
-      if (title) {
-        updates.push('title = COALESCE(title, ?)');
-        params.push(title);
-      }
-      if (companyId) {
-        updates.push('company_id = COALESCE(company_id, ?)');
-        params.push(companyId);
-      }
-      if (email) {
-        updates.push('email = COALESCE(email, ?)');
-        params.push(email);
-      }
+    if (title) {
+      updates.push('title = COALESCE(title, ?)');
+      params.push(title);
+    }
+    if (companyId) {
+      updates.push('company_id = COALESCE(company_id, ?)');
+      params.push(companyId);
+    }
+    if (email) {
+      updates.push('email = COALESCE(email, ?)');
+      params.push(email);
+    }
 
-      if (updates.length > 0) {
-        params.push(match.id);
-        db.prepare(`UPDATE attendees SET ${updates.join(', ')} WHERE id = ?`).run(...params);
-      }
+    if (updates.length > 0) {
+      params.push(match.id);
+      await db.execute({
+        sql: `UPDATE attendees SET ${updates.join(', ')} WHERE id = ?`,
+        args: params,
+      });
     }
     return match.id;
   }
 
-  const result = db
-    .prepare(
-      'INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id'
-    )
-    .get(
-      firstName,
-      lastName,
-      title || null,
-      companyId || null,
-      email || null
-    ) as { id: number };
+  const result = await db.execute({
+    sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id',
+    args: [firstName, lastName, title ?? null, companyId ?? null, email ?? null],
+  });
 
-  return result.id;
+  return Number(result.rows[0].id);
 }

@@ -12,13 +12,12 @@
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
-    "better-sqlite3": "^9.4.3",
+    "@libsql/client": "^0.14.0",
     "xlsx": "^0.18.5",
     "fuse.js": "^7.0.0",
     "recharts": "^2.12.7",
     "react-hook-form": "^7.51.5",
-    "react-hot-toast": "^2.4.1",
-    "@types/better-sqlite3": "^7.6.10"
+    "react-hot-toast": "^2.4.1"
   },
   "devDependencies": {
     "typescript": "^5",

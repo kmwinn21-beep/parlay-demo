@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { db, dbReady } from '@/lib/db';
 import { parseFile } from '@/lib/parsers';
 import { getOrCreateCompany, getOrCreateAttendee } from '@/lib/fuzzy';
 
 export async function GET() {
   try {
-    const db = getDb();
-    const conferences = db
-      .prepare(
-        `SELECT c.*, COUNT(ca.attendee_id) as attendee_count
-         FROM conferences c
-         LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
-         GROUP BY c.id
-         ORDER BY c.start_date DESC`
-      )
-      .all();
+    await dbReady;
+    const result = await db.execute({
+      sql: `SELECT c.*, COUNT(ca.attendee_id) as attendee_count
+            FROM conferences c
+            LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
+            GROUP BY c.id
+            ORDER BY c.start_date DESC`,
+      args: [],
+    });
 
+    const conferences = result.rows.map((r) => ({ ...r }));
     return NextResponse.json(conferences);
   } catch (error) {
     console.error('GET /api/conferences error:', error);
@@ -25,6 +25,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await dbReady;
     const formData = await request.formData();
     const name = formData.get('name') as string;
     const start_date = formData.get('start_date') as string;
@@ -37,13 +38,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const db = getDb();
+    const confResult = await db.execute({
+      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes) VALUES (?, ?, ?, ?, ?) RETURNING *',
+      args: [name, start_date, end_date, location, notes || null],
+    });
 
-    const conference = db
-      .prepare(
-        'INSERT INTO conferences (name, start_date, end_date, location, notes) VALUES (?, ?, ?, ?, ?) RETURNING *'
-      )
-      .get(name, start_date, end_date, location, notes || null) as { id: number; name: string; start_date: string; end_date: string; location: string; notes: string; created_at: string };
+    const conference = confResult.rows[0] as {
+      id: number | bigint;
+      name: string;
+      start_date: string;
+      end_date: string;
+      location: string;
+      notes: string | null;
+      created_at: string;
+    };
+    const conferenceId = Number(conference.id);
 
     let parsedCount = 0;
 
@@ -56,11 +65,11 @@ export async function POST(request: NextRequest) {
 
         let companyId: number | undefined;
         if (parsed.company) {
-          const cId = getOrCreateCompany(parsed.company);
+          const cId = await getOrCreateCompany(parsed.company);
           if (cId > 0) companyId = cId;
         }
 
-        const attendeeId = getOrCreateAttendee(
+        const attendeeId = await getOrCreateAttendee(
           parsed.first_name,
           parsed.last_name,
           parsed.title,
@@ -68,10 +77,10 @@ export async function POST(request: NextRequest) {
           parsed.email
         );
 
-        // Tag attendee with this conference
-        db.prepare(
-          'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)'
-        ).run(conference.id, attendeeId);
+        await db.execute({
+          sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+          args: [conferenceId, attendeeId],
+        });
 
         parsedCount++;
       }
@@ -94,11 +103,11 @@ export async function POST(request: NextRequest) {
 
           let companyId: number | undefined;
           if (manual.company) {
-            const cId = getOrCreateCompany(manual.company);
+            const cId = await getOrCreateCompany(manual.company);
             if (cId > 0) companyId = cId;
           }
 
-          const attendeeId = getOrCreateAttendee(
+          const attendeeId = await getOrCreateAttendee(
             manual.first_name,
             manual.last_name,
             manual.title,
@@ -106,9 +115,10 @@ export async function POST(request: NextRequest) {
             manual.email
           );
 
-          db.prepare(
-            'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)'
-          ).run(conference.id, attendeeId);
+          await db.execute({
+            sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+            args: [conferenceId, attendeeId],
+          });
 
           parsedCount++;
         }
@@ -117,7 +127,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...conference, parsed_count: parsedCount }, { status: 201 });
+    return NextResponse.json({ ...conference, id: conferenceId, parsed_count: parsedCount }, { status: 201 });
   } catch (error) {
     console.error('POST /api/conferences error:', error);
     return NextResponse.json(
