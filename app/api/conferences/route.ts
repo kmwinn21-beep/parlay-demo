@@ -77,6 +77,46 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Process manual attendees
+    const manualAttendeesJson = formData.get('manual_attendees') as string | null;
+    if (manualAttendeesJson) {
+      try {
+        const manualAttendees = JSON.parse(manualAttendeesJson) as Array<{
+          first_name: string;
+          last_name: string;
+          title?: string;
+          company?: string;
+          email?: string;
+        }>;
+
+        for (const manual of manualAttendees) {
+          if (!manual.first_name && !manual.last_name) continue;
+
+          let companyId: number | undefined;
+          if (manual.company) {
+            const cId = getOrCreateCompany(manual.company);
+            if (cId > 0) companyId = cId;
+          }
+
+          const attendeeId = getOrCreateAttendee(
+            manual.first_name,
+            manual.last_name,
+            manual.title,
+            companyId,
+            manual.email
+          );
+
+          db.prepare(
+            'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)'
+          ).run(conference.id, attendeeId);
+
+          parsedCount++;
+        }
+      } catch {
+        // ignore JSON parse errors
+      }
+    }
+
     return NextResponse.json({ ...conference, parsed_count: parsedCount }, { status: 201 });
   } catch (error) {
     console.error('POST /api/conferences error:', error);
