@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { getDb } from '@/lib/db';
+import { db, dbReady } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
   totalConferences: number;
@@ -16,25 +18,40 @@ interface RecentConference {
   attendee_count: number;
 }
 
-function getStats(): DashboardStats {
-  const db = getDb();
-  const totalConferences = (db.prepare('SELECT COUNT(*) as count FROM conferences').get() as { count: number }).count;
-  const totalAttendees = (db.prepare('SELECT COUNT(*) as count FROM attendees').get() as { count: number }).count;
-  const totalCompanies = (db.prepare('SELECT COUNT(*) as count FROM companies').get() as { count: number }).count;
-  return { totalConferences, totalAttendees, totalCompanies };
+async function getStats(): Promise<DashboardStats> {
+  await dbReady;
+  const [confResult, attResult, compResult] = await Promise.all([
+    db.execute({ sql: 'SELECT COUNT(*) as count FROM conferences', args: [] }),
+    db.execute({ sql: 'SELECT COUNT(*) as count FROM attendees', args: [] }),
+    db.execute({ sql: 'SELECT COUNT(*) as count FROM companies', args: [] }),
+  ]);
+  return {
+    totalConferences: Number(confResult.rows[0].count ?? 0),
+    totalAttendees: Number(attResult.rows[0].count ?? 0),
+    totalCompanies: Number(compResult.rows[0].count ?? 0),
+  };
 }
 
-function getRecentConferences(): RecentConference[] {
-  const db = getDb();
-  return db.prepare(
-    `SELECT c.id, c.name, c.start_date, c.end_date, c.location,
-            COUNT(ca.attendee_id) as attendee_count
-     FROM conferences c
-     LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
-     GROUP BY c.id
-     ORDER BY c.created_at DESC
-     LIMIT 5`
-  ).all() as RecentConference[];
+async function getRecentConferences(): Promise<RecentConference[]> {
+  await dbReady;
+  const result = await db.execute({
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location,
+                 COUNT(ca.attendee_id) as attendee_count
+          FROM conferences c
+          LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
+          GROUP BY c.id
+          ORDER BY c.created_at DESC
+          LIMIT 5`,
+    args: [],
+  });
+  return result.rows.map((r) => ({
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+    start_date: String(r.start_date ?? ''),
+    end_date: String(r.end_date ?? ''),
+    location: String(r.location ?? ''),
+    attendee_count: Number(r.attendee_count ?? 0),
+  }));
 }
 
 function formatDate(dateStr: string) {
@@ -46,9 +63,8 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default function DashboardPage() {
-  const stats = getStats();
-  const recentConferences = getRecentConferences();
+export default async function DashboardPage() {
+  const [stats, recentConferences] = await Promise.all([getStats(), getRecentConferences()]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">

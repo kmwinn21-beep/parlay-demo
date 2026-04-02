@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { getDb } from '@/lib/db';
+import { db, dbReady } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 interface Conference {
   id: number;
@@ -12,15 +14,26 @@ interface Conference {
   attendee_count: number;
 }
 
-function getConferences(): Conference[] {
-  const db = getDb();
-  return db.prepare(
-    `SELECT c.*, COUNT(ca.attendee_id) as attendee_count
-     FROM conferences c
-     LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
-     GROUP BY c.id
-     ORDER BY c.start_date DESC`
-  ).all() as Conference[];
+async function getConferences(): Promise<Conference[]> {
+  await dbReady;
+  const result = await db.execute({
+    sql: `SELECT c.*, COUNT(ca.attendee_id) as attendee_count
+          FROM conferences c
+          LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
+          GROUP BY c.id
+          ORDER BY c.start_date DESC`,
+    args: [],
+  });
+  return result.rows.map((r) => ({
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+    start_date: String(r.start_date ?? ''),
+    end_date: String(r.end_date ?? ''),
+    location: String(r.location ?? ''),
+    notes: r.notes != null ? String(r.notes) : undefined,
+    created_at: String(r.created_at ?? ''),
+    attendee_count: Number(r.attendee_count ?? 0),
+  }));
 }
 
 function formatDate(dateStr: string) {
@@ -32,8 +45,8 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default function ConferencesPage() {
-  const conferences = getConferences();
+export default async function ConferencesPage() {
+  const conferences = await getConferences();
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

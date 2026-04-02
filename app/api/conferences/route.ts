@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       args: [name, start_date, end_date, location, notes || null],
     });
 
-    const conference = confResult.rows[0] as {
+    const conference = confResult.rows[0] as unknown as {
       id: number | bigint;
       name: string;
       start_date: string;

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { db, dbReady } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
+    await dbReady;
     const body = await request.json();
     const { master_id, duplicate_ids } = body as { master_id: number; duplicate_ids: number[] };
 
@@ -10,49 +11,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'master_id and duplicate_ids are required' }, { status: 400 });
     }
 
-    const db = getDb();
-
-    const master = db.prepare('SELECT id FROM attendees WHERE id = ?').get(master_id);
-    if (!master) {
+    const masterResult = await db.execute({
+      sql: 'SELECT id FROM attendees WHERE id = ?',
+      args: [master_id],
+    });
+    if (masterResult.rows.length === 0) {
       return NextResponse.json({ error: 'Master attendee not found' }, { status: 404 });
     }
 
-    const mergeTransaction = db.transaction(() => {
-      for (const dupId of duplicate_ids) {
-        if (dupId === master_id) continue;
+    for (const dupId of duplicate_ids) {
+      if (dupId === master_id) continue;
 
-        // Get all conference associations from the duplicate
-        const dupConferences = db
-          .prepare('SELECT conference_id FROM conference_attendees WHERE attendee_id = ?')
-          .all(dupId) as Array<{ conference_id: number }>;
+      // Get all conference associations from the duplicate
+      const dupConferencesResult = await db.execute({
+        sql: 'SELECT conference_id FROM conference_attendees WHERE attendee_id = ?',
+        args: [dupId],
+      });
 
-        // Move conference associations to master
-        for (const ca of dupConferences) {
-          db.prepare(
-            'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)'
-          ).run(ca.conference_id, master_id);
-        }
+      const statements: Array<{ sql: string; args: (string | number | null)[] }> = [];
 
-        // Delete the duplicate attendee's conference associations
-        db.prepare('DELETE FROM conference_attendees WHERE attendee_id = ?').run(dupId);
-
-        // Delete the duplicate attendee
-        db.prepare('DELETE FROM attendees WHERE id = ?').run(dupId);
+      // Move conference associations to master
+      for (const ca of dupConferencesResult.rows) {
+        statements.push({
+          sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+          args: [ca.conference_id as number, master_id],
+        });
       }
+
+      // Delete the duplicate attendee's conference associations and the duplicate itself
+      statements.push({ sql: 'DELETE FROM conference_attendees WHERE attendee_id = ?', args: [dupId] });
+      statements.push({ sql: 'DELETE FROM attendees WHERE id = ?', args: [dupId] });
+
+      if (statements.length > 0) {
+        await db.batch(statements, 'write');
+      }
+    }
+
+    const mergedResult = await db.execute({
+      sql: `SELECT a.*, co.name as company_name
+            FROM attendees a
+            LEFT JOIN companies co ON a.company_id = co.id
+            WHERE a.id = ?`,
+      args: [master_id],
     });
 
-    mergeTransaction();
-
-    const merged = db
-      .prepare(
-        `SELECT a.*, co.name as company_name
-         FROM attendees a
-         LEFT JOIN companies co ON a.company_id = co.id
-         WHERE a.id = ?`
-      )
-      .get(master_id);
-
-    return NextResponse.json({ success: true, attendee: merged });
+    return NextResponse.json({ success: true, attendee: mergedResult.rows[0] });
   } catch (error) {
     console.error('POST /api/attendees/merge error:', error);
     return NextResponse.json({ error: 'Failed to merge attendees' }, { status: 500 });

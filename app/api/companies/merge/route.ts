@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { db, dbReady } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
+    await dbReady;
     const body = await request.json();
     const { master_id, duplicate_ids } = body as { master_id: number; duplicate_ids: number[] };
 
@@ -10,38 +11,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'master_id and duplicate_ids are required' }, { status: 400 });
     }
 
-    const db = getDb();
-
-    const master = db.prepare('SELECT id FROM companies WHERE id = ?').get(master_id);
-    if (!master) {
+    const masterResult = await db.execute({
+      sql: 'SELECT id FROM companies WHERE id = ?',
+      args: [master_id],
+    });
+    if (masterResult.rows.length === 0) {
       return NextResponse.json({ error: 'Master company not found' }, { status: 404 });
     }
 
-    const mergeTransaction = db.transaction(() => {
-      for (const dupId of duplicate_ids) {
-        if (dupId === master_id) continue;
+    for (const dupId of duplicate_ids) {
+      if (dupId === master_id) continue;
 
-        // Reassign all attendees from duplicate to master
-        db.prepare('UPDATE attendees SET company_id = ? WHERE company_id = ?').run(master_id, dupId);
+      await db.batch(
+        [
+          // Reassign all attendees from duplicate to master
+          { sql: 'UPDATE attendees SET company_id = ? WHERE company_id = ?', args: [master_id, dupId] },
+          // Delete the duplicate company
+          { sql: 'DELETE FROM companies WHERE id = ?', args: [dupId] },
+        ],
+        'write'
+      );
+    }
 
-        // Delete the duplicate company
-        db.prepare('DELETE FROM companies WHERE id = ?').run(dupId);
-      }
+    const mergedResult = await db.execute({
+      sql: `SELECT co.*, COUNT(DISTINCT a.id) as attendee_count
+            FROM companies co
+            LEFT JOIN attendees a ON co.id = a.company_id
+            WHERE co.id = ?
+            GROUP BY co.id`,
+      args: [master_id],
     });
 
-    mergeTransaction();
-
-    const merged = db
-      .prepare(
-        `SELECT co.*, COUNT(DISTINCT a.id) as attendee_count
-         FROM companies co
-         LEFT JOIN attendees a ON co.id = a.company_id
-         WHERE co.id = ?
-         GROUP BY co.id`
-      )
-      .get(master_id);
-
-    return NextResponse.json({ success: true, company: merged });
+    return NextResponse.json({ success: true, company: mergedResult.rows[0] });
   } catch (error) {
     console.error('POST /api/companies/merge error:', error);
     return NextResponse.json({ error: 'Failed to merge companies' }, { status: 500 });
