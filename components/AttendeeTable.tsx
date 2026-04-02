@@ -22,28 +22,89 @@ interface AttendeeTableProps {
   onRefresh: () => void;
 }
 
+type SortKey = 'last_name' | 'first_name' | 'title' | 'company_name' | 'email' | 'conference_count';
+type SortDir = 'asc' | 'desc';
+
+function conferenceBadgeClass(count: number): string {
+  if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
+  if (count === 3) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700';
+  if (count === 2) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700';
+  return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600';
+}
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (col !== sortKey) {
+    return (
+      <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
+    );
+  }
+  return sortDir === 'asc' ? (
+    <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+    </svg>
+  ) : (
+    <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [search, setSearch] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('last_name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (col: SortKey) => {
+    if (col === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(col);
+      setSortDir('asc');
+    }
+  };
 
   const filtered = useMemo(() => {
-    return attendees.filter((a) => {
+    const list = attendees.filter((a) => {
       const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
       const matchesSearch =
         !search ||
         fullName.includes(search.toLowerCase()) ||
-        (a.company_name?.toLowerCase().includes(search.toLowerCase())) ||
-        (a.email?.toLowerCase().includes(search.toLowerCase())) ||
-        (a.title?.toLowerCase().includes(search.toLowerCase()));
-
-      const matchesType =
-        !filterCompanyType || a.company_type === filterCompanyType;
-
+        a.company_name?.toLowerCase().includes(search.toLowerCase()) ||
+        a.email?.toLowerCase().includes(search.toLowerCase()) ||
+        a.title?.toLowerCase().includes(search.toLowerCase());
+      const matchesType = !filterCompanyType || a.company_type === filterCompanyType;
       return matchesSearch && matchesType;
     });
-  }, [attendees, search, filterCompanyType]);
+
+    list.sort((a, b) => {
+      let aVal: string | number;
+      let bVal: string | number;
+
+      if (sortKey === 'last_name') {
+        aVal = `${a.last_name} ${a.first_name}`.toLowerCase();
+        bVal = `${b.last_name} ${b.first_name}`.toLowerCase();
+      } else if (sortKey === 'first_name') {
+        aVal = `${a.first_name} ${a.last_name}`.toLowerCase();
+        bVal = `${b.first_name} ${b.last_name}`.toLowerCase();
+      } else {
+        aVal = (a[sortKey] ?? '');
+        bVal = (b[sortKey] ?? '');
+        if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+        if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      }
+
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [attendees, search, filterCompanyType, sortKey, sortDir]);
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
@@ -73,6 +134,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
   const companyTypes = Array.from(new Set(attendees.map((a) => a.company_type).filter(Boolean))) as string[];
 
+  const thClass = 'px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap';
+
   return (
     <div>
       {/* Toolbar */}
@@ -90,21 +153,12 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             />
           </div>
         </div>
-        <select
-          value={filterCompanyType}
-          onChange={(e) => setFilterCompanyType(e.target.value)}
-          className="input-field w-auto"
-        >
+        <select value={filterCompanyType} onChange={(e) => setFilterCompanyType(e.target.value)} className="input-field w-auto">
           <option value="">All Company Types</option>
-          {companyTypes.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
+          {companyTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         {selectedIds.size >= 2 && (
-          <button
-            onClick={() => setShowMergeModal(true)}
-            className="btn-gold flex items-center gap-2"
-          >
+          <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
@@ -113,13 +167,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         )}
       </div>
 
-      {/* Results count */}
       <p className="text-xs text-gray-500 mb-3">
         Showing {filtered.length} of {attendees.length} attendees
         {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
       </p>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-gray-200">
         <table className="w-full text-sm">
           <thead>
@@ -135,11 +187,21 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   className="accent-procare-bright-blue"
                 />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
+              <th className={thClass} onClick={() => handleSort('last_name')}>
+                Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('title')}>
+                Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('company_name')}>
+                Company <SortIcon col="company_name" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('email')}>
+                Email <SortIcon col="email" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('conference_count')}>
+                Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} />
+              </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -147,18 +209,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <tbody className="divide-y divide-gray-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  No attendees found.
-                </td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td>
               </tr>
             ) : (
               filtered.map((attendee) => (
-                <tr
-                  key={attendee.id}
-                  className={`hover:bg-gray-50 transition-colors ${
-                    selectedIds.has(attendee.id) ? 'bg-blue-50' : ''
-                  }`}
-                >
+                <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
@@ -168,9 +223,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-800">
-                      {attendee.first_name} {attendee.last_name}
-                    </p>
+                    <p className="font-medium text-gray-800">{attendee.first_name} {attendee.last_name}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
                     {attendee.title || <span className="text-gray-300">—</span>}
@@ -197,18 +250,15 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="badge-gray">
-                      {attendee.conference_count} conf.
+                    <span className={conferenceBadgeClass(Number(attendee.conference_count))}>
+                      {attendee.conference_count}
                     </span>
                   </td>
                   <td className="px-4 py-3 max-w-[140px] truncate text-gray-500 text-xs">
                     {attendee.notes || <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/attendees/${attendee.id}`}
-                      className="text-procare-bright-blue hover:underline text-xs font-medium"
-                    >
+                    <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">
                       View
                     </Link>
                   </td>

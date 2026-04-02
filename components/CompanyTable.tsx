@@ -13,11 +13,41 @@ interface Company {
   company_type?: string;
   notes?: string;
   attendee_count: number;
+  conference_count: number;
 }
 
 interface CompanyTableProps {
   companies: Company[];
   onRefresh: () => void;
+}
+
+type SortKey = 'name' | 'company_type' | 'profit_type' | 'website' | 'attendee_count' | 'conference_count';
+type SortDir = 'asc' | 'desc';
+
+function conferenceBadgeClass(count: number): string {
+  if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
+  if (count === 3) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700';
+  if (count === 2) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700';
+  return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600';
+}
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (col !== sortKey) {
+    return (
+      <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
+    );
+  }
+  return sortDir === 'asc' ? (
+    <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+    </svg>
+  ) : (
+    <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
 }
 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
@@ -26,16 +56,38 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [filterProfitType, setFilterProfitType] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (col: SortKey) => {
+    if (col === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(col);
+      setSortDir('asc');
+    }
+  };
 
   const filtered = useMemo(() => {
-    return companies.filter((c) => {
-      const matchesSearch =
-        !search || c.name.toLowerCase().includes(search.toLowerCase());
+    const list = companies.filter((c) => {
+      const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
       const matchesType = !filterType || c.company_type === filterType;
       const matchesProfit = !filterProfitType || c.profit_type === filterProfitType;
       return matchesSearch && matchesType && matchesProfit;
     });
-  }, [companies, search, filterType, filterProfitType]);
+
+    list.sort((a, b) => {
+      let aVal: string | number = a[sortKey] ?? '';
+      let bVal: string | number = b[sortKey] ?? '';
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [companies, search, filterType, filterProfitType, sortKey, sortDir]);
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
@@ -65,6 +117,8 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
 
   const companyTypes = Array.from(new Set(companies.map((c) => c.company_type).filter(Boolean))) as string[];
 
+  const thClass = 'px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap';
+
   return (
     <div>
       {/* Toolbar */}
@@ -82,30 +136,17 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             />
           </div>
         </div>
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="input-field w-auto"
-        >
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="input-field w-auto">
           <option value="">All Types</option>
-          {companyTypes.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
+          {companyTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select
-          value={filterProfitType}
-          onChange={(e) => setFilterProfitType(e.target.value)}
-          className="input-field w-auto"
-        >
+        <select value={filterProfitType} onChange={(e) => setFilterProfitType(e.target.value)} className="input-field w-auto">
           <option value="">For/Non-Profit</option>
           <option value="for-profit">For-Profit</option>
           <option value="non-profit">Non-Profit</option>
         </select>
         {selectedIds.size >= 2 && (
-          <button
-            onClick={() => setShowMergeModal(true)}
-            className="btn-gold flex items-center gap-2"
-          >
+          <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
@@ -114,13 +155,11 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         )}
       </div>
 
-      {/* Results count */}
       <p className="text-xs text-gray-500 mb-3">
         Showing {filtered.length} of {companies.length} companies
         {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
       </p>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-gray-200">
         <table className="w-full text-sm">
           <thead>
@@ -136,29 +175,35 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   className="accent-procare-bright-blue"
                 />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Profit Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Website</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Attendees</th>
+              <th className={thClass} onClick={() => handleSort('name')}>
+                Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('company_type')}>
+                Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('profit_type')}>
+                Profit Type <SortIcon col="profit_type" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('website')}>
+                Website <SortIcon col="website" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('attendee_count')}>
+                Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} />
+              </th>
+              <th className={thClass} onClick={() => handleSort('conference_count')}>
+                Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} />
+              </th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  No companies found.
-                </td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td>
               </tr>
             ) : (
               filtered.map((company) => (
-                <tr
-                  key={company.id}
-                  className={`hover:bg-gray-50 transition-colors ${
-                    selectedIds.has(company.id) ? 'bg-blue-50' : ''
-                  }`}
-                >
+                <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
@@ -204,10 +249,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     <span className="badge-gray">{company.attendee_count}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/companies/${company.id}`}
-                      className="text-procare-bright-blue hover:underline text-xs font-medium"
-                    >
+                    <span className={conferenceBadgeClass(Number(company.conference_count))}>
+                      {company.conference_count}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link href={`/companies/${company.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">
                       View
                     </Link>
                   </td>

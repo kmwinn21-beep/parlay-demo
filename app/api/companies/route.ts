@@ -5,9 +5,12 @@ export async function GET() {
   try {
     await dbReady;
     const result = await db.execute({
-      sql: `SELECT co.*, COUNT(DISTINCT a.id) as attendee_count
+      sql: `SELECT co.*,
+              COUNT(DISTINCT a.id) as attendee_count,
+              COUNT(DISTINCT ca.conference_id) as conference_count
             FROM companies co
             LEFT JOIN attendees a ON co.id = a.company_id
+            LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
             GROUP BY co.id
             ORDER BY co.name`,
       args: [],
