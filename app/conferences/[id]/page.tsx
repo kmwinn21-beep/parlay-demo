@@ -107,6 +107,7 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Conference deleted.');
+      router.refresh();
       router.push('/conferences');
     } catch {
       toast.error('Failed to delete conference');
