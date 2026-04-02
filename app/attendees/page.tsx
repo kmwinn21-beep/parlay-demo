@@ -16,6 +16,7 @@ interface Attendee {
   email?: string;
   notes?: string;
   conference_count: number;
+  conference_names?: string;
 }
 
 interface Company {

@@ -15,6 +15,7 @@ interface Attendee {
   email?: string;
   notes?: string;
   conference_count: number;
+  conference_names?: string;
 }
 
 interface AttendeeTableProps {
@@ -24,6 +25,42 @@ interface AttendeeTableProps {
 
 type SortKey = 'last_name' | 'first_name' | 'title' | 'company_name' | 'email' | 'conference_count';
 type SortDir = 'asc' | 'desc';
+
+function ConferenceTooltip({ count, names }: { count: number; names?: string }) {
+  const [visible, setVisible] = useState(false);
+  const list = names ? names.split(',').map((n) => n.trim()).filter(Boolean) : [];
+
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <span className={conferenceBadgeClass(count)} style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}>
+        {count}
+      </span>
+      {visible && list.length > 0 && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs">
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg px-3 py-2">
+            <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
+            <ul className="space-y-0.5">
+              {list.map((name, i) => (
+                <li key={i} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-procare-gold flex-shrink-0" />
+                  {name}
+                </li>
+              ))}
+            </ul>
+          </div>
+          {/* Arrow */}
+          <div className="flex justify-center">
+            <div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function conferenceBadgeClass(count: number): string {
   if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
@@ -250,9 +287,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={conferenceBadgeClass(Number(attendee.conference_count))}>
-                      {attendee.conference_count}
-                    </span>
+                    <ConferenceTooltip
+                      count={Number(attendee.conference_count)}
+                      names={attendee.conference_names}
+                    />
                   </td>
                   <td className="px-4 py-3 max-w-[140px] truncate text-gray-500 text-xs">
                     {attendee.notes || <span className="text-gray-300">—</span>}
