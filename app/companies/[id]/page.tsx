@@ -340,28 +340,6 @@ export default function CompanyDetailPage() {
         )}
       </div>
 
-      {/* Status */}
-      <div className="card">
-        <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Status</h2>
-        <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
-        <div className="flex flex-wrap gap-2">
-          {STATUS_OPTIONS.map(opt => {
-            const isActive = (company.status || 'Unknown') === opt.value;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => handleStatus(opt.value)}
-                className={`px-4 py-2 rounded-full text-sm font-medium border-2 transition-all ${
-                  isActive ? `${opt.cls} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                }`}
-              >
-                {opt.value}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Attendees */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
@@ -432,17 +410,7 @@ export default function CompanyDetailPage() {
         )}
       </div>
 
-          {/* Notes */}
-          <NotesSection
-            entityType="company"
-            entityId={Number(id)}
-            initialNotes={companyNotes}
-          />
-
-        </div>{/* end left column */}
-
-        {/* Right column — Follow Ups */}
-        <div className="space-y-6">
+          {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
               <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
@@ -455,6 +423,38 @@ export default function CompanyDetailPage() {
               </h2>
             </div>
             <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} />
+          </div>
+
+          {/* Notes */}
+          <NotesSection
+            entityType="company"
+            entityId={Number(id)}
+            initialNotes={companyNotes}
+          />
+
+        </div>{/* end left column */}
+
+        {/* Right column — Status */}
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Status</h2>
+            <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTIONS.map(opt => {
+                const isActive = (company.status || 'Unknown') === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleStatus(opt.value)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium border-2 transition-all ${
+                      isActive ? `${opt.cls} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {opt.value}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
