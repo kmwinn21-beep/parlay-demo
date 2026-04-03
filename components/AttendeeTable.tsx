@@ -49,7 +49,7 @@ function seniorityBadgeClass(s: string) {
     case 'C-Suite':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800';
     case 'VP Level': return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800';
     case 'Director': return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white';
-    case 'Manager':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800';
+    case 'Manager':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700';
     default:         return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
   }
 }
@@ -262,9 +262,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
       <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {attendees.length} attendees{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="overflow-auto rounded-xl border border-gray-200" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
         <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-3 text-left w-10">
                 <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />

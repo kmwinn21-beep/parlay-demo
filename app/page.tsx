@@ -62,6 +62,29 @@ async function getRecentConferences(): Promise<RecentConference[]> {
   }));
 }
 
+async function getUpcomingConferences(): Promise<RecentConference[]> {
+  await dbReady;
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute({
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location,
+                 COUNT(ca.attendee_id) as attendee_count
+          FROM conferences c
+          LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
+          WHERE c.end_date >= ?
+          GROUP BY c.id
+          ORDER BY c.start_date ASC`,
+    args: [today],
+  });
+  return result.rows.map((r) => ({
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+    start_date: String(r.start_date ?? ''),
+    end_date: String(r.end_date ?? ''),
+    location: String(r.location ?? ''),
+    attendee_count: Number(r.attendee_count ?? 0),
+  }));
+}
+
 async function getHotProspects(): Promise<HotProspect[]> {
   await dbReady;
   const result = await db.execute({
@@ -91,7 +114,7 @@ function formatDate(dateStr: string) {
 }
 
 export default async function DashboardPage() {
-  const [stats, recentConferences, hotProspects] = await Promise.all([getStats(), getRecentConferences(), getHotProspects()]);
+  const [stats, recentConferences, hotProspects, upcomingConferences] = await Promise.all([getStats(), getRecentConferences(), getHotProspects(), getUpcomingConferences()]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -192,6 +215,57 @@ export default async function DashboardPage() {
           )}
         </div>
         <ActivityStatsCard />
+      </div>
+
+      {/* Current & Upcoming Conferences */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex items-center gap-2">
+            <svg className="w-5 h-5 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Current &amp; Upcoming Conferences
+            <span className="text-sm font-normal text-gray-500">({upcomingConferences.length})</span>
+          </h2>
+          <Link href="/conferences" className="text-sm text-procare-bright-blue hover:underline">View all →</Link>
+        </div>
+        {upcomingConferences.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">No current or upcoming conferences. <Link href="/conferences/new" className="text-procare-bright-blue hover:underline">Add one →</Link></p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingConferences.map((conf) => {
+              const today = new Date().toISOString().slice(0, 10);
+              const isActive = conf.start_date <= today && conf.end_date >= today;
+              return (
+                <Link
+                  key={conf.id}
+                  href={`/conferences/${conf.id}`}
+                  className="block p-4 rounded-xl border hover:shadow-md transition-all hover:border-procare-bright-blue group"
+                  style={{ borderColor: isActive ? '#1B76BC' : undefined }}
+                >
+                  {isActive && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-2">
+                      <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                      In Progress
+                    </span>
+                  )}
+                  <p className="font-semibold text-gray-800 group-hover:text-procare-bright-blue transition-colors leading-tight">{conf.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formatDate(conf.start_date)}
+                    {conf.end_date && conf.end_date !== conf.start_date ? ` – ${formatDate(conf.end_date)}` : ''}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="badge-blue text-xs">{conf.attendee_count} attendees</span>
+                    <svg className="w-4 h-4 text-gray-300 group-hover:text-procare-bright-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Recent Conferences + Quick Actions */}

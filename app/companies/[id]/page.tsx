@@ -36,6 +36,14 @@ function statusBadgeClass(status: string) {
   }
 }
 
+const STATUS_OPTIONS = [
+  { value: 'Client',         cls: 'bg-yellow-400 text-yellow-900 border-yellow-500' },
+  { value: 'Hot Prospect',   cls: 'bg-red-500 text-white border-red-600' },
+  { value: 'Interested',     cls: 'bg-green-500 text-white border-green-600' },
+  { value: 'Not Interested', cls: 'bg-gray-900 text-white border-gray-800' },
+  { value: 'Unknown',        cls: 'bg-gray-200 text-gray-600 border-gray-300' },
+];
+
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -94,6 +102,21 @@ export default function CompanyDetailPage() {
       toast.error('Failed to update company');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleStatus = async (value: string) => {
+    try {
+      const res = await fetch(`/api/companies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: value }),
+      });
+      if (!res.ok) throw new Error();
+      setCompany(prev => prev ? { ...prev, status: value } : prev);
+      toast.success(`Status set to "${value}" — all attendees updated.`);
+    } catch {
+      toast.error('Failed to update status.');
     }
   };
 
@@ -276,6 +299,28 @@ export default function CompanyDetailPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Status */}
+      <div className="card">
+        <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Status</h2>
+        <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_OPTIONS.map(opt => {
+            const isActive = (company.status || 'Unknown') === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => handleStatus(opt.value)}
+                className={`px-4 py-2 rounded-full text-sm font-medium border-2 transition-all ${
+                  isActive ? `${opt.cls} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                {opt.value}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Attendees */}

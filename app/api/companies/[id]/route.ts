@@ -70,6 +70,36 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await dbReady;
+    const body = await request.json();
+    const { status } = body;
+
+    if (!status) {
+      return NextResponse.json({ error: 'status is required' }, { status: 400 });
+    }
+
+    // Update company status and propagate to all associated attendees
+    await db.batch(
+      [
+        { sql: 'UPDATE companies SET status = ? WHERE id = ?', args: [status, params.id] },
+        { sql: 'UPDATE attendees SET status = ? WHERE company_id = ?', args: [status, params.id] },
+      ],
+      'write'
+    );
+
+    const result = await db.execute({ sql: 'SELECT * FROM companies WHERE id = ?', args: [params.id] });
+    return NextResponse.json(result.rows[0]);
+  } catch (error) {
+    console.error('PATCH /api/companies/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to update company status' }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: { id: string } }

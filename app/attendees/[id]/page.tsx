@@ -205,7 +205,7 @@ export default function AttendeeDetailPage() {
   const seniority = classifySeniority(attendee.title);
   const seniorityColors: Record<string, string> = {
     'C-Suite': 'bg-blue-600 text-white', 'VP Level': 'bg-yellow-400 text-yellow-900',
-    'Director': 'bg-gray-800 text-white', 'Manager': 'bg-green-100 text-green-800', 'Other': 'bg-gray-100 text-gray-600',
+    'Director': 'bg-gray-800 text-white', 'Manager': 'bg-orange-100 text-orange-700', 'Other': 'bg-gray-100 text-gray-600',
   };
   const currentStatus = attendee.status || 'Unknown';
   const statusCls = STATUS_OPTIONS.find(s => s.value === currentStatus)?.cls || 'bg-gray-200 text-gray-600 border-gray-300';

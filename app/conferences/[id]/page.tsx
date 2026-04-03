@@ -62,6 +62,13 @@ export default function ConferenceDetailPage() {
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
+  const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
 
   // Add attendee inline form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -211,15 +218,24 @@ export default function ConferenceDetailPage() {
     }
   };
 
-  const filteredAttendees = (conference?.attendees || []).filter((a) => {
-    if (!attendeeSearch) return true;
-    const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
-    return (
-      fullName.includes(attendeeSearch.toLowerCase()) ||
-      (a.company_name?.toLowerCase().includes(attendeeSearch.toLowerCase())) ||
-      (a.title?.toLowerCase().includes(attendeeSearch.toLowerCase()))
-    );
-  });
+  const filteredAttendees = (conference?.attendees || [])
+    .filter((a) => {
+      if (!attendeeSearch) return true;
+      const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
+      return (
+        fullName.includes(attendeeSearch.toLowerCase()) ||
+        (a.company_name?.toLowerCase().includes(attendeeSearch.toLowerCase())) ||
+        (a.title?.toLowerCase().includes(attendeeSearch.toLowerCase()))
+      );
+    })
+    .sort((a, b) => {
+      let aVal = '', bVal = '';
+      if (sortKey === 'name') { aVal = `${a.last_name} ${a.first_name}`.toLowerCase(); bVal = `${b.last_name} ${b.first_name}`.toLowerCase(); }
+      else if (sortKey === 'title') { aVal = (a.title || '').toLowerCase(); bVal = (b.title || '').toLowerCase(); }
+      else if (sortKey === 'company') { aVal = (a.company_name || '').toLowerCase(); bVal = (b.company_name || '').toLowerCase(); }
+      else if (sortKey === 'seniority') { aVal = classifySeniority(a.title); bVal = classifySeniority(b.title); }
+      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
 
   if (isLoading) {
     return (
@@ -510,11 +526,13 @@ export default function ConferenceDetailPage() {
                         className="accent-procare-bright-blue"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
+                    {(['name', 'title', 'company', 'seniority'] as const).map(col => (
+                      <th key={col} onClick={() => handleSort(col)} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-bright-blue transition-colors whitespace-nowrap">
+                        {col === 'name' ? 'Name' : col === 'title' ? 'Title' : col === 'company' ? 'Company' : 'Seniority'}
+                        {sortKey === col && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                      </th>
+                    ))}
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Seniority</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -563,7 +581,7 @@ export default function ConferenceDetailPage() {
                             'C-Suite': 'bg-procare-dark-blue text-white',
                             'VP Level': 'bg-procare-bright-blue text-white',
                             'Director': 'bg-yellow-100 text-yellow-800',
-                            'Manager': 'bg-green-100 text-green-800',
+                            'Manager': 'bg-orange-100 text-orange-700',
                             'Other': 'bg-gray-100 text-gray-600',
                           };
                           return (
