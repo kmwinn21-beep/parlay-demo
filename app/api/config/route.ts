@@ -49,3 +49,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create config option' }, { status: 500 });
   }
 }
+
+// Batch update sort_order for reordering
+export async function PATCH(request: NextRequest) {
+  try {
+    await dbReady;
+    const body = await request.json();
+    const { items } = body as { items: { id: number; sort_order: number }[] };
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'items array is required' }, { status: 400 });
+    }
+
+    for (const item of items) {
+      await db.execute({
+        sql: 'UPDATE config_options SET sort_order = ? WHERE id = ?',
+        args: [item.sort_order, item.id],
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('PATCH /api/config error:', error);
+    return NextResponse.json({ error: 'Failed to reorder options' }, { status: 500 });
+  }
+}

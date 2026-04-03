@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface ConfigOption {
@@ -19,6 +19,23 @@ const CATEGORIES = [
   { key: 'profit_type', label: 'Profit Types' },
 ];
 
+function DragHandle() {
+  return (
+    <svg
+      className="w-4 h-4 text-gray-300 flex-shrink-0 cursor-grab active:cursor-grabbing"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+    >
+      <circle cx="5" cy="4" r="1.2" />
+      <circle cx="5" cy="8" r="1.2" />
+      <circle cx="5" cy="12" r="1.2" />
+      <circle cx="11" cy="4" r="1.2" />
+      <circle cx="11" cy="8" r="1.2" />
+      <circle cx="11" cy="12" r="1.2" />
+    </svg>
+  );
+}
+
 function CategorySection({
   category,
   label,
@@ -30,9 +47,20 @@ function CategorySection({
   options: ConfigOption[];
   onRefresh: () => void;
 }) {
+  const [localOptions, setLocalOptions] = useState<ConfigOption[]>(options);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+
+  // Drag state
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Sync local options when parent refreshes
+  useEffect(() => {
+    setLocalOptions(options);
+  }, [options]);
 
   const handleEdit = (opt: ConfigOption) => {
     setEditingId(opt.id);
@@ -77,7 +105,7 @@ function CategorySection({
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, value: trimmed, sort_order: options.length + 1 }),
+        body: JSON.stringify({ category, value: trimmed, sort_order: localOptions.length + 1 }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -93,23 +121,98 @@ function CategorySection({
     }
   };
 
+  // ── Drag and Drop ──────────────────────────────────────────────────────────
+
+  const handleDragStart = (index: number) => {
+    dragIndexRef.current = index;
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragIndexRef.current === null || dragIndexRef.current === index) return;
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndex = dragIndexRef.current;
+    if (dragIndex === null || dragIndex === dropIndex) {
+      dragIndexRef.current = null;
+      setDragOverIndex(null);
+      setIsDragging(false);
+      return;
+    }
+
+    // Reorder locally (optimistic)
+    const reordered = [...localOptions];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    const withNewOrder = reordered.map((opt, i) => ({ ...opt, sort_order: i + 1 }));
+    setLocalOptions(withNewOrder);
+
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+    setIsDragging(false);
+
+    // Persist to server
+    try {
+      const res = await fetch('/api/config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: withNewOrder.map(o => ({ id: o.id, sort_order: o.sort_order })),
+        }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toast.error('Failed to save order.');
+      setLocalOptions(options); // revert
+    }
+  };
+
+  const handleDragEnd = () => {
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+    setIsDragging(false);
+  };
+
   return (
     <div className="card">
       <h2 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">{label}</h2>
 
-      {options.length === 0 ? (
+      {localOptions.length === 0 ? (
         <p className="text-sm text-gray-400 mb-4">No options yet.</p>
       ) : (
-        <ul className="space-y-2 mb-4">
-          {options.map((opt) => (
-            <li key={opt.id} className="flex items-center gap-2">
+        <ul className="space-y-1 mb-4">
+          {localOptions.map((opt, index) => (
+            <li
+              key={opt.id}
+              draggable={editingId !== opt.id}
+              onDragStart={() => handleDragStart(index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
+              className={[
+                'flex items-center gap-2 rounded-lg transition-all',
+                isDragging && dragIndexRef.current === index ? 'opacity-40' : '',
+                dragOverIndex === index && dragIndexRef.current !== index
+                  ? 'ring-2 ring-procare-bright-blue ring-offset-1'
+                  : '',
+              ].join(' ')}
+            >
               {editingId === opt.id ? (
                 <>
+                  {/* spacer matching drag handle width */}
+                  <span className="w-4 flex-shrink-0" />
                   <input
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     className="input-field flex-1 text-sm"
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveEdit(opt.id);
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
                     autoFocus
                   />
                   <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
@@ -117,7 +220,11 @@ function CategorySection({
                 </>
               ) : (
                 <>
-                  <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer" onClick={() => handleEdit(opt)}>
+                  <DragHandle />
+                  <span
+                    className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleEdit(opt)}
+                  >
                     {opt.value}
                   </span>
                   <button
