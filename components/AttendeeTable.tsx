@@ -11,9 +11,9 @@ interface Attendee {
   first_name: string;
   last_name: string;
   title?: string;
-  company_id?: number;
   company_name?: string;
   company_type?: string;
+  company_id?: number;
   email?: string;
   notes?: string;
   status?: string;
@@ -34,10 +34,10 @@ interface AttendeeTableProps {
 type SortKey = 'last_name' | 'first_name' | 'title' | 'company_name' | 'status' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
-const PAGE_SIZE = 100;
 const STATUS_OPTIONS = ['Client', 'Hot Prospect', 'Interested', 'Not Interested', 'Unknown'];
-const SENIORITY_OPTIONS = ['C-Suite', 'VP Level', 'Director', 'Manager', 'Other'];
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
+const SENIORITY_OPTIONS = ['C-Suite', 'VP Level', 'Director', 'Manager', 'Other'];
+const PAGE_SIZE = 100;
 
 function statusBadgeClass(status: string | undefined) {
   switch (status) {
@@ -102,6 +102,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterHasFollowUps, setFilterHasFollowUps] = useState(false);
+  const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('last_name');
@@ -111,7 +112,6 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [massEditFields, setMassEditFields] = useState<{ status?: string; title?: string; company_id?: string }>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
-  const [page, setPage] = useState(1);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   useEffect(() => {
@@ -120,8 +120,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     }
   }, [showMassEdit, companies.length]);
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1); }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps]);
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps]);
 
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -177,7 +178,6 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps, sortKey, sortDir]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -268,9 +268,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         {/* Has Follow-Ups toggle */}
         <button
           onClick={() => setFilterHasFollowUps(v => !v)}
-          className={`input-field w-auto flex items-center gap-2 text-sm transition-colors ${filterHasFollowUps ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : ''}`}
+          className={`input-field w-auto flex items-center gap-2 text-sm ${filterHasFollowUps ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : ''}`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
           Has Follow-Ups
         </button>
 
@@ -331,7 +330,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-3 text-left w-10">
-                <input type="checkbox" checked={selectedIds.size === paginated.length && paginated.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(paginated.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
               </th>
               <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
               <th className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>
@@ -343,7 +342,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {paginated.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
             ) : paginated.map(attendee => {
               const seniority = classifySeniority(attendee.title);
@@ -351,7 +350,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
                   <td className="px-3 py-3">
-                    <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline truncate block">
+                    <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
                       {attendee.first_name} {attendee.last_name}
                     </Link>
                   </td>
@@ -360,7 +359,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     {attendee.company_name ? (
                       <div className="truncate">
                         {attendee.company_id ? (
-                          <Link href={`/companies/${attendee.company_id}`} className="text-gray-800 hover:text-procare-bright-blue hover:underline truncate block">{attendee.company_name}</Link>
+                          <Link href={`/companies/${attendee.company_id}`} className="text-gray-800 hover:text-procare-bright-blue hover:underline truncate">
+                            {attendee.company_name}
+                          </Link>
                         ) : (
                           <p className="text-gray-800 truncate">{attendee.company_name}</p>
                         )}
@@ -384,13 +385,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {filtered.length > PAGE_SIZE && (
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-          <span className="text-xs text-gray-500">Page {page} of {totalPages} · {filtered.length} total</span>
+          <span className="text-xs text-gray-500">
+            Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)} · {filtered.length} total
+          </span>
           <div className="flex items-center gap-2">
             <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+            <button disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
           </div>
         </div>
       )}
