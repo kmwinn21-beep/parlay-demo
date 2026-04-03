@@ -255,7 +255,7 @@ export default function AttendeeDetailPage() {
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column (2/3 width) — profile only */}
+        {/* Left column (2/3 width) — profile + follow ups */}
         <div className="lg:col-span-2 space-y-6">
           {/* Profile Card */}
           <div className="card">
@@ -331,6 +331,20 @@ export default function AttendeeDetailPage() {
             )}
           </div>
 
+          {/* Follow Ups */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+                Follow Ups
+                {followUps.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({followUps.filter(f => !f.completed).length} pending)
+                  </span>
+                )}
+              </h2>
+            </div>
+            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
+          </div>
         </div>
 
         {/* Right column (1/3 width) */}
@@ -448,21 +462,6 @@ export default function AttendeeDetailPage() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Follow Ups — full width below the two-column section */}
-      <div className="card p-0 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
-            Follow Ups
-            {followUps.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-gray-500">
-                ({followUps.filter(f => !f.completed).length} pending)
-              </span>
-            )}
-          </h2>
-        </div>
-        <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
       </div>
     </div>
   );
