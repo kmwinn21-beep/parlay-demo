@@ -19,8 +19,18 @@ interface Attendee {
   company_name?: string;
 }
 
+interface ConferenceDetail {
+  attendee_id: number;
+  conference_id?: number;
+  action?: string;
+  next_steps?: string;
+  next_steps_notes?: string;
+  notes?: string;
+}
+
 interface AnalyticsChartsProps {
   attendees: Attendee[];
+  conferenceDetails: ConferenceDetail[];
 }
 
 const SENIORITY_COLORS: Record<string, string> = {
@@ -84,109 +94,73 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 }
 
-export function AnalyticsCharts({ attendees }: AnalyticsChartsProps) {
-  const thirdPartyAttendees = attendees.filter(
-    (a) => a.company_type === '3rd Party Operator'
-  );
-  const ownerOperatorAttendees = attendees.filter(
-    (a) => a.company_type === 'Owner/Operator'
-  );
+const ACTION_LABELS = [
+  'Meeting Scheduled',
+  'Meeting Held',
+  'Social Conversation',
+  'Meeting No-Show',
+];
 
+const NEXT_STEPS_LABELS = [
+  'Schedule Follow Up Meeting',
+  'General Follow Up',
+  'Other',
+];
+
+export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChartsProps) {
   const seniorityAll = buildSeniorityData(attendees);
-  const seniorityThirdParty = buildSeniorityData(thirdPartyAttendees);
-  const seniorityOwnerOp = buildSeniorityData(ownerOperatorAttendees);
   const companyTypeData = buildCompanyTypeData(attendees);
+
+  // Count actions
+  const actionCounts: Record<string, number> = {};
+  for (const label of ACTION_LABELS) actionCounts[label] = 0;
+  for (const d of conferenceDetails) {
+    if (d.action && ACTION_LABELS.includes(d.action)) {
+      actionCounts[d.action] = (actionCounts[d.action] || 0) + 1;
+    }
+  }
+
+  // Count next steps
+  const nextStepsCounts: Record<string, number> = {};
+  for (const label of NEXT_STEPS_LABELS) nextStepsCounts[label] = 0;
+  for (const d of conferenceDetails) {
+    if (d.next_steps && NEXT_STEPS_LABELS.includes(d.next_steps)) {
+      nextStepsCounts[d.next_steps] = (nextStepsCounts[d.next_steps] || 0) + 1;
+    }
+  }
+
+  // Build attendee activity table (attendees with action OR next_steps)
+  const detailMap = new Map<number, ConferenceDetail>();
+  for (const d of conferenceDetails) {
+    if (d.action || d.next_steps) {
+      detailMap.set(Number(d.attendee_id), d);
+    }
+  }
+  const attendeeMap = new Map<number, Attendee>();
+  for (const a of attendees) attendeeMap.set(a.id, a);
+
+  const activityRows: Array<{ attendee: Attendee; detail: ConferenceDetail }> = [];
+  detailMap.forEach((detail, aid) => {
+    const attendee = attendeeMap.get(aid);
+    if (attendee) activityRows.push({ attendee, detail });
+  });
 
   return (
     <div className="space-y-8">
-      {/* Company Type Breakdown */}
-      <div className="card">
-        <h3 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">
-          Attendee Type Breakdown
-        </h3>
-        {companyTypeData.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-8">No company type data available.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={companyTypeData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={renderCustomLabel}
-                outerRadius={100}
-                dataKey="value"
-              >
-                {companyTypeData.map((entry) => (
-                  <Cell
-                    key={entry.name}
-                    fill={COMPANY_TYPE_COLORS[entry.name] || '#9ca3af'}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number, name: string) => [value, name]}
-                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Seniority Distribution - All */}
-      <div className="card">
-        <h3 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">
-          Seniority Distribution — All Attendees
-        </h3>
-        {seniorityAll.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-8">No attendee data available.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={seniorityAll}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={renderCustomLabel}
-                outerRadius={100}
-                dataKey="value"
-              >
-                {seniorityAll.map((entry) => (
-                  <Cell
-                    key={entry.name}
-                    fill={SENIORITY_COLORS[entry.name] || '#9ca3af'}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number, name: string) => [value, name]}
-                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Side by side: 3rd Party vs Owner/Operator */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Three charts side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Company Type Breakdown */}
         <div className="card">
           <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
-            Seniority — 3rd Party Operators
-            <span className="text-xs text-gray-500 ml-2 font-normal font-sans">
-              ({thirdPartyAttendees.length} attendees)
-            </span>
+            Attendee Type Breakdown
           </h3>
-          {seniorityThirdParty.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-8">No 3rd Party Operator attendees.</p>
+          {companyTypeData.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-8">No company type data available.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
-                  data={seniorityThirdParty}
+                  data={companyTypeData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -194,34 +168,35 @@ export function AnalyticsCharts({ attendees }: AnalyticsChartsProps) {
                   outerRadius={90}
                   dataKey="value"
                 >
-                  {seniorityThirdParty.map((entry) => (
+                  {companyTypeData.map((entry) => (
                     <Cell
                       key={entry.name}
-                      fill={SENIORITY_COLORS[entry.name] || '#9ca3af'}
+                      fill={COMPANY_TYPE_COLORS[entry.name] || '#9ca3af'}
                     />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                <Tooltip
+                  formatter={(value: number, name: string) => [value, name]}
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
 
+        {/* Seniority Distribution */}
         <div className="card">
           <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
-            Seniority — Owner/Operators
-            <span className="text-xs text-gray-500 ml-2 font-normal font-sans">
-              ({ownerOperatorAttendees.length} attendees)
-            </span>
+            Seniority Distribution — All Attendees
           </h3>
-          {seniorityOwnerOp.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-8">No Owner/Operator attendees.</p>
+          {seniorityAll.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-8">No attendee data available.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
-                  data={seniorityOwnerOp}
+                  data={seniorityAll}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -229,20 +204,107 @@ export function AnalyticsCharts({ attendees }: AnalyticsChartsProps) {
                   outerRadius={90}
                   dataKey="value"
                 >
-                  {seniorityOwnerOp.map((entry) => (
+                  {seniorityAll.map((entry) => (
                     <Cell
                       key={entry.name}
                       fill={SENIORITY_COLORS[entry.name] || '#9ca3af'}
                     />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                <Tooltip
+                  formatter={(value: number, name: string) => [value, name]}
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
+
+        {/* Actions & Next Steps */}
+        <div className="card">
+          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
+            Actions &amp; Next Steps
+          </h3>
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
+            {ACTION_LABELS.map((label) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">{label}</span>
+                <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-bright-blue text-white">
+                  {actionCounts[label] || 0}
+                </span>
+              </div>
+            ))}
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Next Steps</p>
+              {NEXT_STEPS_LABELS.map((label) => (
+                <div key={label} className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-dark-blue text-white">
+                    {nextStepsCounts[label] || 0}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Attendee Activity Table */}
+      {activityRows.length > 0 && (
+        <div className="card">
+          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
+            Attendee Activity
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Next Step</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {activityRows.map(({ attendee, detail }) => (
+                  <tr key={attendee.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-800">
+                      {attendee.first_name} {attendee.last_name}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
+                      {attendee.title || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
+                      {attendee.company_name || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {detail.action ? (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                          {detail.action}
+                        </span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {detail.next_steps ? (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                          {detail.next_steps}
+                        </span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">
+                      {detail.notes || detail.next_steps_notes || <span className="text-gray-300">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

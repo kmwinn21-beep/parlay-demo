@@ -28,6 +28,15 @@ interface Conference {
   attendees: Attendee[];
 }
 
+interface ConferenceDetail {
+  attendee_id: number;
+  conference_id: number;
+  action?: string;
+  next_steps?: string;
+  next_steps_notes?: string;
+  notes?: string;
+}
+
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -43,6 +52,7 @@ export default function ConferenceDetailPage() {
   const id = params.id as string;
 
   const [conference, setConference] = useState<Conference | null>(null);
+  const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Conference>>({});
@@ -53,12 +63,22 @@ export default function ConferenceDetailPage() {
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
 
+  // Add attendee inline form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addFormData, setAddFormData] = useState({ first_name: '', last_name: '', title: '', company: '', email: '' });
+  const [isAddingAttendee, setIsAddingAttendee] = useState(false);
+
   const fetchConference = useCallback(async () => {
     try {
-      const res = await fetch(`/api/conferences/${id}`);
-      if (!res.ok) throw new Error('Not found');
-      const data = await res.json();
+      const [confRes, detailsRes] = await Promise.all([
+        fetch(`/api/conferences/${id}`),
+        fetch(`/api/conference-details?conference_id=${id}`),
+      ]);
+      if (!confRes.ok) throw new Error('Not found');
+      const data = await confRes.json();
+      const detailsData = detailsRes.ok ? await detailsRes.json() : [];
       setConference(data);
+      setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -161,6 +181,33 @@ export default function ConferenceDetailPage() {
       toast.error('Failed to remove attendees.');
     } finally {
       setIsRemoving(false);
+    }
+  };
+
+  const handleAddAttendee = async () => {
+    if (!addFormData.first_name || !addFormData.last_name) {
+      toast.error('First and last name are required.');
+      return;
+    }
+    setIsAddingAttendee(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addFormData),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to add attendee');
+      }
+      toast.success('Attendee added!');
+      setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '' });
+      setShowAddForm(false);
+      fetchConference();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setIsAddingAttendee(false);
     }
   };
 
@@ -345,6 +392,15 @@ export default function ConferenceDetailPage() {
                   Remove ({selectedAttendeeIds.size})
                 </button>
               )}
+              <button
+                onClick={() => setShowAddForm((v) => !v)}
+                className="btn-secondary flex items-center gap-2 text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Attendee
+              </button>
               <div className="relative">
                 <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -358,6 +414,79 @@ export default function ConferenceDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Add Attendee Inline Form */}
+          {showAddForm && (
+            <div className="mb-4 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
+              <h3 className="text-sm font-semibold text-procare-dark-blue mb-3">Add Attendee to Conference</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="label text-xs">First Name *</label>
+                  <input
+                    value={addFormData.first_name}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, first_name: e.target.value }))}
+                    className="input-field"
+                    placeholder="First name"
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">Last Name *</label>
+                  <input
+                    value={addFormData.last_name}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, last_name: e.target.value }))}
+                    className="input-field"
+                    placeholder="Last name"
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">Title</label>
+                  <input
+                    value={addFormData.title}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, title: e.target.value }))}
+                    className="input-field"
+                    placeholder="Job title"
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">Company</label>
+                  <input
+                    value={addFormData.company}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, company: e.target.value }))}
+                    className="input-field"
+                    placeholder="Company name"
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">Email</label>
+                  <input
+                    type="email"
+                    value={addFormData.email}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, email: e.target.value }))}
+                    className="input-field"
+                    placeholder="email@example.com"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleAddAttendee}
+                  disabled={isAddingAttendee}
+                  className="btn-primary text-sm"
+                >
+                  {isAddingAttendee ? 'Adding...' : 'Add'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '' });
+                  }}
+                  className="btn-secondary text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {filteredAttendees.length === 0 ? (
             <div className="text-center py-8">
@@ -470,7 +599,7 @@ export default function ConferenceDetailPage() {
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        <AnalyticsCharts attendees={conference.attendees} />
+        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} />
       )}
     </div>
   );

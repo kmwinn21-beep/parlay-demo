@@ -21,8 +21,19 @@ interface Company {
   profit_type?: string;
   company_type?: string;
   notes?: string;
+  status?: string;
   created_at: string;
   attendees: Attendee[];
+}
+
+function statusBadgeClass(status: string) {
+  switch (status) {
+    case 'Client':        return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300';
+    case 'Hot Prospect':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300';
+    case 'Interested':    return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300';
+    case 'Not Interested':return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white';
+    default:              return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
+  }
 }
 
 export default function CompanyDetailPage() {
@@ -251,6 +262,10 @@ export default function CompanyDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Added</p>
                 <p className="text-sm text-gray-600">{new Date(company.created_at).toLocaleDateString()}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
+                <span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span>
               </div>
               {company.notes && (
                 <div className="md:col-span-3">

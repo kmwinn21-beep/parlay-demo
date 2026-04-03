@@ -243,8 +243,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               </select>
             </div>
             <div>
-              <label className="label text-xs">Title</label>
-              <input value={massEditFields.title || ''} onChange={e => setMassEditFields(p => ({ ...p, title: e.target.value }))} placeholder="— no change —" className="input-field w-40 text-sm" />
+              <label className="label text-xs">Title / Seniority Keyword</label>
+              <input value={massEditFields.title || ''} onChange={e => setMassEditFields(p => ({ ...p, title: e.target.value }))} placeholder="e.g. VP, Director, CEO" className="input-field w-48 text-sm" />
+              <p className="text-xs text-gray-400 mt-0.5">Updates the title which determines seniority</p>
             </div>
             <div>
               <label className="label text-xs">Company</label>

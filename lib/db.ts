@@ -45,6 +45,29 @@ export async function initDb(): Promise<void> {
     );
   `);
 
+  // New tables
+  await db.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS conference_attendee_details (
+      attendee_id INTEGER NOT NULL,
+      conference_id INTEGER NOT NULL,
+      action TEXT,
+      next_steps TEXT,
+      next_steps_notes TEXT,
+      notes TEXT,
+      PRIMARY KEY (attendee_id, conference_id),
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS config_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      value TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Run migrations — ignore errors if columns already exist
   const migrations = [
     `ALTER TABLE attendees ADD COLUMN action TEXT`,
@@ -52,9 +75,43 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE attendees ADD COLUMN next_steps_notes TEXT`,
     `ALTER TABLE attendees ADD COLUMN status TEXT DEFAULT 'Unknown'`,
     `ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'Unknown'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_config_unique ON config_options(category, value)`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
+  }
+
+  // Seed config_options if empty
+  const configCount = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM config_options', args: [] });
+  if (Number(configCount.rows[0].cnt) === 0) {
+    const seeds: Array<{ category: string; value: string; sort_order: number }> = [
+      { category: 'company_type', value: '3rd Party Operator', sort_order: 1 },
+      { category: 'company_type', value: 'Owner/Operator', sort_order: 2 },
+      { category: 'company_type', value: 'Capital Partner', sort_order: 3 },
+      { category: 'company_type', value: 'Vendor', sort_order: 4 },
+      { category: 'company_type', value: 'Partner', sort_order: 5 },
+      { category: 'company_type', value: 'Other', sort_order: 6 },
+      { category: 'status', value: 'Client', sort_order: 1 },
+      { category: 'status', value: 'Hot Prospect', sort_order: 2 },
+      { category: 'status', value: 'Interested', sort_order: 3 },
+      { category: 'status', value: 'Not Interested', sort_order: 4 },
+      { category: 'status', value: 'Unknown', sort_order: 5 },
+      { category: 'action', value: 'Meeting Scheduled', sort_order: 1 },
+      { category: 'action', value: 'Meeting Held', sort_order: 2 },
+      { category: 'action', value: 'Social Conversation', sort_order: 3 },
+      { category: 'action', value: 'Meeting No-Show', sort_order: 4 },
+      { category: 'next_steps', value: 'Schedule Follow Up Meeting', sort_order: 1 },
+      { category: 'next_steps', value: 'General Follow Up', sort_order: 2 },
+      { category: 'next_steps', value: 'Other', sort_order: 3 },
+    ];
+    for (const seed of seeds) {
+      try {
+        await db.execute({
+          sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
+          args: [seed.category, seed.value, seed.sort_order],
+        });
+      } catch { /* ignore */ }
+    }
   }
 }
 

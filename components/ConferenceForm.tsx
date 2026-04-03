@@ -13,27 +13,10 @@ interface ConferenceFormData {
   notes: string;
 }
 
-interface ManualAttendee {
-  first_name: string;
-  last_name: string;
-  title: string;
-  company: string;
-  email: string;
-}
-
 export function ConferenceForm() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [manualAttendees, setManualAttendees] = useState<ManualAttendee[]>([]);
-  const [showAddAttendee, setShowAddAttendee] = useState(false);
-  const [newAttendee, setNewAttendee] = useState<ManualAttendee>({
-    first_name: '',
-    last_name: '',
-    title: '',
-    company: '',
-    email: '',
-  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -55,20 +38,6 @@ export function ConferenceForm() {
     }
   };
 
-  const addManualAttendee = () => {
-    if (!newAttendee.first_name || !newAttendee.last_name) {
-      toast.error('First and last name are required.');
-      return;
-    }
-    setManualAttendees((prev) => [...prev, { ...newAttendee }]);
-    setNewAttendee({ first_name: '', last_name: '', title: '', company: '', email: '' });
-    setShowAddAttendee(false);
-  };
-
-  const removeManualAttendee = (index: number) => {
-    setManualAttendees((prev) => prev.filter((_, i) => i !== index));
-  };
-
   const onSubmit = async (data: ConferenceFormData) => {
     setIsSubmitting(true);
     try {
@@ -81,10 +50,6 @@ export function ConferenceForm() {
 
       if (file) {
         formData.append('file', file);
-      }
-
-      if (manualAttendees.length > 0) {
-        formData.append('manual_attendees', JSON.stringify(manualAttendees));
       }
 
       const res = await fetch('/api/conferences', {
@@ -237,129 +202,6 @@ export function ConferenceForm() {
           className="hidden"
           onChange={handleFileChange}
         />
-      </div>
-
-      {/* Manual Attendees */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Manual Attendees</h2>
-            {manualAttendees.length > 0 && (
-              <p className="text-xs text-gray-500">{manualAttendees.length} attendee{manualAttendees.length !== 1 ? 's' : ''} added</p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowAddAttendee(true)}
-            className="btn-secondary text-sm flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Add Attendee
-          </button>
-        </div>
-
-        {showAddAttendee && (
-          <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">New Attendee</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label text-xs">First Name *</label>
-                <input
-                  value={newAttendee.first_name}
-                  onChange={(e) => setNewAttendee((p) => ({ ...p, first_name: e.target.value }))}
-                  className="input-field"
-                  placeholder="First name"
-                />
-              </div>
-              <div>
-                <label className="label text-xs">Last Name *</label>
-                <input
-                  value={newAttendee.last_name}
-                  onChange={(e) => setNewAttendee((p) => ({ ...p, last_name: e.target.value }))}
-                  className="input-field"
-                  placeholder="Last name"
-                />
-              </div>
-              <div>
-                <label className="label text-xs">Title</label>
-                <input
-                  value={newAttendee.title}
-                  onChange={(e) => setNewAttendee((p) => ({ ...p, title: e.target.value }))}
-                  className="input-field"
-                  placeholder="Job title"
-                />
-              </div>
-              <div>
-                <label className="label text-xs">Company</label>
-                <input
-                  value={newAttendee.company}
-                  onChange={(e) => setNewAttendee((p) => ({ ...p, company: e.target.value }))}
-                  className="input-field"
-                  placeholder="Company name"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="label text-xs">Email</label>
-                <input
-                  type="email"
-                  value={newAttendee.email}
-                  onChange={(e) => setNewAttendee((p) => ({ ...p, email: e.target.value }))}
-                  className="input-field"
-                  placeholder="email@example.com"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-3">
-              <button
-                type="button"
-                onClick={addManualAttendee}
-                className="btn-primary text-sm"
-              >
-                Add
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddAttendee(false)}
-                className="btn-secondary text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {manualAttendees.length > 0 ? (
-          <div className="space-y-2">
-            {manualAttendees.map((a, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">
-                    {a.first_name} {a.last_name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {[a.title, a.company].filter(Boolean).join(' · ')}
-                    {a.email && ` · ${a.email}`}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeManualAttendee(i)}
-                  className="text-red-400 hover:text-red-600 ml-3"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4">
-            No manual attendees added yet. Use the button above or upload a file.
-          </p>
-        )}
       </div>
 
       {/* Submit */}
