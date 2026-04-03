@@ -566,15 +566,6 @@ export default function ConferenceDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {attendee.email ? (
-                          <a href={`mailto:${attendee.email}`} className="text-procare-bright-blue hover:underline text-xs">
-                            {attendee.email}
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
                         {(() => {
                           const s = classifySeniority(attendee.title);
                           const colorMap: Record<string, string> = {
@@ -588,6 +579,15 @@ export default function ConferenceDetailPage() {
                             <span className={`badge ${colorMap[s] || 'badge-gray'}`}>{s}</span>
                           );
                         })()}
+                      </td>
+                      <td className="px-4 py-3">
+                        {attendee.email ? (
+                          <a href={`mailto:${attendee.email}`} className="text-procare-bright-blue hover:underline text-xs">
+                            {attendee.email}
+                          </a>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
