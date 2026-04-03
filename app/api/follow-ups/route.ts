@@ -6,11 +6,19 @@ export async function GET(request: NextRequest) {
     await dbReady;
     const { searchParams } = new URL(request.url);
     const attendeeId = searchParams.get('attendee_id');
+    const conferenceId = searchParams.get('conference_id');
 
-    const whereClause = attendeeId
-      ? 'WHERE cad.next_steps IS NOT NULL AND cad.next_steps != \'\' AND cad.attendee_id = ?'
-      : 'WHERE cad.next_steps IS NOT NULL AND cad.next_steps != \'\'';
-    const args = attendeeId ? [attendeeId] : [];
+    const conditions = ["cad.next_steps IS NOT NULL AND cad.next_steps != ''"];
+    const args: (string | number)[] = [];
+
+    if (attendeeId) {
+      conditions.push('cad.attendee_id = ?');
+      args.push(attendeeId);
+    }
+    if (conferenceId) {
+      conditions.push('cad.conference_id = ?');
+      args.push(conferenceId);
+    }
 
     const result = await db.execute({
       sql: `
@@ -30,7 +38,7 @@ export async function GET(request: NextRequest) {
         JOIN attendees a ON cad.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
         JOIN conferences c ON cad.conference_id = c.id
-        ${whereClause}
+        WHERE ${conditions.join(' AND ')}
         ORDER BY c.start_date DESC, a.last_name, a.first_name
       `,
       args,

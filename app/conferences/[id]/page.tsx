@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
+import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { classifySeniority } from '@/lib/parsers';
 
 interface Attendee {
@@ -58,7 +59,8 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'analytics'>('attendees');
+  const [activeTab, setActiveTab] = useState<'attendees' | 'analytics' | 'follow-ups'>('attendees');
+  const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
@@ -77,15 +79,18 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
+        fetch(`/api/follow-ups?conference_id=${id}`),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
       const detailsData = detailsRes.ok ? await detailsRes.json() : [];
+      const followUpsData = followUpsRes.ok ? await followUpsRes.json() : [];
       setConference(data);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
+      setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -374,19 +379,24 @@ export default function ConferenceDetailPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="flex gap-6">
-          {(['attendees', 'analytics'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors capitalize ${
-                activeTab === tab
-                  ? 'border-procare-bright-blue text-procare-bright-blue'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab === 'attendees' ? `Attendees (${conference.attendees.length})` : 'Analytics'}
-            </button>
-          ))}
+          <button
+            onClick={() => setActiveTab('attendees')}
+            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'attendees' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Attendees ({conference.attendees.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Analytics
+          </button>
+          <button
+            onClick={() => setActiveTab('follow-ups')}
+            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
+          </button>
         </nav>
       </div>
 
@@ -618,6 +628,52 @@ export default function ConferenceDetailPage() {
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
         <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} />
+      )}
+
+      {/* Follow Ups Tab */}
+      {activeTab === 'follow-ups' && (
+        <div className="card p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Follow Ups</h2>
+              {confFollowUps.length > 0 && (
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {confFollowUps.filter(f => !f.completed).length} pending · {confFollowUps.filter(f => f.completed).length} completed
+                </p>
+              )}
+            </div>
+          </div>
+          <FollowUpsTable
+            followUps={confFollowUps}
+            onToggle={async (attendeeId, conferenceId, completed) => {
+              setConfFollowUps(prev =>
+                prev.map(fu =>
+                  fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+                    ? { ...fu, completed }
+                    : fu
+                )
+              );
+              try {
+                const res = await fetch('/api/follow-ups', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+                });
+                if (!res.ok) throw new Error();
+              } catch {
+                // Revert on error
+                setConfFollowUps(prev =>
+                  prev.map(fu =>
+                    fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+                      ? { ...fu, completed: !completed }
+                      : fu
+                  )
+                );
+                toast.error('Failed to update.');
+              }
+            }}
+          />
+        </div>
       )}
     </div>
   );
