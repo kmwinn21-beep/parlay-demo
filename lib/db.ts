@@ -121,6 +121,25 @@ export async function initDb(): Promise<void> {
       } catch { /* ignore */ }
     }
   }
+
+  // Always ensure seniority and profit_type seeds exist (for existing DBs)
+  const newCategorySeeds: Array<{ category: string; value: string; sort_order: number }> = [
+    { category: 'seniority', value: 'C-Suite', sort_order: 1 },
+    { category: 'seniority', value: 'VP Level', sort_order: 2 },
+    { category: 'seniority', value: 'Director', sort_order: 3 },
+    { category: 'seniority', value: 'Manager', sort_order: 4 },
+    { category: 'seniority', value: 'Other', sort_order: 5 },
+    { category: 'profit_type', value: 'For-Profit', sort_order: 1 },
+    { category: 'profit_type', value: 'Non-Profit', sort_order: 2 },
+  ];
+  for (const seed of newCategorySeeds) {
+    try {
+      await db.execute({
+        sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
+        args: [seed.category, seed.value, seed.sort_order],
+      });
+    } catch { /* ignore */ }
+  }
 }
 
 // Run initDb once at module load so tables exist before any query

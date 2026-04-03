@@ -28,23 +28,30 @@ interface Company {
   attendees: Attendee[];
 }
 
-function statusBadgeClass(status: string) {
-  switch (status) {
-    case 'Client':        return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300';
-    case 'Hot Prospect':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300';
-    case 'Interested':    return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300';
-    case 'Not Interested':return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white';
-    default:              return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
-  }
+const STATUS_COLOR_MAP: Record<string, string> = {
+  'Client':         'bg-yellow-400 text-yellow-900 border-yellow-500',
+  'Hot Prospect':   'bg-red-500 text-white border-red-600',
+  'Interested':     'bg-green-500 text-white border-green-600',
+  'Not Interested': 'bg-gray-900 text-white border-gray-800',
+  'Unknown':        'bg-gray-200 text-gray-600 border-gray-300',
+};
+const DEFAULT_STATUS_CLS = 'bg-procare-bright-blue text-white border-procare-bright-blue';
+
+function getStatusCls(value: string) {
+  return STATUS_COLOR_MAP[value] ?? DEFAULT_STATUS_CLS;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'Client',         cls: 'bg-yellow-400 text-yellow-900 border-yellow-500' },
-  { value: 'Hot Prospect',   cls: 'bg-red-500 text-white border-red-600' },
-  { value: 'Interested',     cls: 'bg-green-500 text-white border-green-600' },
-  { value: 'Not Interested', cls: 'bg-gray-900 text-white border-gray-800' },
-  { value: 'Unknown',        cls: 'bg-gray-200 text-gray-600 border-gray-300' },
-];
+const STATUS_BADGE_MAP: Record<string, string> = {
+  'Client':         'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300',
+  'Hot Prospect':   'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300',
+  'Interested':     'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300',
+  'Not Interested': 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white',
+};
+const DEFAULT_BADGE_CLS = 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
+
+function statusBadgeClass(status: string) {
+  return STATUS_BADGE_MAP[status] ?? DEFAULT_BADGE_CLS;
+}
 
 export default function CompanyDetailPage() {
   const params = useParams();
@@ -63,12 +70,20 @@ export default function CompanyDetailPage() {
   const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
   const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
 
+  // Dynamic config options
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
+
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, fuRes, notesRes] = await Promise.all([
+      const [compRes, fuRes, notesRes, statusRes, compTypeRes, profitRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch(`/api/follow-ups?company_id=${id}`),
         fetch(`/api/notes?entity_type=company&entity_id=${id}`),
+        fetch('/api/config?category=status'),
+        fetch('/api/config?category=company_type'),
+        fetch('/api/config?category=profit_type'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -82,6 +97,9 @@ export default function CompanyDetailPage() {
       });
       if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
       if (notesRes.ok) setCompanyNotes(await notesRes.json());
+      if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
+      if (compTypeRes.ok) setCompanyTypeOptions((await compTypeRes.json()).map((o: { value: string }) => o.value));
+      if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
     } catch {
       toast.error('Failed to load company');
       router.push('/companies');
@@ -239,12 +257,9 @@ export default function CompanyDetailPage() {
                   className="input-field"
                 >
                   <option value="">Select type...</option>
-                  <option value="3rd Party Operator">3rd Party Operator</option>
-                  <option value="Owner/Operator">Owner/Operator</option>
-                  <option value="Capital Partner">Capital Partner</option>
-                  <option value="Vendor">Vendor</option>
-                  <option value="Partner">Partner</option>
-                  <option value="Other">Other</option>
+                  {companyTypeOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -255,8 +270,9 @@ export default function CompanyDetailPage() {
                   className="input-field"
                 >
                   <option value="">Select...</option>
-                  <option value="for-profit">For-Profit</option>
-                  <option value="non-profit">Non-Profit</option>
+                  {profitTypeOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -460,17 +476,17 @@ export default function CompanyDetailPage() {
             <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Status</h2>
             <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
             <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.map(opt => {
-                const isActive = (company.status || 'Unknown') === opt.value;
+              {statusOptions.map(val => {
+                const isActive = (company.status || 'Unknown') === val;
                 return (
                   <button
-                    key={opt.value}
-                    onClick={() => handleStatus(opt.value)}
+                    key={val}
+                    onClick={() => handleStatus(val)}
                     className={`px-4 py-2 rounded-full text-sm font-medium border-2 transition-all ${
-                      isActive ? `${opt.cls} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                      isActive ? `${getStatusCls(val)} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
                     }`}
                   >
-                    {opt.value}
+                    {val}
                   </button>
                 );
               })}

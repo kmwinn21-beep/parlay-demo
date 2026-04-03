@@ -29,16 +29,19 @@ interface ConferenceDetail {
 }
 
 
-const STATUS_OPTIONS = [
-  { value: 'Client',         cls: 'bg-yellow-400 text-yellow-900 border-yellow-500' },
-  { value: 'Hot Prospect',   cls: 'bg-red-500 text-white border-red-600' },
-  { value: 'Interested',     cls: 'bg-green-500 text-white border-green-600' },
-  { value: 'Not Interested', cls: 'bg-gray-900 text-white border-gray-800' },
-  { value: 'Unknown',        cls: 'bg-gray-200 text-gray-600 border-gray-300' },
-];
+// Default colors for well-known status values; any new admin-defined values get a neutral style
+const STATUS_COLOR_MAP: Record<string, string> = {
+  'Client':         'bg-yellow-400 text-yellow-900 border-yellow-500',
+  'Hot Prospect':   'bg-red-500 text-white border-red-600',
+  'Interested':     'bg-green-500 text-white border-green-600',
+  'Not Interested': 'bg-gray-900 text-white border-gray-800',
+  'Unknown':        'bg-gray-200 text-gray-600 border-gray-300',
+};
+const DEFAULT_STATUS_CLS = 'bg-procare-bright-blue text-white border-procare-bright-blue';
 
-const ACTION_OPTIONS = ['Meeting Scheduled', 'Meeting Held', 'Social Conversation', 'Meeting No-Show'];
-const NEXT_STEPS_OPTIONS = ['Schedule Follow Up Meeting', 'General Follow Up', 'Other'];
+function getStatusCls(value: string) {
+  return STATUS_COLOR_MAP[value] ?? DEFAULT_STATUS_CLS;
+}
 
 function formatDate(d: string) {
   if (!d) return '';
@@ -57,6 +60,11 @@ export default function AttendeeDetailPage() {
   const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Dynamic config options
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -88,11 +96,22 @@ export default function AttendeeDetailPage() {
 
   const fetchAttendee = useCallback(async () => {
     try {
-      const [atRes, coRes] = await Promise.all([fetch(`/api/attendees/${id}`), fetch('/api/companies')]);
+      const [atRes, coRes, statusRes, actionRes, nextStepsRes] = await Promise.all([
+        fetch(`/api/attendees/${id}`),
+        fetch('/api/companies'),
+        fetch('/api/config?category=status'),
+        fetch('/api/config?category=action'),
+        fetch('/api/config?category=next_steps'),
+      ]);
       if (!atRes.ok) throw new Error('Not found');
-      const [atData, coData] = await Promise.all([atRes.json(), coRes.json()]);
+      const [atData, coData, statusData, actionData, nextStepsData] = await Promise.all([
+        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), nextStepsRes.json(),
+      ]);
       setAttendee(atData);
       setCompanies(coData);
+      setStatusOptions(statusData.map((o: { value: string }) => o.value));
+      setActionOptions(actionData.map((o: { value: string }) => o.value));
+      setNextStepsOptions(nextStepsData.map((o: { value: string }) => o.value));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '' });
     } catch {
       toast.error('Failed to load attendee');
@@ -293,7 +312,7 @@ export default function AttendeeDetailPage() {
     'Director': 'bg-gray-800 text-white', 'Manager': 'bg-orange-100 text-orange-700', 'Other': 'bg-gray-100 text-gray-600',
   };
   const currentStatus = attendee.status || 'Unknown';
-  const statusCls = STATUS_OPTIONS.find(s => s.value === currentStatus)?.cls || 'bg-gray-200 text-gray-600 border-gray-300';
+  const statusCls = getStatusCls(currentStatus);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -428,10 +447,10 @@ export default function AttendeeDetailPage() {
           <div className="card">
             <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Status</h2>
             <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.map(opt => (
-                <button key={opt.value} onClick={() => handleStatus(opt.value)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatus === opt.value ? `${opt.cls} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
-                  {opt.value}
+              {statusOptions.map(val => (
+                <button key={val} onClick={() => handleStatus(val)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatus === val ? `${getStatusCls(val)} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                  {val}
                 </button>
               ))}
             </div>
@@ -472,13 +491,13 @@ export default function AttendeeDetailPage() {
                   <div className="flex flex-wrap gap-2">
                     {(() => {
                       const activeActions = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
-                      return ACTION_OPTIONS.map(opt => (
-                      <button key={opt} onClick={() => handleAction(opt)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${activeActions.has(opt) ? 'bg-procare-bright-blue text-white border-procare-bright-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
-                        {activeActions.has(opt) && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                        {opt}
-                      </button>
-                    ));
+                      return actionOptions.map(opt => (
+                        <button key={opt} onClick={() => handleAction(opt)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${activeActions.has(opt) ? 'bg-procare-bright-blue text-white border-procare-bright-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
+                          {activeActions.has(opt) && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                          {opt}
+                        </button>
+                      ));
                     })()}
                   </div>
                 </div>
@@ -487,7 +506,7 @@ export default function AttendeeDetailPage() {
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Next Steps</p>
                   <div className="flex flex-wrap gap-2">
-                    {NEXT_STEPS_OPTIONS.map(opt => (
+                    {nextStepsOptions.map(opt => (
                       <button key={opt} onClick={() => handleNextSteps(opt)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${conferenceDetail?.next_steps === opt ? 'bg-procare-dark-blue text-white border-procare-dark-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-dark-blue hover:text-procare-dark-blue'}`}>
                         {opt}
