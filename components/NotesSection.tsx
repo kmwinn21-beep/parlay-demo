@@ -136,7 +136,7 @@ export function NotesSection({
       )}
 
       {notes.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No notes yet. Click "Add Note" to get started.</p>
+        <p className="text-sm text-gray-400 text-center py-6">No notes yet. Click &quot;Add Note&quot; to get started.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
