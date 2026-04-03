@@ -17,7 +17,13 @@ export async function GET() {
                      WHERE cad.attendee_id = a.id
                      AND cad.next_steps IS NOT NULL AND cad.next_steps != ''
                      AND (cad.completed IS NULL OR cad.completed = 0)
-                   ) THEN 1 ELSE 0 END as has_pending_follow_ups
+                   ) THEN 1 ELSE 0 END as has_pending_follow_ups,
+                   (SELECT COUNT(*) FROM entity_notes en WHERE en.entity_type = 'attendee' AND en.entity_id = a.id) as notes_count,
+                   (SELECT GROUP_CONCAT(sub.content, '|||') FROM (
+                     SELECT content FROM entity_notes
+                     WHERE entity_type = 'attendee' AND entity_id = a.id
+                     ORDER BY created_at DESC LIMIT 2
+                   ) sub) as recent_notes_concat
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
             LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id

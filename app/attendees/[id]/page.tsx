@@ -77,8 +77,9 @@ export default function AttendeeDetailPage() {
   const [confNotesValue, setConfNotesValue] = useState('');
   const [confOtherNotes, setConfOtherNotes] = useState('');
   const [confNotesSaved, setConfNotesSaved] = useState(false);
-  const [confNoteEntityIds, setConfNoteEntityIds] = useState<Record<string, number>>({});
   const confNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the last value that was synced to entity_notes, per conference — prevents duplicate rows on re-blur
+  const lastSavedConfNotesRef = useRef<Record<string, string>>({});
 
   const fetchFollowUps = useCallback(async () => {
     try {
@@ -136,13 +137,8 @@ export default function AttendeeDetailPage() {
         setConferenceDetail(data);
         setConfNotesValue(data?.notes || '');
         setConfOtherNotes(data?.next_steps_notes || '');
-        // Find existing entity_note for this conference
-        const conf = attendee?.conferences.find(c => c.id === Number(selectedConferenceId));
-        if (conf && attendeeNotes.length > 0) {
-          const prefix = `[${conf.name} - `;
-          const existing = attendeeNotes.find(n => n.content.startsWith(prefix));
-          if (existing) setConfNoteEntityIds(prev => ({ ...prev, [selectedConferenceId]: existing.id }));
-        }
+        // Seed the baseline so blurring without a change doesn't create a duplicate note
+        lastSavedConfNotesRef.current[selectedConferenceId] = (data?.notes || '').trim();
       })
       .catch(() => {
         setConferenceDetail(null);
@@ -270,33 +266,22 @@ export default function AttendeeDetailPage() {
         setConfNotesSaved(true);
         setTimeout(() => setConfNotesSaved(false), 2000);
 
-        // Sync to general attendee notes
+        // Append a new note row only when content actually changed from the last save
+        const trimmed = confNotesValue.trim();
+        const lastSaved = lastSavedConfNotesRef.current[selectedConferenceId] ?? '';
         const conf = attendee?.conferences.find(c => c.id === Number(selectedConferenceId));
-        if (conf && confNotesValue.trim()) {
+        if (conf && trimmed && trimmed !== lastSaved) {
           const monthYear = new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-          const prefixedContent = `[${conf.name} - ${monthYear}]: ${confNotesValue.trim()}`;
-          const existingId = confNoteEntityIds[selectedConferenceId];
-          if (existingId) {
-            const res = await fetch(`/api/notes/${existingId}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: prefixedContent }),
-            });
-            if (res.ok) {
-              const updated = await res.json();
-              setAttendeeNotes(prev => prev.map(n => n.id === existingId ? updated : n));
-            }
-          } else {
-            const res = await fetch('/api/notes', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ entity_type: 'attendee', entity_id: Number(id), content: prefixedContent }),
-            });
-            if (res.ok) {
-              const created = await res.json();
-              setAttendeeNotes(prev => [created, ...prev]);
-              setConfNoteEntityIds(prev => ({ ...prev, [selectedConferenceId]: created.id }));
-            }
+          const prefixedContent = `[${conf.name} - ${monthYear}]: ${trimmed}`;
+          const res = await fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entity_type: 'attendee', entity_id: Number(id), content: prefixedContent }),
+          });
+          if (res.ok) {
+            const created = await res.json();
+            setAttendeeNotes(prev => [created, ...prev]);
+            lastSavedConfNotesRef.current[selectedConferenceId] = trimmed;
           }
         }
       } catch { toast.error('Failed to save notes.'); }

@@ -22,6 +22,8 @@ interface Attendee {
   conference_count: number;
   conference_names?: string;
   has_pending_follow_ups?: boolean;
+  notes_count?: number;
+  recent_notes_concat?: string;
 }
 
 interface Company { id: number; name: string; }
@@ -85,6 +87,71 @@ function ConferenceTooltip({ count, names }: { count: number; names?: string }) 
   );
 }
 
+function NotesPopover({ attendeeId, notesCount, recentNotesConcat }: {
+  attendeeId: number;
+  notesCount: number;
+  recentNotesConcat?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const notes = recentNotesConcat ? recentNotesConcat.split('|||').filter(Boolean) : [];
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-gray-400 hover:text-procare-bright-blue transition-colors"
+        title={`${notesCount} note${notesCount !== 1 ? 's' : ''}`}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span className="text-xs font-medium">{notesCount}</span>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 bottom-full left-0 mb-2 w-72">
+          <div className="bg-gray-900 text-white text-xs rounded-xl shadow-xl p-3 space-y-2">
+            <p className="font-semibold text-gray-300 uppercase tracking-wide text-[10px]">Recent Notes</p>
+            {notes.length === 0 ? (
+              <p className="text-gray-400 italic">No notes yet.</p>
+            ) : (
+              notes.map((note, i) => (
+                <p key={i} className="text-gray-100 leading-snug line-clamp-3 border-t border-gray-700 pt-2 first:border-0 first:pt-0">
+                  {note}
+                </p>
+              ))
+            )}
+            {notesCount > 2 && (
+              <Link
+                href={`/attendees/${attendeeId}`}
+                className="block text-procare-bright-blue hover:underline text-[10px] pt-1 border-t border-gray-700"
+                onClick={() => setOpen(false)}
+              >
+                View all {notesCount} notes →
+              </Link>
+            )}
+          </div>
+          <div className="flex justify-start pl-3">
+            <div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>;
   return sortDir === 'asc'
@@ -92,7 +159,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 180, title: 150, company: 180, status: 130, seniority: 120, conferences: 100, actions: 100 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 180, title: 150, company: 180, status: 130, seniority: 120, conferences: 100, notes: 70, actions: 100 };
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [search, setSearch] = useState('');
@@ -338,12 +405,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
               <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>
               <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
+              <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>
               <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
             ) : paginated.map(attendee => {
               const seniority = classifySeniority(attendee.title);
               return (
@@ -372,6 +440,17 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   <td className="px-3 py-3"><span className={statusBadgeClass(attendee.status || 'Unknown')}>{attendee.status || 'Unknown'}</span></td>
                   <td className="px-3 py-3"><span className={seniorityBadgeClass(seniority)}>{seniority}</span></td>
                   <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>
+                  <td className="px-3 py-3">
+                    {Number(attendee.notes_count) > 0 ? (
+                      <NotesPopover
+                        attendeeId={attendee.id}
+                        notesCount={Number(attendee.notes_count)}
+                        recentNotesConcat={attendee.recent_notes_concat}
+                      />
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
                       <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>

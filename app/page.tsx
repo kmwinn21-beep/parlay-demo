@@ -48,7 +48,7 @@ async function getRecentConferences(): Promise<RecentConference[]> {
           FROM conferences c
           LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
           GROUP BY c.id
-          ORDER BY c.created_at DESC
+          ORDER BY c.start_date DESC
           LIMIT 5`,
     args: [],
   });
