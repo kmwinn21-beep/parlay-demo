@@ -3,8 +3,4 @@
   publish = ".next"
 
 [functions]
-  # Allow up to 3 minutes for large file uploads
   timeout = 180
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
