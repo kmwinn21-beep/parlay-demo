@@ -19,9 +19,11 @@ export async function GET(
     const company = companyResult.rows[0];
 
     const attendeesResult = await db.execute({
-      sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count
+      sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count,
+                   GROUP_CONCAT(DISTINCT conf.name) as conference_names
             FROM attendees a
             LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
+            LEFT JOIN conferences conf ON ca.conference_id = conf.id
             WHERE a.company_id = ?
             GROUP BY a.id
             ORDER BY a.last_name, a.first_name`,
@@ -30,7 +32,25 @@ export async function GET(
 
     const attendees = attendeesResult.rows.map((r) => ({ ...r }));
 
-    return NextResponse.json({ ...company, attendees });
+    // Distinct conferences this company has attended, most recent first
+    const confsResult = await db.execute({
+      sql: `SELECT DISTINCT c.id, c.name, c.start_date, c.end_date, c.location
+            FROM conferences c
+            JOIN conference_attendees ca ON c.id = ca.conference_id
+            JOIN attendees a ON ca.attendee_id = a.id
+            WHERE a.company_id = ?
+            ORDER BY c.start_date DESC`,
+      args: [params.id],
+    });
+    const conferences = confsResult.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name),
+      start_date: String(r.start_date),
+      end_date: String(r.end_date),
+      location: String(r.location),
+    }));
+
+    return NextResponse.json({ ...company, attendees, conferences });
   } catch (error) {
     console.error('GET /api/companies/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch company' }, { status: 500 });

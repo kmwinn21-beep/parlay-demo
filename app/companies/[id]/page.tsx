@@ -6,6 +6,9 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { BackButton } from '@/components/BackButton';
+
+interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
 interface Attendee {
   id: number;
@@ -14,6 +17,7 @@ interface Attendee {
   title?: string;
   email?: string;
   conference_count: number;
+  conference_names?: string;
 }
 
 interface Company {
@@ -26,6 +30,31 @@ interface Company {
   status?: string;
   created_at: string;
   attendees: Attendee[];
+  conferences?: ConferenceItem[];
+}
+
+function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
+  const [visible, setVisible] = useState(false);
+  const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
+  return (
+    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+      <span
+        className={`inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold ${count >= 4 ? 'bg-green-100 text-green-700' : count === 3 ? 'bg-yellow-100 text-yellow-700' : count === 2 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
+        style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}
+      >
+        {count}
+      </span>
+      {visible && list.length > 0 && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs">
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg px-3 py-2">
+            <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
+            <ul className="space-y-0.5">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+          </div>
+          <div className="flex justify-center"><div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" /></div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const STATUS_COLOR_MAP: Record<string, string> = {
@@ -213,13 +242,16 @@ export default function CompanyDetailPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/companies" className="hover:text-procare-bright-blue">Companies</Link>
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-gray-800">{company.name}</span>
-      </nav>
+      <div className="flex items-center justify-between">
+        <nav className="flex items-center gap-2 text-sm text-gray-500">
+          <Link href="/companies" className="hover:text-procare-bright-blue">Companies</Link>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="text-gray-800">{company.name}</span>
+        </nav>
+        <BackButton />
+      </div>
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -417,7 +449,7 @@ export default function CompanyDetailPage() {
                       ) : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="badge-gray">{attendee.conference_count}</span>
+                      <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
                     </td>
                     <td className="px-4 py-3">
                       <Link
@@ -491,6 +523,35 @@ export default function CompanyDetailPage() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Conferences this company has attended */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">
+              Conferences ({company.conferences?.length ?? 0})
+            </h2>
+            {!company.conferences || company.conferences.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-3">No conferences attended yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {company.conferences.map(conf => (
+                  <Link
+                    key={conf.id}
+                    href={`/conferences/${conf.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                      </p>
+                    </div>
+                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

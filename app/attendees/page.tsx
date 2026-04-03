@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AttendeeTable } from '@/components/AttendeeTable';
+import { BackButton } from '@/components/BackButton';
 import { useForm } from 'react-hook-form';
 
 interface Attendee {
@@ -102,6 +103,7 @@ export default function AttendeesPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      <BackButton />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

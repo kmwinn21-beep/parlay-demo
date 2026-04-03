@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { CompanyTable } from '@/components/CompanyTable';
+import { BackButton } from '@/components/BackButton';
 import { useForm } from 'react-hook-form';
 
 interface Company {
@@ -82,6 +83,7 @@ export default function CompaniesPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      <BackButton />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

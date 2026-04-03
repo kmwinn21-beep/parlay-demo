@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { BackButton } from '@/components/BackButton';
 
 interface ConfigOption {
   id: number;
@@ -298,6 +299,7 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <BackButton />
       <div>
         <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Admin Panel</h1>
         <p className="text-sm text-gray-500 mt-1">Manage dropdown options for company types, statuses, actions, next steps, seniority levels, and profit types.</p>

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { BackButton } from '@/components/BackButton';
 
 export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -63,6 +64,7 @@ export default function FollowUpsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <BackButton />
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Follow Ups</h1>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { BackButton } from '@/components/BackButton';
 
 interface Conference {
   id: number;
@@ -150,6 +151,7 @@ export default function ConferencesPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <BackButton />
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>

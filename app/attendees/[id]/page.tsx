@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { classifySeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { BackButton } from '@/components/BackButton';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -301,11 +302,14 @@ export default function AttendeeDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <nav className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/attendees" className="hover:text-procare-bright-blue">Attendees</Link>
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-        <span className="text-gray-800">{attendee.first_name} {attendee.last_name}</span>
-      </nav>
+      <div className="flex items-center justify-between">
+        <nav className="flex items-center gap-2 text-sm text-gray-500">
+          <Link href="/attendees" className="hover:text-procare-bright-blue">Attendees</Link>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          <span className="text-gray-800">{attendee.first_name} {attendee.last_name}</span>
+        </nav>
+        <BackButton />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column (2/3 width) — profile + follow ups */}

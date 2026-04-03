@@ -7,6 +7,8 @@ import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { CompanyTable } from '@/components/CompanyTable';
+import { BackButton } from '@/components/BackButton';
 import { classifySeniority } from '@/lib/parsers';
 
 interface Attendee {
@@ -91,7 +93,10 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
+  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
+  const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
@@ -146,6 +151,26 @@ export default function ConferenceDetailPage() {
   useEffect(() => {
     fetchConference();
   }, [fetchConference]);
+
+  const loadCompanies = useCallback(async () => {
+    if (companiesLoaded || !conference) return;
+    setIsLoadingCompanies(true);
+    try {
+      const companyIds = new Set(conference.attendees.map(a => a.company_id).filter(Boolean) as number[]);
+      if (companyIds.size === 0) { setConferenceCompanies([]); setCompaniesLoaded(true); return; }
+      const allCompanies = await fetch('/api/companies').then(r => r.json());
+      // Count attendees per company in THIS conference
+      const countMap = new Map<number, number>();
+      for (const a of conference.attendees) {
+        if (a.company_id) countMap.set(a.company_id, (countMap.get(a.company_id) ?? 0) + 1);
+      }
+      const filtered = allCompanies
+        .filter((c: { id: number }) => companyIds.has(c.id))
+        .map((c: { id: number; attendee_count: number }) => ({ ...c, attendee_count: countMap.get(c.id) ?? 0 }));
+      setConferenceCompanies(filtered);
+      setCompaniesLoaded(true);
+    } catch { /* non-fatal */ } finally { setIsLoadingCompanies(false); }
+  }, [conference, companiesLoaded]);
 
   const handleSave = async () => {
     if (!editData.name || !editData.start_date || !editData.end_date || !editData.location) {
@@ -297,13 +322,16 @@ export default function ConferenceDetailPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/conferences" className="hover:text-procare-bright-blue">Conferences</Link>
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-gray-800 truncate max-w-xs">{conference.name}</span>
-      </nav>
+      <div className="flex items-center justify-between">
+        <nav className="flex items-center gap-2 text-sm text-gray-500">
+          <Link href="/conferences" className="hover:text-procare-bright-blue">Conferences</Link>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="text-gray-800 truncate max-w-xs">{conference.name}</span>
+        </nav>
+        <BackButton />
+      </div>
 
       {/* Conference Info Card */}
       <div className="card">
@@ -426,6 +454,12 @@ export default function ConferenceDetailPage() {
             className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'attendees' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Attendees ({conference.attendees.length})
+          </button>
+          <button
+            onClick={() => { setActiveTab('companies'); loadCompanies(); }}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'companies' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Companies
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
@@ -717,6 +751,19 @@ export default function ConferenceDetailPage() {
                 <button disabled={attendeePage >= attendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Companies Tab */}
+      {activeTab === 'companies' && (
+        <div className="card">
+          {isLoadingCompanies ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin w-6 h-6 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <CompanyTable companies={conferenceCompanies} onRefresh={loadCompanies} />
           )}
         </div>
       )}
