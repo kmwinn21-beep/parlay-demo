@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { classifySeniority } from '@/lib/parsers';
 
 interface Attendee {
@@ -59,8 +60,9 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'analytics' | 'follow-ups'>('attendees');
+  const [activeTab, setActiveTab] = useState<'attendees' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
+  const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
@@ -79,18 +81,21 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
+        fetch(`/api/notes?entity_type=conference&entity_id=${id}`),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
       const detailsData = detailsRes.ok ? await detailsRes.json() : [];
       const followUpsData = followUpsRes.ok ? await followUpsRes.json() : [];
+      const notesData = notesRes.ok ? await notesRes.json() : [];
       setConference(data);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
+      setConfNotes(Array.isArray(notesData) ? notesData : []);
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -397,6 +402,12 @@ export default function ConferenceDetailPage() {
           >
             Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
           </button>
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'notes' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Notes{confNotes.length > 0 ? ` (${confNotes.length})` : ''}
+          </button>
         </nav>
       </div>
 
@@ -628,6 +639,15 @@ export default function ConferenceDetailPage() {
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
         <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} />
+      )}
+
+      {/* Notes Tab */}
+      {activeTab === 'notes' && (
+        <NotesSection
+          entityType="conference"
+          entityId={Number(id)}
+          initialNotes={confNotes}
+        />
       )}
 
       {/* Follow Ups Tab */}

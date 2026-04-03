@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { NotesSection, type EntityNote } from '@/components/NotesSection';
 
 interface Attendee {
   id: number;
@@ -56,12 +58,18 @@ export default function CompanyDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
+  const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
 
   const fetchCompany = useCallback(async () => {
     try {
-      const res = await fetch(`/api/companies/${id}`);
-      if (!res.ok) throw new Error('Not found');
-      const data = await res.json();
+      const [compRes, fuRes, notesRes] = await Promise.all([
+        fetch(`/api/companies/${id}`),
+        fetch(`/api/follow-ups?company_id=${id}`),
+        fetch(`/api/notes?entity_type=company&entity_id=${id}`),
+      ]);
+      if (!compRes.ok) throw new Error('Not found');
+      const data = await compRes.json();
       setCompany(data);
       setEditData({
         name: data.name,
@@ -70,6 +78,8 @@ export default function CompanyDetailPage() {
         company_type: data.company_type || '',
         notes: data.notes || '',
       });
+      if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
+      if (notesRes.ok) setCompanyNotes(await notesRes.json());
     } catch {
       toast.error('Failed to load company');
       router.push('/companies');
@@ -134,6 +144,30 @@ export default function CompanyDetailPage() {
     }
   };
 
+  const handleToggleFollowUp = async (attendeeId: number, conferenceId: number, completed: boolean) => {
+    setCompanyFollowUps(prev =>
+      prev.map(fu =>
+        fu.attendee_id === attendeeId && fu.conference_id === conferenceId ? { ...fu, completed } : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(completed ? 'Marked as completed!' : 'Marked as pending.');
+    } catch {
+      setCompanyFollowUps(prev =>
+        prev.map(fu =>
+          fu.attendee_id === attendeeId && fu.conference_id === conferenceId ? { ...fu, completed: !completed } : fu
+        )
+      );
+      toast.error('Failed to update.');
+    }
+  };
+
   const filteredAttendees = (company?.attendees || []).filter((a) => {
     if (!attendeeSearch) return true;
     const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
@@ -152,7 +186,7 @@ export default function CompanyDetailPage() {
   if (!company) return null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500">
         <Link href="/companies" className="hover:text-procare-bright-blue">Companies</Link>
@@ -161,6 +195,11 @@ export default function CompanyDetailPage() {
         </svg>
         <span className="text-gray-800">{company.name}</span>
       </nav>
+
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column — main content */}
+        <div className="lg:col-span-2 space-y-6">
 
       {/* Company Info Card */}
       <div className="card">
@@ -392,6 +431,34 @@ export default function CompanyDetailPage() {
           </div>
         )}
       </div>
+
+          {/* Notes */}
+          <NotesSection
+            entityType="company"
+            entityId={Number(id)}
+            initialNotes={companyNotes}
+          />
+
+        </div>{/* end left column */}
+
+        {/* Right column — Follow Ups */}
+        <div className="space-y-6">
+          <div className="card p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                Follow Ups
+                {companyFollowUps.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({companyFollowUps.filter(f => !f.completed).length} pending)
+                  </span>
+                )}
+              </h2>
+            </div>
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} />
+          </div>
+        </div>
+
+      </div>{/* end grid */}
     </div>
   );
 }

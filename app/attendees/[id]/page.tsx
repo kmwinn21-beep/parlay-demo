@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { classifySeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { NotesSection, type EntityNote } from '@/components/NotesSection';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -59,6 +60,7 @@ export default function AttendeeDetailPage() {
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [attendeeNotes, setAttendeeNotes] = useState<EntityNote[]>([]);
 
   // Conference-specific state
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
@@ -76,6 +78,13 @@ export default function AttendeeDetailPage() {
     } catch { /* non-fatal */ }
   }, [id]);
 
+  const fetchNotes = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/notes?entity_type=attendee&entity_id=${id}`);
+      if (res.ok) setAttendeeNotes(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
   const fetchAttendee = useCallback(async () => {
     try {
       const [atRes, coRes] = await Promise.all([fetch(`/api/attendees/${id}`), fetch('/api/companies')]);
@@ -90,7 +99,7 @@ export default function AttendeeDetailPage() {
     } finally { setIsLoading(false); }
   }, [id, router]);
 
-  useEffect(() => { fetchAttendee(); fetchFollowUps(); }, [fetchAttendee, fetchFollowUps]);
+  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); }, [fetchAttendee, fetchFollowUps, fetchNotes]);
 
   // Load conference detail when a conference is selected
   useEffect(() => {
@@ -345,6 +354,13 @@ export default function AttendeeDetailPage() {
             </div>
             <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
           </div>
+
+          {/* Notes */}
+          <NotesSection
+            entityType="attendee"
+            entityId={Number(id)}
+            initialNotes={attendeeNotes}
+          />
         </div>
 
         {/* Right column (1/3 width) */}

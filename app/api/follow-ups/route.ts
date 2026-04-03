@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const attendeeId = searchParams.get('attendee_id');
     const conferenceId = searchParams.get('conference_id');
+    const companyId = searchParams.get('company_id');
 
     const conditions = ["cad.next_steps IS NOT NULL AND cad.next_steps != ''"];
     const args: (string | number)[] = [];
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
     if (conferenceId) {
       conditions.push('cad.conference_id = ?');
       args.push(conferenceId);
+    }
+    if (companyId) {
+      conditions.push('a.company_id = ?');
+      args.push(companyId);
     }
 
     const result = await db.execute({

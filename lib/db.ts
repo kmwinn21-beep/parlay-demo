@@ -77,6 +77,13 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'Unknown'`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_config_unique ON config_options(category, value)`,
     `ALTER TABLE conference_attendee_details ADD COLUMN completed INTEGER DEFAULT 0`,
+    `CREATE TABLE IF NOT EXISTS entity_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
