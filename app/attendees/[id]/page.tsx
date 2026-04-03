@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { classifySeniority } from '@/lib/parsers';
+import { FollowUpsTable } from '@/app/follow-ups/page';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -24,6 +25,20 @@ interface ConferenceDetail {
   next_steps?: string;
   next_steps_notes?: string;
   notes?: string;
+}
+
+interface FollowUp {
+  attendee_id: number;
+  conference_id: number;
+  next_steps: string;
+  next_steps_notes: string | null;
+  completed: boolean;
+  first_name: string;
+  last_name: string;
+  title: string | null;
+  company_name: string | null;
+  conference_name: string;
+  start_date: string;
 }
 
 const STATUS_OPTIONS = [
@@ -55,6 +70,9 @@ export default function AttendeeDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Follow-ups
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+
   // Conference-specific state
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
   const [conferenceDetail, setConferenceDetail] = useState<ConferenceDetail | null>(null);
@@ -63,6 +81,13 @@ export default function AttendeeDetailPage() {
   const [confOtherNotes, setConfOtherNotes] = useState('');
   const [confNotesSaved, setConfNotesSaved] = useState(false);
   const confNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchFollowUps = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/follow-ups?attendee_id=${id}`);
+      if (res.ok) setFollowUps(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
 
   const fetchAttendee = useCallback(async () => {
     try {
@@ -78,7 +103,7 @@ export default function AttendeeDetailPage() {
     } finally { setIsLoading(false); }
   }, [id, router]);
 
-  useEffect(() => { fetchAttendee(); }, [fetchAttendee]);
+  useEffect(() => { fetchAttendee(); fetchFollowUps(); }, [fetchAttendee, fetchFollowUps]);
 
   // Load conference detail when a conference is selected
   useEffect(() => {
@@ -155,6 +180,30 @@ export default function AttendeeDetailPage() {
       toast.success('Attendee deleted.');
       router.push('/attendees');
     } catch { toast.error('Failed to delete attendee'); setIsDeleting(false); }
+  };
+
+  const handleToggleFollowUp = async (attendeeId: number, conferenceId: number, completed: boolean) => {
+    setFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.attendee_id === attendeeId && fu.conference_id === conferenceId ? { ...fu, completed } : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(completed ? 'Marked as completed!' : 'Marked as pending.');
+    } catch {
+      setFollowUps((prev) =>
+        prev.map((fu) =>
+          fu.attendee_id === attendeeId && fu.conference_id === conferenceId ? { ...fu, completed: !completed } : fu
+        )
+      );
+      toast.error('Failed to update.');
+    }
   };
 
   const handleStatus = async (value: string) => {
@@ -313,6 +362,21 @@ export default function AttendeeDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Follow Ups */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+                Follow Ups
+                {followUps.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({followUps.filter(f => !f.completed).length} pending)
+                  </span>
+                )}
+              </h2>
+            </div>
+            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
           </div>
         </div>
 

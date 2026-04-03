@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface ConfigOption {
@@ -30,8 +30,10 @@ function CategorySection({
 }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [newValue, setNewValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  // Use a ref to reliably read the input value at submission time,
+  // avoiding any stale-closure / React batching edge cases.
+  const newInputRef = useRef<HTMLInputElement>(null);
 
   const handleEdit = (opt: ConfigOption) => {
     setEditingId(opt.id);
@@ -68,20 +70,25 @@ function CategorySection({
   };
 
   const handleAdd = async () => {
-    if (!newValue.trim()) { toast.error('Value cannot be empty.'); return; }
+    const rawValue = newInputRef.current?.value ?? '';
+    const trimmed = rawValue.trim();
+    if (!trimmed) { toast.error('Value cannot be empty.'); return; }
     setIsAdding(true);
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, value: newValue.trim(), sort_order: options.length + 1 }),
+        body: JSON.stringify({ category, value: trimmed, sort_order: options.length + 1 }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add');
+      }
       toast.success('Added!');
-      setNewValue('');
+      if (newInputRef.current) newInputRef.current.value = '';
       onRefresh();
-    } catch {
-      toast.error('Failed to add.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to add.');
     } finally {
       setIsAdding(false);
     }
@@ -106,8 +113,8 @@ function CategorySection({
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
                     autoFocus
                   />
-                  <button onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
-                  <button onClick={() => setEditingId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                  <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                  <button type="button" onClick={() => setEditingId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
                 </>
               ) : (
                 <>
@@ -115,12 +122,14 @@ function CategorySection({
                     {opt.value}
                   </span>
                   <button
+                    type="button"
                     onClick={() => handleEdit(opt)}
                     className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium px-2 py-1"
                   >
                     Edit
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleDelete(opt.id, opt.value)}
                     className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1"
                   >
@@ -135,13 +144,13 @@ function CategorySection({
 
       <div className="flex gap-2 pt-3 border-t border-gray-100">
         <input
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
+          ref={newInputRef}
+          defaultValue=""
           placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`}
           className="input-field flex-1 text-sm"
           onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
         />
-        <button onClick={handleAdd} disabled={isAdding} className="btn-primary text-sm">
+        <button type="button" onClick={handleAdd} disabled={isAdding} className="btn-primary text-sm">
           {isAdding ? 'Adding...' : 'Add'}
         </button>
       </div>
