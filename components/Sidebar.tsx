@@ -52,7 +52,7 @@ const navItems = [
   },
 ];
 
-export function Sidebar({ onClose }: { onClose?: () => void }) {
+export function Sidebar() {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
@@ -64,29 +64,15 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     <aside className="w-64 bg-procare-dark-blue flex flex-col flex-shrink-0 h-full">
       {/* Logo area */}
       <div className="p-5 border-b border-blue-800">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/logo-white.png"
-              alt="Procare HR Logo"
-              width={140}
-              height={42}
-              className="object-contain"
-              priority
-            />
-          </div>
-          {/* Close button — mobile only */}
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="lg:hidden text-blue-300 hover:text-white p-1 rounded transition-colors"
-              aria-label="Close menu"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+        <div className="flex items-center gap-3">
+          <Image
+            src="/logo-white.png"
+            alt="Procare HR Logo"
+            width={140}
+            height={42}
+            className="object-contain"
+            priority
+          />
         </div>
         <p className="text-blue-300 text-xs mt-2 italic">Caring for people who care for people.</p>
       </div>
@@ -97,7 +83,6 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
           <Link
             key={item.href}
             href={item.href}
-            onClick={onClose}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
               isActive(item.href)
                 ? 'bg-procare-gold text-procare-dark-blue'

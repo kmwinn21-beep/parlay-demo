@@ -328,7 +328,7 @@ export default function ConferenceDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{conference.name}</h1>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
@@ -356,7 +356,7 @@ export default function ConferenceDetailPage() {
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
               )}
             </div>
-            <div className="flex gap-2 ml-4">
+            <div className="flex gap-2 sm:ml-4 flex-shrink-0">
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
@@ -382,29 +382,29 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           <button
             onClick={() => setActiveTab('attendees')}
-            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'attendees' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'attendees' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Attendees ({conference.attendees.length})
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Analytics
           </button>
           <button
             onClick={() => setActiveTab('follow-ups')}
-            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
           </button>
           <button
             onClick={() => setActiveTab('notes')}
-            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'notes' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'notes' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Notes{confNotes.length > 0 ? ` (${confNotes.length})` : ''}
           </button>
@@ -532,7 +532,33 @@ export default function ConferenceDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* Mobile card list */}
+              <div className="block lg:hidden divide-y divide-gray-100 -mx-6">
+                {filteredAttendees.map((attendee) => (
+                  <div key={attendee.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">{attendee.first_name} {attendee.last_name}</p>
+                      {attendee.title && <p className="text-xs text-gray-500 mt-0.5 truncate">{attendee.title}</p>}
+                      {attendee.company_name && <p className="text-xs text-gray-500 truncate">{attendee.company_name}</p>}
+                      {attendee.email && (
+                        <a href={`mailto:${attendee.email}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5 block truncate">
+                          {attendee.email}
+                        </a>
+                      )}
+                    </div>
+                    <Link
+                      href={`/attendees/${attendee.id}`}
+                      className="flex-shrink-0 text-xs font-medium text-procare-bright-blue hover:underline mt-0.5"
+                    >
+                      View
+                    </Link>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
@@ -632,6 +658,7 @@ export default function ConferenceDetailPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       )}

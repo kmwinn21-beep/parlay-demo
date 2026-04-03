@@ -88,8 +88,8 @@ export default function FollowUpsPage() {
       )}
 
       {/* Filter tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex gap-6 whitespace-nowrap">
           {(['pending', 'all', 'completed'] as const).map((tab) => (
             <button
               key={tab}
