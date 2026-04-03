@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { classifySeniority } from '@/lib/parsers';
-import { FollowUpsTable } from '@/app/follow-ups/page';
+import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -27,19 +27,6 @@ interface ConferenceDetail {
   notes?: string;
 }
 
-interface FollowUp {
-  attendee_id: number;
-  conference_id: number;
-  next_steps: string;
-  next_steps_notes: string | null;
-  completed: boolean;
-  first_name: string;
-  last_name: string;
-  title: string | null;
-  company_name: string | null;
-  conference_name: string;
-  start_date: string;
-}
 
 const STATUS_OPTIONS = [
   { value: 'Client',         cls: 'bg-yellow-400 text-yellow-900 border-yellow-500' },
