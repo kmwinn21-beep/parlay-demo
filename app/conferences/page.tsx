@@ -49,12 +49,8 @@ export default function ConferencesPage() {
   const [filterMonth, setFilterMonth] = useState('');
   const [filterCity, setFilterCity] = useState('');
   const [filterState, setFilterState] = useState('');
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDateRange, setFilterEndDateRange] = useState('');
-  const [attendeeMin, setAttendeeMin] = useState(0);
-  const [attendeeMax, setAttendeeMax] = useState(0);
-  const [sliderMin, setSliderMin] = useState(0);
-  const [sliderMax, setSliderMax] = useState(0);
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
 
   useEffect(() => {
     fetch('/api/conferences')
@@ -64,13 +60,6 @@ export default function ConferencesPage() {
           (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
         );
         setConferences(sorted);
-        const counts = sorted.map((c) => c.attendee_count);
-        const min = Math.min(0, ...counts);
-        const max = Math.max(0, ...counts);
-        setAttendeeMin(min);
-        setAttendeeMax(max);
-        setSliderMin(min);
-        setSliderMax(max);
       })
       .finally(() => setIsLoading(false));
   }, []);
@@ -102,12 +91,21 @@ export default function ConferencesPage() {
       if (filterMonth && month !== filterMonth) return false;
       if (filterCity && city.toLowerCase() !== filterCity.toLowerCase()) return false;
       if (filterState && state.toLowerCase() !== filterState.toLowerCase()) return false;
-      if (filterStartDate && c.start_date < filterStartDate) return false;
-      if (filterEndDateRange && c.start_date > filterEndDateRange) return false;
-      if (c.attendee_count < sliderMin || c.attendee_count > sliderMax) return false;
+
+      // Date range: show conference if start_date OR end_date falls within [from, to]
+      if (filterDateFrom || filterDateTo) {
+        const startInRange =
+          (!filterDateFrom || c.start_date >= filterDateFrom) &&
+          (!filterDateTo || c.start_date <= filterDateTo);
+        const endInRange =
+          (!filterDateFrom || c.end_date >= filterDateFrom) &&
+          (!filterDateTo || c.end_date <= filterDateTo);
+        if (!startInRange && !endInRange) return false;
+      }
+
       return true;
     });
-  }, [conferences, filterYear, filterMonth, filterCity, filterState, filterStartDate, filterEndDateRange, sliderMin, sliderMax]);
+  }, [conferences, filterYear, filterMonth, filterCity, filterState, filterDateFrom, filterDateTo]);
 
   // Group by year → month (descending)
   const grouped = useMemo(() => {
@@ -139,17 +137,15 @@ export default function ConferencesPage() {
     });
   }, [filteredConferences]);
 
-  const hasFilters = filterYear || filterMonth || filterCity || filterState || filterStartDate || filterEndDateRange || sliderMin !== attendeeMin || sliderMax !== attendeeMax;
+  const hasFilters = filterYear || filterMonth || filterCity || filterState || filterDateFrom || filterDateTo;
 
   const clearFilters = () => {
     setFilterYear('');
     setFilterMonth('');
     setFilterCity('');
     setFilterState('');
-    setFilterStartDate('');
-    setFilterEndDateRange('');
-    setSliderMin(attendeeMin);
-    setSliderMax(attendeeMax);
+    setFilterDateFrom('');
+    setFilterDateTo('');
   };
 
   return (
@@ -243,66 +239,28 @@ export default function ConferencesPage() {
               </select>
             </div>
 
-            {/* Start Date from */}
+            {/* Date From */}
             <div>
-              <label className="label text-xs">Start Date (from)</label>
+              <label className="label text-xs">Date From</label>
               <input
                 type="date"
-                value={filterStartDate}
-                onChange={(e) => setFilterStartDate(e.target.value)}
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
                 className="input-field text-sm"
               />
             </div>
 
-            {/* Start Date to */}
+            {/* Date To */}
             <div>
-              <label className="label text-xs">Start Date (to)</label>
+              <label className="label text-xs">Date To</label>
               <input
                 type="date"
-                value={filterEndDateRange}
-                onChange={(e) => setFilterEndDateRange(e.target.value)}
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
                 className="input-field text-sm"
               />
             </div>
           </div>
-
-          {/* Attendee Count Slider */}
-          {attendeeMax > 0 && (
-            <div>
-              <label className="label text-xs">
-                Attendee Count: <span className="font-semibold text-procare-dark-blue">{sliderMin} – {sliderMax}</span>
-              </label>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-gray-400 w-8 text-right">{attendeeMin}</span>
-                <div className="flex-1 flex flex-col gap-1">
-                  <input
-                    type="range"
-                    min={attendeeMin}
-                    max={attendeeMax}
-                    value={sliderMin}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      if (v <= sliderMax) setSliderMin(v);
-                    }}
-                    className="w-full accent-procare-bright-blue"
-                  />
-                  <input
-                    type="range"
-                    min={attendeeMin}
-                    max={attendeeMax}
-                    value={sliderMax}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      if (v >= sliderMin) setSliderMax(v);
-                    }}
-                    className="w-full accent-procare-bright-blue"
-                  />
-                </div>
-                <span className="text-xs text-gray-400 w-8">{attendeeMax}</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Use top slider for minimum, bottom slider for maximum</p>
-            </div>
-          )}
         </div>
       )}
 

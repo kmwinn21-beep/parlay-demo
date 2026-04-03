@@ -255,7 +255,7 @@ export default function AttendeeDetailPage() {
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column (2/3 width) */}
+        {/* Left column (2/3 width) — profile only */}
         <div className="lg:col-span-2 space-y-6">
           {/* Profile Card */}
           <div className="card">
@@ -331,44 +331,29 @@ export default function AttendeeDetailPage() {
             )}
           </div>
 
-          {/* Conferences */}
+        </div>
+
+        {/* Right column (1/3 width) */}
+        <div className="space-y-6">
+          {/* Conferences — at the top of the right column */}
           <div className="card">
             <h2 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">Conferences ({attendee.conferences.length})</h2>
             {attendee.conferences.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Not associated with any conferences.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {attendee.conferences.map(conf => (
                   <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{conf.name}</p>
-                      <p className="text-xs text-gray-500">{formatDate(conf.start_date)} · {conf.location}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                      <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
                     </div>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </Link>
                 ))}
               </div>
             )}
           </div>
-
-          {/* Follow Ups */}
-          <div className="card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
-                Follow Ups
-                {followUps.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-gray-500">
-                    ({followUps.filter(f => !f.completed).length} pending)
-                  </span>
-                )}
-              </h2>
-            </div>
-            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
-          </div>
-        </div>
-
-        {/* Right column (1/3 width) */}
-        <div className="space-y-6">
           {/* Status */}
           <div className="card">
             <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Status</h2>
@@ -463,6 +448,21 @@ export default function AttendeeDetailPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Follow Ups — full width below the two-column section */}
+      <div className="card p-0 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+            Follow Ups
+            {followUps.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-gray-500">
+                ({followUps.filter(f => !f.completed).length} pending)
+              </span>
+            )}
+          </h2>
+        </div>
+        <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
       </div>
     </div>
   );

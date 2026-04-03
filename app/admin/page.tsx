@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface ConfigOption {
@@ -31,9 +31,6 @@ function CategorySection({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  // Use a ref to reliably read the input value at submission time,
-  // avoiding any stale-closure / React batching edge cases.
-  const newInputRef = useRef<HTMLInputElement>(null);
 
   const handleEdit = (opt: ConfigOption) => {
     setEditingId(opt.id);
@@ -69,9 +66,9 @@ function CategorySection({
     }
   };
 
-  const handleAdd = async () => {
-    const rawValue = newInputRef.current?.value ?? '';
-    const trimmed = rawValue.trim();
+  const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmed = ((new FormData(e.currentTarget).get('newOption') as string) ?? '').trim();
     if (!trimmed) { toast.error('Value cannot be empty.'); return; }
     setIsAdding(true);
     try {
@@ -85,10 +82,10 @@ function CategorySection({
         throw new Error(err.error || 'Failed to add');
       }
       toast.success('Added!');
-      if (newInputRef.current) newInputRef.current.value = '';
+      e.currentTarget.reset();
       onRefresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to add.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add.');
     } finally {
       setIsAdding(false);
     }
@@ -142,18 +139,17 @@ function CategorySection({
         </ul>
       )}
 
-      <div className="flex gap-2 pt-3 border-t border-gray-100">
+      <form onSubmit={handleAdd} className="flex gap-2 pt-3 border-t border-gray-100">
         <input
-          ref={newInputRef}
-          defaultValue=""
+          name="newOption"
           placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`}
           className="input-field flex-1 text-sm"
-          onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+          autoComplete="off"
         />
-        <button type="button" onClick={handleAdd} disabled={isAdding} className="btn-primary text-sm">
+        <button type="submit" disabled={isAdding} className="btn-primary text-sm">
           {isAdding ? 'Adding...' : 'Add'}
         </button>
-      </div>
+      </form>
     </div>
   );
 }
