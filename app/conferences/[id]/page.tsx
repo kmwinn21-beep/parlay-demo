@@ -14,9 +14,40 @@ interface Attendee {
   first_name: string;
   last_name: string;
   title?: string;
+  company_id?: number;
   company_name?: string;
   company_type?: string;
   email?: string;
+  conference_count?: number;
+  conference_names?: string;
+}
+
+const ATTENDEE_PAGE_SIZE = 100;
+
+function conferenceBadgeClass(count: number) {
+  if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
+  if (count === 3) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700';
+  if (count === 2) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700';
+  return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600';
+}
+
+function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
+  const [visible, setVisible] = useState(false);
+  const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
+  return (
+    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+      <span className={conferenceBadgeClass(count)} style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}>{count}</span>
+      {visible && list.length > 0 && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs">
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg px-3 py-2">
+            <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">All Conferences</p>
+            <ul className="space-y-0.5">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+          </div>
+          <div className="flex justify-center"><div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" /></div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface Conference {
@@ -64,6 +95,7 @@ export default function ConferenceDetailPage() {
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
@@ -228,6 +260,8 @@ export default function ConferenceDetailPage() {
     }
   };
 
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch]);
+
   const filteredAttendees = (conference?.attendees || [])
     .filter((a) => {
       if (!attendeeSearch) return true;
@@ -246,6 +280,9 @@ export default function ConferenceDetailPage() {
       else if (sortKey === 'seniority') { aVal = classifySeniority(a.title); bVal = classifySeniority(b.title); }
       return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
+
+  const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
+  const paginatedAttendees = filteredAttendees.slice((attendeePage - 1) * ATTENDEE_PAGE_SIZE, attendeePage * ATTENDEE_PAGE_SIZE);
 
   if (isLoading) {
     return (
@@ -535,10 +572,10 @@ export default function ConferenceDetailPage() {
             <>
               {/* Mobile card list */}
               <div className="block lg:hidden divide-y divide-gray-100 -mx-6">
-                {filteredAttendees.map((attendee) => (
+                {paginatedAttendees.map((attendee) => (
                   <div key={attendee.id} className="px-4 py-3 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800">{attendee.first_name} {attendee.last_name}</p>
+                      <Link href={`/attendees/${attendee.id}`} className="text-sm font-semibold text-procare-bright-blue hover:underline">{attendee.first_name} {attendee.last_name}</Link>
                       {attendee.title && <p className="text-xs text-gray-500 mt-0.5 truncate">{attendee.title}</p>}
                       {attendee.company_name && <p className="text-xs text-gray-500 truncate">{attendee.company_name}</p>}
                       {attendee.email && (
@@ -579,12 +616,13 @@ export default function ConferenceDetailPage() {
                         {sortKey === col && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
                       </th>
                     ))}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"># Conf</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredAttendees.map((attendee) => (
+                  {paginatedAttendees.map((attendee) => (
                     <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-4 py-3">
                         <input
@@ -594,8 +632,10 @@ export default function ConferenceDetailPage() {
                           className="accent-procare-bright-blue"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-800">
-                        {attendee.first_name} {attendee.last_name}
+                      <td className="px-4 py-3 font-medium">
+                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                          {attendee.first_name} {attendee.last_name}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
                         {attendee.title || <span className="text-gray-300">—</span>}
@@ -603,7 +643,11 @@ export default function ConferenceDetailPage() {
                       <td className="px-4 py-3">
                         {attendee.company_name ? (
                           <div>
-                            <p className="text-gray-800">{attendee.company_name}</p>
+                            {attendee.company_id ? (
+                              <Link href={`/companies/${attendee.company_id}`} className="text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                            ) : (
+                              <p className="text-gray-800">{attendee.company_name}</p>
+                            )}
                             {attendee.company_type && (
                               <span className="badge-blue text-xs">{attendee.company_type}</span>
                             )}
@@ -626,6 +670,9 @@ export default function ConferenceDetailPage() {
                             <span className={`badge ${colorMap[s] || 'badge-gray'}`}>{s}</span>
                           );
                         })()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
                       </td>
                       <td className="px-4 py-3">
                         {attendee.email ? (
@@ -659,6 +706,17 @@ export default function ConferenceDetailPage() {
               </table>
             </div>
             </>
+          )}
+
+          {/* Pagination */}
+          {attendeeTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
+              <span className="text-xs text-gray-500">Page {attendeePage} of {attendeeTotalPages} · {filteredAttendees.length} total</span>
+              <div className="flex items-center gap-2">
+                <button disabled={attendeePage === 1} onClick={() => setAttendeePage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
+                <button disabled={attendeePage >= attendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+              </div>
+            </div>
           )}
         </div>
       )}

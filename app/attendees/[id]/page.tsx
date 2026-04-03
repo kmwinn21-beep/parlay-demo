@@ -69,6 +69,7 @@ export default function AttendeeDetailPage() {
   const [confNotesValue, setConfNotesValue] = useState('');
   const [confOtherNotes, setConfOtherNotes] = useState('');
   const [confNotesSaved, setConfNotesSaved] = useState(false);
+  const [confNoteEntityIds, setConfNoteEntityIds] = useState<Record<string, number>>({});
   const confNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchFollowUps = useCallback(async () => {
@@ -116,6 +117,13 @@ export default function AttendeeDetailPage() {
         setConferenceDetail(data);
         setConfNotesValue(data?.notes || '');
         setConfOtherNotes(data?.next_steps_notes || '');
+        // Find existing entity_note for this conference
+        const conf = attendee?.conferences.find(c => c.id === Number(selectedConferenceId));
+        if (conf && attendeeNotes.length > 0) {
+          const prefix = `[${conf.name} - `;
+          const existing = attendeeNotes.find(n => n.content.startsWith(prefix));
+          if (existing) setConfNoteEntityIds(prev => ({ ...prev, [selectedConferenceId]: existing.id }));
+        }
       })
       .catch(() => {
         setConferenceDetail(null);
@@ -210,8 +218,10 @@ export default function AttendeeDetailPage() {
   const handleAction = async (value: string) => {
     if (!selectedConferenceId) { toast.error('Please select a conference first.'); return; }
     try {
-      const newVal = conferenceDetail?.action === value ? undefined : value;
-      await upsertConferenceDetail({ action: newVal });
+      const current = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
+      if (current.has(value)) current.delete(value); else current.add(value);
+      const newAction = Array.from(current).join(',') || undefined;
+      await upsertConferenceDetail({ action: newAction });
     } catch { toast.error('Failed to update action.'); }
   };
 
@@ -240,6 +250,36 @@ export default function AttendeeDetailPage() {
         await upsertConferenceDetail({ notes: confNotesValue });
         setConfNotesSaved(true);
         setTimeout(() => setConfNotesSaved(false), 2000);
+
+        // Sync to general attendee notes
+        const conf = attendee?.conferences.find(c => c.id === Number(selectedConferenceId));
+        if (conf && confNotesValue.trim()) {
+          const monthYear = new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          const prefixedContent = `[${conf.name} - ${monthYear}]: ${confNotesValue.trim()}`;
+          const existingId = confNoteEntityIds[selectedConferenceId];
+          if (existingId) {
+            const res = await fetch(`/api/notes/${existingId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: prefixedContent }),
+            });
+            if (res.ok) {
+              const updated = await res.json();
+              setAttendeeNotes(prev => prev.map(n => n.id === existingId ? updated : n));
+            }
+          } else {
+            const res = await fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ entity_type: 'attendee', entity_id: Number(id), content: prefixedContent }),
+            });
+            if (res.ok) {
+              const created = await res.json();
+              setAttendeeNotes(prev => [created, ...prev]);
+              setConfNoteEntityIds(prev => ({ ...prev, [selectedConferenceId]: created.id }));
+            }
+          }
+        }
       } catch { toast.error('Failed to save notes.'); }
     }, 400);
   };
@@ -430,12 +470,16 @@ export default function AttendeeDetailPage() {
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Actions</p>
                   <div className="flex flex-wrap gap-2">
-                    {ACTION_OPTIONS.map(opt => (
+                    {(() => {
+                      const activeActions = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
+                      return ACTION_OPTIONS.map(opt => (
                       <button key={opt} onClick={() => handleAction(opt)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${conferenceDetail?.action === opt ? 'bg-procare-bright-blue text-white border-procare-bright-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${activeActions.has(opt) ? 'bg-procare-bright-blue text-white border-procare-bright-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
+                        {activeActions.has(opt) && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                         {opt}
                       </button>
-                    ))}
+                    ));
+                    })()}
                   </div>
                 </div>
 

@@ -15,6 +15,7 @@ interface Company {
   status?: string;
   attendee_count: number;
   conference_count: number;
+  conference_names?: string;
 }
 
 interface CompanyTableProps {
@@ -25,6 +26,7 @@ interface CompanyTableProps {
 type SortKey = 'name' | 'company_type' | 'status' | 'attendee_count' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
+const PAGE_SIZE = 100;
 const STATUS_OPTIONS = ['Client', 'Hot Prospect', 'Interested', 'Not Interested', 'Unknown'];
 const COMPANY_TYPES = ['3rd Party Operator', 'Owner/Operator', 'Capital Partner', 'Vendor', 'Partner', 'Other'];
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
@@ -61,6 +63,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
+  const [filterConference, setFilterConference] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -69,6 +72,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [showMassEdit, setShowMassEdit] = useState(false);
   const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; profit_type?: string }>({});
   const [isApplying, setIsApplying] = useState(false);
+  const [page, setPage] = useState(1);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
@@ -100,13 +104,23 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     return false;
   };
 
+  // All unique conference names across companies
+  const allConferenceNames = useMemo(() => {
+    const names = new Set<string>();
+    companies.forEach(c => {
+      (c.conference_names || '').split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.add(n));
+    });
+    return Array.from(names).sort();
+  }, [companies]);
+
   const filtered = useMemo(() => {
     const list = companies.filter(c => {
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
       const matchType = !filterType || c.company_type === filterType;
       const matchStatus = !filterStatus || (c.status || 'Unknown') === filterStatus;
       const matchConf = confCountMatches(Number(c.conference_count));
-      return matchSearch && matchType && matchStatus && matchConf;
+      const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
+      return matchSearch && matchType && matchStatus && matchConf && matchConference;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -118,7 +132,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, search, filterType, filterStatus, filterConfCounts, sortKey, sortDir]);
+  }, [companies, search, filterType, filterStatus, filterConfCounts, filterConference, sortKey, sortDir]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectedCompanies = companies.filter(c => selectedIds.has(c.id));
@@ -180,6 +197,14 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
           <option value="">All Statuses</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+
+        {/* Conference name filter */}
+        {allConferenceNames.length > 0 && (
+          <select value={filterConference} onChange={e => { setFilterConference(e.target.value); setPage(1); }} className={`input-field w-auto ${filterConference ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}>
+            <option value="">All Conferences</option>
+            {allConferenceNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        )}
 
         {/* # Attended multiselect */}
         <div className="relative">
@@ -260,7 +285,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-3 text-left w-10">
-                <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                <input type="checkbox" checked={selectedIds.size === paginated.length && paginated.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(paginated.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
               </th>
               <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
               <th className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>
@@ -271,12 +296,14 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
+            {paginated.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
-            ) : filtered.map(company => (
+            ) : paginated.map(company => (
               <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                 <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
-                <td className="px-3 py-3"><p className="font-medium text-gray-800 truncate">{company.name}</p></td>
+                <td className="px-3 py-3">
+                  <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline truncate block">{company.name}</Link>
+                </td>
                 <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                 <td className="px-3 py-3"><span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span></td>
                 <td className="px-3 py-3"><span className="badge-gray">{company.attendee_count}</span></td>
@@ -292,6 +319,17 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+          <span className="text-xs text-gray-500">Page {page} of {totalPages} · {filtered.length} total</span>
+          <div className="flex items-center gap-2">
+            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+          </div>
+        </div>
+      )}
 
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}

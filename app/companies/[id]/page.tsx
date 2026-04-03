@@ -58,6 +58,8 @@ export default function CompanyDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [attendeePage, setAttendeePage] = useState(1);
+  const ATTENDEE_PAGE_SIZE = 100;
   const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
   const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
 
@@ -168,12 +170,17 @@ export default function CompanyDetailPage() {
     }
   };
 
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch]);
+
   const filteredAttendees = (company?.attendees || []).filter((a) => {
     if (!attendeeSearch) return true;
     const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
     return fullName.includes(attendeeSearch.toLowerCase()) ||
       (a.title?.toLowerCase().includes(attendeeSearch.toLowerCase()));
   });
+
+  const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
+  const paginatedAttendees = filteredAttendees.slice((attendeePage - 1) * ATTENDEE_PAGE_SIZE, attendeePage * ATTENDEE_PAGE_SIZE);
 
   if (isLoading) {
     return (
@@ -376,10 +383,12 @@ export default function CompanyDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredAttendees.map((attendee) => (
+                {paginatedAttendees.map((attendee) => (
                   <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-800">
-                      {attendee.first_name} {attendee.last_name}
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                        {attendee.first_name} {attendee.last_name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
                       {attendee.title || <span className="text-gray-300">—</span>}
@@ -406,6 +415,17 @@ export default function CompanyDetailPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Attendee pagination */}
+        {attendeeTotalPages > 1 && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+            <span className="text-xs text-gray-500">Page {attendeePage} of {attendeeTotalPages} · {filteredAttendees.length} total</span>
+            <div className="flex items-center gap-2">
+              <button disabled={attendeePage === 1} onClick={() => setAttendeePage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
+              <button disabled={attendeePage >= attendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+            </div>
           </div>
         )}
       </div>

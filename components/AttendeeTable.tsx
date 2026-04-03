@@ -11,6 +11,7 @@ interface Attendee {
   first_name: string;
   last_name: string;
   title?: string;
+  company_id?: number;
   company_name?: string;
   company_type?: string;
   email?: string;
@@ -20,6 +21,7 @@ interface Attendee {
   next_steps?: string;
   conference_count: number;
   conference_names?: string;
+  has_pending_follow_ups?: boolean;
 }
 
 interface Company { id: number; name: string; }
@@ -32,7 +34,10 @@ interface AttendeeTableProps {
 type SortKey = 'last_name' | 'first_name' | 'title' | 'company_name' | 'status' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
+const PAGE_SIZE = 100;
 const STATUS_OPTIONS = ['Client', 'Hot Prospect', 'Interested', 'Not Interested', 'Unknown'];
+const SENIORITY_OPTIONS = ['C-Suite', 'VP Level', 'Director', 'Manager', 'Other'];
+const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
 
 function statusBadgeClass(status: string | undefined) {
   switch (status) {
@@ -93,6 +98,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [search, setSearch] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterSeniority, setFilterSeniority] = useState('');
+  const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
+  const [showConfFilter, setShowConfFilter] = useState(false);
+  const [filterHasFollowUps, setFilterHasFollowUps] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('last_name');
@@ -102,6 +111,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [massEditFields, setMassEditFields] = useState<{ status?: string; title?: string; company_id?: string }>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
+  const [page, setPage] = useState(1);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   useEffect(() => {
@@ -109,6 +119,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       fetch('/api/companies').then(r => r.json()).then(setCompanies).catch(() => {});
     }
   }, [showMassEdit, companies.length]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps]);
 
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -128,13 +141,27 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     else { setSortKey(col); setSortDir('asc'); }
   };
 
+  const toggleConfFilter = (val: string) => {
+    setFilterConfCounts(prev => { const n = new Set(prev); n.has(val) ? n.delete(val) : n.add(val); return n; });
+  };
+
+  const confCountMatches = (count: number): boolean => {
+    if (filterConfCounts.size === 0) return true;
+    if (filterConfCounts.has('4+') && count >= 4) return true;
+    if (filterConfCounts.has(String(count)) && count < 4) return true;
+    return false;
+  };
+
   const filtered = useMemo(() => {
     const list = attendees.filter(a => {
       const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
       const matchSearch = !search || fullName.includes(search.toLowerCase()) || a.company_name?.toLowerCase().includes(search.toLowerCase()) || a.email?.toLowerCase().includes(search.toLowerCase()) || a.title?.toLowerCase().includes(search.toLowerCase());
       const matchType = !filterCompanyType || a.company_type === filterCompanyType;
       const matchStatus = !filterStatus || (a.status || 'Unknown') === filterStatus;
-      return matchSearch && matchType && matchStatus;
+      const matchSeniority = !filterSeniority || classifySeniority(a.title) === filterSeniority;
+      const matchConf = confCountMatches(Number(a.conference_count));
+      const matchFollowUps = !filterHasFollowUps || a.has_pending_follow_ups === true;
+      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchFollowUps;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -147,7 +174,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       return 0;
     });
     return list;
-  }, [attendees, search, filterCompanyType, filterStatus, sortKey, sortDir]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps, sortKey, sortDir]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectedAttendees = attendees.filter(a => selectedIds.has(a.id));
@@ -210,6 +241,39 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <option value="">All Statuses</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto">
+          <option value="">All Seniorities</option>
+          {SENIORITY_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        {/* # Conferences multiselect */}
+        <div className="relative">
+          <button onClick={() => setShowConfFilter(v => !v)} className={`input-field w-auto flex items-center gap-2 text-sm ${filterConfCounts.size > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}>
+            # Conferences {filterConfCounts.size > 0 ? `(${filterConfCounts.size})` : ''}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          {showConfFilter && (
+            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2 min-w-[120px]">
+              {CONF_COUNT_OPTIONS.map(opt => (
+                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
+                  <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-procare-bright-blue" />
+                  {opt} conference{opt === '1' ? '' : 's'}
+                </label>
+              ))}
+              {filterConfCounts.size > 0 && <button onClick={() => setFilterConfCounts(new Set())} className="text-xs text-red-500 hover:underline px-2 mt-1">Clear</button>}
+            </div>
+          )}
+        </div>
+
+        {/* Has Follow-Ups toggle */}
+        <button
+          onClick={() => setFilterHasFollowUps(v => !v)}
+          className={`input-field w-auto flex items-center gap-2 text-sm transition-colors ${filterHasFollowUps ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : ''}`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+          Has Follow-Ups
+        </button>
+
         {selectedIds.size >= 1 && (
           <>
             <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className="btn-secondary flex items-center gap-2 text-sm">
@@ -267,7 +331,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-3 text-left w-10">
-                <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                <input type="checkbox" checked={selectedIds.size === paginated.length && paginated.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(paginated.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
               </th>
               <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
               <th className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>
@@ -279,19 +343,27 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
+            {paginated.length === 0 ? (
               <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
-            ) : filtered.map(attendee => {
+            ) : paginated.map(attendee => {
               const seniority = classifySeniority(attendee.title);
               return (
                 <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
-                  <td className="px-3 py-3"><p className="font-medium text-gray-800 truncate">{attendee.first_name} {attendee.last_name}</p></td>
+                  <td className="px-3 py-3">
+                    <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline truncate block">
+                      {attendee.first_name} {attendee.last_name}
+                    </Link>
+                  </td>
                   <td className="px-3 py-3 text-gray-600 truncate">{attendee.title || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
                     {attendee.company_name ? (
                       <div className="truncate">
-                        <p className="text-gray-800 truncate">{attendee.company_name}</p>
+                        {attendee.company_id ? (
+                          <Link href={`/companies/${attendee.company_id}`} className="text-gray-800 hover:text-procare-bright-blue hover:underline truncate block">{attendee.company_name}</Link>
+                        ) : (
+                          <p className="text-gray-800 truncate">{attendee.company_name}</p>
+                        )}
                         {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
                       </div>
                     ) : <span className="text-gray-300">—</span>}
@@ -311,6 +383,17 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+          <span className="text-xs text-gray-500">Page {page} of {totalPages} · {filtered.length} total</span>
+          <div className="flex items-center gap-2">
+            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+          </div>
+        </div>
+      )}
 
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedAttendees.map(a => ({ id: a.id, label: `${a.first_name} ${a.last_name}`, sublabel: [a.title, a.company_name].filter(Boolean).join(' · ') }))}

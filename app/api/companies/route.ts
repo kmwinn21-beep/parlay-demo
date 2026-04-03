@@ -8,10 +8,12 @@ export async function GET() {
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes,
               COALESCE(co.status, 'Unknown') as status, co.created_at,
               COUNT(DISTINCT a.id) as attendee_count,
-              COUNT(DISTINCT ca.conference_id) as conference_count
+              COUNT(DISTINCT ca.conference_id) as conference_count,
+              GROUP_CONCAT(DISTINCT conf.name) as conference_names
             FROM companies co
             LEFT JOIN attendees a ON co.id = a.company_id
             LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
+            LEFT JOIN conferences conf ON ca.conference_id = conf.id
             GROUP BY co.id
             ORDER BY co.name`,
       args: [],

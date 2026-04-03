@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   PieChart,
   Pie,
@@ -15,6 +16,7 @@ interface Attendee {
   first_name: string;
   last_name: string;
   title?: string;
+  company_id?: number;
   company_type?: string;
   company_name?: string;
 }
@@ -111,12 +113,17 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
   const seniorityAll = buildSeniorityData(attendees);
   const companyTypeData = buildCompanyTypeData(attendees);
 
-  // Count actions
+  // Count actions — action field may contain comma-separated multiple values
   const actionCounts: Record<string, number> = {};
   for (const label of ACTION_LABELS) actionCounts[label] = 0;
   for (const d of conferenceDetails) {
-    if (d.action && ACTION_LABELS.includes(d.action)) {
-      actionCounts[d.action] = (actionCounts[d.action] || 0) + 1;
+    if (d.action) {
+      const actions = d.action.split(',').map(s => s.trim()).filter(Boolean);
+      for (const a of actions) {
+        if (ACTION_LABELS.includes(a)) {
+          actionCounts[a] = (actionCounts[a] || 0) + 1;
+        }
+      }
     }
   }
 
@@ -272,20 +279,28 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
               <tbody className="divide-y divide-gray-100">
                 {activityRows.map(({ attendee, detail }) => (
                   <tr key={attendee.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800">
-                      {attendee.first_name} {attendee.last_name}
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                        {attendee.first_name} {attendee.last_name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
                       {attendee.title || <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
-                      {attendee.company_name || <span className="text-gray-300">—</span>}
+                    <td className="px-4 py-3 max-w-[140px] truncate">
+                      {attendee.company_name ? (
+                        attendee.company_id ? (
+                          <Link href={`/companies/${attendee.company_id}`} className="text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                        ) : <span className="text-gray-600">{attendee.company_name}</span>
+                      ) : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       {detail.action ? (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                          {detail.action}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {detail.action.split(',').map(a => a.trim()).filter(Boolean).map(a => (
+                            <span key={a} className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">{a}</span>
+                          ))}
+                        </div>
                       ) : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3">

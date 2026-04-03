@@ -11,7 +11,13 @@ export async function GET() {
                    a.created_at,
                    co.name as company_name, co.company_type,
                    COUNT(DISTINCT ca.conference_id) as conference_count,
-                   GROUP_CONCAT(DISTINCT c.name) as conference_names
+                   GROUP_CONCAT(DISTINCT c.name) as conference_names,
+                   CASE WHEN EXISTS (
+                     SELECT 1 FROM conference_attendee_details cad
+                     WHERE cad.attendee_id = a.id
+                     AND cad.next_steps IS NOT NULL AND cad.next_steps != ''
+                     AND (cad.completed IS NULL OR cad.completed = 0)
+                   ) THEN 1 ELSE 0 END as has_pending_follow_ups
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
             LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
