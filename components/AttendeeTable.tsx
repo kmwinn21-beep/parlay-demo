@@ -339,75 +339,121 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
       <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {attendees.length} attendees{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
 
-      <div className="overflow-auto rounded-xl border border-gray-200" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
-        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-3 py-3 text-left w-10">
-                <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
-              </th>
-              <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
-              <th className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>
-              <th className={thCls} style={{ width: colWidths.company }} onClick={() => handleSort('company_name')}>Company <SortIcon col="company_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="company" /></th>
-              <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
-              <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>
-              <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
-              <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>
-              <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
-            ) : paginated.map(attendee => {
-              const seniority = classifySeniority(attendee.title);
-              return (
-                <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
-                  <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
-                  <td className="px-3 py-3">
-                    <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        {/* Mobile card layout */}
+        <div className="block lg:hidden divide-y divide-gray-100 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+          {filtered.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</div>
+          ) : paginated.map(attendee => {
+            const seniority = classifySeniority(attendee.title);
+            return (
+              <div key={attendee.id} className={`p-4 ${selectedIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue flex-shrink-0" />
+                    <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
                       {attendee.first_name} {attendee.last_name}
                     </Link>
-                  </td>
-                  <td className="px-3 py-3 text-gray-600 truncate">{attendee.title || <span className="text-gray-300">—</span>}</td>
-                  <td className="px-3 py-3">
-                    {attendee.company_name ? (
-                      <div className="truncate">
-                        {attendee.company_id ? (
-                          <Link href={`/companies/${attendee.company_id}`} className="text-gray-800 hover:text-procare-bright-blue hover:underline truncate">
-                            {attendee.company_name}
-                          </Link>
-                        ) : (
-                          <p className="text-gray-800 truncate">{attendee.company_name}</p>
-                        )}
-                        {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
-                      </div>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-3 py-3"><span className={statusBadgeClass(attendee.status || 'Unknown')}>{attendee.status || 'Unknown'}</span></td>
-                  <td className="px-3 py-3"><span className={seniorityBadgeClass(seniority)}>{seniority}</span></td>
-                  <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>
-                  <td className="px-3 py-3">
-                    {Number(attendee.notes_count) > 0 ? (
-                      <NotesPopover
-                        attendeeId={attendee.id}
-                        notesCount={Number(attendee.notes_count)}
-                      />
-                    ) : (
-                      <span className="text-gray-300">—</span>
+                    {Number(attendee.notes_count) > 0 && (
+                      <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.notes_count)} />
                     )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-3">
-                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>
-                      <button onClick={() => handleDeleteOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                  <button onClick={() => handleDeleteOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+                {attendee.title && <p className="text-xs text-gray-500 mt-1 ml-6">{attendee.title}</p>}
+                {attendee.company_name && (
+                  <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
+                    {attendee.company_id ? (
+                      <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                    ) : (
+                      <span className="text-xs text-gray-700">{attendee.company_name}</span>
+                    )}
+                    {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
+                  </div>
+                )}
+                <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
+                  <span className={statusBadgeClass(attendee.status || 'Unknown')}>{attendee.status || 'Unknown'}</span>
+                  <span className={seniorityBadgeClass(seniority)}>{seniority}</span>
+                  <ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop table layout */}
+        <div className="hidden lg:block overflow-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+          <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-3 text-left w-10">
+                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                </th>
+                <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
+                <th className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>
+                <th className={thCls} style={{ width: colWidths.company }} onClick={() => handleSort('company_name')}>Company <SortIcon col="company_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="company" /></th>
+                <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
+                <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>
+                <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+              ) : paginated.map(attendee => {
+                const seniority = classifySeniority(attendee.title);
+                return (
+                  <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
+                    <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
+                    <td className="px-3 py-3">
+                      <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
+                        {attendee.first_name} {attendee.last_name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-3 text-gray-600 truncate">{attendee.title || <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-3">
+                      {attendee.company_name ? (
+                        <div className="truncate">
+                          {attendee.company_id ? (
+                            <Link href={`/companies/${attendee.company_id}`} className="text-gray-800 hover:text-procare-bright-blue hover:underline truncate">
+                              {attendee.company_name}
+                            </Link>
+                          ) : (
+                            <p className="text-gray-800 truncate">{attendee.company_name}</p>
+                          )}
+                          {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
+                        </div>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-3"><span className={statusBadgeClass(attendee.status || 'Unknown')}>{attendee.status || 'Unknown'}</span></td>
+                    <td className="px-3 py-3"><span className={seniorityBadgeClass(seniority)}>{seniority}</span></td>
+                    <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>
+                    <td className="px-3 py-3">
+                      {Number(attendee.notes_count) > 0 ? (
+                        <NotesPopover
+                          attendeeId={attendee.id}
+                          notesCount={Number(attendee.notes_count)}
+                        />
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>
+                        <button onClick={() => handleDeleteOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {filtered.length > PAGE_SIZE && (

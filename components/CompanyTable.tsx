@@ -349,46 +349,84 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
 
       <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {companies.length} companies{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
 
-      <div className="overflow-auto rounded-xl border border-gray-200" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
-        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-3 py-3 text-left w-10">
-                <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
-              </th>
-              <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
-              <th className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>
-              <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
-              <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>
-              <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
-              <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
-            ) : paginated.map(company => (
-              <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
-                <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
-                <td className="px-3 py-3">
-                  <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        {/* Mobile card layout */}
+        <div className="block lg:hidden divide-y divide-gray-100 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+          {filtered.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
+          ) : paginated.map(company => (
+            <div key={company.id} className={`p-4 ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue flex-shrink-0" />
+                  <Link href={`/companies/${company.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
                     {company.name}
                   </Link>
-                </td>
-                <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
-                <td className="px-3 py-3"><span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span></td>
-                <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
-                <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-3">
-                    <Link href={`/companies/${company.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>
-                    <button onClick={() => handleDeleteOne(company.id, company.name)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-                  </div>
-                </td>
+                </div>
+                <button onClick={() => handleDeleteOne(company.id, company.name)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+              <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
+                <span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span>
+                {company.company_type && <span className="badge-blue">{company.company_type}</span>}
+              </div>
+              <div className="mt-2 ml-6 flex items-center gap-4">
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} />
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table layout */}
+        <div className="hidden lg:block overflow-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+          <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-3 text-left w-10">
+                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                </th>
+                <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
+                <th className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>
+                <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
+                <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>
+                <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+              ) : paginated.map(company => (
+                <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
+                  <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
+                  <td className="px-3 py-3">
+                    <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
+                      {company.name}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-3"><span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span></td>
+                  <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
+                  <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-3">
+                      <Link href={`/companies/${company.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>
+                      <button onClick={() => handleDeleteOne(company.id, company.name)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {filtered.length > PAGE_SIZE && (

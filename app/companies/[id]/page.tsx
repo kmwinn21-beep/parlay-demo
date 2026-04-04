@@ -429,51 +429,74 @@ export default function CompanyDetailPage() {
             {attendeeSearch ? 'No attendees match your search.' : 'No attendees for this company yet.'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {paginatedAttendees.map((attendee) => (
-                  <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium">
-                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
-                        {attendee.first_name} {attendee.last_name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
-                      {attendee.title || <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {attendee.email ? (
-                        <a href={`mailto:${attendee.email}`} className="text-procare-bright-blue hover:underline text-xs">
-                          {attendee.email}
-                        </a>
-                      ) : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/attendees/${attendee.id}`}
-                        className="text-procare-bright-blue hover:underline text-xs font-medium"
-                      >
-                        View
-                      </Link>
-                    </td>
+          <>
+            {/* Mobile card layout */}
+            <div className="block lg:hidden divide-y divide-gray-100">
+              {paginatedAttendees.map((attendee) => (
+                <div key={attendee.id} className="p-4 bg-white">
+                  <div className="flex items-start justify-between gap-3">
+                    <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm">
+                      {attendee.first_name} {attendee.last_name}
+                    </Link>
+                    <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                  </div>
+                  {attendee.title && <p className="text-xs text-gray-500 mt-1">{attendee.title}</p>}
+                  {attendee.email && (
+                    <a href={`mailto:${attendee.email}`} className="text-xs text-procare-bright-blue hover:underline mt-1 block">
+                      {attendee.email}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table layout */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedAttendees.map((attendee) => (
+                    <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-medium">
+                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                          {attendee.first_name} {attendee.last_name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
+                        {attendee.title || <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {attendee.email ? (
+                          <a href={`mailto:${attendee.email}`} className="text-procare-bright-blue hover:underline text-xs">
+                            {attendee.email}
+                          </a>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/attendees/${attendee.id}`}
+                          className="text-procare-bright-blue hover:underline text-xs font-medium"
+                        >
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         {/* Attendee pagination */}
