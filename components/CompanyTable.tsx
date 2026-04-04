@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
 
 interface Company {
@@ -97,8 +98,6 @@ interface CompanyTableProps {
 type SortKey = 'name' | 'company_type' | 'status' | 'attendee_count' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
-const STATUS_OPTIONS = ['Client', 'Hot Prospect', 'Interested', 'Not Interested', 'Unknown'];
-const COMPANY_TYPES = ['3rd Party Operator', 'Owner/Operator', 'Capital Partner', 'Vendor', 'Partner', 'Other'];
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
 const PAGE_SIZE = 100;
 
@@ -120,6 +119,10 @@ const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, status: 1
 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const colorMaps = useConfigColors();
+  const configOptions = useConfigOptions();
+  const statusOptions = configOptions.status ?? [];
+  const companyTypeOptions = configOptions.company_type ?? [];
+  const profitTypeOptions = configOptions.profit_type ?? [];
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -255,11 +258,11 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         </div>
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="input-field w-auto">
           <option value="">All Types</option>
-          {COMPANY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field w-auto">
           <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
         {/* # Attended multiselect */}
@@ -316,22 +319,21 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               <label className="label text-xs">Status</label>
               <select value={massEditFields.status || ''} onChange={e => setMassEditFields(p => ({ ...p, status: e.target.value }))} className="input-field w-40 text-sm">
                 <option value="">— no change —</option>
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>
               <label className="label text-xs">Company Type</label>
               <select value={massEditFields.company_type || ''} onChange={e => setMassEditFields(p => ({ ...p, company_type: e.target.value }))} className="input-field w-48 text-sm">
                 <option value="">— no change —</option>
-                {COMPANY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
               <label className="label text-xs">Profit Type</label>
               <select value={massEditFields.profit_type || ''} onChange={e => setMassEditFields(p => ({ ...p, profit_type: e.target.value }))} className="input-field w-36 text-sm">
                 <option value="">— no change —</option>
-                <option value="for-profit">For-Profit</option>
-                <option value="non-profit">Non-Profit</option>
+                {profitTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <button onClick={handleMassEdit} disabled={isApplying} className="btn-primary text-sm">{isApplying ? 'Applying...' : `Apply to ${selectedIds.size}`}</button>

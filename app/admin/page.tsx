@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { BackButton } from '@/components/BackButton';
 import { COLOR_PRESETS, getPreset } from '@/lib/colors';
 import { invalidateConfigColors } from '@/lib/useConfigColors';
+import { invalidateConfigOptions } from '@/lib/useConfigOptions';
 
 interface ConfigOption {
   id: number;
@@ -64,6 +65,7 @@ function ColorPicker({ optionId, currentColor, onColorSaved }: { optionId: numbe
       });
       if (!res.ok) throw new Error();
       invalidateConfigColors();
+      invalidateConfigOptions();
       onColorSaved();
     } catch {
       toast.error('Failed to update color.');
@@ -342,6 +344,8 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAll = async () => {
+    invalidateConfigColors();
+    invalidateConfigOptions();
     try {
       const results = await Promise.all(
         CATEGORIES.map((cat) =>

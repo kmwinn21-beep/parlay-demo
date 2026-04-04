@@ -7,6 +7,7 @@ import { MergeModal } from './MergeModal';
 import { effectiveSeniority } from '@/lib/parsers';
 import { NotesPopover } from './NotesPopover';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
 
 interface Attendee {
@@ -40,7 +41,6 @@ interface AttendeeTableProps {
 type SortKey = 'last_name' | 'first_name' | 'title' | 'company_name' | 'status' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
-const STATUS_OPTIONS = ['Client', 'Hot Prospect', 'Interested', 'Not Interested', 'Unknown'];
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
 const PAGE_SIZE = 100;
 
@@ -92,6 +92,9 @@ const DEFAULT_WIDTHS: Record<string, number> = { name: 180, title: 150, company:
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const colorMaps = useConfigColors();
+  const configOptions = useConfigOptions();
+  const statusOptions = configOptions.status ?? [];
+  const seniorityConfigOptions = configOptions.seniority ?? [];
   const [search, setSearch] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -122,12 +125,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps]);
 
   const seniorityFilterOptions = useMemo(() => {
+    if (seniorityConfigOptions.length > 0) return seniorityConfigOptions;
     const vals = new Set<string>();
     for (const a of attendees) {
       vals.add(effectiveSeniority(a.seniority, a.title));
     }
     return Array.from(vals).sort();
-  }, [attendees]);
+  }, [attendees, seniorityConfigOptions]);
 
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -244,7 +248,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field w-auto">
           <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto">
           <option value="">All Seniorities</option>
@@ -307,7 +311,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <label className="label text-xs">Status</label>
               <select value={massEditFields.status || ''} onChange={e => setMassEditFields(p => ({ ...p, status: e.target.value }))} className="input-field w-40 text-sm">
                 <option value="">— no change —</option>
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>
