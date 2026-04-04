@@ -67,6 +67,13 @@ export default function AttendeesPage() {
     fetchData();
   }, [fetchData]);
 
+  // Re-fetch when the user navigates back to this tab/page so notes_count stays fresh
+  useEffect(() => {
+    const onFocus = () => fetchData();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchData]);
+
   const onSubmit = async (data: AddAttendeeForm) => {
     setIsSubmitting(true);
     try {

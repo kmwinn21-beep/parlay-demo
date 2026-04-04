@@ -126,12 +126,12 @@ function NotesPopover({ attendeeId, notesCount }: {
         type="button"
         onClick={() => setOpen(v => !v)}
         className="flex items-center gap-1 text-gray-400 hover:text-procare-bright-blue transition-colors"
-        title={`${notesCount} note${notesCount !== 1 ? 's' : ''}`}
+        title={`${totalCount} note${totalCount !== 1 ? 's' : ''}`}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
         </svg>
-        <span className="text-xs font-medium">{notesCount}</span>
+        <span className="text-xs font-medium">{totalCount}</span>
       </button>
 
       {open && (
