@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -34,18 +34,26 @@ function conferenceBadgeClass(count: number) {
 }
 
 function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
-  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
+  const handleMouseEnter = () => {
+    if (!ref.current || list.length === 0) return;
+    const rect = ref.current.getBoundingClientRect();
+    const w = Math.min(240, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
+    const above = rect.top > 180;
+    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above });
+  };
   return (
-    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
       <span className={conferenceBadgeClass(count)} style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}>{count}</span>
-      {visible && list.length > 0 && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs">
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg px-3 py-2">
-            <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">All Conferences</p>
-            <ul className="space-y-0.5">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+      {pos && list.length > 0 && (
+        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
+            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
+            <ul className="space-y-1">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
           </div>
-          <div className="flex justify-center"><div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" /></div>
         </div>
       )}
     </div>
@@ -606,26 +614,42 @@ export default function ConferenceDetailPage() {
             <>
               {/* Mobile card list */}
               <div className="block lg:hidden divide-y divide-gray-100 -mx-6">
-                {paginatedAttendees.map((attendee) => (
-                  <div key={attendee.id} className="px-4 py-3 flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <Link href={`/attendees/${attendee.id}`} className="text-sm font-semibold text-procare-bright-blue hover:underline">{attendee.first_name} {attendee.last_name}</Link>
-                      {attendee.title && <p className="text-xs text-gray-500 mt-0.5 truncate">{attendee.title}</p>}
-                      {attendee.company_name && <p className="text-xs text-gray-500 truncate">{attendee.company_name}</p>}
-                      {attendee.email && (
-                        <a href={`mailto:${attendee.email}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5 block truncate">
-                          {attendee.email}
-                        </a>
+                {paginatedAttendees.map((attendee) => {
+                  const seniority = classifySeniority(attendee.title);
+                  return (
+                    <div key={attendee.id} className={`px-4 py-4 ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-procare-bright-blue flex-shrink-0" />
+                          <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
+                            {attendee.first_name} {attendee.last_name}
+                          </Link>
+                        </div>
+                      </div>
+                      {attendee.title && <p className="text-xs text-gray-500 mt-1 ml-6">{attendee.title}</p>}
+                      {attendee.company_name && (
+                        <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
+                          {attendee.company_id ? (
+                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                          ) : (
+                            <span className="text-xs text-gray-700">{attendee.company_name}</span>
+                          )}
+                          {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
+                        </div>
                       )}
+                      <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          seniority === 'C-Suite' ? 'bg-blue-100 text-blue-800' :
+                          seniority === 'VP Level' ? 'bg-yellow-100 text-yellow-800' :
+                          seniority === 'Director' ? 'bg-gray-800 text-white' :
+                          seniority === 'Manager' ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{seniority}</span>
+                        <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                      </div>
                     </div>
-                    <Link
-                      href={`/attendees/${attendee.id}`}
-                      className="flex-shrink-0 text-xs font-medium text-procare-bright-blue hover:underline mt-0.5"
-                    >
-                      View
-                    </Link>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Desktop table */}
