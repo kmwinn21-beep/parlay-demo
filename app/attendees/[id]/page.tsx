@@ -79,8 +79,6 @@ export default function AttendeeDetailPage() {
   const [confOtherNotes, setConfOtherNotes] = useState('');
   const [confNotesSaved, setConfNotesSaved] = useState(false);
   const confNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks the last value that was synced to entity_notes, per conference — prevents duplicate rows on re-blur
-  const lastSavedConfNotesRef = useRef<Record<string, string>>({});
 
   const fetchFollowUps = useCallback(async () => {
     try {
@@ -138,8 +136,6 @@ export default function AttendeeDetailPage() {
         setConferenceDetail(data);
         setConfNotesValue(data?.notes || '');
         setConfOtherNotes(data?.next_steps_notes || '');
-        // Seed the baseline so blurring without a change doesn't create a duplicate note
-        lastSavedConfNotesRef.current[selectedConferenceId] = (data?.notes || '').trim();
       })
       .catch(() => {
         setConferenceDetail(null);
@@ -266,25 +262,6 @@ export default function AttendeeDetailPage() {
         await upsertConferenceDetail({ notes: confNotesValue });
         setConfNotesSaved(true);
         setTimeout(() => setConfNotesSaved(false), 2000);
-
-        // Append a new note row only when content actually changed from the last save
-        const trimmed = confNotesValue.trim();
-        const lastSaved = lastSavedConfNotesRef.current[selectedConferenceId] ?? '';
-        const conf = attendee?.conferences.find(c => c.id === Number(selectedConferenceId));
-        if (conf && trimmed && trimmed !== lastSaved) {
-          const monthYear = new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-          const prefixedContent = `[${conf.name} - ${monthYear}]: ${trimmed}`;
-          const res = await fetch('/api/notes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entity_type: 'attendee', entity_id: Number(id), content: prefixedContent }),
-          });
-          if (res.ok) {
-            const created = await res.json();
-            setAttendeeNotes(prev => [created, ...prev]);
-            lastSavedConfNotesRef.current[selectedConferenceId] = trimmed;
-          }
-        }
       } catch { toast.error('Failed to save notes.'); }
     }, 400);
   };
