@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
@@ -111,6 +112,8 @@ export default function ConferenceDetailPage() {
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
+  const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
@@ -130,21 +133,27 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
         fetch(`/api/notes?entity_type=conference&entity_id=${id}`),
+        fetch(`/api/meetings?conference_id=${id}`),
+        fetch('/api/config?category=action'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
       const detailsData = detailsRes.ok ? await detailsRes.json() : [];
       const followUpsData = followUpsRes.ok ? await followUpsRes.json() : [];
       const notesData = notesRes.ok ? await notesRes.json() : [];
+      const meetingsData = meetingsRes.ok ? await meetingsRes.json() : [];
+      const actionData = actionRes.ok ? await actionRes.json() : [];
       setConference(data);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
       setConfNotes(Array.isArray(notesData) ? notesData : []);
+      setConfMeetings(Array.isArray(meetingsData) ? meetingsData : []);
+      setActionOptions(actionData.map((o: { value: string }) => o.value));
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -483,7 +492,7 @@ export default function ConferenceDetailPage() {
             onClick={() => setActiveTab('follow-ups')}
             className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
-            Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
+            Meetings &amp; Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
           </button>
           <button
             onClick={() => setActiveTab('notes')}
@@ -785,7 +794,7 @@ export default function ConferenceDetailPage() {
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} />
+        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} meetings={confMeetings} />
       )}
 
       {/* Notes Tab */}
@@ -799,47 +808,110 @@ export default function ConferenceDetailPage() {
 
       {/* Follow Ups Tab */}
       {activeTab === 'follow-ups' && (
-        <div className="card p-0 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Follow Ups</h2>
-              {confFollowUps.length > 0 && (
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {confFollowUps.filter(f => !f.completed).length} pending · {confFollowUps.filter(f => f.completed).length} completed
-                </p>
-              )}
+        <div className="space-y-6">
+          {/* Meetings */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+                Meetings
+                {confMeetings.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({confMeetings.length})
+                  </span>
+                )}
+              </h2>
             </div>
+            <MeetingsTable
+              meetings={confMeetings}
+              actionOptions={actionOptions}
+              onOutcomeChange={async (meetingId, outcome) => {
+                setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
+                try {
+                  const res = await fetch('/api/meetings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: meetingId, outcome }),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Outcome updated.');
+                } catch {
+                  fetchConference();
+                  toast.error('Failed to update outcome.');
+                }
+              }}
+              onDelete={async (meetingId) => {
+                if (!confirm('Delete this meeting? This cannot be undone.')) return;
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting deleted.');
+                  fetchConference();
+                } catch {
+                  toast.error('Failed to delete meeting.');
+                }
+              }}
+            />
           </div>
-          <FollowUpsTable
-            followUps={confFollowUps}
-            onToggle={async (attendeeId, conferenceId, completed) => {
-              setConfFollowUps(prev =>
-                prev.map(fu =>
-                  fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                    ? { ...fu, completed }
-                    : fu
-                )
-              );
-              try {
-                const res = await fetch('/api/follow-ups', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
-                });
-                if (!res.ok) throw new Error();
-              } catch {
-                // Revert on error
+
+          {/* Follow Ups */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Follow Ups</h2>
+                {confFollowUps.length > 0 && (
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {confFollowUps.filter(f => !f.completed).length} pending · {confFollowUps.filter(f => f.completed).length} completed
+                  </p>
+                )}
+              </div>
+            </div>
+            <FollowUpsTable
+              followUps={confFollowUps}
+              onToggle={async (attendeeId, conferenceId, completed) => {
                 setConfFollowUps(prev =>
                   prev.map(fu =>
                     fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                      ? { ...fu, completed: !completed }
+                      ? { ...fu, completed }
                       : fu
                   )
                 );
-                toast.error('Failed to update.');
-              }
-            }}
-          />
+                try {
+                  const res = await fetch('/api/follow-ups', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+                  });
+                  if (!res.ok) throw new Error();
+                } catch {
+                  setConfFollowUps(prev =>
+                    prev.map(fu =>
+                      fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+                        ? { ...fu, completed: !completed }
+                        : fu
+                    )
+                  );
+                  toast.error('Failed to update.');
+                }
+              }}
+              onDelete={async (attendeeId, conferenceId) => {
+                if (!confirm('Are you sure you want to delete this follow-up?')) return;
+                const prev = confFollowUps;
+                setConfFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
+                try {
+                  const res = await fetch('/api/follow-ups', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Follow-up deleted.');
+                } catch {
+                  setConfFollowUps(prev);
+                  toast.error('Failed to delete follow-up.');
+                }
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -86,6 +87,8 @@ export default function CompanyDetailPage() {
   const ATTENDEE_PAGE_SIZE = 100;
   const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
   const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
+  const [companyMeetings, setCompanyMeetings] = useState<Meeting[]>([]);
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
 
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
@@ -94,13 +97,15 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, fuRes, notesRes, statusRes, compTypeRes, profitRes] = await Promise.all([
+      const [compRes, fuRes, notesRes, statusRes, compTypeRes, profitRes, meetingsRes, actionRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch(`/api/follow-ups?company_id=${id}`),
         fetch(`/api/notes?entity_type=company&entity_id=${id}`),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=company_type'),
         fetch('/api/config?category=profit_type'),
+        fetch(`/api/meetings?company_id=${id}`),
+        fetch('/api/config?category=action'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -117,6 +122,8 @@ export default function CompanyDetailPage() {
       if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
       if (compTypeRes.ok) setCompanyTypeOptions((await compTypeRes.json()).map((o: { value: string }) => o.value));
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
+      if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
+      if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
     } catch {
       toast.error('Failed to load company');
       router.push('/companies');
@@ -202,6 +209,24 @@ export default function CompanyDetailPage() {
         )
       );
       toast.error('Failed to update.');
+    }
+  };
+
+  const handleDeleteFollowUp = async (attendeeId: number, conferenceId: number) => {
+    if (!confirm('Are you sure you want to delete this follow-up?')) return;
+    const prev = companyFollowUps;
+    setCompanyFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Follow-up deleted.');
+    } catch {
+      setCompanyFollowUps(prev);
+      toast.error('Failed to delete follow-up.');
     }
   };
 
@@ -489,6 +514,50 @@ export default function CompanyDetailPage() {
         )}
       </div>
 
+          {/* Meetings */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                Meetings
+                {companyMeetings.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({companyMeetings.length})
+                  </span>
+                )}
+              </h2>
+            </div>
+            <MeetingsTable
+              meetings={companyMeetings}
+              actionOptions={actionOptions}
+              onOutcomeChange={async (meetingId, outcome) => {
+                setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
+                try {
+                  const res = await fetch('/api/meetings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: meetingId, outcome }),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Outcome updated.');
+                } catch {
+                  fetchCompany();
+                  toast.error('Failed to update outcome.');
+                }
+              }}
+              onDelete={async (meetingId) => {
+                if (!confirm('Delete this meeting? This cannot be undone.')) return;
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting deleted.');
+                  fetchCompany();
+                } catch {
+                  toast.error('Failed to delete meeting.');
+                }
+              }}
+            />
+          </div>
+
           {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
@@ -501,7 +570,7 @@ export default function CompanyDetailPage() {
                 )}
               </h2>
             </div>
-            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} />
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} />
           </div>
 
           {/* Notes */}

@@ -10,7 +10,7 @@ const pageTitles: Record<string, string> = {
   '/attendees': 'Attendees',
   '/companies': 'Companies',
   '/admin': 'Admin Panel',
-  '/follow-ups': 'Follow Ups',
+  '/follow-ups': 'Meetings & Follow Ups',
 };
 
 function getPageTitle(pathname: string): string {

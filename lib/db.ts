@@ -120,6 +120,20 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'blue' WHERE category = 'next_steps' AND value = 'Meeting' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'next_steps' AND value = 'Nurture' AND color IS NULL`,
     `UPDATE config_options SET color = 'gray' WHERE category = 'next_steps' AND value = 'Other' AND color IS NULL`,
+    `CREATE TABLE IF NOT EXISTS meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attendee_id INTEGER NOT NULL,
+      conference_id INTEGER NOT NULL,
+      meeting_date TEXT NOT NULL,
+      meeting_time TEXT NOT NULL,
+      location TEXT,
+      scheduled_by TEXT,
+      additional_attendees TEXT,
+      outcome TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }

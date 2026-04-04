@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -60,6 +61,12 @@ export default function AttendeeDetailPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [attendeeNotes, setAttendeeNotes] = useState<EntityNote[]>([]);
 
+  // Meetings
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [meetingForm, setMeetingForm] = useState({ meeting_date: '', meeting_time: '', location: '', scheduled_by: '', additional_attendees: '' });
+  const [isSchedulingMeeting, setIsSchedulingMeeting] = useState(false);
+
   // Conference-specific state
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
   const [conferenceDetail, setConferenceDetail] = useState<ConferenceDetail | null>(null);
@@ -77,6 +84,13 @@ export default function AttendeeDetailPage() {
     try {
       const res = await fetch(`/api/notes?entity_type=attendee&entity_id=${id}`);
       if (res.ok) setAttendeeNotes(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
+  const fetchMeetings = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/meetings?attendee_id=${id}`);
+      if (res.ok) setMeetings(await res.json());
     } catch { /* non-fatal */ }
   }, [id]);
 
@@ -107,7 +121,7 @@ export default function AttendeeDetailPage() {
     } finally { setIsLoading(false); }
   }, [id, router]);
 
-  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); }, [fetchAttendee, fetchFollowUps, fetchNotes]);
+  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings]);
 
   // Load conference detail when a conference is selected
   useEffect(() => {
@@ -206,6 +220,24 @@ export default function AttendeeDetailPage() {
     }
   };
 
+  const handleDeleteFollowUp = async (attendeeId: number, conferenceId: number) => {
+    if (!confirm('Are you sure you want to delete this follow-up?')) return;
+    const prev = followUps;
+    setFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Follow-up deleted.');
+    } catch {
+      setFollowUps(prev);
+      toast.error('Failed to delete follow-up.');
+    }
+  };
+
   const handleStatus = async (value: string) => {
     try { await patchAttendee({ status: value, company_id: attendee?.company_id ?? null }); toast.success('Status updated.'); }
     catch { toast.error('Failed to update status.'); }
@@ -236,6 +268,75 @@ export default function AttendeeDetailPage() {
       await upsertConferenceDetail({ next_steps: 'Other', next_steps_notes: confOtherNotes });
       toast.success('Saved.');
     } catch { toast.error('Failed to save.'); }
+  };
+
+  const handleScheduleMeeting = async () => {
+    if (!selectedConferenceId) { toast.error('Please select a conference first.'); return; }
+    if (!meetingForm.meeting_date || !meetingForm.meeting_time) { toast.error('Date and time are required.'); return; }
+    setIsSchedulingMeeting(true);
+    try {
+      const res = await fetch('/api/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attendee_id: Number(id),
+          conference_id: Number(selectedConferenceId),
+          meeting_date: meetingForm.meeting_date,
+          meeting_time: meetingForm.meeting_time,
+          location: meetingForm.location || null,
+          scheduled_by: meetingForm.scheduled_by || null,
+          additional_attendees: meetingForm.additional_attendees.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to schedule meeting');
+      toast.success('Meeting scheduled!');
+      setShowMeetingForm(false);
+      setMeetingForm({ meeting_date: '', meeting_time: '', location: '', scheduled_by: '', additional_attendees: '' });
+      fetchMeetings();
+      // Refresh conference details to show updated actions
+      const detailRes = await fetch(`/api/conference-details?attendee_id=${id}&conference_id=${selectedConferenceId}`);
+      if (detailRes.ok) {
+        const data = await detailRes.json();
+        setConferenceDetail(data);
+      }
+    } catch { toast.error('Failed to schedule meeting.'); }
+    finally { setIsSchedulingMeeting(false); }
+  };
+
+  const handleMeetingOutcome = async (meetingId: number, outcome: string) => {
+    setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
+    try {
+      const res = await fetch('/api/meetings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: meetingId, outcome }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Outcome updated.');
+      // Refresh conference details to reflect action update
+      if (selectedConferenceId) {
+        const detailRes = await fetch(`/api/conference-details?attendee_id=${id}&conference_id=${selectedConferenceId}`);
+        if (detailRes.ok) {
+          const data = await detailRes.json();
+          setConferenceDetail(data);
+        }
+      }
+    } catch {
+      fetchMeetings();
+      toast.error('Failed to update outcome.');
+    }
+  };
+
+  const handleDeleteMeeting = async (meetingId: number) => {
+    if (!confirm('Delete this meeting? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('Meeting deleted.');
+      fetchMeetings();
+    } catch {
+      toast.error('Failed to delete meeting.');
+    }
   };
 
 
@@ -341,6 +442,21 @@ export default function AttendeeDetailPage() {
             )}
           </div>
 
+          {/* Meetings */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+                Meetings
+                {meetings.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({meetings.length})
+                  </span>
+                )}
+              </h2>
+            </div>
+            <MeetingsTable meetings={meetings} actionOptions={actionOptions} onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} />
+          </div>
+
           {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
@@ -353,7 +469,7 @@ export default function AttendeeDetailPage() {
                 )}
               </h2>
             </div>
-            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} />
+            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} />
           </div>
 
           {/* Notes */}
@@ -459,6 +575,60 @@ export default function AttendeeDetailPage() {
                     <div className="mt-2">
                       <textarea value={confOtherNotes} onChange={e => setConfOtherNotes(e.target.value)} placeholder="Describe the next step..." className="input-field resize-none w-full text-sm" rows={2} />
                       <button onClick={handleSaveOtherNotes} className="btn-primary mt-2 text-xs">Save</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Meeting Schedule */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Meeting Schedule</p>
+                  {!showMeetingForm ? (
+                    <button
+                      onClick={() => setShowMeetingForm(true)}
+                      className="w-full px-3 py-2 rounded-lg text-xs font-medium border-2 border-dashed border-gray-300 text-gray-500 hover:border-procare-bright-blue hover:text-procare-bright-blue transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      Schedule Meeting
+                    </button>
+                  ) : (
+                    <div className="bg-blue-50 rounded-lg p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="label text-[10px]">Meeting Date *</label>
+                          <input type="date" value={meetingForm.meeting_date} onChange={e => setMeetingForm(p => ({ ...p, meeting_date: e.target.value }))} className="input-field text-xs" />
+                        </div>
+                        <div>
+                          <label className="label text-[10px]">Meeting Time *</label>
+                          <input type="time" value={meetingForm.meeting_time} onChange={e => setMeetingForm(p => ({ ...p, meeting_time: e.target.value }))} className="input-field text-xs" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Location</label>
+                        <input type="text" value={meetingForm.location} onChange={e => setMeetingForm(p => ({ ...p, location: e.target.value }))} placeholder="e.g., Conference Room A" className="input-field text-xs" />
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Scheduled By</label>
+                        <input type="text" value={meetingForm.scheduled_by} onChange={e => setMeetingForm(p => ({ ...p, scheduled_by: e.target.value }))} placeholder="Enter name..." className="input-field text-xs" />
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Additional Attendees</label>
+                        <input
+                          type="text"
+                          placeholder="Comma-separated names..."
+                          className="input-field text-xs"
+                          value={meetingForm.additional_attendees}
+                          onChange={e => setMeetingForm(p => ({ ...p, additional_attendees: e.target.value }))}
+                        />
+                        <p className="text-[10px] text-gray-400 mt-0.5">Separate multiple names with commas</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={handleScheduleMeeting} disabled={isSchedulingMeeting} className="btn-primary text-xs flex-1">
+                          {isSchedulingMeeting ? 'Scheduling...' : 'Schedule Meeting'}
+                        </button>
+                        <button onClick={() => { setShowMeetingForm(false); setMeetingForm({ meeting_date: '', meeting_time: '', location: '', scheduled_by: '', additional_attendees: '' }); }} className="btn-secondary text-xs">
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
