@@ -19,27 +19,42 @@ interface Company {
   attendee_summary?: string;
 }
 
+type TooltipPos = { top: number; left: number; width: number; above: boolean };
+
+function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
+  const rect = el.getBoundingClientRect();
+  const w = Math.min(maxW, window.innerWidth - 16);
+  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
+  const above = rect.top > 180;
+  return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
+}
+
 function AttendeeTooltip({ count, summary }: { count: number; summary?: string }) {
-  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const attendees = (summary || '').split('~~~').map(s => s.trim()).filter(Boolean).map(s => {
     const [name, title] = s.split('|');
     return { name: name?.trim() || '', title: title?.trim() || '' };
   });
   if (count === 0) return <span className="badge-gray">{count}</span>;
   return (
-    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+    <div ref={ref} className="relative inline-block"
+      onMouseEnter={() => ref.current && setPos(calcTooltipPos(ref.current))}
+      onMouseLeave={() => setPos(null)}>
       <span className="badge-gray cursor-default">{count}</span>
-      {visible && attendees.length > 0 && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-gray-900 text-white text-xs rounded-lg shadow-xl p-2.5 min-w-[180px] max-w-[260px] pointer-events-none">
-          <div className="space-y-1.5">
-            {attendees.map((a, i) => (
-              <div key={i}>
-                <span className="font-medium">{a.name}</span>
-                {a.title && <span className="text-gray-300"> · {a.title}</span>}
-              </div>
-            ))}
+      {pos && attendees.length > 0 && (
+        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
+            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Attendees</p>
+            <ul className="space-y-1">
+              {attendees.map((a, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 mt-1" />
+                  <span><span className="font-medium">{a.name}</span>{a.title && <span className="text-gray-300"> · {a.title}</span>}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
         </div>
       )}
     </div>
@@ -47,20 +62,25 @@ function AttendeeTooltip({ count, summary }: { count: number; summary?: string }
 }
 
 function ConferenceTooltip({ count, names }: { count: number; names?: string }) {
-  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const confList = (names || '').split(',').map(s => s.trim()).filter(Boolean);
   if (count === 0) return <span className={conferenceBadgeClass(0)}>{count}</span>;
   return (
-    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+    <div ref={ref} className="relative inline-block"
+      onMouseEnter={() => ref.current && setPos(calcTooltipPos(ref.current))}
+      onMouseLeave={() => setPos(null)}>
       <span className={`${conferenceBadgeClass(count)} cursor-default`}>{count}</span>
-      {visible && confList.length > 0 && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-gray-900 text-white text-xs rounded-lg shadow-xl p-2.5 min-w-[180px] max-w-[280px] pointer-events-none">
-          <div className="space-y-1">
-            {confList.map((name, i) => (
-              <div key={i} className="leading-snug">{name}</div>
-            ))}
+      {pos && confList.length > 0 && (
+        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
+            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
+            <ul className="space-y-1">
+              {confList.map((name, i) => (
+                <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>
+              ))}
+            </ul>
           </div>
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
         </div>
       )}
     </div>

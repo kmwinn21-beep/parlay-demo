@@ -10,7 +10,11 @@ export async function GET() {
               COUNT(DISTINCT a.id) as attendee_count,
               COUNT(DISTINCT ca.conference_id) as conference_count,
               GROUP_CONCAT(DISTINCT conf.name) as conference_names,
-              GROUP_CONCAT(a.first_name || ' ' || a.last_name || CASE WHEN a.title IS NOT NULL AND a.title != '' THEN '|' || a.title ELSE '|' END, '~~~') as attendee_summary
+              (SELECT GROUP_CONCAT(sub.info, '~~~') FROM (
+                SELECT DISTINCT a2.first_name || ' ' || a2.last_name || '|' || COALESCE(a2.title, '') as info
+                FROM attendees a2
+                WHERE a2.company_id = co.id
+              ) sub) as attendee_summary
             FROM companies co
             LEFT JOIN attendees a ON co.id = a.company_id
             LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id

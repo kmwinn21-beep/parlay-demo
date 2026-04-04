@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -34,23 +34,33 @@ interface Company {
 }
 
 function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
-  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
+
+  const handleMouseEnter = () => {
+    if (!ref.current || list.length === 0) return;
+    const rect = ref.current.getBoundingClientRect();
+    const w = Math.min(240, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
+    const above = rect.top > 180;
+    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above });
+  };
+
   return (
-    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
       <span
         className={`inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold ${count >= 4 ? 'bg-green-100 text-green-700' : count === 3 ? 'bg-yellow-100 text-yellow-700' : count === 2 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
         style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}
       >
         {count}
       </span>
-      {visible && list.length > 0 && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs">
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg px-3 py-2">
-            <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
-            <ul className="space-y-0.5">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+      {pos && (
+        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
+            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
+            <ul className="space-y-1">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
           </div>
-          <div className="flex justify-center"><div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" /></div>
         </div>
       )}
     </div>
