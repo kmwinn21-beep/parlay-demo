@@ -37,13 +37,14 @@ function formatMeetingTime(t: string) {
   return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function AdditionalAttendeesTooltip({ attendees }: { attendees: string }) {
+function MeetingInfoTooltip({ scheduledBy, location, attendees }: { scheduledBy?: string | null; location?: string | null; attendees?: string | null }) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const list = attendees.split(',').map(n => n.trim()).filter(Boolean);
+  const attendeeList = attendees ? attendees.split(',').map(n => n.trim()).filter(Boolean) : [];
+  const hasContent = scheduledBy || location || attendeeList.length > 0;
 
   const handleMouseEnter = () => {
-    if (!ref.current || list.length === 0) return;
+    if (!ref.current || !hasContent) return;
     const rect = ref.current.getBoundingClientRect();
     const w = Math.min(240, window.innerWidth - 16);
     const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
@@ -51,18 +52,36 @@ function AdditionalAttendeesTooltip({ attendees }: { attendees: string }) {
     setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above });
   };
 
+  if (!hasContent) return null;
+
   return (
     <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <button type="button" className="text-gray-400 hover:text-procare-bright-blue transition-colors" title="Additional Attendees">
+      <button type="button" className="text-gray-400 hover:text-procare-bright-blue transition-colors" title="Meeting Info">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </button>
-      {pos && list.length > 0 && (
+      {pos && (
         <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Additional Attendees</p>
-            <ul className="space-y-1">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5 space-y-2">
+            {scheduledBy && (
+              <div>
+                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">Scheduled By</p>
+                <p>{scheduledBy}</p>
+              </div>
+            )}
+            {location && (
+              <div>
+                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">Location</p>
+                <p>{location}</p>
+              </div>
+            )}
+            {attendeeList.length > 0 && (
+              <div>
+                <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Additional Attendees</p>
+                <ul className="space-y-1">{attendeeList.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -153,9 +172,7 @@ export function MeetingsTable({
                 </Link>
                 {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
               </div>
-              {m.additional_attendees && (
-                <AdditionalAttendeesTooltip attendees={m.additional_attendees} />
-              )}
+              <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
               {onDelete && (
                 <button onClick={() => onDelete(m.id)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -231,9 +248,7 @@ export function MeetingsTable({
                   </select>
                 </td>
                 <td className="px-3 py-2">
-                  {m.additional_attendees
-                    ? <AdditionalAttendeesTooltip attendees={m.additional_attendees} />
-                    : <span className="text-gray-300">—</span>}
+                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
                 </td>
                 {onDelete && (
                   <td className="px-3 py-2">
