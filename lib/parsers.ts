@@ -141,3 +141,8 @@ export function classifySeniority(title?: string): string {
 
   return 'Other';
 }
+
+/** Returns the stored seniority override if set, otherwise falls back to title-based classification */
+export function effectiveSeniority(storedSeniority?: string, title?: string): string {
+  return storedSeniority || classifySeniority(title);
+}

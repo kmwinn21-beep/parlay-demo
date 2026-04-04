@@ -7,6 +7,8 @@ import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getPillClass, getBadgeClass } from '@/lib/colors';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -67,35 +69,11 @@ function ConferenceCountTooltip({ count, names }: { count: number; names?: strin
   );
 }
 
-const STATUS_COLOR_MAP: Record<string, string> = {
-  'Client':         'bg-yellow-400 text-yellow-900 border-yellow-500',
-  'Hot Prospect':   'bg-red-500 text-white border-red-600',
-  'Interested':     'bg-green-500 text-white border-green-600',
-  'Not Interested': 'bg-gray-900 text-white border-gray-800',
-  'Unknown':        'bg-gray-200 text-gray-600 border-gray-300',
-};
-const DEFAULT_STATUS_CLS = 'bg-procare-bright-blue text-white border-procare-bright-blue';
-
-function getStatusCls(value: string) {
-  return STATUS_COLOR_MAP[value] ?? DEFAULT_STATUS_CLS;
-}
-
-const STATUS_BADGE_MAP: Record<string, string> = {
-  'Client':         'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300',
-  'Hot Prospect':   'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300',
-  'Interested':     'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300',
-  'Not Interested': 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white',
-};
-const DEFAULT_BADGE_CLS = 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
-
-function statusBadgeClass(status: string) {
-  return STATUS_BADGE_MAP[status] ?? DEFAULT_BADGE_CLS;
-}
-
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const colorMaps = useConfigColors();
 
   const [company, setCompany] = useState<Company | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -392,7 +370,7 @@ export default function CompanyDetailPage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                <span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span>
+                <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
               </div>
               {company.notes && (
                 <div className="md:col-span-3">
@@ -548,7 +526,7 @@ export default function CompanyDetailPage() {
                     key={val}
                     onClick={() => handleStatus(val)}
                     className={`px-4 py-2 rounded-full text-sm font-medium border-2 transition-all ${
-                      isActive ? `${getStatusCls(val)} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                      isActive ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
                     }`}
                   >
                     {val}

@@ -46,7 +46,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status } = body;
+    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority } = body;
 
     if (!first_name || !last_name) {
       return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
@@ -61,7 +61,7 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ? WHERE id = ? RETURNING *',
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ? WHERE id = ? RETURNING *',
       args: [
         first_name,
         last_name,
@@ -73,6 +73,7 @@ export async function PUT(
         next_steps || null,
         next_steps_notes || null,
         status || 'Unknown',
+        seniority || null,
         params.id,
       ],
     });
@@ -98,7 +99,7 @@ export async function PATCH(
   try {
     await dbReady;
     const body = await request.json();
-    const { action, next_steps, next_steps_notes, status, notes, company_id } = body;
+    const { action, next_steps, next_steps_notes, status, notes, company_id, seniority } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id, company_id FROM attendees WHERE id = ?',
@@ -130,6 +131,10 @@ export async function PATCH(
     if ('notes' in body) {
       setClauses.push('notes = ?');
       args.push(notes !== undefined ? notes : null);
+    }
+    if ('seniority' in body) {
+      setClauses.push('seniority = ?');
+      args.push(seniority || null);
     }
 
     if (setClauses.length === 0) {

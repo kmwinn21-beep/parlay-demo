@@ -84,6 +84,42 @@ export async function initDb(): Promise<void> {
       content TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+    `ALTER TABLE attendees ADD COLUMN seniority TEXT`,
+    `ALTER TABLE config_options ADD COLUMN color TEXT`,
+    // Seed default colors for existing options
+    `UPDATE config_options SET color = 'yellow' WHERE category = 'status' AND value = 'Client' AND color IS NULL`,
+    `UPDATE config_options SET color = 'red' WHERE category = 'status' AND value = 'Hot Prospect' AND color IS NULL`,
+    `UPDATE config_options SET color = 'green' WHERE category = 'status' AND value = 'Interested' AND color IS NULL`,
+    `UPDATE config_options SET color = 'dark' WHERE category = 'status' AND value = 'Not Interested' AND color IS NULL`,
+    `UPDATE config_options SET color = 'gray' WHERE category = 'status' AND value = 'Unknown' AND color IS NULL`,
+    `UPDATE config_options SET color = 'blue' WHERE category = 'status' AND value = 'Active Op.' AND color IS NULL`,
+    `UPDATE config_options SET color = 'orange' WHERE category = 'status' AND value = 'Nurturing' AND color IS NULL`,
+    `UPDATE config_options SET color = 'purple' WHERE category = 'status' AND value = 'DNC' AND color IS NULL`,
+    `UPDATE config_options SET color = 'dark-blue' WHERE category = 'seniority' AND value = 'C-Suite' AND color IS NULL`,
+    `UPDATE config_options SET color = 'blue' WHERE category = 'seniority' AND value = 'VP Level' AND color IS NULL`,
+    `UPDATE config_options SET color = 'yellow' WHERE category = 'seniority' AND value = 'VP/SVP' AND color IS NULL`,
+    `UPDATE config_options SET color = 'dark' WHERE category = 'seniority' AND value = 'Director' AND color IS NULL`,
+    `UPDATE config_options SET color = 'orange' WHERE category = 'seniority' AND value = 'Manager' AND color IS NULL`,
+    `UPDATE config_options SET color = 'teal' WHERE category = 'seniority' AND value = 'Executive Director' AND color IS NULL`,
+    `UPDATE config_options SET color = 'gray' WHERE category = 'seniority' AND value = 'Other' AND color IS NULL`,
+    `UPDATE config_options SET color = 'dark-blue' WHERE category = 'company_type' AND value = 'Capital' AND color IS NULL`,
+    `UPDATE config_options SET color = 'blue' WHERE category = 'company_type' AND value = 'Own/Op' AND color IS NULL`,
+    `UPDATE config_options SET color = 'purple' WHERE category = 'company_type' AND value = 'Pr. Vendor' AND color IS NULL`,
+    `UPDATE config_options SET color = 'teal' WHERE category = 'company_type' AND value = 'OpCo' AND color IS NULL`,
+    `UPDATE config_options SET color = 'orange' WHERE category = 'company_type' AND value = 'PropCo' AND color IS NULL`,
+    `UPDATE config_options SET color = 'red' WHERE category = 'company_type' AND value = 'CCRC' AND color IS NULL`,
+    `UPDATE config_options SET color = 'yellow' WHERE category = 'company_type' AND value = 'Vendor' AND color IS NULL`,
+    `UPDATE config_options SET color = 'gray' WHERE category = 'company_type' AND value = 'Other' AND color IS NULL`,
+    `UPDATE config_options SET color = 'green' WHERE category = 'profit_type' AND value = 'For-Profit' AND color IS NULL`,
+    `UPDATE config_options SET color = 'blue' WHERE category = 'profit_type' AND value = 'Non-Profit' AND color IS NULL`,
+    `UPDATE config_options SET color = 'blue' WHERE category = 'action' AND value = 'Meeting Scheduled' AND color IS NULL`,
+    `UPDATE config_options SET color = 'green' WHERE category = 'action' AND value = 'Meeting Held' AND color IS NULL`,
+    `UPDATE config_options SET color = 'purple' WHERE category = 'action' AND value = 'Social Conversation' AND color IS NULL`,
+    `UPDATE config_options SET color = 'orange' WHERE category = 'action' AND value = 'Rescheduled' AND color IS NULL`,
+    `UPDATE config_options SET color = 'red' WHERE category = 'action' AND value = 'Meeting No-Show' AND color IS NULL`,
+    `UPDATE config_options SET color = 'blue' WHERE category = 'next_steps' AND value = 'Meeting' AND color IS NULL`,
+    `UPDATE config_options SET color = 'green' WHERE category = 'next_steps' AND value = 'Nurture' AND color IS NULL`,
+    `UPDATE config_options SET color = 'gray' WHERE category = 'next_steps' AND value = 'Other' AND color IS NULL`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -184,6 +220,7 @@ export interface Attendee {
   next_steps?: string;
   next_steps_notes?: string;
   status?: string;
+  seniority?: string;
   created_at: string;
   conference_count?: number;
   conferences?: Array<{ id: number; name: string }>;

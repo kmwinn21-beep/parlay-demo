@@ -9,7 +9,9 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { classifySeniority } from '@/lib/parsers';
+import { effectiveSeniority } from '@/lib/parsers';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getHex } from '@/lib/colors';
 
 interface Attendee {
   id: number;
@@ -19,6 +21,7 @@ interface Attendee {
   company_id?: number;
   company_type?: string;
   company_name?: string;
+  seniority?: string;
 }
 
 interface ConferenceDetail {
@@ -35,27 +38,10 @@ interface AnalyticsChartsProps {
   conferenceDetails: ConferenceDetail[];
 }
 
-const SENIORITY_COLORS: Record<string, string> = {
-  'C-Suite': '#0B3C62',
-  'VP Level': '#1B76BC',
-  'Director': '#FFCB3F',
-  'Manager': '#E7DED9',
-  'Other': '#9ca3af',
-};
-
-const COMPANY_TYPE_COLORS: Record<string, string> = {
-  '3rd Party Operator': '#0B3C62',
-  'Owner/Operator': '#1B76BC',
-  'Capital Partner': '#FFCB3F',
-  'Vendor': '#E7DED9',
-  'Partner': '#34d399',
-  'Other': '#9ca3af',
-};
-
 function buildSeniorityData(attendees: Attendee[]) {
   const counts: Record<string, number> = {};
   for (const a of attendees) {
-    const level = classifySeniority(a.title);
+    const level = effectiveSeniority(a.seniority, a.title);
     counts[level] = (counts[level] || 0) + 1;
   }
   return Object.entries(counts)
@@ -110,6 +96,7 @@ const NEXT_STEPS_LABELS = [
 ];
 
 export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChartsProps) {
+  const colorMaps = useConfigColors();
   const seniorityAll = buildSeniorityData(attendees);
   const companyTypeData = buildCompanyTypeData(attendees);
 
@@ -178,7 +165,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                   {companyTypeData.map((entry) => (
                     <Cell
                       key={entry.name}
-                      fill={COMPANY_TYPE_COLORS[entry.name] || '#9ca3af'}
+                      fill={getHex(entry.name, colorMaps.company_type || {})}
                     />
                   ))}
                 </Pie>
@@ -214,7 +201,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                   {seniorityAll.map((entry) => (
                     <Cell
                       key={entry.name}
-                      fill={SENIORITY_COLORS[entry.name] || '#9ca3af'}
+                      fill={getHex(entry.name, colorMaps.seniority || {})}
                     />
                   ))}
                 </Pie>

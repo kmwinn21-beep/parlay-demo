@@ -4,8 +4,10 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
-import { classifySeniority } from '@/lib/parsers';
+import { effectiveSeniority } from '@/lib/parsers';
 import { NotesPopover } from './NotesPopover';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass } from '@/lib/colors';
 
 interface Attendee {
   id: number;
@@ -18,6 +20,7 @@ interface Attendee {
   email?: string;
   notes?: string;
   status?: string;
+  seniority?: string;
   action?: string;
   next_steps?: string;
   conference_count: number;
@@ -39,28 +42,7 @@ type SortDir = 'asc' | 'desc';
 
 const STATUS_OPTIONS = ['Client', 'Hot Prospect', 'Interested', 'Not Interested', 'Unknown'];
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
-const SENIORITY_OPTIONS = ['C-Suite', 'VP Level', 'Director', 'Manager', 'Other'];
 const PAGE_SIZE = 100;
-
-function statusBadgeClass(status: string | undefined) {
-  switch (status) {
-    case 'Client':        return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300';
-    case 'Hot Prospect':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300';
-    case 'Interested':    return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300';
-    case 'Not Interested':return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white';
-    default:              return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
-  }
-}
-
-function seniorityBadgeClass(s: string) {
-  switch (s) {
-    case 'C-Suite':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800';
-    case 'VP Level': return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800';
-    case 'Director': return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white';
-    case 'Manager':  return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700';
-    default:         return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
-  }
-}
 
 function conferenceBadgeClass(count: number) {
   if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
@@ -109,6 +91,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 const DEFAULT_WIDTHS: Record<string, number> = { name: 180, title: 150, company: 180, status: 130, seniority: 120, conferences: 100, notes: 70, actions: 100 };
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
+  const colorMaps = useConfigColors();
   const [search, setSearch] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -137,6 +120,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   useEffect(() => {
     setPage(1);
   }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps]);
+
+  const seniorityFilterOptions = useMemo(() => {
+    const vals = new Set<string>();
+    for (const a of attendees) {
+      vals.add(effectiveSeniority(a.seniority, a.title));
+    }
+    return Array.from(vals).sort();
+  }, [attendees]);
 
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -173,7 +164,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       const matchSearch = !search || fullName.includes(search.toLowerCase()) || a.company_name?.toLowerCase().includes(search.toLowerCase()) || a.email?.toLowerCase().includes(search.toLowerCase()) || a.title?.toLowerCase().includes(search.toLowerCase());
       const matchType = !filterCompanyType || a.company_type === filterCompanyType;
       const matchStatus = !filterStatus || (a.status || 'Unknown') === filterStatus;
-      const matchSeniority = !filterSeniority || classifySeniority(a.title) === filterSeniority;
+      const matchSeniority = !filterSeniority || effectiveSeniority(a.seniority, a.title) === filterSeniority;
       const matchConf = confCountMatches(Number(a.conference_count));
       const matchFollowUps = !filterHasFollowUps || a.has_pending_follow_ups === true;
       return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchFollowUps;
@@ -257,7 +248,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         </select>
         <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto">
           <option value="">All Seniorities</option>
-          {SENIORITY_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
         {/* # Conferences multiselect */}
@@ -322,7 +313,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             <div>
               <label className="label text-xs">Title / Seniority Keyword</label>
               <input value={massEditFields.title || ''} onChange={e => setMassEditFields(p => ({ ...p, title: e.target.value }))} placeholder="e.g. VP, Director, CEO" className="input-field w-48 text-sm" />
-              <p className="text-xs text-gray-400 mt-0.5">Updates the title which determines seniority</p>
+              <p className="text-xs text-gray-400 mt-0.5">Seniority auto-detects from title unless overridden</p>
             </div>
             <div>
               <label className="label text-xs">Company</label>
@@ -345,7 +336,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</div>
           ) : paginated.map(attendee => {
-            const seniority = classifySeniority(attendee.title);
+            const seniority = effectiveSeniority(attendee.seniority, attendee.title);
             return (
               <div key={attendee.id} className={`p-4 ${selectedIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -374,8 +365,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   </div>
                 )}
                 <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                  <span className={statusBadgeClass(attendee.status || 'Unknown')}>{attendee.status || 'Unknown'}</span>
-                  <span className={seniorityBadgeClass(seniority)}>{seniority}</span>
+                  <span className={getBadgeClass(attendee.status || 'Unknown', colorMaps.status || {})}>{attendee.status || 'Unknown'}</span>
+                  <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
                   <ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
                 </div>
               </div>
@@ -405,7 +396,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               {filtered.length === 0 ? (
                 <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
-                const seniority = classifySeniority(attendee.title);
+                const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
@@ -429,8 +420,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         </div>
                       ) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-3 py-3"><span className={statusBadgeClass(attendee.status || 'Unknown')}>{attendee.status || 'Unknown'}</span></td>
-                    <td className="px-3 py-3"><span className={seniorityBadgeClass(seniority)}>{seniority}</span></td>
+                    <td className="px-3 py-3"><span className={getBadgeClass(attendee.status || 'Unknown', colorMaps.status || {})}>{attendee.status || 'Unknown'}</span></td>
+                    <td className="px-3 py-3"><span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span></td>
                     <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>
                     <td className="px-3 py-3">
                       {Number(attendee.notes_count) > 0 ? (

@@ -9,7 +9,9 @@ import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
-import { classifySeniority } from '@/lib/parsers';
+import { effectiveSeniority } from '@/lib/parsers';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 
 interface Attendee {
   id: number;
@@ -20,6 +22,7 @@ interface Attendee {
   company_name?: string;
   company_type?: string;
   email?: string;
+  seniority?: string;
   conference_count?: number;
   conference_names?: string;
 }
@@ -93,6 +96,7 @@ export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const colorMaps = useConfigColors();
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -310,7 +314,7 @@ export default function ConferenceDetailPage() {
       if (sortKey === 'name') { aVal = `${a.last_name} ${a.first_name}`.toLowerCase(); bVal = `${b.last_name} ${b.first_name}`.toLowerCase(); }
       else if (sortKey === 'title') { aVal = (a.title || '').toLowerCase(); bVal = (b.title || '').toLowerCase(); }
       else if (sortKey === 'company') { aVal = (a.company_name || '').toLowerCase(); bVal = (b.company_name || '').toLowerCase(); }
-      else if (sortKey === 'seniority') { aVal = classifySeniority(a.title); bVal = classifySeniority(b.title); }
+      else if (sortKey === 'seniority') { aVal = effectiveSeniority(a.seniority, a.title); bVal = effectiveSeniority(b.seniority, b.title); }
       return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
 
@@ -615,7 +619,7 @@ export default function ConferenceDetailPage() {
               {/* Mobile card list */}
               <div className="block lg:hidden divide-y divide-gray-100 -mx-6">
                 {paginatedAttendees.map((attendee) => {
-                  const seniority = classifySeniority(attendee.title);
+                  const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                   return (
                     <div key={attendee.id} className={`px-4 py-4 ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
                       <div className="flex items-start justify-between gap-3">
@@ -638,13 +642,7 @@ export default function ConferenceDetailPage() {
                         </div>
                       )}
                       <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          seniority === 'C-Suite' ? 'bg-blue-100 text-blue-800' :
-                          seniority === 'VP Level' ? 'bg-yellow-100 text-yellow-800' :
-                          seniority === 'Director' ? 'bg-gray-800 text-white' :
-                          seniority === 'Manager' ? 'bg-orange-100 text-orange-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>{seniority}</span>
+                        <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
                         <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
                       </div>
                     </div>
@@ -716,16 +714,9 @@ export default function ConferenceDetailPage() {
                       </td>
                       <td className="px-4 py-3">
                         {(() => {
-                          const s = classifySeniority(attendee.title);
-                          const colorMap: Record<string, string> = {
-                            'C-Suite': 'bg-procare-dark-blue text-white',
-                            'VP Level': 'bg-procare-bright-blue text-white',
-                            'Director': 'bg-yellow-100 text-yellow-800',
-                            'Manager': 'bg-orange-100 text-orange-700',
-                            'Other': 'bg-gray-100 text-gray-600',
-                          };
+                          const s = effectiveSeniority(attendee.seniority, attendee.title);
                           return (
-                            <span className={`badge ${colorMap[s] || 'badge-gray'}`}>{s}</span>
+                            <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
                           );
                         })()}
                       </td>

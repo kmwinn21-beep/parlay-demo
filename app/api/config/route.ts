@@ -7,20 +7,26 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
 
-    if (!category) {
-      return NextResponse.json({ error: 'category is required' }, { status: 400 });
+    let result;
+    if (category) {
+      result = await db.execute({
+        sql: 'SELECT id, category, value, sort_order, color FROM config_options WHERE category = ? ORDER BY sort_order, value',
+        args: [category],
+      });
+    } else {
+      // Return all options (used for color lookups across the app)
+      result = await db.execute({
+        sql: 'SELECT id, category, value, sort_order, color FROM config_options ORDER BY category, sort_order, value',
+        args: [],
+      });
     }
-
-    const result = await db.execute({
-      sql: 'SELECT id, category, value, sort_order FROM config_options WHERE category = ? ORDER BY sort_order, value',
-      args: [category],
-    });
 
     return NextResponse.json(result.rows.map(r => ({
       id: Number(r.id),
       category: String(r.category),
       value: String(r.value),
       sort_order: Number(r.sort_order ?? 0),
+      color: r.color ? String(r.color) : null,
     })));
   } catch (error) {
     console.error('GET /api/config error:', error);
@@ -32,15 +38,15 @@ export async function POST(request: NextRequest) {
   try {
     await dbReady;
     const body = await request.json();
-    const { category, value, sort_order } = body;
+    const { category, value, sort_order, color } = body;
 
     if (!category || !value) {
       return NextResponse.json({ error: 'category and value are required' }, { status: 400 });
     }
 
     const result = await db.execute({
-      sql: 'INSERT INTO config_options (category, value, sort_order) VALUES (?, ?, ?) RETURNING *',
-      args: [category, value, sort_order ?? 0],
+      sql: 'INSERT INTO config_options (category, value, sort_order, color) VALUES (?, ?, ?, ?) RETURNING *',
+      args: [category, value, sort_order ?? 0, color ?? null],
     });
 
     return NextResponse.json(result.rows[0], { status: 201 });

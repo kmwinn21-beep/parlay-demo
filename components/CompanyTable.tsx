@@ -4,6 +4,8 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass } from '@/lib/colors';
 
 interface Company {
   id: number;
@@ -100,16 +102,6 @@ const COMPANY_TYPES = ['3rd Party Operator', 'Owner/Operator', 'Capital Partner'
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
 const PAGE_SIZE = 100;
 
-function statusBadgeClass(status: string | undefined) {
-  switch (status) {
-    case 'Client':         return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300';
-    case 'Hot Prospect':   return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300';
-    case 'Interested':     return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300';
-    case 'Not Interested': return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white';
-    default:               return 'inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500';
-  }
-}
-
 function conferenceBadgeClass(count: number) {
   if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
   if (count === 3) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700';
@@ -127,6 +119,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, status: 140, attendees: 110, conferences: 120, actions: 110 };
 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
+  const colorMaps = useConfigColors();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -368,7 +361,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 </button>
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                <span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span>
+                <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
                 {company.company_type && <span className="badge-blue">{company.company_type}</span>}
               </div>
               <div className="mt-2 ml-6 flex items-center gap-4">
@@ -413,7 +406,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     </Link>
                   </td>
                   <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
-                  <td className="px-3 py-3"><span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span></td>
+                  <td className="px-3 py-3"><span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span></td>
                   <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
                   <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>
                   <td className="px-3 py-3">

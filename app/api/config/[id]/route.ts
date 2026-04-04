@@ -8,7 +8,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { value, sort_order } = body;
+    const { value, sort_order, color } = body;
 
     if (!value) {
       return NextResponse.json({ error: 'value is required' }, { status: 400 });
@@ -28,8 +28,8 @@ export async function PUT(
     const category = String(existing.rows[0].category);
 
     const result = await db.execute({
-      sql: 'UPDATE config_options SET value = ?, sort_order = ? WHERE id = ? RETURNING *',
-      args: [value, sort_order ?? 0, params.id],
+      sql: 'UPDATE config_options SET value = ?, sort_order = ?, color = ? WHERE id = ? RETURNING *',
+      args: [value, sort_order ?? 0, color !== undefined ? color : null, params.id],
     });
 
     if (result.rows.length === 0) {
@@ -102,5 +102,31 @@ export async function DELETE(
   } catch (error) {
     console.error('DELETE /api/config/[id] error:', error);
     return NextResponse.json({ error: 'Failed to delete config option' }, { status: 500 });
+  }
+}
+
+// Update color only (no cascade rename needed)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await dbReady;
+    const body = await request.json();
+    const { color } = body;
+
+    const result = await db.execute({
+      sql: 'UPDATE config_options SET color = ? WHERE id = ? RETURNING *',
+      args: [color ?? null, params.id],
+    });
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Option not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(result.rows[0]);
+  } catch (error) {
+    console.error('PATCH /api/config/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to update color' }, { status: 500 });
   }
 }

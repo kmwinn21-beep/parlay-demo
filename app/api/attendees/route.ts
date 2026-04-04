@@ -8,6 +8,7 @@ export async function GET() {
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, a.email,
                    a.notes, a.action, a.next_steps, a.next_steps_notes,
                    COALESCE(a.status, 'Unknown') as status,
+                   a.seniority,
                    a.created_at,
                    co.name as company_name, co.company_type,
                    COUNT(DISTINCT ca.conference_id) as conference_count,

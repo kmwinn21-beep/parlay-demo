@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { BackButton } from '@/components/BackButton';
+import { COLOR_PRESETS, getPreset } from '@/lib/colors';
+import { invalidateConfigColors } from '@/lib/useConfigColors';
 
 interface ConfigOption {
   id: number;
   category: string;
   value: string;
   sort_order: number;
+  color: string | null;
 }
 
 const CATEGORIES = [
@@ -34,6 +37,75 @@ function DragHandle() {
       <circle cx="11" cy="8" r="1.2" />
       <circle cx="11" cy="12" r="1.2" />
     </svg>
+  );
+}
+
+function ColorPicker({ optionId, currentColor, onColorSaved }: { optionId: number; currentColor: string | null; onColorSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const preset = getPreset(currentColor);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleSelect = async (colorKey: string | null) => {
+    setOpen(false);
+    try {
+      const res = await fetch(`/api/config/${optionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color: colorKey }),
+      });
+      if (!res.ok) throw new Error();
+      invalidateConfigColors();
+      onColorSaved();
+    } catch {
+      toast.error('Failed to update color.');
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-5 h-5 rounded-full border-2 border-gray-200 hover:border-gray-400 transition-colors flex-shrink-0"
+        style={{ backgroundColor: preset.swatch }}
+        title="Change color"
+      />
+      {open && (
+        <div className="absolute left-1/2 -translate-x-1/2 top-7 z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-2 min-w-[180px]">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1.5 px-1">Pick a color</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            {COLOR_PRESETS.map(p => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => handleSelect(p.key)}
+                className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${currentColor === p.key ? 'border-procare-dark-blue ring-2 ring-procare-bright-blue/30' : 'border-gray-200 hover:border-gray-400'}`}
+                style={{ backgroundColor: p.swatch }}
+                title={p.label}
+              />
+            ))}
+          </div>
+          {currentColor && (
+            <button
+              type="button"
+              onClick={() => handleSelect(null)}
+              className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 py-1"
+            >
+              Reset to default
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -222,6 +294,7 @@ function CategorySection({
               ) : (
                 <>
                   <DragHandle />
+                  <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
                   <span
                     className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer"
                     onClick={() => handleEdit(opt)}

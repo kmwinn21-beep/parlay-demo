@@ -4,10 +4,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { classifySeniority } from '@/lib/parsers';
+import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getPillClass, getBadgeClass } from '@/lib/colors';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -15,7 +17,7 @@ interface Attendee {
   id: number; first_name: string; last_name: string; title?: string;
   company_id?: number; company_name?: string; company_type?: string; company_website?: string;
   email?: string; notes?: string; action?: string; next_steps?: string;
-  next_steps_notes?: string; status?: string; created_at: string; conferences: Conference[];
+  next_steps_notes?: string; status?: string; seniority?: string; created_at: string; conferences: Conference[];
 }
 
 interface Company { id: number; name: string; }
@@ -29,20 +31,6 @@ interface ConferenceDetail {
 }
 
 
-// Default colors for well-known status values; any new admin-defined values get a neutral style
-const STATUS_COLOR_MAP: Record<string, string> = {
-  'Client':         'bg-yellow-400 text-yellow-900 border-yellow-500',
-  'Hot Prospect':   'bg-red-500 text-white border-red-600',
-  'Interested':     'bg-green-500 text-white border-green-600',
-  'Not Interested': 'bg-gray-900 text-white border-gray-800',
-  'Unknown':        'bg-gray-200 text-gray-600 border-gray-300',
-};
-const DEFAULT_STATUS_CLS = 'bg-procare-bright-blue text-white border-procare-bright-blue';
-
-function getStatusCls(value: string) {
-  return STATUS_COLOR_MAP[value] ?? DEFAULT_STATUS_CLS;
-}
-
 function formatDate(d: string) {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -52,12 +40,13 @@ export default function AttendeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const colorMaps = useConfigColors();
 
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string }>({});
+  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -65,6 +54,7 @@ export default function AttendeeDetailPage() {
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
+  const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -92,23 +82,25 @@ export default function AttendeeDetailPage() {
 
   const fetchAttendee = useCallback(async () => {
     try {
-      const [atRes, coRes, statusRes, actionRes, nextStepsRes] = await Promise.all([
+      const [atRes, coRes, statusRes, actionRes, nextStepsRes, seniorityRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=action'),
         fetch('/api/config?category=next_steps'),
+        fetch('/api/config?category=seniority'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
-      const [atData, coData, statusData, actionData, nextStepsData] = await Promise.all([
-        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), nextStepsRes.json(),
+      const [atData, coData, statusData, actionData, nextStepsData, seniorityData] = await Promise.all([
+        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), nextStepsRes.json(), seniorityRes.json(),
       ]);
       setAttendee(atData);
       setCompanies(coData);
       setStatusOptions(statusData.map((o: { value: string }) => o.value));
       setActionOptions(actionData.map((o: { value: string }) => o.value));
       setNextStepsOptions(nextStepsData.map((o: { value: string }) => o.value));
-      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '' });
+      setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
+      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
     } catch {
       toast.error('Failed to load attendee');
       router.push('/attendees');
@@ -171,7 +163,7 @@ export default function AttendeeDetailPage() {
     if (!editData.first_name || !editData.last_name) { toast.error('First and last name are required.'); return; }
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/attendees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editData, company_id: editData.company_id ? parseInt(editData.company_id) : null }) });
+      const res = await fetch(`/api/attendees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editData, company_id: editData.company_id ? parseInt(editData.company_id) : null, seniority: editData.seniority || null }) });
       if (!res.ok) throw new Error();
       toast.success('Attendee updated!');
       setIsEditing(false);
@@ -250,13 +242,9 @@ export default function AttendeeDetailPage() {
   if (isLoading) return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" /></div>;
   if (!attendee) return null;
 
-  const seniority = classifySeniority(attendee.title);
-  const seniorityColors: Record<string, string> = {
-    'C-Suite': 'bg-blue-600 text-white', 'VP Level': 'bg-yellow-400 text-yellow-900',
-    'Director': 'bg-gray-800 text-white', 'Manager': 'bg-orange-100 text-orange-700', 'Other': 'bg-gray-100 text-gray-600',
-  };
+  const seniority = effectiveSeniority(attendee.seniority, attendee.title);
   const currentStatus = attendee.status || 'Unknown';
-  const statusCls = getStatusCls(currentStatus);
+  const statusCls = getPillClass(currentStatus, colorMaps.status || {});
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -289,6 +277,13 @@ export default function AttendeeDetailPage() {
                     </select>
                   </div>
                   <div><label className="label">Email</label><input type="email" value={editData.email || ''} onChange={e => setEditData(p => ({ ...p, email: e.target.value }))} className="input-field" /></div>
+                  <div>
+                    <label className="label">Seniority</label>
+                    <select value={editData.seniority || ''} onChange={e => setEditData(p => ({ ...p, seniority: e.target.value }))} className="input-field">
+                      <option value="">Auto-detect from title</option>
+                      {seniorityOptions.map(val => <option key={val} value={val}>{val}</option>)}
+                    </select>
+                  </div>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={handleSave} disabled={isSaving} className="btn-primary">{isSaving ? 'Saving...' : 'Save Changes'}</button>
@@ -306,8 +301,8 @@ export default function AttendeeDetailPage() {
                       <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{attendee.first_name} {attendee.last_name}</h1>
                       {attendee.title && <p className="text-gray-600 mt-1">{attendee.title}</p>}
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {attendee.title && <span className={`badge ${seniorityColors[seniority]}`}>{seniority}</span>}
-                        <span className={`badge border ${statusCls}`}>{currentStatus}</span>
+                        {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
+                        <span className={`badge ${statusCls}`}>{currentStatus}</span>
                         {attendee.company_type && <span className="badge-blue">{attendee.company_type}</span>}
                       </div>
                     </div>
@@ -396,7 +391,7 @@ export default function AttendeeDetailPage() {
             <div className="flex flex-wrap gap-2">
               {statusOptions.map(val => (
                 <button key={val} onClick={() => handleStatus(val)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatus === val ? `${getStatusCls(val)} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatus === val ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
                   {val}
                 </button>
               ))}
