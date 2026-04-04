@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -26,7 +26,6 @@ interface ConferenceDetail {
   action?: string;
   next_steps?: string;
   next_steps_notes?: string;
-  notes?: string;
 }
 
 
@@ -75,10 +74,7 @@ export default function AttendeeDetailPage() {
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
   const [conferenceDetail, setConferenceDetail] = useState<ConferenceDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [confNotesValue, setConfNotesValue] = useState('');
   const [confOtherNotes, setConfOtherNotes] = useState('');
-  const [confNotesSaved, setConfNotesSaved] = useState(false);
-  const confNotesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchFollowUps = useCallback(async () => {
     try {
@@ -134,7 +130,6 @@ export default function AttendeeDetailPage() {
       .then(r => r.json())
       .then(data => {
         setConferenceDetail(data);
-        setConfNotesValue(data?.notes || '');
         setConfOtherNotes(data?.next_steps_notes || '');
       })
       .catch(() => {
@@ -161,7 +156,6 @@ export default function AttendeeDetailPage() {
       action: conferenceDetail?.action ?? null,
       next_steps: conferenceDetail?.next_steps ?? null,
       next_steps_notes: conferenceDetail?.next_steps_notes ?? null,
-      notes: conferenceDetail?.notes ?? null,
       ...fields,
     };
     const res = await fetch('/api/conference-details', {
@@ -254,17 +248,6 @@ export default function AttendeeDetailPage() {
     } catch { toast.error('Failed to save.'); }
   };
 
-  const handleConfNotesBlur = () => {
-    if (!selectedConferenceId) return;
-    if (confNotesTimer.current) clearTimeout(confNotesTimer.current);
-    confNotesTimer.current = setTimeout(async () => {
-      try {
-        await upsertConferenceDetail({ notes: confNotesValue });
-        setConfNotesSaved(true);
-        setTimeout(() => setConfNotesSaved(false), 2000);
-      } catch { toast.error('Failed to save notes.'); }
-    }, 400);
-  };
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" /></div>;
   if (!attendee) return null;
@@ -440,7 +423,7 @@ export default function AttendeeDetailPage() {
             </div>
 
             {!selectedConferenceId && (
-              <p className="text-xs text-gray-400 text-center py-4">Select a conference above to log actions, next steps, and notes.</p>
+              <p className="text-xs text-gray-400 text-center py-4">Select a conference above to log actions and next steps.</p>
             )}
 
             {selectedConferenceId && isLoadingDetail && (
@@ -487,22 +470,7 @@ export default function AttendeeDetailPage() {
                   )}
                 </div>
 
-                {/* Notes */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</p>
-                    {confNotesSaved && <span className="text-xs text-green-500 font-medium">Saved</span>}
-                  </div>
-                  <textarea
-                    value={confNotesValue}
-                    onChange={e => setConfNotesValue(e.target.value)}
-                    onBlur={handleConfNotesBlur}
-                    placeholder="Notes for this conference..."
-                    className="input-field resize-none w-full text-sm"
-                    rows={3}
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Auto-saves on focus change.</p>
-                </div>
+
               </div>
             )}
           </div>

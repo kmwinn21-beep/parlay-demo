@@ -87,12 +87,18 @@ function ConferenceTooltip({ count, names }: { count: number; names?: string }) 
   );
 }
 
+function formatNoteDate(dt: string) {
+  const d = new Date(dt);
+  if (isNaN(d.getTime())) return dt;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function NotesPopover({ attendeeId, notesCount }: {
   attendeeId: number;
   notesCount: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [notes, setNotes] = useState<{ id: number; content: string }[]>([]);
+  const [notes, setNotes] = useState<{ id: number; content: string; created_at: string }[]>([]);
   const [totalCount, setTotalCount] = useState(notesCount);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -102,15 +108,14 @@ function NotesPopover({ attendeeId, notesCount }: {
     setLoading(true);
     fetch(`/api/notes?entity_type=attendee&entity_id=${attendeeId}`)
       .then(r => r.json())
-      .then((data: { id: number; content: string }[]) => {
-        setNotes(data.slice(0, 2));
+      .then((data: { id: number; content: string; created_at: string }[]) => {
+        setNotes(data);
         setTotalCount(data.length);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [open, attendeeId]);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -135,32 +140,47 @@ function NotesPopover({ attendeeId, notesCount }: {
       </button>
 
       {open && (
-        <div className="absolute z-50 bottom-full left-0 mb-2 w-72">
-          <div className="bg-gray-900 text-white text-xs rounded-xl shadow-xl p-3 space-y-2">
-            <p className="font-semibold text-gray-300 uppercase tracking-wide text-[10px]">Recent Notes</p>
-            {loading ? (
-              <p className="text-gray-400 italic">Loading...</p>
-            ) : notes.length === 0 ? (
-              <p className="text-gray-400 italic">No notes yet.</p>
-            ) : (
-              notes.map((note) => (
-                <p key={note.id} className="text-gray-100 leading-snug line-clamp-3 border-t border-gray-700 pt-2 first:border-0 first:pt-0">
-                  {note.content}
-                </p>
-              ))
-            )}
-            {totalCount > 2 && (
+        <div className="absolute z-50 bottom-full left-0 mb-2 w-[480px] max-w-[90vw]">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                Notes {totalCount > 0 && `(${totalCount})`}
+              </span>
               <Link
                 href={`/attendees/${attendeeId}`}
-                className="block text-procare-bright-blue hover:underline text-[10px] pt-1 border-t border-gray-700"
+                className="text-xs text-procare-bright-blue hover:underline font-medium"
                 onClick={() => setOpen(false)}
               >
-                View all {totalCount} notes →
+                Open record →
               </Link>
-            )}
-          </div>
-          <div className="flex justify-start pl-3">
-            <div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" />
+            </div>
+
+            {/* Table body */}
+            <div className="overflow-y-auto max-h-64">
+              {loading ? (
+                <p className="text-sm text-gray-400 italic text-center py-6">Loading...</p>
+              ) : notes.length === 0 ? (
+                <p className="text-sm text-gray-400 italic text-center py-6">No notes yet.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-28">Date</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {notes.map(note => (
+                      <tr key={note.id} className="align-top hover:bg-gray-50">
+                        <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap w-28">{formatNoteDate(note.created_at)}</td>
+                        <td className="px-4 py-2.5 text-gray-800 leading-snug whitespace-pre-wrap break-words">{note.content}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}
