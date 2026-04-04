@@ -32,14 +32,14 @@ export async function GET(request: NextRequest) {
           cad.conference_id,
           cad.next_steps,
           cad.next_steps_notes,
-          cad.notes AS conference_notes,
           cad.completed,
           a.first_name,
           a.last_name,
           a.title,
           co.name AS company_name,
           c.name AS conference_name,
-          c.start_date
+          c.start_date,
+          (SELECT COUNT(*) FROM entity_notes en WHERE en.entity_type = 'attendee' AND en.entity_id = a.id) AS entity_notes_count
         FROM conference_attendee_details cad
         JOIN attendees a ON cad.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
@@ -56,7 +56,6 @@ export async function GET(request: NextRequest) {
         conference_id: Number(r.conference_id),
         next_steps: String(r.next_steps ?? ''),
         next_steps_notes: r.next_steps_notes != null ? String(r.next_steps_notes) : null,
-        conference_notes: r.conference_notes != null ? String(r.conference_notes) : null,
         completed: Number(r.completed ?? 0) === 1,
         first_name: String(r.first_name ?? ''),
         last_name: String(r.last_name ?? ''),
@@ -64,6 +63,7 @@ export async function GET(request: NextRequest) {
         company_name: r.company_name != null ? String(r.company_name) : null,
         conference_name: String(r.conference_name ?? ''),
         start_date: String(r.start_date ?? ''),
+        entity_notes_count: Number(r.entity_notes_count ?? 0),
       }))
     );
   } catch (error) {

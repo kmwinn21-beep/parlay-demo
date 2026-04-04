@@ -1,14 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
+import { NotesPopover } from './NotesPopover';
 
 export interface FollowUp {
   attendee_id: number;
   conference_id: number;
   next_steps: string;
   next_steps_notes: string | null;
-  conference_notes: string | null;
   completed: boolean;
   first_name: string;
   last_name: string;
@@ -16,6 +15,7 @@ export interface FollowUp {
   company_name: string | null;
   conference_name: string;
   start_date: string;
+  entity_notes_count: number;
 }
 
 function formatDate(d: string) {
@@ -25,37 +25,6 @@ function formatDate(d: string) {
   });
 }
 
-function NoteModal({ note, name, conference, onClose }: { note: string; name: string; conference: string; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50" />
-      <div
-        className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-base font-semibold text-procare-dark-blue font-serif">{name}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{conference}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 rounded transition-colors flex-shrink-0 ml-3"
-            aria-label="Close"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-4">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{note}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function FollowUpsTable({
   followUps,
   onToggle,
@@ -63,8 +32,6 @@ export function FollowUpsTable({
   followUps: FollowUp[];
   onToggle: (attendeeId: number, conferenceId: number, completed: boolean) => void;
 }) {
-  const [modalNote, setModalNote] = useState<{ note: string; name: string; conference: string } | null>(null);
-
   if (followUps.length === 0) {
     return (
       <div className="text-center py-8">
@@ -78,15 +45,6 @@ export function FollowUpsTable({
 
   return (
     <>
-      {modalNote && (
-        <NoteModal
-          note={modalNote.note}
-          name={modalNote.name}
-          conference={modalNote.conference}
-          onClose={() => setModalNote(null)}
-        />
-      )}
-
       {/* Mobile card layout */}
       <div className="block lg:hidden divide-y divide-gray-100">
         {followUps.map((fu) => (
@@ -103,17 +61,8 @@ export function FollowUpsTable({
                   >
                     {fu.first_name} {fu.last_name}
                   </Link>
-                  {fu.conference_notes && (
-                    <button
-                      type="button"
-                      onClick={() => setModalNote({ note: fu.conference_notes!, name: `${fu.first_name} ${fu.last_name}`, conference: fu.conference_name })}
-                      className="text-procare-bright-blue hover:text-procare-dark-blue transition-colors flex-shrink-0"
-                      title="View conference note"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </button>
+                  {fu.entity_notes_count > 0 && (
+                    <NotesPopover attendeeId={fu.attendee_id} notesCount={fu.entity_notes_count} />
                   )}
                 </div>
                 {fu.title && <p className="text-xs text-gray-500 mt-0.5">{fu.title}</p>}
@@ -207,20 +156,9 @@ export function FollowUpsTable({
                   <p className="text-gray-400">{formatDate(fu.start_date)}</p>
                 </td>
                 <td className="px-3 py-2">
-                  {fu.conference_notes ? (
-                    <button
-                      type="button"
-                      onClick={() => setModalNote({ note: fu.conference_notes!, name: `${fu.first_name} ${fu.last_name}`, conference: fu.conference_name })}
-                      className="text-procare-bright-blue hover:text-procare-dark-blue transition-colors"
-                      title="View conference note"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <span className="text-gray-300">—</span>
-                  )}
+                  {fu.entity_notes_count > 0
+                    ? <NotesPopover attendeeId={fu.attendee_id} notesCount={fu.entity_notes_count} />
+                    : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-3 py-2">
                   <button
