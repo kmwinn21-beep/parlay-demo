@@ -16,6 +16,55 @@ interface Company {
   attendee_count: number;
   conference_count: number;
   conference_names?: string;
+  attendee_summary?: string;
+}
+
+function AttendeeTooltip({ count, summary }: { count: number; summary?: string }) {
+  const [visible, setVisible] = useState(false);
+  const attendees = (summary || '').split('~~~').map(s => s.trim()).filter(Boolean).map(s => {
+    const [name, title] = s.split('|');
+    return { name: name?.trim() || '', title: title?.trim() || '' };
+  });
+  if (count === 0) return <span className="badge-gray">{count}</span>;
+  return (
+    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+      <span className="badge-gray cursor-default">{count}</span>
+      {visible && attendees.length > 0 && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-gray-900 text-white text-xs rounded-lg shadow-xl p-2.5 min-w-[180px] max-w-[260px] pointer-events-none">
+          <div className="space-y-1.5">
+            {attendees.map((a, i) => (
+              <div key={i}>
+                <span className="font-medium">{a.name}</span>
+                {a.title && <span className="text-gray-300"> · {a.title}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConferenceTooltip({ count, names }: { count: number; names?: string }) {
+  const [visible, setVisible] = useState(false);
+  const confList = (names || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (count === 0) return <span className={conferenceBadgeClass(0)}>{count}</span>;
+  return (
+    <div className="relative inline-block" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+      <span className={`${conferenceBadgeClass(count)} cursor-default`}>{count}</span>
+      {visible && confList.length > 0 && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-gray-900 text-white text-xs rounded-lg shadow-xl p-2.5 min-w-[180px] max-w-[280px] pointer-events-none">
+          <div className="space-y-1">
+            {confList.map((name, i) => (
+              <div key={i} className="leading-snug">{name}</div>
+            ))}
+          </div>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface CompanyTableProps {
@@ -308,8 +357,8 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 </td>
                 <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                 <td className="px-3 py-3"><span className={statusBadgeClass(company.status || 'Unknown')}>{company.status || 'Unknown'}</span></td>
-                <td className="px-3 py-3"><span className="badge-gray">{company.attendee_count}</span></td>
-                <td className="px-3 py-3"><span className={conferenceBadgeClass(Number(company.conference_count))}>{company.conference_count}</span></td>
+                <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
+                <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-3">
                     <Link href={`/companies/${company.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>

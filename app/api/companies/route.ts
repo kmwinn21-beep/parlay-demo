@@ -9,7 +9,8 @@ export async function GET() {
               COALESCE(co.status, 'Unknown') as status, co.created_at,
               COUNT(DISTINCT a.id) as attendee_count,
               COUNT(DISTINCT ca.conference_id) as conference_count,
-              GROUP_CONCAT(DISTINCT conf.name) as conference_names
+              GROUP_CONCAT(DISTINCT conf.name) as conference_names,
+              GROUP_CONCAT(a.first_name || ' ' || a.last_name || CASE WHEN a.title IS NOT NULL AND a.title != '' THEN '|' || a.title ELSE '|' END, '~~~') as attendee_summary
             FROM companies co
             LEFT JOIN attendees a ON co.id = a.company_id
             LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
