@@ -36,6 +36,12 @@ interface ConferenceDetail {
 interface AnalyticsChartsProps {
   attendees: Attendee[];
   conferenceDetails: ConferenceDetail[];
+  meetings?: MeetingData[];
+}
+
+interface MeetingData {
+  id: number;
+  outcome: string | null;
 }
 
 function buildSeniorityData(attendees: Attendee[]) {
@@ -95,7 +101,7 @@ const NEXT_STEPS_LABELS = [
   'Other',
 ];
 
-export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChartsProps) {
+export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }: AnalyticsChartsProps) {
   const colorMaps = useConfigColors();
   const seniorityAll = buildSeniorityData(attendees);
   const companyTypeData = buildCompanyTypeData(attendees);
@@ -123,6 +129,17 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
     }
   }
 
+  // Count meetings and outcomes
+  const totalMeetings = meetings.length;
+  const meetingOutcomeCounts: Record<string, number> = {};
+  for (const m of meetings) {
+    if (m.outcome) {
+      meetingOutcomeCounts[m.outcome] = (meetingOutcomeCounts[m.outcome] || 0) + 1;
+    }
+  }
+  const meetingsWithOutcome = meetings.filter(m => m.outcome).length;
+  const meetingsPending = totalMeetings - meetingsWithOutcome;
+
   // Build attendee activity table (attendees with action OR next_steps)
   const detailMap = new Map<number, ConferenceDetail>();
   for (const d of conferenceDetails) {
@@ -141,7 +158,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
 
   return (
     <div className="space-y-8">
-      {/* Three charts side by side */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Company Type Breakdown */}
         <div className="card">
@@ -244,6 +261,44 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           </div>
         </div>
       </div>
+
+      {/* Meetings Summary */}
+      {totalMeetings > 0 && (
+        <div className="card">
+          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
+            Meetings Summary
+          </h3>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-procare-dark-blue font-serif">{totalMeetings}</p>
+              <p className="text-xs text-gray-500 mt-1">Total Scheduled</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-procare-bright-blue font-serif">{meetingsPending}</p>
+              <p className="text-xs text-gray-500 mt-1">Pending Outcome</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600 font-serif">{meetingsWithOutcome}</p>
+              <p className="text-xs text-gray-500 mt-1">With Outcome</p>
+            </div>
+          </div>
+          {Object.keys(meetingOutcomeCounts).length > 0 && (
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Outcomes</p>
+              {Object.entries(meetingOutcomeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([outcome, count]) => (
+                  <div key={outcome} className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-700">{outcome}</span>
+                    <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-bright-blue text-white">
+                      {count}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Attendee Activity Table */}
       {activityRows.length > 0 && (

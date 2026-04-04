@@ -28,9 +28,11 @@ function formatDate(d: string) {
 export function FollowUpsTable({
   followUps,
   onToggle,
+  onDelete,
 }: {
   followUps: FollowUp[];
   onToggle: (attendeeId: number, conferenceId: number, completed: boolean) => void;
+  onDelete?: (attendeeId: number, conferenceId: number) => void;
 }) {
   if (followUps.length === 0) {
     return (
@@ -68,26 +70,38 @@ export function FollowUpsTable({
                 {fu.title && <p className="text-xs text-gray-500 mt-0.5">{fu.title}</p>}
                 {fu.company_name && <p className="text-xs text-gray-500">{fu.company_name}</p>}
               </div>
-              <button
-                type="button"
-                onClick={() => onToggle(fu.attendee_id, fu.conference_id, !fu.completed)}
-                className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${
-                  fu.completed
-                    ? 'bg-green-500 text-white border-green-600'
-                    : 'bg-white text-gray-500 border-gray-300'
-                }`}
-              >
-                {fu.completed ? (
-                  <>
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Done
-                  </>
-                ) : (
-                  'Mark Done'
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onToggle(fu.attendee_id, fu.conference_id, !fu.completed)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${
+                    fu.completed
+                      ? 'bg-green-500 text-white border-green-600'
+                      : 'bg-white text-gray-500 border-gray-300'
+                  }`}
+                >
+                  {fu.completed ? (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Done
+                    </>
+                  ) : (
+                    'Mark Done'
+                  )}
+                </button>
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(fu.attendee_id, fu.conference_id)}
+                    className="text-red-400 hover:text-red-600 p-1 rounded transition-colors"
+                    title="Delete follow-up"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
@@ -122,6 +136,7 @@ export function FollowUpsTable({
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Conference</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Note</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Done</th>
+              {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -182,6 +197,17 @@ export function FollowUpsTable({
                     )}
                   </button>
                 </td>
+                {onDelete && (
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(fu.attendee_id, fu.conference_id)}
+                      className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

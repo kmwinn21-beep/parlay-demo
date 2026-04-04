@@ -72,6 +72,27 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    await dbReady;
+    const { attendee_id, conference_id } = await request.json();
+
+    if (attendee_id == null || conference_id == null) {
+      return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
+    }
+
+    await db.execute({
+      sql: 'UPDATE conference_attendee_details SET next_steps = NULL, next_steps_notes = NULL, completed = 0 WHERE attendee_id = ? AND conference_id = ?',
+      args: [attendee_id, conference_id],
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/follow-ups error:', error);
+    return NextResponse.json({ error: 'Failed to delete follow-up' }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     await dbReady;
