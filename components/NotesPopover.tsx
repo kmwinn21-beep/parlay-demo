@@ -14,7 +14,7 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
   const [notes, setNotes] = useState<{ id: number; content: string; created_at: string }[]>([]);
   const [totalCount, setTotalCount] = useState(notesCount);
   const [loading, setLoading] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +48,11 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
   const handleToggle = () => {
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.top, left: rect.left });
+      const PADDING = 8;
+      const cardWidth = Math.min(480, window.innerWidth - PADDING * 2);
+      // Align card's left edge with button, but clamp so it never exits the viewport
+      const left = Math.max(PADDING, Math.min(rect.left, window.innerWidth - cardWidth - PADDING));
+      setPos({ top: rect.top, left, width: cardWidth });
     }
     setOpen(v => !v);
   };
@@ -77,8 +81,7 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
             left: pos.left,
             transform: 'translateY(calc(-100% - 8px))',
             zIndex: 9999,
-            width: 480,
-            maxWidth: '90vw',
+            width: pos.width,
           }}
         >
           <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
