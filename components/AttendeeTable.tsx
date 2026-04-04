@@ -87,14 +87,28 @@ function ConferenceTooltip({ count, names }: { count: number; names?: string }) 
   );
 }
 
-function NotesPopover({ attendeeId, notesCount, recentNotesConcat }: {
+function NotesPopover({ attendeeId, notesCount }: {
   attendeeId: number;
   notesCount: number;
-  recentNotesConcat?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [notes, setNotes] = useState<{ id: number; content: string }[]>([]);
+  const [totalCount, setTotalCount] = useState(notesCount);
+  const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const notes = recentNotesConcat ? recentNotesConcat.split('|||').filter(Boolean) : [];
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetch(`/api/notes?entity_type=attendee&entity_id=${attendeeId}`)
+      .then(r => r.json())
+      .then((data: { id: number; content: string }[]) => {
+        setNotes(data.slice(0, 2));
+        setTotalCount(data.length);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, attendeeId]);
 
   // Close on outside click
   useEffect(() => {
@@ -115,7 +129,7 @@ function NotesPopover({ attendeeId, notesCount, recentNotesConcat }: {
         title={`${notesCount} note${notesCount !== 1 ? 's' : ''}`}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
         </svg>
         <span className="text-xs font-medium">{notesCount}</span>
       </button>
@@ -124,22 +138,24 @@ function NotesPopover({ attendeeId, notesCount, recentNotesConcat }: {
         <div className="absolute z-50 bottom-full left-0 mb-2 w-72">
           <div className="bg-gray-900 text-white text-xs rounded-xl shadow-xl p-3 space-y-2">
             <p className="font-semibold text-gray-300 uppercase tracking-wide text-[10px]">Recent Notes</p>
-            {notes.length === 0 ? (
+            {loading ? (
+              <p className="text-gray-400 italic">Loading...</p>
+            ) : notes.length === 0 ? (
               <p className="text-gray-400 italic">No notes yet.</p>
             ) : (
-              notes.map((note, i) => (
-                <p key={i} className="text-gray-100 leading-snug line-clamp-3 border-t border-gray-700 pt-2 first:border-0 first:pt-0">
-                  {note}
+              notes.map((note) => (
+                <p key={note.id} className="text-gray-100 leading-snug line-clamp-3 border-t border-gray-700 pt-2 first:border-0 first:pt-0">
+                  {note.content}
                 </p>
               ))
             )}
-            {notesCount > 2 && (
+            {totalCount > 2 && (
               <Link
                 href={`/attendees/${attendeeId}`}
                 className="block text-procare-bright-blue hover:underline text-[10px] pt-1 border-t border-gray-700"
                 onClick={() => setOpen(false)}
               >
-                View all {notesCount} notes →
+                View all {totalCount} notes →
               </Link>
             )}
           </div>
@@ -445,7 +461,6 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                       <NotesPopover
                         attendeeId={attendee.id}
                         notesCount={Number(attendee.notes_count)}
-                        recentNotesConcat={attendee.recent_notes_concat}
                       />
                     ) : (
                       <span className="text-gray-300">—</span>
