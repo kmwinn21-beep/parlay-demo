@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
 import { useForm } from 'react-hook-form';
+import { useConfigOptions } from '@/lib/useConfigOptions';
 
 interface Company {
   id: number;
@@ -33,6 +34,9 @@ export default function CompaniesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AddCompanyForm>();
+  const configOptions = useConfigOptions();
+  const companyTypeOptions = configOptions.company_type ?? [];
+  const profitTypeOptions = configOptions.profit_type ?? [];
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -128,20 +132,14 @@ export default function CompaniesPage() {
                 <label className="label">Company Type</label>
                 <select {...register('company_type')} className="input-field">
                   <option value="">Select type...</option>
-                  <option value="3rd Party Operator">3rd Party Operator</option>
-                  <option value="Owner/Operator">Owner/Operator</option>
-                  <option value="Capital Partner">Capital Partner</option>
-                  <option value="Vendor">Vendor</option>
-                  <option value="Partner">Partner</option>
-                  <option value="Other">Other</option>
+                  {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
                 <label className="label">Profit Type</label>
                 <select {...register('profit_type')} className="input-field">
                   <option value="">Select...</option>
-                  <option value="for-profit">For-Profit</option>
-                  <option value="non-profit">Non-Profit</option>
+                  {profitTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
