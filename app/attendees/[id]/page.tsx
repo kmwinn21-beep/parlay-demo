@@ -121,7 +121,6 @@ export default function AttendeeDetailPage() {
   useEffect(() => {
     if (!selectedConferenceId) {
       setConferenceDetail(null);
-      setConfNotesValue('');
       setConfOtherNotes('');
       return;
     }
@@ -134,7 +133,6 @@ export default function AttendeeDetailPage() {
       })
       .catch(() => {
         setConferenceDetail(null);
-        setConfNotesValue('');
         setConfOtherNotes('');
       })
       .finally(() => setIsLoadingDetail(false));
