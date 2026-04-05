@@ -56,6 +56,7 @@ export default function AttendeeDetailPage() {
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<string[]>([]);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -96,17 +97,18 @@ export default function AttendeeDetailPage() {
 
   const fetchAttendee = useCallback(async () => {
     try {
-      const [atRes, coRes, statusRes, actionRes, nextStepsRes, seniorityRes] = await Promise.all([
+      const [atRes, coRes, statusRes, actionRes, nextStepsRes, seniorityRes, userRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=action'),
         fetch('/api/config?category=next_steps'),
         fetch('/api/config?category=seniority'),
+        fetch('/api/config?category=user'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
-      const [atData, coData, statusData, actionData, nextStepsData, seniorityData] = await Promise.all([
-        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), nextStepsRes.json(), seniorityRes.json(),
+      const [atData, coData, statusData, actionData, nextStepsData, seniorityData, userData] = await Promise.all([
+        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), nextStepsRes.json(), seniorityRes.json(), userRes.json(),
       ]);
       setAttendee(atData);
       setCompanies(coData);
@@ -114,6 +116,7 @@ export default function AttendeeDetailPage() {
       setActionOptions(actionData.map((o: { value: string }) => o.value));
       setNextStepsOptions(nextStepsData.map((o: { value: string }) => o.value));
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
+      setUserOptions(userData.map((o: { value: string }) => o.value));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
     } catch {
       toast.error('Failed to load attendee');
@@ -454,7 +457,7 @@ export default function AttendeeDetailPage() {
                 )}
               </h2>
             </div>
-            <MeetingsTable meetings={meetings} actionOptions={actionOptions} colorMap={colorMaps.action || {}} onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
+            <MeetingsTable meetings={meetings} actionOptions={actionOptions} colorMap={colorMaps.action || {}} userOptions={userOptions} onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
               setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
               try {
                 const res = await fetch(`/api/meetings/${meetingId}`, {
@@ -586,7 +589,12 @@ export default function AttendeeDetailPage() {
                       </div>
                       <div>
                         <label className="label text-[10px]">Scheduled By</label>
-                        <input type="text" value={meetingForm.scheduled_by} onChange={e => setMeetingForm(p => ({ ...p, scheduled_by: e.target.value }))} placeholder="Enter name..." className="input-field text-xs" />
+                        <select value={meetingForm.scheduled_by} onChange={e => setMeetingForm(p => ({ ...p, scheduled_by: e.target.value }))} className="input-field text-xs">
+                          <option value="">Select user...</option>
+                          {userOptions.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="label text-[10px]">Additional Attendees</label>

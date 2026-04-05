@@ -11,6 +11,7 @@ export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending');
   const colorMaps = useConfigColors();
@@ -34,6 +35,8 @@ export default function FollowUpsPage() {
         if (Array.isArray(cfgData)) {
           const actionOpts = cfgData.filter((o: { category: string }) => o.category === 'action');
           setActionOptions(actionOpts.map((o: { value: string }) => o.value));
+          const userOpts = cfgData.filter((o: { category: string }) => o.category === 'user');
+          setUserOptions(userOpts.map((o: { value: string }) => o.value));
         }
       }
     } catch {
@@ -174,6 +177,7 @@ export default function FollowUpsPage() {
               meetings={meetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
+              userOptions={userOptions}
               onOutcomeChange={handleOutcomeChange}
               onDelete={handleDeleteMeeting}
               onEdit={async (meetingId, data) => {

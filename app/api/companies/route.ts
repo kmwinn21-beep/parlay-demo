@@ -36,15 +36,15 @@ export async function POST(request: NextRequest) {
   try {
     await dbReady;
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
     }
 
     const result = await db.execute({
-      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes) VALUES (?, ?, ?, ?, ?) RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null],
+      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null],
     });
 
     return NextResponse.json(result.rows[0], { status: 201 });

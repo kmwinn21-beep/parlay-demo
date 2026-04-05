@@ -25,6 +25,7 @@ interface AddCompanyForm {
   profit_type: string;
   company_type: string;
   notes: string;
+  assigned_user: string;
 }
 
 export default function CompaniesPage() {
@@ -37,6 +38,7 @@ export default function CompaniesPage() {
   const configOptions = useConfigOptions();
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
+  const userOptions = configOptions.user ?? [];
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -145,6 +147,13 @@ export default function CompaniesPage() {
               <div>
                 <label className="label">Notes</label>
                 <input {...register('notes')} className="input-field" placeholder="Any notes..." />
+              </div>
+              <div>
+                <label className="label">Assigned User</label>
+                <select {...register('assigned_user')} className="input-field">
+                  <option value="">Select user...</option>
+                  {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
               </div>
             </div>
             <div className="flex gap-3 mt-4">

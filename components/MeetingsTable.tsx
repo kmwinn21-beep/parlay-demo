@@ -194,11 +194,13 @@ function EditMeetingRow({
   onSave,
   onCancel,
   onDelete,
+  userOptions = [],
 }: {
   meeting: Meeting;
   onSave: (meetingId: number, data: EditFormData) => void;
   onCancel: () => void;
   onDelete?: (meetingId: number) => void;
+  userOptions?: string[];
 }) {
   const [form, setForm] = useState<EditFormData>({
     meeting_date: meeting.meeting_date,
@@ -232,7 +234,10 @@ function EditMeetingRow({
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Scheduled By</label>
-          <input type="text" className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))} placeholder="Person name" />
+          <select className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))}>
+            <option value="">Select user...</option>
+            {userOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
         </div>
         <div className="sm:col-span-2">
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
@@ -277,12 +282,14 @@ function EditMeetingTableRow({
   onCancel,
   onDelete,
   colSpan,
+  userOptions = [],
 }: {
   meeting: Meeting;
   onSave: (meetingId: number, data: EditFormData) => void;
   onCancel: () => void;
   onDelete?: (meetingId: number) => void;
   colSpan: number;
+  userOptions?: string[];
 }) {
   const [form, setForm] = useState<EditFormData>({
     meeting_date: meeting.meeting_date,
@@ -316,7 +323,10 @@ function EditMeetingTableRow({
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Scheduled By</label>
-              <input type="text" className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))} placeholder="Person name" />
+              <select className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))}>
+                <option value="">Select user...</option>
+                {userOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
@@ -364,6 +374,7 @@ export function MeetingsTable({
   onOutcomeChange,
   onDelete,
   onEdit,
+  userOptions = [],
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -371,6 +382,7 @@ export function MeetingsTable({
   onOutcomeChange: (meetingId: number, outcome: string) => void;
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
+  userOptions?: string[];
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -451,6 +463,7 @@ export function MeetingsTable({
                 onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                 onCancel={() => setEditingId(null)}
                 onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
+                userOptions={userOptions}
               />
             ) : (
               <>
@@ -533,6 +546,7 @@ export function MeetingsTable({
                   onCancel={() => setEditingId(null)}
                   onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
                   colSpan={8 + (hasActions ? 1 : 0)}
+                  userOptions={userOptions}
                 />
               ) : (
               <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">

@@ -31,6 +31,7 @@ interface Company {
   company_type?: string;
   notes?: string;
   status?: string;
+  assigned_user?: string;
   created_at: string;
   attendees: Attendee[];
   conferences?: ConferenceItem[];
@@ -94,10 +95,11 @@ export default function CompanyDetailPage() {
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<string[]>([]);
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, fuRes, notesRes, statusRes, compTypeRes, profitRes, meetingsRes, actionRes] = await Promise.all([
+      const [compRes, fuRes, notesRes, statusRes, compTypeRes, profitRes, meetingsRes, actionRes, userRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch(`/api/follow-ups?company_id=${id}`),
         fetch(`/api/notes?entity_type=company&entity_id=${id}`),
@@ -106,6 +108,7 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=profit_type'),
         fetch(`/api/meetings?company_id=${id}`),
         fetch('/api/config?category=action'),
+        fetch('/api/config?category=user'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -116,6 +119,7 @@ export default function CompanyDetailPage() {
         profit_type: data.profit_type || '',
         company_type: data.company_type || '',
         notes: data.notes || '',
+        assigned_user: data.assigned_user || '',
       });
       if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
       if (notesRes.ok) setCompanyNotes(await notesRes.json());
@@ -124,6 +128,7 @@ export default function CompanyDetailPage() {
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
       if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
+      if (userRes.ok) setUserOptions((await userRes.json()).map((o: { value: string }) => o.value));
     } catch {
       toast.error('Failed to load company');
       router.push('/companies');
@@ -329,6 +334,19 @@ export default function CompanyDetailPage() {
                   rows={2}
                 />
               </div>
+              <div>
+                <label className="label">Assigned User</label>
+                <select
+                  value={editData.assigned_user || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, assigned_user: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select user...</option>
+                  {userOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex gap-3">
               <button onClick={handleSave} disabled={isSaving} className="btn-primary">
@@ -356,6 +374,9 @@ export default function CompanyDetailPage() {
                       </span>
                     )}
                     <span className="badge-gray">{company.attendees.length} attendees</span>
+                    {company.assigned_user && (
+                      <span className={getBadgeClass(company.assigned_user, colorMaps.user || {})}>{company.assigned_user}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -530,6 +551,7 @@ export default function CompanyDetailPage() {
               meetings={companyMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
+              userOptions={userOptions}
               onOutcomeChange={async (meetingId, outcome) => {
                 setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {

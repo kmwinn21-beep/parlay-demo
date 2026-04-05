@@ -121,6 +121,7 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'blue' WHERE category = 'next_steps' AND value = 'Meeting' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'next_steps' AND value = 'Nurture' AND color IS NULL`,
     `UPDATE config_options SET color = 'gray' WHERE category = 'next_steps' AND value = 'Other' AND color IS NULL`,
+    `ALTER TABLE companies ADD COLUMN assigned_user TEXT`,
     `CREATE TABLE IF NOT EXISTS meetings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       attendee_id INTEGER NOT NULL,
@@ -219,6 +220,7 @@ export interface Company {
   company_type?: string;
   notes?: string;
   status?: string;
+  assigned_user?: string;
   created_at: string;
   attendee_count?: number;
 }
