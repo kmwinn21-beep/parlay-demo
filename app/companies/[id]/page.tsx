@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
-import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
+import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -554,6 +554,21 @@ export default function CompanyDetailPage() {
                   fetchCompany();
                 } catch {
                   toast.error('Failed to delete meeting.');
+                }
+              }}
+              onEdit={async (meetingId, data) => {
+                setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting updated.');
+                } catch {
+                  fetchCompany();
+                  toast.error('Failed to update meeting.');
                 }
               }}
             />

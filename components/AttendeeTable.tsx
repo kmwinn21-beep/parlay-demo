@@ -94,7 +94,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
   const statusOptions = configOptions.status ?? [];
-  const seniorityConfigOptions = configOptions.seniority ?? [];
+  const seniorityConfigOptions = useMemo(() => configOptions.seniority ?? [], [configOptions.seniority]);
   const [search, setSearch] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');

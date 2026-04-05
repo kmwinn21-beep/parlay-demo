@@ -181,21 +181,175 @@ function OutcomeButton({
   );
 }
 
+export interface EditFormData {
+  meeting_date: string;
+  meeting_time: string;
+  location: string;
+  scheduled_by: string;
+  additional_attendees: string;
+}
+
+function EditMeetingRow({
+  meeting,
+  onSave,
+  onCancel,
+}: {
+  meeting: Meeting;
+  onSave: (meetingId: number, data: EditFormData) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<EditFormData>({
+    meeting_date: meeting.meeting_date,
+    meeting_time: meeting.meeting_time,
+    location: meeting.location || '',
+    scheduled_by: meeting.scheduled_by || '',
+    additional_attendees: meeting.additional_attendees || '',
+  });
+
+  const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-semibold text-gray-700">
+          Editing meeting with {meeting.first_name} {meeting.last_name}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Date *</label>
+          <input type="date" className={inputClass} value={form.meeting_date} onChange={e => setForm(f => ({ ...f, meeting_date: e.target.value }))} required />
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Time *</label>
+          <input type="time" className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} required />
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Location</label>
+          <input type="text" className={inputClass} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Room 201, Lobby" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Scheduled By</label>
+          <input type="text" className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))} placeholder="Person name" />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
+          <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated names" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          className="px-3 py-1.5 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+          disabled={!form.meeting_date || !form.meeting_time}
+          onClick={() => onSave(meeting.id, form)}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300 transition-colors"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditMeetingTableRow({
+  meeting,
+  onSave,
+  onCancel,
+  colSpan,
+}: {
+  meeting: Meeting;
+  onSave: (meetingId: number, data: EditFormData) => void;
+  onCancel: () => void;
+  colSpan: number;
+}) {
+  const [form, setForm] = useState<EditFormData>({
+    meeting_date: meeting.meeting_date,
+    meeting_time: meeting.meeting_time,
+    location: meeting.location || '',
+    scheduled_by: meeting.scheduled_by || '',
+    additional_attendees: meeting.additional_attendees || '',
+  });
+
+  const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+
+  return (
+    <tr className="bg-blue-50">
+      <td colSpan={colSpan} className="px-3 py-3">
+        <div className="space-y-2">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Editing meeting with {meeting.first_name} {meeting.last_name}</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Date *</label>
+              <input type="date" className={inputClass} value={form.meeting_date} onChange={e => setForm(f => ({ ...f, meeting_date: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Time *</label>
+              <input type="time" className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Location</label>
+              <input type="text" className={inputClass} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Room 201" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Scheduled By</label>
+              <input type="text" className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))} placeholder="Person name" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
+              <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="px-2.5 py-1 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+              disabled={!form.meeting_date || !form.meeting_time}
+              onClick={() => onSave(meeting.id, form)}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="px-2.5 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300 transition-colors"
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export function MeetingsTable({
   meetings,
   actionOptions,
   colorMap,
   onOutcomeChange,
   onDelete,
+  onEdit,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
   colorMap: ColorMap;
   onOutcomeChange: (meetingId: number, outcome: string) => void;
   onDelete?: (meetingId: number) => void;
+  onEdit?: (meetingId: number, data: EditFormData) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const hasActions = !!(onEdit || onDelete);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -262,45 +416,60 @@ export function MeetingsTable({
       <div className="block lg:hidden divide-y divide-gray-100">
         {sorted.map((m) => (
           <div key={m.id} className="p-4 bg-white">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-procare-bright-blue hover:underline">
-                  {m.first_name} {m.last_name}
-                </Link>
-                {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
-                {m.company_name && m.company_id ? (
-                  <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5">
-                    {m.company_name}
-                  </Link>
-                ) : m.company_name ? (
-                  <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
-                ) : null}
-              </div>
-              <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
-              {onDelete && (
-                <button onClick={() => onDelete(m.id)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
-              )}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-gray-600">
-                {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
-              </span>
-            </div>
-            <div className="mt-1.5 flex items-center gap-2">
-              <Link href={`/conferences/${m.conference_id}`} className="text-xs text-procare-bright-blue hover:underline">
-                {m.conference_name}
-              </Link>
-            </div>
-            <div className="mt-2">
-              <OutcomeButton
-                value={m.outcome}
-                options={actionOptions}
-                colorMap={colorMap}
-                onChange={(val) => onOutcomeChange(m.id, val)}
+            {editingId === m.id && onEdit ? (
+              <EditMeetingRow
+                meeting={m}
+                onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
+                onCancel={() => setEditingId(null)}
               />
-            </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-procare-bright-blue hover:underline">
+                      {m.first_name} {m.last_name}
+                    </Link>
+                    {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
+                    {m.company_name && m.company_id ? (
+                      <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5">
+                        {m.company_name}
+                      </Link>
+                    ) : m.company_name ? (
+                      <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
+                    ) : null}
+                  </div>
+                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
+                  {onEdit && (
+                    <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-procare-bright-blue p-1 rounded" title="Edit">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button onClick={() => onDelete(m.id)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-600">
+                    {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Link href={`/conferences/${m.conference_id}`} className="text-xs text-procare-bright-blue hover:underline">
+                    {m.conference_name}
+                  </Link>
+                </div>
+                <div className="mt-2">
+                  <OutcomeButton
+                    value={m.outcome}
+                    options={actionOptions}
+                    colorMap={colorMap}
+                    onChange={(val) => onOutcomeChange(m.id, val)}
+                  />
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -317,11 +486,20 @@ export function MeetingsTable({
               <SortHeader label="Conference" col="conference" />
               <SortHeader label="Outcome" col="outcome" />
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>
-              {onDelete && <th className="px-3 py-2"></th>}
+              {hasActions && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.map((m) => (
+              editingId === m.id && onEdit ? (
+                <EditMeetingTableRow
+                  key={m.id}
+                  meeting={m}
+                  onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
+                  onCancel={() => setEditingId(null)}
+                  colSpan={7 + (hasActions ? 1 : 0)}
+                />
+              ) : (
               <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-gray-800">
                   <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug">
@@ -360,12 +538,20 @@ export function MeetingsTable({
                 <td className="px-3 py-2">
                   <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
                 </td>
-                {onDelete && (
+                {hasActions && (
                   <td className="px-3 py-2">
-                    <button onClick={() => onDelete(m.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
+                    <div className="flex items-center gap-2">
+                      {onEdit && (
+                        <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-procare-bright-blue text-xs font-medium transition-colors">Edit</button>
+                      )}
+                      {onDelete && (
+                        <button onClick={() => onDelete(m.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
+              )
             ))}
           </tbody>
         </table>
