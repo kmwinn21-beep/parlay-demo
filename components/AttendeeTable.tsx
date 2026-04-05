@@ -108,6 +108,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('last_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
   const [massEditFields, setMassEditFields] = useState<{ status?: string; title?: string; company_id?: string }>({});
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -234,6 +235,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
+  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterHasFollowUps ? 1 : 0);
+
   return (
     <div>
       {/* Toolbar */}
@@ -242,45 +245,57 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, company, email, title..." className="input-field pl-9" />
         </div>
-        <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-auto">
-          <option value="">All Company Types</option>
-          {companyTypes.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field w-auto">
-          <option value="">All Statuses</option>
-          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto">
-          <option value="">All Seniorities</option>
-          {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-
-        {/* # Conferences multiselect */}
-        <div className="relative">
-          <button onClick={() => setShowConfFilter(v => !v)} className={`input-field w-auto flex items-center gap-2 text-sm ${filterConfCounts.size > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}>
-            # Conferences {filterConfCounts.size > 0 ? `(${filterConfCounts.size})` : ''}
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-          </button>
-          {showConfFilter && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2 min-w-[120px]">
-              {CONF_COUNT_OPTIONS.map(opt => (
-                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
-                  <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-procare-bright-blue" />
-                  {opt} conference{opt === '1' ? '' : 's'}
-                </label>
-              ))}
-              {filterConfCounts.size > 0 && <button onClick={() => setFilterConfCounts(new Set())} className="text-xs text-red-500 hover:underline px-2 mt-1">Clear</button>}
-            </div>
-          )}
-        </div>
-
-        {/* Has Follow-Ups toggle */}
+        {/* Mobile filter toggle button */}
         <button
-          onClick={() => setFilterHasFollowUps(v => !v)}
-          className={`input-field w-auto flex items-center gap-2 text-sm ${filterHasFollowUps ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : ''}`}
+          onClick={() => setShowMobileFilters(v => !v)}
+          className={`lg:hidden input-field w-auto flex items-center gap-2 text-sm ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
         >
-          Has Follow-Ups
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          <svg className={`w-3 h-3 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
+        {/* Filter controls - always visible on desktop, collapsible on mobile */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
+          <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-auto">
+            <option value="">All Company Types</option>
+            {companyTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field w-auto">
+            <option value="">All Statuses</option>
+            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto">
+            <option value="">All Seniorities</option>
+            {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+
+          {/* # Conferences multiselect */}
+          <div className="relative">
+            <button onClick={() => setShowConfFilter(v => !v)} className={`input-field w-auto flex items-center gap-2 text-sm ${filterConfCounts.size > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}>
+              # Conferences {filterConfCounts.size > 0 ? `(${filterConfCounts.size})` : ''}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {showConfFilter && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2 min-w-[120px]">
+                {CONF_COUNT_OPTIONS.map(opt => (
+                  <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
+                    <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-procare-bright-blue" />
+                    {opt} conference{opt === '1' ? '' : 's'}
+                  </label>
+                ))}
+                {filterConfCounts.size > 0 && <button onClick={() => setFilterConfCounts(new Set())} className="text-xs text-red-500 hover:underline px-2 mt-1">Clear</button>}
+              </div>
+            )}
+          </div>
+
+          {/* Has Follow-Ups toggle */}
+          <button
+            onClick={() => setFilterHasFollowUps(v => !v)}
+            className={`input-field w-auto flex items-center gap-2 text-sm ${filterHasFollowUps ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : ''}`}
+          >
+            Has Follow-Ups
+          </button>
+        </div>
 
         {selectedIds.size >= 1 && (
           <>

@@ -8,6 +8,7 @@ import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { NotesPopover } from '@/components/NotesPopover';
 import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -26,6 +27,7 @@ interface Attendee {
   seniority?: string;
   conference_count?: number;
   conference_names?: string;
+  entity_notes_count?: number;
 }
 
 const ATTENDEE_PAGE_SIZE = 100;
@@ -653,6 +655,9 @@ export default function ConferenceDetailPage() {
                       <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                         <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
                         <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                        {Number(attendee.entity_notes_count ?? 0) > 0 && (
+                          <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
+                        )}
                       </div>
                     </div>
                   );
@@ -683,6 +688,7 @@ export default function ConferenceDetailPage() {
                     ))}
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"># Conf</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -740,6 +746,12 @@ export default function ConferenceDetailPage() {
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {Number(attendee.entity_notes_count ?? 0) > 0
+                          ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
+                          : <span className="text-gray-300">—</span>
+                        }
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">

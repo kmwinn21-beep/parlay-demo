@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
           a.first_name,
           a.last_name,
           a.title,
+          co.id AS company_id,
           co.name AS company_name,
           c.name AS conference_name
         FROM meetings m
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
         first_name: String(r.first_name ?? ''),
         last_name: String(r.last_name ?? ''),
         title: r.title != null ? String(r.title) : null,
+        company_id: r.company_id != null ? Number(r.company_id) : null,
         company_name: r.company_name != null ? String(r.company_name) : null,
         conference_name: String(r.conference_name ?? ''),
       }))
