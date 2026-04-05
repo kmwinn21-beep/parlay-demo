@@ -603,13 +603,17 @@ export default function AttendeeDetailPage() {
                   <div className="flex flex-wrap gap-2">
                     {(() => {
                       const activeActions = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
-                      return actionOptions.map(opt => (
-                        <button key={opt} onClick={() => handleAction(opt)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${activeActions.has(opt) ? 'bg-procare-bright-blue text-white border-procare-bright-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
-                          {activeActions.has(opt) && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                          {opt}
-                        </button>
-                      ));
+                      return actionOptions.map(opt => {
+                        const isActive = activeActions.has(opt);
+                        const pillCls = isActive ? getPillClass(opt, colorMaps.action ?? {}) : '';
+                        return (
+                          <button key={opt} onClick={() => handleAction(opt)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
+                            {isActive && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                            {opt}
+                          </button>
+                        );
+                      });
                     })()}
                   </div>
                 </div>
@@ -618,12 +622,16 @@ export default function AttendeeDetailPage() {
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Next Steps</p>
                   <div className="flex flex-wrap gap-2">
-                    {nextStepsOptions.map(opt => (
-                      <button key={opt} onClick={() => handleNextSteps(opt)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${conferenceDetail?.next_steps === opt ? 'bg-procare-dark-blue text-white border-procare-dark-blue shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-procare-dark-blue hover:text-procare-dark-blue'}`}>
-                        {opt}
-                      </button>
-                    ))}
+                    {nextStepsOptions.map(opt => {
+                      const isActive = conferenceDetail?.next_steps === opt;
+                      const pillCls = isActive ? getPillClass(opt, colorMaps.next_steps ?? {}) : '';
+                      return (
+                        <button key={opt} onClick={() => handleNextSteps(opt)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-procare-dark-blue hover:text-procare-dark-blue'}`}>
+                          {opt}
+                        </button>
+                      );
+                    })}
                   </div>
                   {conferenceDetail?.next_steps === 'Other' && (
                     <div className="mt-2">
