@@ -18,11 +18,12 @@ export interface Meeting {
   first_name: string;
   last_name: string;
   title: string | null;
+  company_id: number | null;
   company_name: string | null;
   conference_name: string;
 }
 
-type SortKey = 'name' | 'title' | 'datetime' | 'conference' | 'outcome';
+type SortKey = 'name' | 'title' | 'company' | 'datetime' | 'conference' | 'outcome';
 
 function formatMeetingDate(d: string) {
   if (!d) return '';
@@ -117,6 +118,9 @@ export function MeetingsTable({
       case 'title':
         cmp = (a.title || '').localeCompare(b.title || '');
         break;
+      case 'company':
+        cmp = (a.company_name || '').localeCompare(b.company_name || '');
+        break;
       case 'datetime':
         cmp = `${a.meeting_date} ${a.meeting_time}`.localeCompare(`${b.meeting_date} ${b.meeting_time}`);
         break;
@@ -171,6 +175,13 @@ export function MeetingsTable({
                   {m.first_name} {m.last_name}
                 </Link>
                 {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
+                {m.company_name && m.company_id ? (
+                  <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5">
+                    {m.company_name}
+                  </Link>
+                ) : m.company_name ? (
+                  <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
+                ) : null}
               </div>
               <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
               {onDelete && (
@@ -210,6 +221,7 @@ export function MeetingsTable({
             <tr className="bg-gray-50 border-b border-gray-200">
               <SortHeader label="Name" col="name" />
               <SortHeader label="Title" col="title" />
+              <SortHeader label="Company" col="company" />
               <SortHeader label="Date/Time" col="datetime" />
               <SortHeader label="Conference" col="conference" />
               <SortHeader label="Outcome" col="outcome" />
@@ -227,6 +239,15 @@ export function MeetingsTable({
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   {m.title || <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-3 py-2 text-gray-600 leading-snug">
+                  {m.company_name && m.company_id ? (
+                    <Link href={`/companies/${m.company_id}`} className="text-procare-bright-blue hover:underline">
+                      {m.company_name}
+                    </Link>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
