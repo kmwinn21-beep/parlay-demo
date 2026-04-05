@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
-import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
+import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 
@@ -176,6 +176,21 @@ export default function FollowUpsPage() {
               colorMap={colorMaps.action || {}}
               onOutcomeChange={handleOutcomeChange}
               onDelete={handleDeleteMeeting}
+              onEdit={async (meetingId, data) => {
+                setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting updated.');
+                } catch {
+                  fetchData();
+                  toast.error('Failed to update meeting.');
+                }
+              }}
             />
           )}
         </div>
