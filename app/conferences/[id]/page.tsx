@@ -806,7 +806,7 @@ export default function ConferenceDetailPage() {
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} meetings={confMeetings} />
+        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} />
       )}
 
       {/* Notes Tab */}
