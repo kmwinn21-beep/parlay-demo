@@ -116,6 +116,7 @@ export default function ConferenceDetailPage() {
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<string[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
@@ -135,13 +136,14 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
         fetch(`/api/notes?entity_type=conference&entity_id=${id}`),
         fetch(`/api/meetings?conference_id=${id}`),
         fetch('/api/config?category=action'),
+        fetch('/api/config?category=user'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -150,12 +152,14 @@ export default function ConferenceDetailPage() {
       const notesData = notesRes.ok ? await notesRes.json() : [];
       const meetingsData = meetingsRes.ok ? await meetingsRes.json() : [];
       const actionData = actionRes.ok ? await actionRes.json() : [];
+      const userData = userRes.ok ? await userRes.json() : [];
       setConference(data);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
       setConfNotes(Array.isArray(notesData) ? notesData : []);
       setConfMeetings(Array.isArray(meetingsData) ? meetingsData : []);
       setActionOptions(actionData.map((o: { value: string }) => o.value));
+      setUserOptions(userData.map((o: { value: string }) => o.value));
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -837,6 +841,7 @@ export default function ConferenceDetailPage() {
               meetings={confMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
+              userOptions={userOptions}
               onOutcomeChange={async (meetingId, outcome) => {
                 setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {

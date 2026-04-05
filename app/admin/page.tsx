@@ -22,6 +22,7 @@ const CATEGORIES = [
   { key: 'next_steps', label: 'Next Steps' },
   { key: 'seniority', label: 'Seniority Levels' },
   { key: 'profit_type', label: 'Profit Types' },
+  { key: 'user', label: 'Users' },
 ];
 
 function DragHandle() {
@@ -151,6 +152,7 @@ function CategorySection({
         body: JSON.stringify({ value: editValue.trim() }),
       });
       if (!res.ok) throw new Error('Update failed');
+      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim() } : opt));
       toast.success('Updated!');
       setEditingId(null);
       onRefresh();
@@ -164,6 +166,7 @@ function CategorySection({
     try {
       const res = await fetch(`/api/config/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
+      setLocalOptions(prev => prev.filter(opt => opt.id !== id));
       toast.success('Deleted.');
       onRefresh();
     } catch {
@@ -173,7 +176,8 @@ function CategorySection({
 
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const trimmed = ((new FormData(e.currentTarget).get('newOption') as string) ?? '').trim();
+    const form = e.currentTarget;
+    const trimmed = ((new FormData(form).get('newOption') as string) ?? '').trim();
     if (!trimmed) { toast.error('Value cannot be empty.'); return; }
     setIsAdding(true);
     try {
@@ -186,8 +190,17 @@ function CategorySection({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to add');
       }
+      const newOption = await res.json();
+      const addedOption: ConfigOption = {
+        id: Number(newOption.id),
+        category: String(newOption.category),
+        value: String(newOption.value),
+        sort_order: Number(newOption.sort_order ?? 0),
+        color: newOption.color ? String(newOption.color) : null,
+      };
+      setLocalOptions(prev => [...prev, addedOption]);
       toast.success('Added!');
-      e.currentTarget.reset();
+      form.reset();
       onRefresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add.');
@@ -379,7 +392,7 @@ export default function AdminPage() {
       <BackButton />
       <div>
         <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Admin Panel</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage dropdown options for company types, statuses, actions, next steps, seniority levels, and profit types.</p>
+        <p className="text-sm text-gray-500 mt-1">Manage dropdown options for company types, statuses, actions, next steps, seniority levels, profit types, and users.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
