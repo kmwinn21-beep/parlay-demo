@@ -836,6 +836,7 @@ export default function ConferenceDetailPage() {
             <MeetingsTable
               meetings={confMeetings}
               actionOptions={actionOptions}
+              colorMap={colorMaps.action || {}}
               onOutcomeChange={async (meetingId, outcome) => {
                 setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {

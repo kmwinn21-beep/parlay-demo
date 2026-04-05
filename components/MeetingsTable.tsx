@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { getPreset, type ColorMap } from '@/lib/colors';
 
 export interface Meeting {
   id: number;
@@ -90,14 +91,106 @@ function MeetingInfoTooltip({ scheduledBy, location, attendees }: { scheduledBy?
   );
 }
 
+function OutcomeButton({
+  value,
+  options,
+  colorMap,
+  onChange,
+}: {
+  value: string | null;
+  options: string[];
+  colorMap: ColorMap;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const above = spaceBelow < 200 && rect.top > 200;
+      setDropdownPos({
+        top: above ? rect.top : rect.bottom + 4,
+        left: rect.left,
+        above,
+      });
+    }
+    setOpen(o => !o);
+  };
+
+  const preset = value ? getPreset(colorMap[value]) : null;
+  const btnClass = preset
+    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
+    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap';
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button ref={btnRef} type="button" className={btnClass} onClick={handleToggle}>
+        {value || '— Select —'}
+        <svg className="w-3 h-3 ml-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && dropdownPos && (
+        <div
+          style={{
+            position: 'fixed',
+            top: dropdownPos.above ? dropdownPos.top : dropdownPos.top,
+            left: dropdownPos.left,
+            zIndex: 9999,
+            transform: dropdownPos.above ? 'translateY(-100%)' : 'translateY(0)',
+          }}
+          className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+        >
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50"
+            onClick={() => { onChange(''); setOpen(false); }}
+          >
+            — Clear —
+          </button>
+          {options.map(opt => {
+            const p = getPreset(colorMap[opt]);
+            return (
+              <button
+                key={opt}
+                type="button"
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                onClick={() => { onChange(opt); setOpen(false); }}
+              >
+                <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0`} style={{ backgroundColor: p.swatch }} />
+                <span className={opt === value ? 'font-semibold' : ''}>{opt}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MeetingsTable({
   meetings,
   actionOptions,
+  colorMap,
   onOutcomeChange,
   onDelete,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
+  colorMap: ColorMap;
   onOutcomeChange: (meetingId: number, outcome: string) => void;
   onDelete?: (meetingId: number) => void;
 }) {
@@ -201,14 +294,12 @@ export function MeetingsTable({
               </Link>
             </div>
             <div className="mt-2">
-              <select
-                value={m.outcome || ''}
-                onChange={e => onOutcomeChange(m.id, e.target.value)}
-                className="input-field text-xs py-1"
-              >
-                <option value="">— Select Outcome —</option>
-                {actionOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+              <OutcomeButton
+                value={m.outcome}
+                options={actionOptions}
+                colorMap={colorMap}
+                onChange={(val) => onOutcomeChange(m.id, val)}
+              />
             </div>
           </div>
         ))}
@@ -259,14 +350,12 @@ export function MeetingsTable({
                   </Link>
                 </td>
                 <td className="px-3 py-2">
-                  <select
-                    value={m.outcome || ''}
-                    onChange={e => onOutcomeChange(m.id, e.target.value)}
-                    className="input-field text-xs py-1 min-w-[120px]"
-                  >
-                    <option value="">— Select —</option>
-                    {actionOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
+                  <OutcomeButton
+                    value={m.outcome}
+                    options={actionOptions}
+                    colorMap={colorMap}
+                    onChange={(val) => onOutcomeChange(m.id, val)}
+                  />
                 </td>
                 <td className="px-3 py-2">
                   <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />

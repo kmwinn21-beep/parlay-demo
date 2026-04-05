@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
 import { BackButton } from '@/components/BackButton';
+import { useConfigColors } from '@/lib/useConfigColors';
 
 export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -12,6 +13,7 @@ export default function FollowUpsPage() {
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending');
+  const colorMaps = useConfigColors();
 
   const fetchData = useCallback(async () => {
     try {
@@ -29,9 +31,9 @@ export default function FollowUpsPage() {
 
       if (cfgRes.ok) {
         const cfgData = await cfgRes.json();
-        const actionsCat = cfgData.categories?.find((c: { name: string }) => c.name === 'Actions');
-        if (actionsCat?.options) {
-          setActionOptions(actionsCat.options.map((o: { value: string }) => o.value));
+        if (Array.isArray(cfgData)) {
+          const actionOpts = cfgData.filter((o: { category: string }) => o.category === 'action');
+          setActionOptions(actionOpts.map((o: { value: string }) => o.value));
         }
       }
     } catch {
@@ -171,6 +173,7 @@ export default function FollowUpsPage() {
             <MeetingsTable
               meetings={meetings}
               actionOptions={actionOptions}
+              colorMap={colorMaps.action || {}}
               onOutcomeChange={handleOutcomeChange}
               onDelete={handleDeleteMeeting}
             />
