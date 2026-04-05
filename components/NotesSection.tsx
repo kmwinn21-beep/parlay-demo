@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
 export interface EntityNote {
@@ -43,20 +43,36 @@ export function NotesSection({
   const [noteText, setNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [selectedUser, setSelectedUser] = useState('');
+
+  useEffect(() => {
+    fetch('/api/config?category=user')
+      .then(res => res.json())
+      .then((data: { value: string }[]) => {
+        const users = data.map((d) => d.value);
+        setUserOptions(users);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async () => {
     if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
     setIsSubmitting(true);
+    const content = selectedUser
+      ? `[${selectedUser}] ${noteText.trim()}`
+      : noteText.trim();
     try {
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity_type: entityType, entity_id: entityId, content: noteText.trim() }),
+        body: JSON.stringify({ entity_type: entityType, entity_id: entityId, content }),
       });
       if (!res.ok) throw new Error();
       const newNote: EntityNote = await res.json();
       setNotes(prev => [newNote, ...prev]);
       setNoteText('');
+      setSelectedUser('');
       setIsAdding(false);
       toast.success('Note saved.');
     } catch {
@@ -107,6 +123,23 @@ export function NotesSection({
 
       {isAdding && (
         <div className="mb-5 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
+          {userOptions.length > 0 && (
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Entered By
+              </label>
+              <select
+                value={selectedUser}
+                onChange={e => setSelectedUser(e.target.value)}
+                className="input-field text-sm w-full sm:w-64"
+              >
+                <option value="">Select user...</option>
+                {userOptions.map(user => (
+                  <option key={user} value={user}>{user}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <textarea
             value={noteText}
             onChange={e => setNoteText(e.target.value)}
@@ -126,7 +159,7 @@ export function NotesSection({
             </button>
             <button
               type="button"
-              onClick={() => { setIsAdding(false); setNoteText(''); }}
+              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); }}
               className="btn-secondary text-sm"
             >
               Cancel

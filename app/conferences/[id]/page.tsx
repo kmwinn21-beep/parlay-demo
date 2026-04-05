@@ -540,17 +540,25 @@ export default function ConferenceDetailPage() {
                 <div className="mt-3">
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {conference.internal_attendees.split(',').filter(Boolean).map((user) => (
-                      <span
-                        key={user}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {user}
-                      </span>
-                    ))}
+                    {conference.internal_attendees.split(',').filter(Boolean).map((user) => {
+                      const parts = user.trim().split(/\s+/);
+                      const initials = parts.length >= 2
+                        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                        : parts[0].substring(0, 2).toUpperCase();
+                      return (
+                        <span
+                          key={user}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                          title={user.trim()}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span className="sm:hidden">{initials}</span>
+                          <span className="hidden sm:inline">{user.trim()}</span>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
