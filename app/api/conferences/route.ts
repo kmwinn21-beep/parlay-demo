@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     const end_date = formData.get('end_date') as string;
     const location = formData.get('location') as string;
     const notes = formData.get('notes') as string | null;
+    const internal_attendees = formData.get('internal_attendees') as string | null;
     const file = formData.get('file') as File | null;
 
     if (!name || !start_date || !end_date || !location) {
@@ -58,8 +59,8 @@ export async function POST(request: NextRequest) {
 
     // Create the conference record
     const confResult = await db.execute({
-      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes) VALUES (?, ?, ?, ?, ?) RETURNING *',
-      args: [name, start_date, end_date, location, notes || null],
+      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [name, start_date, end_date, location, notes || null, internal_attendees || null],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;

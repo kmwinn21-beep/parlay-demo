@@ -73,6 +73,7 @@ interface Conference {
   end_date: string;
   location: string;
   notes?: string;
+  internal_attendees?: string;
   created_at: string;
   attendees: Attendee[];
 }
@@ -123,6 +124,9 @@ export default function ConferenceDetailPage() {
   const [isRemoving, setIsRemoving] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [editInternalAttendees, setEditInternalAttendees] = useState<string[]>([]);
+  const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
+  const internalDropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -167,6 +171,9 @@ export default function ConferenceDetailPage() {
         location: data.location,
         notes: data.notes || '',
       });
+      setEditInternalAttendees(
+        data.internal_attendees ? data.internal_attendees.split(',').filter(Boolean) : []
+      );
     } catch {
       toast.error('Failed to load conference');
       router.push('/conferences');
@@ -178,6 +185,16 @@ export default function ConferenceDetailPage() {
   useEffect(() => {
     fetchConference();
   }, [fetchConference]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (internalDropdownRef.current && !internalDropdownRef.current.contains(e.target as Node)) {
+        setInternalDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadCompanies = useCallback(async () => {
     if (companiesLoaded || !conference) return;
@@ -209,7 +226,7 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editData),
+        body: JSON.stringify({ ...editData, internal_attendees: editInternalAttendees.join(',') }),
       });
       if (!res.ok) throw new Error('Update failed');
       const updated = await res.json();
@@ -409,6 +426,78 @@ export default function ConferenceDetailPage() {
                   rows={3}
                 />
               </div>
+              <div className="md:col-span-2" ref={internalDropdownRef}>
+                <label className="label">Internal Attendees</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setInternalDropdownOpen(!internalDropdownOpen)}
+                    className="input-field w-full text-left flex items-center justify-between"
+                  >
+                    <span className={editInternalAttendees.length === 0 ? 'text-gray-400' : 'text-gray-800'}>
+                      {editInternalAttendees.length === 0
+                        ? 'Select internal attendees...'
+                        : `${editInternalAttendees.length} selected`}
+                    </span>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${internalDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {internalDropdownOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {userOptions.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">No users configured. Add users in the Admin panel.</div>
+                      ) : (
+                        userOptions.map((user) => {
+                          const isSelected = editInternalAttendees.includes(user);
+                          return (
+                            <button
+                              key={user}
+                              type="button"
+                              onClick={() => {
+                                setEditInternalAttendees((prev) =>
+                                  isSelected ? prev.filter((u) => u !== user) : [...prev, user]
+                                );
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${isSelected ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                                {isSelected && (
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                              {user}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+                {editInternalAttendees.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {editInternalAttendees.map((user) => (
+                      <span
+                        key={user}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                      >
+                        {user}
+                        <button
+                          type="button"
+                          onClick={() => setEditInternalAttendees((prev) => prev.filter((u) => u !== user))}
+                          className="hover:text-red-500"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex gap-3">
               <button onClick={handleSave} disabled={isSaving} className="btn-primary">
@@ -446,6 +535,24 @@ export default function ConferenceDetailPage() {
               </div>
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
+              )}
+              {conference.internal_attendees && (
+                <div className="mt-3">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {conference.internal_attendees.split(',').filter(Boolean).map((user) => (
+                      <span
+                        key={user}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {user}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
             <div className="flex gap-2 sm:ml-4 flex-shrink-0">

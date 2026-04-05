@@ -122,6 +122,7 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'green' WHERE category = 'next_steps' AND value = 'Nurture' AND color IS NULL`,
     `UPDATE config_options SET color = 'gray' WHERE category = 'next_steps' AND value = 'Other' AND color IS NULL`,
     `ALTER TABLE companies ADD COLUMN assigned_user TEXT`,
+    `ALTER TABLE conferences ADD COLUMN internal_attendees TEXT`,
     `CREATE TABLE IF NOT EXISTS meetings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       attendee_id INTEGER NOT NULL,
@@ -208,6 +209,7 @@ export interface Conference {
   end_date: string;
   location: string;
   notes?: string;
+  internal_attendees?: string;
   created_at: string;
   attendee_count?: number;
 }
