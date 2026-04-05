@@ -1,20 +1,11 @@
 import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
-import { ActivityStatsCard } from '@/components/ActivityStatsCard';
-
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
   totalConferences: number;
   totalAttendees: number;
   totalCompanies: number;
-}
-
-interface HotProspect {
-  id: number;
-  name: string;
-  company_type?: string;
-  attendee_count: number;
 }
 
 interface RecentConference {
@@ -85,25 +76,6 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
   }));
 }
 
-async function getHotProspects(): Promise<HotProspect[]> {
-  await dbReady;
-  const result = await db.execute({
-    sql: `SELECT co.id, co.name, co.company_type, COUNT(DISTINCT a.id) as attendee_count
-          FROM companies co
-          LEFT JOIN attendees a ON co.id = a.company_id
-          WHERE co.status = 'Hot Prospect'
-          GROUP BY co.id
-          ORDER BY co.name`,
-    args: [],
-  });
-  return result.rows.map(r => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    company_type: r.company_type ? String(r.company_type) : undefined,
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
-}
-
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -114,7 +86,7 @@ function formatDate(dateStr: string) {
 }
 
 export default async function DashboardPage() {
-  const [stats, recentConferences, hotProspects, upcomingConferences] = await Promise.all([getStats(), getRecentConferences(), getHotProspects(), getUpcomingConferences()]);
+  const [stats, recentConferences, upcomingConferences] = await Promise.all([getStats(), getRecentConferences(), getUpcomingConferences()]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -183,38 +155,6 @@ export default async function DashboardPage() {
             </div>
           </div>
         </Link>
-      </div>
-
-      {/* Hot Prospects + Meeting Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card border-l-4 border-red-500">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex items-center gap-2">
-              <span>🔥</span> Hot Prospects
-              <span className="ml-1 text-sm font-normal text-gray-500">({hotProspects.length})</span>
-            </h2>
-            <Link href="/companies?status=Hot+Prospect" className="text-sm text-procare-bright-blue hover:underline">View all →</Link>
-          </div>
-          {hotProspects.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No hot prospects yet. Mark a company status as &quot;Hot Prospect&quot; to see them here.</p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {hotProspects.map(co => (
-                <Link key={co.id} href={`/companies/${co.id}`} className="flex items-center justify-between py-3 hover:bg-red-50 px-2 rounded-lg transition-colors group">
-                  <div>
-                    <p className="font-medium text-gray-800 group-hover:text-red-600 transition-colors">{co.name}</p>
-                    {co.company_type && <span className="text-xs text-gray-500">{co.company_type}</span>}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-500">{co.attendee_count} attendee{co.attendee_count !== 1 ? 's' : ''}</span>
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300">Hot Prospect</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-        <ActivityStatsCard />
       </div>
 
       {/* Current & Upcoming Conferences */}
