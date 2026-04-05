@@ -47,7 +47,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { name, start_date, end_date, location, notes } = body;
+    const { name, start_date, end_date, location, notes, internal_attendees } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id FROM conferences WHERE id = ?',
@@ -58,8 +58,8 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ? WHERE id = ? RETURNING *',
-      args: [name, start_date, end_date, location, notes || null, params.id],
+      sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ? WHERE id = ? RETURNING *',
+      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, params.id],
     });
 
     return NextResponse.json(updatedResult.rows[0]);

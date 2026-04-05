@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { useConfigOptions } from '@/lib/useConfigOptions';
 
 interface ConferenceFormData {
   name: string;
@@ -18,6 +19,21 @@ export function ConferenceForm() {
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedInternalAttendees, setSelectedInternalAttendees] = useState<string[]>([]);
+  const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
+  const internalDropdownRef = useRef<HTMLDivElement>(null);
+  const configOptions = useConfigOptions();
+  const userOptions = configOptions.user ?? [];
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (internalDropdownRef.current && !internalDropdownRef.current.contains(e.target as Node)) {
+        setInternalDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const {
     register,
@@ -47,6 +63,7 @@ export function ConferenceForm() {
       formData.append('end_date', data.end_date);
       formData.append('location', data.location);
       formData.append('notes', data.notes || '');
+      formData.append('internal_attendees', selectedInternalAttendees.join(','));
 
       if (file) {
         formData.append('file', file);
@@ -128,6 +145,79 @@ export function ConferenceForm() {
               rows={3}
               placeholder="Any additional notes about this conference..."
             />
+          </div>
+
+          <div className="md:col-span-2" ref={internalDropdownRef}>
+            <label className="label">Internal Attendees</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setInternalDropdownOpen(!internalDropdownOpen)}
+                className="input-field w-full text-left flex items-center justify-between"
+              >
+                <span className={selectedInternalAttendees.length === 0 ? 'text-gray-400' : 'text-gray-800'}>
+                  {selectedInternalAttendees.length === 0
+                    ? 'Select internal attendees...'
+                    : `${selectedInternalAttendees.length} selected`}
+                </span>
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${internalDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {internalDropdownOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {userOptions.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-500">No users configured. Add users in the Admin panel.</div>
+                  ) : (
+                    userOptions.map((user) => {
+                      const isSelected = selectedInternalAttendees.includes(user);
+                      return (
+                        <button
+                          key={user}
+                          type="button"
+                          onClick={() => {
+                            setSelectedInternalAttendees((prev) =>
+                              isSelected ? prev.filter((u) => u !== user) : [...prev, user]
+                            );
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${isSelected ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </span>
+                          {user}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+            {selectedInternalAttendees.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {selectedInternalAttendees.map((user) => (
+                  <span
+                    key={user}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                  >
+                    {user}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedInternalAttendees((prev) => prev.filter((u) => u !== user))}
+                      className="hover:text-red-500"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
