@@ -193,10 +193,12 @@ function EditMeetingRow({
   meeting,
   onSave,
   onCancel,
+  onDelete,
 }: {
   meeting: Meeting;
   onSave: (meetingId: number, data: EditFormData) => void;
   onCancel: () => void;
+  onDelete?: (meetingId: number) => void;
 }) {
   const [form, setForm] = useState<EditFormData>({
     meeting_date: meeting.meeting_date,
@@ -237,22 +239,33 @@ function EditMeetingRow({
           <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated names" />
         </div>
       </div>
-      <div className="flex items-center gap-2 pt-1">
-        <button
-          type="button"
-          className="px-3 py-1.5 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-          disabled={!form.meeting_date || !form.meeting_time}
-          onClick={() => onSave(meeting.id, form)}
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300 transition-colors"
-          onClick={onCancel}
-        >
-          Cancel
-        </button>
+      <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="px-3 py-1.5 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+            disabled={!form.meeting_date || !form.meeting_time}
+            onClick={() => onSave(meeting.id, form)}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300 transition-colors"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+        </div>
+        {onDelete && (
+          <button
+            type="button"
+            className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded border border-red-200 hover:bg-red-100 transition-colors"
+            onClick={() => onDelete(meeting.id)}
+          >
+            Delete Meeting
+          </button>
+        )}
       </div>
     </div>
   );
@@ -262,11 +275,13 @@ function EditMeetingTableRow({
   meeting,
   onSave,
   onCancel,
+  onDelete,
   colSpan,
 }: {
   meeting: Meeting;
   onSave: (meetingId: number, data: EditFormData) => void;
   onCancel: () => void;
+  onDelete?: (meetingId: number) => void;
   colSpan: number;
 }) {
   const [form, setForm] = useState<EditFormData>({
@@ -308,22 +323,33 @@ function EditMeetingTableRow({
               <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated" />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="px-2.5 py-1 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-              disabled={!form.meeting_date || !form.meeting_time}
-              onClick={() => onSave(meeting.id, form)}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              className="px-2.5 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300 transition-colors"
-              onClick={onCancel}
-            >
-              Cancel
-            </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-2.5 py-1 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={!form.meeting_date || !form.meeting_time}
+                onClick={() => onSave(meeting.id, form)}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                className="px-2.5 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300 transition-colors"
+                onClick={onCancel}
+              >
+                Cancel
+              </button>
+            </div>
+            {onDelete && (
+              <button
+                type="button"
+                className="px-2.5 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded border border-red-200 hover:bg-red-100 transition-colors"
+                onClick={() => onDelete(meeting.id)}
+              >
+                Delete Meeting
+              </button>
+            )}
           </div>
         </div>
       </td>
@@ -349,7 +375,7 @@ export function MeetingsTable({
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
-  const hasActions = !!(onEdit || onDelete);
+  const hasActions = !!onEdit;
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -421,6 +447,7 @@ export function MeetingsTable({
                 meeting={m}
                 onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                 onCancel={() => setEditingId(null)}
+                onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
               />
             ) : (
               <>
@@ -444,11 +471,6 @@ export function MeetingsTable({
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
                   )}
-                  {onDelete && (
-                    <button onClick={() => onDelete(m.id)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-gray-600">
@@ -460,13 +482,21 @@ export function MeetingsTable({
                     {m.conference_name}
                   </Link>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 flex items-center justify-between gap-2">
                   <OutcomeButton
                     value={m.outcome}
                     options={actionOptions}
                     colorMap={colorMap}
                     onChange={(val) => onOutcomeChange(m.id, val)}
                   />
+                  {m.scheduled_by && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {m.scheduled_by}
+                    </span>
+                  )}
                 </div>
               </>
             )}
@@ -497,6 +527,7 @@ export function MeetingsTable({
                   meeting={m}
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
+                  onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
                   colSpan={7 + (hasActions ? 1 : 0)}
                 />
               ) : (
@@ -541,12 +572,7 @@ export function MeetingsTable({
                 {hasActions && (
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      {onEdit && (
-                        <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-procare-bright-blue text-xs font-medium transition-colors">Edit</button>
-                      )}
-                      {onDelete && (
-                        <button onClick={() => onDelete(m.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-                      )}
+                      <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-procare-bright-blue text-xs font-medium transition-colors">Edit</button>
                     </div>
                   </td>
                 )}
