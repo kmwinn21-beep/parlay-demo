@@ -24,7 +24,7 @@ export interface Meeting {
   conference_name: string;
 }
 
-type SortKey = 'name' | 'title' | 'company' | 'datetime' | 'conference' | 'outcome';
+type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'outcome';
 
 function formatMeetingDate(d: string) {
   if (!d) return '';
@@ -391,6 +391,9 @@ export function MeetingsTable({
       case 'title':
         cmp = (a.title || '').localeCompare(b.title || '');
         break;
+      case 'scheduled_by':
+        cmp = (a.scheduled_by || '').localeCompare(b.scheduled_by || '');
+        break;
       case 'company':
         cmp = (a.company_name || '').localeCompare(b.company_name || '');
         break;
@@ -511,6 +514,7 @@ export function MeetingsTable({
             <tr className="bg-gray-50 border-b border-gray-200">
               <SortHeader label="Name" col="name" />
               <SortHeader label="Title" col="title" />
+              <SortHeader label="Scheduled By" col="scheduled_by" />
               <SortHeader label="Company" col="company" />
               <SortHeader label="Date/Time" col="datetime" />
               <SortHeader label="Conference" col="conference" />
@@ -528,7 +532,7 @@ export function MeetingsTable({
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
                   onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                  colSpan={7 + (hasActions ? 1 : 0)}
+                  colSpan={8 + (hasActions ? 1 : 0)}
                 />
               ) : (
               <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
@@ -539,6 +543,18 @@ export function MeetingsTable({
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   {m.title || <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-3 py-2 leading-snug">
+                  {m.scheduled_by ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {m.scheduled_by}
+                    </span>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   {m.company_name && m.company_id ? (
