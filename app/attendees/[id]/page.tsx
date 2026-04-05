@@ -555,8 +555,8 @@ export default function AttendeeDetailPage() {
                       Schedule Meeting
                     </button>
                   ) : (
-                    <div className="bg-blue-50 rounded-lg p-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
                           <label className="label text-[10px]">Meeting Date *</label>
                           <input type="date" value={meetingForm.meeting_date} onChange={e => setMeetingForm(p => ({ ...p, meeting_date: e.target.value }))} className="input-field text-xs" />
