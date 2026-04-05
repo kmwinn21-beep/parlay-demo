@@ -347,7 +347,7 @@ export function MeetingsTable({
   onEdit?: (meetingId: number, data: EditFormData) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
   const hasActions = !!(onEdit || onDelete);
 
