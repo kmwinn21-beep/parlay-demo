@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   PieChart,
@@ -11,7 +12,9 @@ import {
 } from 'recharts';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { getHex } from '@/lib/colors';
+import { useConfigOptions } from '@/lib/useConfigOptions';
+import { getHex, getBadgeClass } from '@/lib/colors';
+import { NotesPopover } from './NotesPopover';
 
 interface Attendee {
   id: number;
@@ -22,6 +25,7 @@ interface Attendee {
   company_type?: string;
   company_name?: string;
   seniority?: string;
+  entity_notes_count?: number;
 }
 
 interface ConferenceDetail {
@@ -36,12 +40,6 @@ interface ConferenceDetail {
 interface AnalyticsChartsProps {
   attendees: Attendee[];
   conferenceDetails: ConferenceDetail[];
-  meetings?: MeetingData[];
-}
-
-interface MeetingData {
-  id: number;
-  outcome: string | null;
 }
 
 function buildSeniorityData(attendees: Attendee[]) {
@@ -88,32 +86,58 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 }
 
-const ACTION_LABELS = [
-  'Meeting Scheduled',
-  'Meeting Held',
-  'Social Conversation',
-  'Meeting No-Show',
-];
-
-const NEXT_STEPS_LABELS = [
-  'Schedule Follow Up Meeting',
-  'General Follow Up',
-  'Other',
-];
-
-export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }: AnalyticsChartsProps) {
+export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChartsProps) {
   const colorMaps = useConfigColors();
+  const configOptions = useConfigOptions();
   const seniorityAll = buildSeniorityData(attendees);
   const companyTypeData = buildCompanyTypeData(attendees);
 
+  // Dynamic labels from Admin Panel config
+  const actionLabels = configOptions.action || [];
+  const nextStepsLabels = configOptions.next_steps || [];
+
+  // Visibility toggles — all visible by default
+  const [visibleActions, setVisibleActions] = useState<Set<string> | null>(null);
+  const [visibleNextSteps, setVisibleNextSteps] = useState<Set<string> | null>(null);
+  const [showActionFilter, setShowActionFilter] = useState(false);
+  const [showNextStepsFilter, setShowNextStepsFilter] = useState(false);
+
+  // Initialize visibility sets once options load
+  const effectiveVisibleActions = visibleActions ?? new Set(actionLabels);
+  const effectiveVisibleNextSteps = visibleNextSteps ?? new Set(nextStepsLabels);
+
+  const toggleAction = (label: string) => {
+    const current = new Set(effectiveVisibleActions);
+    if (current.has(label)) {
+      current.delete(label);
+    } else {
+      current.add(label);
+    }
+    setVisibleActions(current);
+  };
+
+  const toggleNextStep = (label: string) => {
+    const current = new Set(effectiveVisibleNextSteps);
+    if (current.has(label)) {
+      current.delete(label);
+    } else {
+      current.add(label);
+    }
+    setVisibleNextSteps(current);
+  };
+
+  // Filtered labels based on visibility selection
+  const filteredActionLabels = actionLabels.filter(l => effectiveVisibleActions.has(l));
+  const filteredNextStepsLabels = nextStepsLabels.filter(l => effectiveVisibleNextSteps.has(l));
+
   // Count actions — action field may contain comma-separated multiple values
   const actionCounts: Record<string, number> = {};
-  for (const label of ACTION_LABELS) actionCounts[label] = 0;
+  for (const label of actionLabels) actionCounts[label] = 0;
   for (const d of conferenceDetails) {
     if (d.action) {
       const actions = d.action.split(',').map(s => s.trim()).filter(Boolean);
       for (const a of actions) {
-        if (ACTION_LABELS.includes(a)) {
+        if (actionLabels.includes(a)) {
           actionCounts[a] = (actionCounts[a] || 0) + 1;
         }
       }
@@ -122,23 +146,12 @@ export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }:
 
   // Count next steps
   const nextStepsCounts: Record<string, number> = {};
-  for (const label of NEXT_STEPS_LABELS) nextStepsCounts[label] = 0;
+  for (const label of nextStepsLabels) nextStepsCounts[label] = 0;
   for (const d of conferenceDetails) {
-    if (d.next_steps && NEXT_STEPS_LABELS.includes(d.next_steps)) {
+    if (d.next_steps && nextStepsLabels.includes(d.next_steps)) {
       nextStepsCounts[d.next_steps] = (nextStepsCounts[d.next_steps] || 0) + 1;
     }
   }
-
-  // Count meetings and outcomes
-  const totalMeetings = meetings.length;
-  const meetingOutcomeCounts: Record<string, number> = {};
-  for (const m of meetings) {
-    if (m.outcome) {
-      meetingOutcomeCounts[m.outcome] = (meetingOutcomeCounts[m.outcome] || 0) + 1;
-    }
-  }
-  const meetingsWithOutcome = meetings.filter(m => m.outcome).length;
-  const meetingsPending = totalMeetings - meetingsWithOutcome;
 
   // Build attendee activity table (attendees with action OR next_steps)
   const detailMap = new Map<number, ConferenceDetail>();
@@ -238,8 +251,36 @@ export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }:
             Actions &amp; Next Steps
           </h3>
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
-            {ACTION_LABELS.map((label) => (
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
+              <button
+                type="button"
+                onClick={() => setShowActionFilter(!showActionFilter)}
+                className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+                title="Filter visible actions"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filter
+              </button>
+            </div>
+            {showActionFilter && (
+              <div className="bg-gray-50 rounded-lg p-2 space-y-1">
+                {actionLabels.map((label) => (
+                  <label key={label} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={effectiveVisibleActions.has(label)}
+                      onChange={() => toggleAction(label)}
+                      className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
+            {filteredActionLabels.map((label) => (
               <div key={label} className="flex items-center justify-between">
                 <span className="text-sm text-gray-700">{label}</span>
                 <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-bright-blue text-white">
@@ -247,9 +288,40 @@ export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }:
                 </span>
               </div>
             ))}
+            {filteredActionLabels.length === 0 && (
+              <p className="text-xs text-gray-400 italic">No actions selected</p>
+            )}
             <div className="border-t border-gray-100 pt-3">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Next Steps</p>
-              {NEXT_STEPS_LABELS.map((label) => (
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Next Steps</p>
+                <button
+                  type="button"
+                  onClick={() => setShowNextStepsFilter(!showNextStepsFilter)}
+                  className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+                  title="Filter visible next steps"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Filter
+                </button>
+              </div>
+              {showNextStepsFilter && (
+                <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-2">
+                  {nextStepsLabels.map((label) => (
+                    <label key={label} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                      <input
+                        type="checkbox"
+                        checked={effectiveVisibleNextSteps.has(label)}
+                        onChange={() => toggleNextStep(label)}
+                        className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {filteredNextStepsLabels.map((label) => (
                 <div key={label} className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-700">{label}</span>
                   <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-dark-blue text-white">
@@ -257,48 +329,13 @@ export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }:
                   </span>
                 </div>
               ))}
+              {filteredNextStepsLabels.length === 0 && (
+                <p className="text-xs text-gray-400 italic">No next steps selected</p>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Meetings Summary */}
-      {totalMeetings > 0 && (
-        <div className="card">
-          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
-            Meetings Summary
-          </h3>
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-procare-dark-blue font-serif">{totalMeetings}</p>
-              <p className="text-xs text-gray-500 mt-1">Total Scheduled</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-procare-bright-blue font-serif">{meetingsPending}</p>
-              <p className="text-xs text-gray-500 mt-1">Pending Outcome</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600 font-serif">{meetingsWithOutcome}</p>
-              <p className="text-xs text-gray-500 mt-1">With Outcome</p>
-            </div>
-          </div>
-          {Object.keys(meetingOutcomeCounts).length > 0 && (
-            <div className="border-t border-gray-100 pt-3">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Outcomes</p>
-              {Object.entries(meetingOutcomeCounts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([outcome, count]) => (
-                  <div key={outcome} className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-700">{outcome}</span>
-                    <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-bright-blue text-white">
-                      {count}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Attendee Activity Table */}
       {activityRows.length > 0 && (
@@ -340,7 +377,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }:
                       {detail.action ? (
                         <div className="flex flex-wrap gap-1">
                           {detail.action.split(',').map(a => a.trim()).filter(Boolean).map(a => (
-                            <span key={a} className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">{a}</span>
+                            <span key={a} className={getBadgeClass(a, colorMaps.action || {})}>{a}</span>
                           ))}
                         </div>
                       ) : <span className="text-gray-300">—</span>}
@@ -352,8 +389,12 @@ export function AnalyticsCharts({ attendees, conferenceDetails, meetings = [] }:
                         </span>
                       ) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">
-                      {detail.notes || detail.next_steps_notes || <span className="text-gray-300">—</span>}
+                    <td className="px-4 py-3">
+                      {Number(attendee.entity_notes_count ?? 0) > 0 ? (
+                        <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

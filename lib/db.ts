@@ -117,6 +117,7 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'purple' WHERE category = 'action' AND value = 'Social Conversation' AND color IS NULL`,
     `UPDATE config_options SET color = 'orange' WHERE category = 'action' AND value = 'Rescheduled' AND color IS NULL`,
     `UPDATE config_options SET color = 'red' WHERE category = 'action' AND value = 'Meeting No-Show' AND color IS NULL`,
+    `UPDATE config_options SET color = 'yellow' WHERE category = 'action' AND value = 'Pending' AND color IS NULL`,
     `UPDATE config_options SET color = 'blue' WHERE category = 'next_steps' AND value = 'Meeting' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'next_steps' AND value = 'Nurture' AND color IS NULL`,
     `UPDATE config_options SET color = 'gray' WHERE category = 'next_steps' AND value = 'Other' AND color IS NULL`,
@@ -158,6 +159,7 @@ export async function initDb(): Promise<void> {
       { category: 'action', value: 'Meeting Held', sort_order: 2 },
       { category: 'action', value: 'Social Conversation', sort_order: 3 },
       { category: 'action', value: 'Meeting No-Show', sort_order: 4 },
+      { category: 'action', value: 'Pending', sort_order: 5 },
       { category: 'next_steps', value: 'Schedule Follow Up Meeting', sort_order: 1 },
       { category: 'next_steps', value: 'General Follow Up', sort_order: 2 },
       { category: 'next_steps', value: 'Other', sort_order: 3 },
@@ -181,6 +183,7 @@ export async function initDb(): Promise<void> {
     { category: 'seniority', value: 'Other', sort_order: 5 },
     { category: 'profit_type', value: 'For-Profit', sort_order: 1 },
     { category: 'profit_type', value: 'Non-Profit', sort_order: 2 },
+    { category: 'action', value: 'Pending', sort_order: 5 },
   ];
   for (const seed of newCategorySeeds) {
     try {

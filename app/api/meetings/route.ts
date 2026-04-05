@@ -93,8 +93,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
             RETURNING *`,
       args: [
         attendee_id,
