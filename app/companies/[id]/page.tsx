@@ -529,6 +529,7 @@ export default function CompanyDetailPage() {
             <MeetingsTable
               meetings={companyMeetings}
               actionOptions={actionOptions}
+              colorMap={colorMaps.action || {}}
               onOutcomeChange={async (meetingId, outcome) => {
                 setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {
