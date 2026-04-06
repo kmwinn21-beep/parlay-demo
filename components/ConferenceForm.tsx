@@ -226,7 +226,7 @@ export function ConferenceForm() {
       <div className="card">
         <h2 className="text-lg font-semibold text-procare-dark-blue mb-2 font-serif">Import Attendees</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Upload an Excel (.xlsx, .xls) or CSV file with attendee data. The system will auto-detect columns for name, title, company, email, website, and company type.
+          Upload an Excel (.xlsx, .xls) or CSV file with attendee data. The system will auto-detect columns for name, title, company, email, website, company type, and assigned user.
         </p>
 
         <div

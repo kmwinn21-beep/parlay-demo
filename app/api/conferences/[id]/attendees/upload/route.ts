@@ -70,17 +70,22 @@ export async function POST(
       )
     );
 
-    // Filter out attendees that already exist in this conference
+    // Separate attendees already in conference (for updates) vs new entries
     const newEntries = valid.filter((p) => {
       const key = `${(p.first_name ?? '').trim()} ${(p.last_name ?? '').trim()}`.toLowerCase();
       return !linkedNames.has(key);
     });
+    const existingEntries = valid.filter((p) => {
+      const key = `${(p.first_name ?? '').trim()} ${(p.last_name ?? '').trim()}`.toLowerCase();
+      return linkedNames.has(key);
+    });
 
-    if (newEntries.length === 0) {
+    if (newEntries.length === 0 && existingEntries.length === 0) {
       return NextResponse.json({
         success: true,
         total_in_file: valid.length,
         new_count: 0,
+        updated_count: 0,
         skipped_count: valid.length,
         message: 'All attendees in the file are already in this conference.',
       });
@@ -101,21 +106,22 @@ export async function POST(
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
-    // Collect unique company names with associated email/website/company_type for domain matching
+    // Collect unique company names with associated email/website/company_type/assigned_user for domain matching
     const companyIdCache = new Map<string, number>();
-    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string };
+    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string };
     const companyEntries = new Map<string, CompanyEntry>();
-    for (const p of newEntries) {
+    for (const p of valid) {
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim() });
+          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: p.assigned_user?.trim() });
         } else {
-          // If we don't have an email/website/company_type yet for this company, pick it up
+          // If we don't have an email/website/company_type/assigned_user yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
+          if (!existing.assigned_user && p.assigned_user?.trim()) existing.assigned_user = p.assigned_user.trim();
         }
       }
     }
@@ -130,46 +136,34 @@ export async function POST(
       }
     });
 
-    // Update existing matched companies with CSV-provided company_type
+    // Update existing matched companies with CSV-provided fields
     const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
       const id = companyIdCache.get(n);
-      return id !== undefined && id > 0 && entry.company_type;
+      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website);
     });
     if (existingToUpdate.length > 0) {
       await batchInsert(existingToUpdate, ([n, entry]) => ({
-        sql: 'UPDATE companies SET company_type = ? WHERE id = ? AND (company_type IS NULL OR company_type = ?)',
-        args: [entry.company_type!, companyIdCache.get(n)!, entry.company_type!],
+        sql: `UPDATE companies SET
+          company_type = COALESCE(?, company_type),
+          assigned_user = COALESCE(?, assigned_user),
+          website = COALESCE(?, website)
+          WHERE id = ?`,
+        args: [entry.company_type || null, entry.assigned_user || null, entry.website || null, companyIdCache.get(n)!],
       }));
     }
 
-    // Batch-insert new companies (with auto-detected company type and website)
+    // Batch-insert new companies (with auto-detected company type, website, and assigned_user)
     const newCoNames = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
     if (newCoNames.length > 0) {
       const results = await batchInsert(newCoNames, (n) => {
         const entry = companyEntries.get(n)!;
         const detectedType = entry.company_type || classifyCompanyType(n);
         const website = entry.website || null;
-        if (detectedType && website) {
-          return {
-            sql: 'INSERT INTO companies (name, company_type, website) VALUES (?, ?, ?) RETURNING id',
-            args: [n, detectedType, website],
-          };
-        } else if (detectedType) {
-          return {
-            sql: 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id',
-            args: [n, detectedType],
-          };
-        } else if (website) {
-          return {
-            sql: 'INSERT INTO companies (name, website) VALUES (?, ?) RETURNING id',
-            args: [n, website],
-          };
-        } else {
-          return {
-            sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-            args: [n],
-          };
-        }
+        const assignedUser = entry.assigned_user || null;
+        return {
+          sql: 'INSERT INTO companies (name, company_type, website, assigned_user) VALUES (?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, assignedUser],
+        };
       });
       for (let i = 0; i < newCoNames.length; i++) {
         const id = Number(results[i]?.rows[0]?.id ?? 0);
@@ -234,10 +228,38 @@ export async function POST(
       }
     }
 
+    // Also process attendees already linked to this conference — update their fields from the new upload
+    const linkedAttendeeMap = new Map<string, number>();
+    for (const r of existingLinked.rows) {
+      const key = `${(r.first_name as string || '').trim()} ${(r.last_name as string || '').trim()}`.toLowerCase();
+      linkedAttendeeMap.set(key, Number(r.id));
+    }
+
+    for (const p of existingEntries) {
+      const fname = (p.first_name ?? '').trim();
+      const lname = (p.last_name ?? '').trim();
+      const key = `${fname} ${lname}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const existingId = linkedAttendeeMap.get(key);
+      if (existingId) {
+        const companyId = p.company?.trim()
+          ? resolveCompanyId(p.company.trim())
+          : null;
+        existingAttendeeUpdates.push({
+          id: existingId,
+          company_id: companyId && companyId > 0 ? companyId : null,
+          title: p.title?.trim() || null,
+          email: p.email?.trim() || null,
+        });
+      }
+    }
+
     // Batch-update existing matched attendees with CSV company/title/email
     if (existingAttendeeUpdates.length > 0) {
       await batchInsert(existingAttendeeUpdates, (u) => ({
-        sql: 'UPDATE attendees SET company_id = ?, title = COALESCE(?, title), email = COALESCE(?, email) WHERE id = ?',
+        sql: 'UPDATE attendees SET company_id = COALESCE(?, company_id), title = COALESCE(?, title), email = COALESCE(?, email) WHERE id = ?',
         args: [u.company_id, u.title, u.email, u.id],
       }));
     }
@@ -270,12 +292,14 @@ export async function POST(
     }));
 
     const skippedCount = valid.length - newEntries.length;
+    const updatedCount = existingAttendeeUpdates.length;
 
     return NextResponse.json({
       success: true,
       total_in_file: valid.length,
       new_count: attendeeIdsToLink.length,
-      skipped_count: skippedCount,
+      updated_count: updatedCount,
+      skipped_count: skippedCount - updatedCount,
     });
   } catch (error) {
     console.error('POST /api/conferences/[id]/attendees/upload error:', error);
