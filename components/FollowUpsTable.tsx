@@ -145,8 +145,8 @@ export function FollowUpsTable({
                 key={`${fu.attendee_id}-${fu.conference_id}`}
                 className={`transition-colors align-top ${fu.completed ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}
               >
-                <td className="px-3 py-2 font-medium text-gray-800">
-                  <Link href={`/attendees/${fu.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug">
+                <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                  <Link href={`/attendees/${fu.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
                     {fu.first_name} {fu.last_name}
                   </Link>
                 </td>

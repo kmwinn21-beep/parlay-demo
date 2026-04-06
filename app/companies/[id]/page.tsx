@@ -33,6 +33,7 @@ interface Company {
   profit_type?: string;
   company_type?: string;
   notes?: string;
+  wse?: number;
   status?: string;
   assigned_user?: string;
   parent_company_id?: number;
@@ -128,6 +129,7 @@ export default function CompanyDetailPage() {
         profit_type: data.profit_type || '',
         company_type: data.company_type || '',
         notes: data.notes || '',
+        wse: data.wse ?? '',
         assigned_user: data.assigned_user || '',
         entity_structure: data.entity_structure || '',
       });
@@ -323,12 +325,27 @@ export default function CompanyDetailPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Company</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+              <div>
                 <label className="label">Company Name *</label>
                 <input
                   value={editData.name || ''}
                   onChange={(e) => setEditData((p) => ({ ...p, name: e.target.value }))}
                   className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">WSE</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={editData.wse ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setEditData((p) => ({ ...p, wse: val === '' ? undefined : Number(val) }));
+                  }}
+                  className="input-field"
+                  placeholder="# of Work Site Employees"
                 />
               </div>
               <div>
@@ -365,15 +382,6 @@ export default function CompanyDetailPage() {
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="label">Notes</label>
-                <textarea
-                  value={editData.notes || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, notes: e.target.value }))}
-                  className="input-field resize-none"
-                  rows={2}
-                />
               </div>
               <div>
                 <label className="label">Assigned User</label>
@@ -476,7 +484,7 @@ export default function CompanyDetailPage() {
             </div>
 
             {/* Metadata fields */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Website</p>
                 {company.website ? (
@@ -484,9 +492,12 @@ export default function CompanyDetailPage() {
                     href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-procare-bright-blue hover:underline break-all"
+                    className="text-procare-bright-blue hover:text-blue-700 transition-colors"
+                    title={company.website.replace(/^https?:\/\//, '')}
                   >
-                    {company.website.replace(/^https?:\/\//, '')}
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
                   </a>
                 ) : <p className="text-sm text-gray-400">—</p>}
               </div>
@@ -498,12 +509,15 @@ export default function CompanyDetailPage() {
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
                 <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
               </div>
-              {company.notes && (
-                <div className="col-span-2 md:col-span-3">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Notes</p>
-                  <p className="text-sm text-gray-600">{company.notes}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">WSE</p>
+                {company.wse != null ? (
+                  <span className="text-sm text-gray-600 inline-flex items-center gap-1">
+                    <svg className="w-4 h-4 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {company.wse.toLocaleString()}
+                  </span>
+                ) : <p className="text-sm text-gray-400">—</p>}
+              </div>
             </div>
           </div>
         )}
@@ -574,8 +588,8 @@ export default function CompanyDetailPage() {
                     const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                     return (
                     <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium">
-                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                      <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
+                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>

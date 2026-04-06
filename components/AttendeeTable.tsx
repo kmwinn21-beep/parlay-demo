@@ -18,6 +18,7 @@ interface Attendee {
   company_name?: string;
   company_type?: string;
   company_id?: number;
+  company_wse?: number;
   email?: string;
   notes?: string;
   status?: string;
@@ -88,7 +89,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 180, title: 150, company: 180, status: 130, seniority: 120, conferences: 100, notes: 70, actions: 100 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70, actions: 100 };
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const colorMaps = useConfigColors();
@@ -387,8 +388,20 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 )}
                 <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                   <span className={getBadgeClass(attendee.status || 'Unknown', colorMaps.status || {})}>{attendee.status || 'Unknown'}</span>
-                  <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
-                  <ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                  <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1`}>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    {seniority}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    <ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                  </span>
+                  {attendee.company_wse != null && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                      <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                      {Number(attendee.company_wse).toLocaleString()}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -406,6 +419,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
                 <th className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>
                 <th className={thCls} style={{ width: colWidths.company }} onClick={() => handleSort('company_name')}>Company <SortIcon col="company_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="company" /></th>
+                <th className={thCls} style={{ width: colWidths.company_type }}>Type<ResizeHandle col="company_type" /></th>
                 <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
                 <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
@@ -415,14 +429,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
-                    <td className="px-3 py-3">
-                      <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
+                    <td className="px-3 py-3 overflow-hidden">
+                      <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>
@@ -439,9 +453,18 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                           ) : (
                             <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                           )}
-                          {attendee.company_type && <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>}
+                          {attendee.company_wse != null && (
+                            <p className="text-[10px] text-gray-400 mt-0.5">WSE: {Number(attendee.company_wse).toLocaleString()}</p>
+                          )}
                         </div>
                       ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-3">
+                      {attendee.company_type ? (
+                        <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3"><span className={getBadgeClass(attendee.status || 'Unknown', colorMaps.status || {})}>{attendee.status || 'Unknown'}</span></td>
                     <td className="px-3 py-3"><span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span></td>

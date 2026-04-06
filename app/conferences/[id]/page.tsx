@@ -23,7 +23,9 @@ interface Attendee {
   company_id?: number;
   company_name?: string;
   company_type?: string;
+  company_wse?: number;
   email?: string;
+  status?: string;
   seniority?: string;
   conference_count?: number;
   conference_names?: string;
@@ -129,7 +131,7 @@ export default function ConferenceDetailPage() {
   const internalDropdownRef = useRef<HTMLDivElement>(null);
 
   // Resizable column widths
-  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 180, title: 160, company: 160, type: 120, seniority: 120, conferences: 80, actions: 100 });
+  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80, actions: 100 });
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -859,8 +861,21 @@ export default function ConferenceDetailPage() {
                         </div>
                       )}
                       <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                        <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
-                        <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                        <span className={getBadgeClass(attendee.status || 'Unknown', colorMaps.status || {})}>{attendee.status || 'Unknown'}</span>
+                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1`}>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                          {seniority}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                        </span>
+                        {attendee.company_wse != null && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                            <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                            {Number(attendee.company_wse).toLocaleString()}
+                          </span>
+                        )}
                         {Number(attendee.entity_notes_count ?? 0) > 0 && (
                           <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
                         )}
@@ -913,8 +928,8 @@ export default function ConferenceDetailPage() {
                           className="accent-procare-bright-blue"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium">
-                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                      <td className="px-4 py-3 font-medium overflow-hidden">
+                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>

@@ -19,7 +19,7 @@ export async function GET(
     const conference = confResult.rows[0];
 
     const attendeesResult = await db.execute({
-      sql: `SELECT a.*, c.name as company_name, c.company_type,
+      sql: `SELECT a.*, c.name as company_name, c.company_type, c.wse as company_wse,
                    (SELECT COUNT(*) FROM conference_attendees ca2 WHERE ca2.attendee_id = a.id) as conference_count,
                    (SELECT GROUP_CONCAT(c2.name) FROM conference_attendees ca2 JOIN conferences c2 ON ca2.conference_id = c2.id WHERE ca2.attendee_id = a.id) as conference_names,
                    (SELECT COUNT(*) FROM entity_notes n WHERE n.entity_type = 'attendee' AND n.entity_id = a.id) as entity_notes_count

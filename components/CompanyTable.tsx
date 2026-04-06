@@ -16,6 +16,7 @@ interface Company {
   profit_type?: string;
   company_type?: string;
   notes?: string;
+  wse?: number;
   status?: string;
   assigned_user?: string;
   parent_company_id?: number;
@@ -440,6 +441,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
                 </div>
+                {company.wse != null && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    <span className="badge-gray">{Number(company.wse).toLocaleString()}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
