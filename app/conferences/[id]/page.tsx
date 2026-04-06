@@ -138,6 +138,10 @@ export default function ConferenceDetailPage() {
   const [addFormData, setAddFormData] = useState({ first_name: '', last_name: '', title: '', company: '', email: '' });
   const [isAddingAttendee, setIsAddingAttendee] = useState(false);
 
+  // Upload attendee list state
+  const [isUploading, setIsUploading] = useState(false);
+  const uploadFileRef = useRef<HTMLInputElement>(null);
+
   const fetchConference = useCallback(async () => {
     try {
       const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes] = await Promise.all([
@@ -326,6 +330,42 @@ export default function ConferenceDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
     } finally {
       setIsAddingAttendee(false);
+    }
+  };
+
+  const handleUploadAttendees = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
+      toast.error('Please upload an Excel (.xlsx, .xls) or CSV file.');
+      if (uploadFileRef.current) uploadFileRef.current.value = '';
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`/api/conferences/${id}/attendees/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
+      if (result.new_count === 0) {
+        toast.success('All attendees in the file are already in this conference.');
+      } else {
+        const msg = result.skipped_count > 0
+          ? `${result.new_count} new attendee(s) added. ${result.skipped_count} already existed.`
+          : `${result.new_count} attendee(s) added!`;
+        toast.success(msg);
+      }
+      fetchConference();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload attendees');
+    } finally {
+      setIsUploading(false);
+      if (uploadFileRef.current) uploadFileRef.current.value = '';
     }
   };
 
@@ -644,6 +684,35 @@ export default function ConferenceDetailPage() {
                 </svg>
                 Add Attendee
               </button>
+              <button
+                onClick={() => uploadFileRef.current?.click()}
+                disabled={isUploading}
+                className="btn-secondary flex items-center gap-2 text-sm"
+              >
+                {isUploading ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload List
+                  </>
+                )}
+              </button>
+              <input
+                ref={uploadFileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleUploadAttendees}
+              />
               <div className="relative">
                 <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
