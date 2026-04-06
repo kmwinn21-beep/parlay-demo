@@ -200,7 +200,6 @@ export async function POST(
 
     // For each new company in the upload, check if it's a child of an existing parent
     const parentUpdates: Array<{ childId: number; parentId: number }> = [];
-    const childToParentRedirect = new Map<number, number>();
 
     companyEntries.forEach((entry, coName) => {
       const coId = companyIdCache.get(coName);
@@ -213,7 +212,6 @@ export async function POST(
 
       if (parent) {
         parentUpdates.push({ childId: coId, parentId: parent.id });
-        childToParentRedirect.set(coId, parent.id);
       }
     });
 
@@ -225,13 +223,11 @@ export async function POST(
       }));
     }
 
-    // Phase 3: Redirect attendees from child companies to parent companies
-    // When a child entity is detected, assign the attendee to the parent company instead
+    // Attendees stay with their own company — child contacts are NOT redirected to the parent
     const resolveCompanyId = (coName: string): number | null => {
       const coId = companyIdCache.get(coName);
       if (!coId || coId <= 0) return null;
-      // If this company is a child, redirect to parent
-      return childToParentRedirect.get(coId) ?? coId;
+      return coId;
     };
 
     // Build attendee lookup (exact + normalised + fuzzy)

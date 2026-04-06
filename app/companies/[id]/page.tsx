@@ -10,6 +10,7 @@ import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
+import { effectiveSeniority } from '@/lib/parsers';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -19,6 +20,8 @@ interface Attendee {
   last_name: string;
   title?: string;
   email?: string;
+  seniority?: string;
+  company_id?: number;
   conference_count: number;
   conference_names?: string;
 }
@@ -33,6 +36,7 @@ interface Company {
   status?: string;
   assigned_user?: string;
   parent_company_id?: number;
+  entity_structure?: string;
   created_at: string;
   attendees: Attendee[];
   conferences?: ConferenceItem[];
@@ -92,25 +96,28 @@ export default function CompanyDetailPage() {
   const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
   const [companyMeetings, setCompanyMeetings] = useState<Meeting[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
+  const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
+  const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
 
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, fuRes, notesRes, statusRes, compTypeRes, profitRes, meetingsRes, actionRes, userRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, allCompaniesRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
-        fetch(`/api/follow-ups?company_id=${id}`),
-        fetch(`/api/notes?entity_type=company&entity_id=${id}`),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=company_type'),
         fetch('/api/config?category=profit_type'),
-        fetch(`/api/meetings?company_id=${id}`),
         fetch('/api/config?category=action'),
         fetch('/api/config?category=user'),
+        fetch('/api/config?category=entity_structure'),
+        fetch('/api/companies'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -122,15 +129,35 @@ export default function CompanyDetailPage() {
         company_type: data.company_type || '',
         notes: data.notes || '',
         assigned_user: data.assigned_user || '',
+        entity_structure: data.entity_structure || '',
       });
-      if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
-      if (notesRes.ok) setCompanyNotes(await notesRes.json());
       if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
       if (compTypeRes.ok) setCompanyTypeOptions((await compTypeRes.json()).map((o: { value: string }) => o.value));
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
-      if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { value: string }) => o.value));
+      if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
+      if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+
+      // For parent companies, include child company IDs in meetings, follow-ups, and notes queries
+      const childIds = (data.child_companies || []).map((c: { id: number }) => c.id);
+      const isParent = childIds.length > 0;
+      const companyIds = isParent ? [id, ...childIds].join(',') : null;
+
+      const [fuRes, notesRes, meetingsRes] = await Promise.all([
+        fetch(companyIds
+          ? `/api/follow-ups?company_ids=${companyIds}`
+          : `/api/follow-ups?company_id=${id}`),
+        fetch(companyIds
+          ? `/api/notes?entity_type=company&entity_ids=${companyIds}`
+          : `/api/notes?entity_type=company&entity_id=${id}`),
+        fetch(companyIds
+          ? `/api/meetings?company_ids=${companyIds}`
+          : `/api/meetings?company_id=${id}`),
+      ]);
+      if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
+      if (notesRes.ok) setCompanyNotes(await notesRes.json());
+      if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
     } catch {
       toast.error('Failed to load company');
       router.push('/companies');
@@ -192,6 +219,25 @@ export default function CompanyDetailPage() {
     } catch {
       toast.error('Failed to delete company');
       setIsDeleting(false);
+    }
+  };
+
+  const handleCompanyChange = async (attendeeId: number, newCompanyId: number) => {
+    setSavingCompanyAttendeeId(attendeeId);
+    try {
+      const res = await fetch(`/api/attendees/${attendeeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: newCompanyId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Company updated.');
+      setEditingCompanyAttendeeId(null);
+      fetchCompany();
+    } catch {
+      toast.error('Failed to update company.');
+    } finally {
+      setSavingCompanyAttendeeId(null);
     }
   };
 
@@ -342,6 +388,19 @@ export default function CompanyDetailPage() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="label">Entity Structure</label>
+                <select
+                  value={editData.entity_structure || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, entity_structure: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select...</option>
+                  {entityStructureOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <button onClick={handleSave} disabled={isSaving} className="btn-primary">
@@ -384,7 +443,19 @@ export default function CompanyDetailPage() {
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {company.company_type && (
-                    <span className="badge-blue">{company.company_type}</span>
+                    <span className="badge-blue inline-flex items-center gap-1">
+                      {company.entity_structure === 'Parent' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.entity_structure === 'Child' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.company_type}
+                    </span>
                   )}
                   {company.profit_type && (
                     <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
@@ -452,22 +523,32 @@ export default function CompanyDetailPage() {
           <>
             {/* Mobile card layout */}
             <div className="block lg:hidden divide-y divide-gray-100">
-              {paginatedAttendees.map((attendee) => (
+              {paginatedAttendees.map((attendee) => {
+                const seniority = effectiveSeniority(attendee.seniority, attendee.title);
+                return (
                 <div key={attendee.id} className="p-4 bg-white">
                   <div className="flex items-start justify-between gap-3">
-                    <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm">
-                      {attendee.first_name} {attendee.last_name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm">
+                        {attendee.first_name} {attendee.last_name}
+                      </Link>
+                      {attendee.email && (
+                        <a href={`mailto:${attendee.email}`} title={attendee.email} className="text-gray-400 hover:text-procare-bright-blue">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </a>
+                      )}
+                    </div>
                     <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
                   </div>
                   {attendee.title && <p className="text-xs text-gray-500 mt-1">{attendee.title}</p>}
-                  {attendee.email && (
-                    <a href={`mailto:${attendee.email}`} className="text-xs text-procare-bright-blue hover:underline mt-1 block">
-                      {attendee.email}
-                    </a>
+                  {seniority && (
+                    <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} mt-1 inline-block text-[10px]`}>{seniority}</span>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Desktop table layout */}
@@ -477,28 +558,78 @@ export default function CompanyDetailPage() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Seniority</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">
+                      <svg className="w-4 h-4 mx-auto text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedAttendees.map((attendee) => (
+                  {paginatedAttendees.map((attendee) => {
+                    const seniority = effectiveSeniority(attendee.seniority, attendee.title);
+                    return (
                     <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-medium">
                         <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
-                        {attendee.title || <span className="text-gray-300">—</span>}
+                      <td className="px-4 py-3 text-gray-600">
+                        {attendee.title ? (
+                          <span className="block text-xs leading-snug break-words whitespace-normal" title={attendee.title}>{attendee.title}</span>
+                        ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
+                        {seniority ? (
+                          <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center">
                         {attendee.email ? (
-                          <a href={`mailto:${attendee.email}`} className="text-procare-bright-blue hover:underline text-xs">
-                            {attendee.email}
+                          <a href={`mailto:${attendee.email}`} title={attendee.email} className="inline-flex items-center justify-center text-gray-400 hover:text-procare-bright-blue transition-colors">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
                           </a>
                         ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {editingCompanyAttendeeId === attendee.id ? (
+                          <div className="flex items-center gap-1">
+                            <select
+                              defaultValue={attendee.company_id || ''}
+                              disabled={savingCompanyAttendeeId === attendee.id}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                if (val && val !== attendee.company_id) {
+                                  handleCompanyChange(attendee.id, val);
+                                }
+                              }}
+                              className="input-field text-xs py-1 px-2 w-40"
+                            >
+                              <option value="">Select...</option>
+                              {allCompanies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <button onClick={() => setEditingCompanyAttendeeId(null)} className="text-gray-400 hover:text-gray-600 p-0.5">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingCompanyAttendeeId(attendee.id)}
+                            className="text-xs text-gray-500 hover:text-procare-bright-blue hover:underline cursor-pointer"
+                            title="Click to change company"
+                          >
+                            {company.name}
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
@@ -512,7 +643,8 @@ export default function CompanyDetailPage() {
                         </Link>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -612,6 +744,7 @@ export default function CompanyDetailPage() {
             entityType="company"
             entityId={Number(id)}
             initialNotes={companyNotes}
+            parentEntityId={company.child_companies && company.child_companies.length > 0 ? Number(id) : undefined}
           />
 
         </div>{/* end left column */}

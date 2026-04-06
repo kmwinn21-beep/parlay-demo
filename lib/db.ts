@@ -113,6 +113,8 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'red' WHERE category = 'company_type' AND value = 'CCRC' AND color IS NULL`,
     `UPDATE config_options SET color = 'yellow' WHERE category = 'company_type' AND value = 'Vendor' AND color IS NULL`,
     `UPDATE config_options SET color = 'gray' WHERE category = 'company_type' AND value = 'Other' AND color IS NULL`,
+    `UPDATE config_options SET color = 'dark-blue' WHERE category = 'entity_structure' AND value = 'Parent' AND color IS NULL`,
+    `UPDATE config_options SET color = 'teal' WHERE category = 'entity_structure' AND value = 'Child' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'profit_type' AND value = 'For-Profit' AND color IS NULL`,
     `UPDATE config_options SET color = 'blue' WHERE category = 'profit_type' AND value = 'Non-Profit' AND color IS NULL`,
     `UPDATE config_options SET color = 'blue' WHERE category = 'action' AND value = 'Meeting Scheduled' AND color IS NULL`,
@@ -141,6 +143,7 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE companies ADD COLUMN parent_company_id INTEGER REFERENCES companies(id)`,
+    `ALTER TABLE companies ADD COLUMN entity_structure TEXT`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -197,6 +200,8 @@ export async function initDb(): Promise<void> {
     { category: 'action', value: 'Pending', sort_order: 5 },
     { category: 'company_type', value: 'Capital', sort_order: 7 },
     { category: 'company_type', value: 'Operator', sort_order: 8 },
+    { category: 'entity_structure', value: 'Parent', sort_order: 1 },
+    { category: 'entity_structure', value: 'Child', sort_order: 2 },
   ];
   for (const seed of newCategorySeeds) {
     try {
@@ -235,6 +240,7 @@ export interface Company {
   status?: string;
   assigned_user?: string;
   parent_company_id?: number;
+  entity_structure?: string;
   created_at: string;
   attendee_count?: number;
 }

@@ -9,6 +9,7 @@ export interface EntityNote {
   entity_id: number;
   content: string;
   created_at: string;
+  company_name?: string;
 }
 
 function formatDateTime(dt: string) {
@@ -33,16 +34,23 @@ export function NotesSection({
   entityType,
   entityId,
   initialNotes = [],
+  parentEntityId,
 }: {
   entityType: 'attendee' | 'company' | 'conference';
   entityId: number;
   initialNotes?: EntityNote[];
+  parentEntityId?: number;
 }) {
   const [notes, setNotes] = useState<EntityNote[]>(initialNotes);
   const [isAdding, setIsAdding] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  // Sync notes when initialNotes prop changes (e.g. after parent fetch completes)
+  useEffect(() => {
+    setNotes(initialNotes);
+  }, [initialNotes]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
 
@@ -194,6 +202,11 @@ export function NotesSection({
                       {formatDateTime(note.created_at)}
                     </td>
                     <td className="px-4 py-3 text-gray-800">
+                      {parentEntityId && note.entity_id !== parentEntityId && note.company_name && (
+                        <span className="inline-block text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 mb-1">
+                          {note.company_name}
+                        </span>
+                      )}
                       <p className={`whitespace-pre-wrap leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
                         {note.content}
                       </p>

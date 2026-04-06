@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
+import { ParentChildModal } from './ParentChildModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
@@ -19,6 +20,7 @@ interface Company {
   assigned_user?: string;
   parent_company_id?: number;
   parent_company_name?: string;
+  entity_structure?: string;
   attendee_count: number;
   conference_count: number;
   conference_names?: string;
@@ -98,6 +100,25 @@ interface CompanyTableProps {
   onRefresh: () => void;
 }
 
+function EntityStructureIcon({ structure }: { structure?: string }) {
+  if (!structure) return null;
+  if (structure === 'Parent') {
+    return (
+      <svg className="w-3 h-3 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+      </svg>
+    );
+  }
+  if (structure === 'Child') {
+    return (
+      <svg className="w-3 h-3 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+      </svg>
+    );
+  }
+  return null;
+}
+
 type SortKey = 'name' | 'company_type' | 'status' | 'attendee_count' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
@@ -135,6 +156,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showParentChildModal, setShowParentChildModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -231,6 +253,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     toast.success('Companies merged!'); setSelectedIds(new Set()); onRefresh();
   };
 
+  const handleParentChild = async (parentId: number, childIds: number[]) => {
+    const res = await fetch('/api/companies/parent-child', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent_id: parentId, child_ids: childIds }) });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationship'); }
+    toast.success('Parent/Child relationship created!'); setSelectedIds(new Set()); onRefresh();
+  };
+
   const handleMassEdit = async () => {
     const fields: Record<string, string | null> = {};
     if (massEditFields.status) fields.status = massEditFields.status;
@@ -321,10 +349,16 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
           </>
         )}
         {selectedIds.size >= 2 && (
+          <>
           <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2 text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
             Merge ({selectedIds.size})
           </button>
+          <button onClick={() => setShowParentChildModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+            Create Parent/Child Relationship
+          </button>
+          </>
         )}
       </div>
 
@@ -387,7 +421,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
-                {company.company_type && <span className="badge-blue">{company.company_type}</span>}
+                {company.company_type && <span className="badge-blue inline-flex items-center gap-1"><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
                 {company.assigned_user && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
                     <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -446,7 +480,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                       </p>
                     )}
                   </td>
-                  <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-3">{company.company_type ? <span className="badge-blue inline-flex items-center gap-1"><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
                     {company.assigned_user ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
@@ -490,6 +524,13 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
         title="Merge Companies" description="Select the master record. All attendees from duplicates will be reassigned to master. Duplicates will be deleted." />
+
+      <ParentChildModal
+        isOpen={showParentChildModal}
+        onClose={() => setShowParentChildModal(false)}
+        onSubmit={handleParentChild}
+        items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
+      />
     </div>
   );
 }

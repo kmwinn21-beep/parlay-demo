@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const attendeeId = searchParams.get('attendee_id');
     const conferenceId = searchParams.get('conference_id');
     const companyId = searchParams.get('company_id');
+    const companyIds = searchParams.get('company_ids'); // comma-separated list
 
     const conditions = ["cad.next_steps IS NOT NULL AND cad.next_steps != ''"];
     const args: (string | number)[] = [];
@@ -20,7 +21,13 @@ export async function GET(request: NextRequest) {
       conditions.push('cad.conference_id = ?');
       args.push(conferenceId);
     }
-    if (companyId) {
+    if (companyIds) {
+      const ids = companyIds.split(',').map(id => id.trim()).filter(Boolean);
+      if (ids.length > 0) {
+        conditions.push(`a.company_id IN (${ids.map(() => '?').join(',')})`);
+        args.push(...ids);
+      }
+    } else if (companyId) {
       conditions.push('a.company_id = ?');
       args.push(companyId);
     }

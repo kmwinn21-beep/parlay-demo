@@ -7,18 +7,39 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const entityType = searchParams.get('entity_type');
     const entityId = searchParams.get('entity_id');
+    const entityIds = searchParams.get('entity_ids'); // comma-separated list
 
-    if (!entityType || !entityId) {
-      return NextResponse.json({ error: 'entity_type and entity_id are required' }, { status: 400 });
+    if (!entityType || (!entityId && !entityIds)) {
+      return NextResponse.json({ error: 'entity_type and entity_id (or entity_ids) are required' }, { status: 400 });
     }
 
-    const result = await db.execute({
-      sql: `SELECT id, entity_type, entity_id, content, created_at
-            FROM entity_notes
-            WHERE entity_type = ? AND entity_id = ?
-            ORDER BY created_at DESC`,
-      args: [entityType, entityId],
-    });
+    let result;
+    if (entityIds) {
+      const ids = entityIds.split(',').map(id => id.trim()).filter(Boolean);
+      // When fetching for multiple entities, join to get the company name for context
+      const joinCompany = entityType === 'company';
+      result = await db.execute({
+        sql: joinCompany
+          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, co.name AS company_name
+                FROM entity_notes en
+                LEFT JOIN companies co ON en.entity_id = co.id
+                WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
+                ORDER BY en.created_at DESC`
+          : `SELECT id, entity_type, entity_id, content, created_at
+                FROM entity_notes
+                WHERE entity_type = ? AND entity_id IN (${ids.map(() => '?').join(',')})
+                ORDER BY created_at DESC`,
+        args: [entityType, ...ids],
+      });
+    } else {
+      result = await db.execute({
+        sql: `SELECT id, entity_type, entity_id, content, created_at
+              FROM entity_notes
+              WHERE entity_type = ? AND entity_id = ?
+              ORDER BY created_at DESC`,
+        args: [entityType, entityId!],
+      });
+    }
 
     return NextResponse.json(
       result.rows.map((r) => ({
@@ -27,6 +48,7 @@ export async function GET(request: NextRequest) {
         entity_id: Number(r.entity_id),
         content: String(r.content),
         created_at: String(r.created_at),
+        ...(r.company_name != null ? { company_name: String(r.company_name) } : {}),
       }))
     );
   } catch (error) {
