@@ -154,7 +154,7 @@ export function FollowUpsTable({
                   {fu.title || <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
-                  {fu.company_name || <span className="text-gray-300">—</span>}
+                  <span className="text-xs break-words whitespace-normal leading-snug">{fu.company_name || <span className="text-gray-300">—</span>}</span>
                 </td>
                 <td className="px-3 py-2">
                   <span className={`inline-flex px-2 py-0.5 rounded-full font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
