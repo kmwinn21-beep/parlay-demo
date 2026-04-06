@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Fuse from 'fuse.js';
 import { db, dbReady } from '@/lib/db';
-import { parseFile } from '@/lib/parsers';
+import { parseFile, classifyCompanyType } from '@/lib/parsers';
 
 async function batchInsert<T>(
   items: T[],
@@ -121,13 +121,18 @@ export async function POST(
       }
     }
 
-    // Batch-insert new companies
+    // Batch-insert new companies (with auto-detected company type)
     const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
     if (newCoNames.length > 0) {
-      const results = await batchInsert(newCoNames, (n) => ({
-        sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-        args: [n],
-      }));
+      const results = await batchInsert(newCoNames, (n) => {
+        const detectedType = classifyCompanyType(n);
+        return {
+          sql: detectedType
+            ? 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id'
+            : 'INSERT INTO companies (name) VALUES (?) RETURNING id',
+          args: detectedType ? [n, detectedType] : [n],
+        };
+      });
       for (let i = 0; i < newCoNames.length; i++) {
         const id = Number(results[i]?.rows[0]?.id ?? 0);
         if (id > 0) companyIdCache.set(newCoNames[i], id);

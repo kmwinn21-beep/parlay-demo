@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { ParsedAttendee } from './db';
+import companyTypeLookup from './company-type-lookup.json';
 
 export async function parseFile(
   buffer: Buffer,
@@ -168,4 +169,86 @@ export function classifySeniority(title?: string): string {
 /** Returns the stored seniority override if set, otherwise falls back to title-based classification */
 export function effectiveSeniority(storedSeniority?: string, title?: string): string {
   return storedSeniority || classifySeniority(title);
+}
+
+/**
+ * Auto-detect company type based on company name.
+ * Uses a known-company lookup (from training data) first, then falls back to keyword heuristics.
+ */
+export function classifyCompanyType(companyName?: string): string | null {
+  if (!companyName) return null;
+
+  const name = companyName.trim();
+  const key = name.toLowerCase();
+
+  // --- Phase 1: Exact lookup from known companies ---
+  const lookup = companyTypeLookup as Record<string, string>;
+  if (lookup[key]) return lookup[key];
+
+  // --- Phase 2: Normalized lookup (strip common suffixes like LLC, Inc, etc.) ---
+  const normalized = key
+    .replace(/[,.]*/g, '')
+    .replace(/\b(inc|llc|llp|lp|ltd|corp|corporation|company|co|group|pllc)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  for (const [lookupKey, lookupType] of Object.entries(lookup)) {
+    const lookupNorm = lookupKey
+      .replace(/[,.]*/g, '')
+      .replace(/\b(inc|llc|llp|lp|ltd|corp|corporation|company|co|group|pllc)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (normalized === lookupNorm && lookupNorm.length > 2) return lookupType;
+  }
+
+  // --- Phase 3: Keyword-based heuristics ---
+  const n = ` ${key} `;
+
+  // Capital indicators (banks, REITs, investment firms, lenders)
+  const capitalPatterns = [
+    /\bbank\b/, /\bbanking\b/, /\bcapital\b/, /\breit\b/, /\binvestment[s]?\b/,
+    /\binvestor[s]?\b/, /\bfinancial\b/, /\bfunding\b/, /\blending\b/, /\blender[s]?\b/,
+    /\bmortgage\b/, /\bcredit\s+union\b/, /\basset\s+management\b/, /\bprivate\s+equity\b/,
+    /\bventure\b/, /\bequity\b/, /\bfund\b/, /\bfunds\b/, /\bwealth\b/,
+    /\brealty\b/, /\breal\s+estate\s+(partners|capital|investment|advisors)\b/,
+  ];
+
+  // Operator indicators (senior living operators, care providers)
+  const operatorPatterns = [
+    /\bsenior\s+living\b/, /\bassisted\s+living\b/, /\bmemory\s+care\b/,
+    /\bretirement\b/, /\bcommunities\b/, /\bresidences\b/,
+    /\bcontinuing\s+care\b/, /\bccrc\b/, /\bnursing\b/,
+    /\bhealthcare\s+(management|partners|group)\b/, /\bcare\s+(community|communities|home|center)\b/,
+    /\bsenior\s+(community|communities|residence|residences|services|housing)\b/,
+    /\b(aged|elder)\s+care\b/, /\blife\s*plan\b/,
+    /\bliving\s+(community|communities|group|services)\b/,
+  ];
+
+  // Vendor indicators (technology, consulting, construction, associations, staffing)
+  const vendorPatterns = [
+    /\bsoftware\b/, /\btechnology\b/, /\btech\b/, /\bsolutions\b/,
+    /\bconstruction\b/, /\barchitects?\b/, /\bdesign\b/,
+    /\buniversity\b/, /\bcollege\b/, /\bschool\b/,
+    /\bassociation\b/, /\bleadingage\b/, /\bargentum\b/,
+    /\bstaffing\b/, /\brecruiting\b/, /\bhireology\b/,
+    /\btherapies\b/, /\bpharmac/,
+    /\binsurance\s+services\b/,
+  ];
+
+  const capitalScore = capitalPatterns.reduce((s, p) => s + (p.test(n) ? 1 : 0), 0);
+  const operatorScore = operatorPatterns.reduce((s, p) => s + (p.test(n) ? 1 : 0), 0);
+  const vendorScore = vendorPatterns.reduce((s, p) => s + (p.test(n) ? 1 : 0), 0);
+
+  const maxScore = Math.max(capitalScore, operatorScore, vendorScore);
+  if (maxScore === 0) return null;
+
+  // If there's a clear winner, return it
+  if (capitalScore > operatorScore && capitalScore > vendorScore) return 'Capital';
+  if (operatorScore > capitalScore && operatorScore > vendorScore) return 'Operator';
+  if (vendorScore > capitalScore && vendorScore > operatorScore) return 'Vendor';
+
+  // Tie-breaking: prioritize Operator > Capital > Vendor
+  if (operatorScore === maxScore) return 'Operator';
+  if (capitalScore === maxScore) return 'Capital';
+  return 'Vendor';
 }
