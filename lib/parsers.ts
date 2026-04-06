@@ -51,6 +51,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const websiteCol = findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website');
   const companyTypeCol = findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type');
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
+  const wseCol = findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees');
 
   const attendees: ParsedAttendee[] = [];
 
@@ -105,6 +106,12 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
     }
     if (assignedUserCol && row[assignedUserCol]) {
       attendee.assigned_user = String(row[assignedUserCol]).trim();
+    }
+    if (wseCol && row[wseCol]) {
+      const rawWse = String(row[wseCol]).trim().replace(/[^0-9]/g, '');
+      if (rawWse) {
+        attendee.wse = rawWse;
+      }
     }
 
     attendees.push(attendee);
