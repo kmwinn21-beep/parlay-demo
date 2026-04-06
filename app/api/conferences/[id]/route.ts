@@ -83,13 +83,83 @@ export async function DELETE(
       return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
     }
 
+    // Find attendees that are ONLY linked to this conference (will become orphans)
+    const orphanedAttendeesResult = await db.execute({
+      sql: `SELECT a.id FROM attendees a
+            JOIN conference_attendees ca ON a.id = ca.attendee_id
+            WHERE ca.conference_id = ?
+            AND (SELECT COUNT(*) FROM conference_attendees ca2 WHERE ca2.attendee_id = a.id) = 1`,
+      args: [params.id],
+    });
+    const orphanedAttendeeIds = orphanedAttendeesResult.rows.map((r) => r.id as number);
+
+    // Find all attendees linked to this conference (to check companies after)
+    const allConferenceAttendeesResult = await db.execute({
+      sql: `SELECT DISTINCT a.company_id FROM attendees a
+            JOIN conference_attendees ca ON a.id = ca.attendee_id
+            WHERE ca.conference_id = ? AND a.company_id IS NOT NULL`,
+      args: [params.id],
+    });
+    const affectedCompanyIds = allConferenceAttendeesResult.rows.map((r) => r.company_id as number);
+
+    // Delete the conference and its links
     await db.batch(
       [
         { sql: 'DELETE FROM conference_attendees WHERE conference_id = ?', args: [params.id] },
+        { sql: 'DELETE FROM conference_attendee_details WHERE conference_id = ?', args: [params.id] },
+        { sql: 'DELETE FROM meetings WHERE conference_id = ?', args: [params.id] },
+        { sql: 'DELETE FROM entity_notes WHERE entity_type = ? AND entity_id = ?', args: ['conference', params.id] },
         { sql: 'DELETE FROM conferences WHERE id = ?', args: [params.id] },
       ],
       'write'
     );
+
+    // Delete orphaned attendees and their entity_notes
+    if (orphanedAttendeeIds.length > 0) {
+      const chunks = [];
+      for (let i = 0; i < orphanedAttendeeIds.length; i += 100) {
+        chunks.push(orphanedAttendeeIds.slice(i, i + 100));
+      }
+      for (const chunk of chunks) {
+        const placeholders = chunk.map(() => '?').join(', ');
+        await db.batch(
+          [
+            { sql: `DELETE FROM entity_notes WHERE entity_type = 'attendee' AND entity_id IN (${placeholders})`, args: chunk },
+            { sql: `DELETE FROM attendees WHERE id IN (${placeholders})`, args: chunk },
+          ],
+          'write'
+        );
+      }
+    }
+
+    // Delete orphaned companies: companies that no longer have any attendees linked to a conference
+    if (affectedCompanyIds.length > 0) {
+      const placeholders = affectedCompanyIds.map(() => '?').join(', ');
+      const orphanedCompaniesResult = await db.execute({
+        sql: `SELECT c.id FROM companies c
+              WHERE c.id IN (${placeholders})
+              AND NOT EXISTS (
+                SELECT 1 FROM attendees a
+                JOIN conference_attendees ca ON a.id = ca.attendee_id
+                WHERE a.company_id = c.id
+              )`,
+        args: affectedCompanyIds,
+      });
+      const orphanedCompanyIds = orphanedCompaniesResult.rows.map((r) => r.id as number);
+
+      if (orphanedCompanyIds.length > 0) {
+        const compPlaceholders = orphanedCompanyIds.map(() => '?').join(', ');
+        await db.batch(
+          [
+            { sql: `UPDATE companies SET parent_company_id = NULL WHERE parent_company_id IN (${compPlaceholders})`, args: orphanedCompanyIds },
+            { sql: `UPDATE attendees SET company_id = NULL WHERE company_id IN (${compPlaceholders})`, args: orphanedCompanyIds },
+            { sql: `DELETE FROM entity_notes WHERE entity_type = 'company' AND entity_id IN (${compPlaceholders})`, args: orphanedCompanyIds },
+            { sql: `DELETE FROM companies WHERE id IN (${compPlaceholders})`, args: orphanedCompanyIds },
+          ],
+          'write'
+        );
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
