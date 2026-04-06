@@ -128,6 +128,22 @@ export default function ConferenceDetailPage() {
   const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
   const internalDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Resizable column widths
+  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 180, title: 160, company: 160, type: 120, seniority: 120, conferences: 80, actions: 100 });
+  const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
+  const startResize = useCallback((e: React.MouseEvent, col: string) => {
+    e.preventDefault();
+    resizeRef.current = { col, startX: e.clientX, startW: colWidths[col] };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const delta = ev.clientX - resizeRef.current.startX;
+      setColWidths(prev => ({ ...prev, [resizeRef.current!.col]: Math.max(60, resizeRef.current!.startW + delta) }));
+    };
+    const onUp = () => { resizeRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [colWidths]);
+
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
@@ -209,12 +225,24 @@ export default function ConferenceDetailPage() {
       const allCompanies = await fetch('/api/companies').then(r => r.json());
       // Count attendees per company in THIS conference
       const countMap = new Map<number, number>();
+      // Build attendee summary per company for THIS conference only
+      const summaryMap = new Map<number, string[]>();
       for (const a of conference.attendees) {
-        if (a.company_id) countMap.set(a.company_id, (countMap.get(a.company_id) ?? 0) + 1);
+        if (a.company_id) {
+          countMap.set(a.company_id, (countMap.get(a.company_id) ?? 0) + 1);
+          const info = `${a.first_name} ${a.last_name}|${a.title || ''}`;
+          const existing = summaryMap.get(a.company_id) ?? [];
+          existing.push(info);
+          summaryMap.set(a.company_id, existing);
+        }
       }
       const filtered = allCompanies
         .filter((c: { id: number }) => companyIds.has(c.id))
-        .map((c: { id: number; attendee_count: number }) => ({ ...c, attendee_count: countMap.get(c.id) ?? 0 }));
+        .map((c: { id: number; attendee_count: number }) => ({
+          ...c,
+          attendee_count: countMap.get(c.id) ?? 0,
+          attendee_summary: summaryMap.get(c.id)?.join('~~~') ?? '',
+        }));
       setConferenceCompanies(filtered);
       setCompaniesLoaded(true);
     } catch { /* non-fatal */ } finally { setIsLoadingCompanies(false); }
@@ -844,10 +872,10 @@ export default function ConferenceDetailPage() {
 
               {/* Desktop table */}
             <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left">
+                    <th className="px-4 py-3 text-left" style={{ width: 40 }}>
                       <input
                         type="checkbox"
                         checked={selectedAttendeeIds.size === filteredAttendees.length && filteredAttendees.length > 0}
@@ -858,16 +886,20 @@ export default function ConferenceDetailPage() {
                         className="accent-procare-bright-blue"
                       />
                     </th>
-                    {(['name', 'title', 'company', 'seniority'] as const).map(col => (
-                      <th key={col} onClick={() => handleSort(col)} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-bright-blue transition-colors whitespace-nowrap">
-                        {col === 'name' ? 'Name' : col === 'title' ? 'Title' : col === 'company' ? 'Company' : 'Seniority'}
+                    {(['name', 'title', 'company', 'type', 'seniority'] as const).map(col => (
+                      <th key={col} onClick={col !== 'type' ? () => handleSort(col as 'name' | 'title' | 'company' | 'seniority') : undefined} className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative ${col !== 'type' ? 'cursor-pointer hover:text-procare-bright-blue' : ''}`} style={{ width: colWidths[col] }}>
+                        {{ name: 'Name', title: 'Title', company: 'Company', type: 'Type', seniority: 'Seniority' }[col]}
                         {sortKey === col && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                        <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"># Conf</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.conferences }}># Conf
+                      <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
-                    <th className="px-4 py-3"></th>
+                    <th className="px-4 py-3 relative" style={{ width: colWidths.actions }}>
+                      <div onMouseDown={e => startResize(e, 'actions')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -886,21 +918,25 @@ export default function ConferenceDetailPage() {
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
-                        {attendee.title || <span className="text-gray-300">—</span>}
+                      <td className="px-4 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
+                        <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
                       </td>
                       <td className="px-4 py-3">
                         {attendee.company_name ? (
                           <div>
                             {attendee.company_id ? (
-                              <Link href={`/companies/${attendee.company_id}`} className="text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                              <Link href={`/companies/${attendee.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
                             ) : (
-                              <p className="text-gray-800">{attendee.company_name}</p>
-                            )}
-                            {attendee.company_type && (
-                              <span className="badge-blue text-xs">{attendee.company_type}</span>
+                              <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                             )}
                           </div>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {attendee.company_type ? (
+                          <span className="badge-blue text-xs">{attendee.company_type}</span>
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
@@ -915,15 +951,6 @@ export default function ConferenceDetailPage() {
                       </td>
                       <td className="px-4 py-3">
                         <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
-                      </td>
-                      <td className="px-4 py-3">
-                        {attendee.email ? (
-                          <a href={`mailto:${attendee.email}`} className="text-procare-bright-blue hover:underline text-xs">
-                            {attendee.email}
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
                       </td>
                       <td className="px-4 py-3">
                         {Number(attendee.entity_notes_count ?? 0) > 0

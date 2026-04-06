@@ -426,16 +426,18 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>
-                    <td className="px-3 py-3 text-gray-600 truncate">{attendee.title || <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
+                      <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                    </td>
                     <td className="px-3 py-3">
                       {attendee.company_name ? (
-                        <div className="truncate">
+                        <div>
                           {attendee.company_id ? (
-                            <Link href={`/companies/${attendee.company_id}`} className="text-gray-800 hover:text-procare-bright-blue hover:underline truncate">
+                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-800 hover:text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
                               {attendee.company_name}
                             </Link>
                           ) : (
-                            <p className="text-gray-800 truncate">{attendee.company_name}</p>
+                            <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                           )}
                           {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
                         </div>

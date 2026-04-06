@@ -370,7 +370,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue flex-shrink-0" />
-                  <Link href={`/companies/${company.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
+                  <Link href={`/companies/${company.id}`} className="font-semibold text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
                     {company.name}
                   </Link>
                 </div>
@@ -427,8 +427,8 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
-                  <td className="px-3 py-3">
-                    <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline truncate">
+                  <td className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
+                    <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
                       {company.name}
                     </Link>
                   </td>

@@ -556,7 +556,7 @@ export function MeetingsTable({
                   </Link>
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
-                  {m.title || <span className="text-gray-300">—</span>}
+                  <span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span>
                 </td>
                 <td className="px-3 py-2 leading-snug">
                   {m.scheduled_by ? (
@@ -572,7 +572,7 @@ export function MeetingsTable({
                 </td>
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   {m.company_name && m.company_id ? (
-                    <Link href={`/companies/${m.company_id}`} className="text-procare-bright-blue hover:underline">
+                    <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
                       {m.company_name}
                     </Link>
                   ) : (
