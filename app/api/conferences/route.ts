@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
-import { parseFile } from '@/lib/parsers';
+import { parseFile, classifyCompanyType } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -103,8 +103,16 @@ export async function POST(request: NextRequest) {
 
         // Resolve company name -> id (or mark -1 = needs insert)
         const companyIdCache = new Map<string, number>(); // original cased name -> id
+        const companyTypeMap = new Map<string, string>(); // company name -> company_type from file
         const companyNameSet = new Set<string>();
-        valid.forEach((p) => { if (p.company?.trim()) companyNameSet.add(p.company.trim()); });
+        valid.forEach((p) => {
+          if (p.company?.trim()) {
+            companyNameSet.add(p.company.trim());
+            if (p.company_type?.trim() && !companyTypeMap.has(p.company.trim())) {
+              companyTypeMap.set(p.company.trim(), p.company_type.trim());
+            }
+          }
+        });
         const uniqueCompanyNames = Array.from(companyNameSet);
 
         for (const coName of uniqueCompanyNames) {
@@ -119,10 +127,19 @@ export async function POST(request: NextRequest) {
         // ── Step 3: Batch-insert new companies ──
         const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
         if (newCoNames.length > 0) {
-          const results = await batchInsert(newCoNames, (n) => ({
-            sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-            args: [n],
-          }));
+          const results = await batchInsert(newCoNames, (n) => {
+            const detectedType = companyTypeMap.get(n) || classifyCompanyType(n);
+            if (detectedType) {
+              return {
+                sql: 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id',
+                args: [n, detectedType],
+              };
+            }
+            return {
+              sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
+              args: [n],
+            };
+          });
           for (let i = 0; i < newCoNames.length; i++) {
             const id = Number(results[i]?.rows[0]?.id ?? 0);
             if (id > 0) companyIdCache.set(newCoNames[i], id);
