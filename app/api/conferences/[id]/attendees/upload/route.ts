@@ -104,20 +104,21 @@ export async function POST(
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
-    // Collect unique company names with associated email/website for domain matching
+    // Collect unique company names with associated email/website/company_type for domain matching
     const companyIdCache = new Map<string, number>();
-    type CompanyEntry = { name: string; email?: string; website?: string };
+    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of newEntries) {
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim() });
+          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim() });
         } else {
-          // If we don't have an email/website yet for this company, pick it up
+          // If we don't have an email/website/company_type yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
+          if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
         }
       }
     }
@@ -146,7 +147,7 @@ export async function POST(
     if (newCoNames.length > 0) {
       const results = await batchInsert(newCoNames, (n) => {
         const entry = companyEntries.get(n)!;
-        const detectedType = classifyCompanyType(n);
+        const detectedType = entry.company_type || classifyCompanyType(n);
         const website = entry.website || null;
         if (detectedType && website) {
           return {

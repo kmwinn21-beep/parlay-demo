@@ -281,4 +281,5 @@ export interface ParsedAttendee {
   company?: string;
   email?: string;
   website?: string;
+  company_type?: string;
 }
