@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
         [
           // Reassign all attendees from duplicate to master
           { sql: 'UPDATE attendees SET company_id = ? WHERE company_id = ?', args: [master_id, dupId] },
+          // Reassign child companies from duplicate to master
+          { sql: 'UPDATE companies SET parent_company_id = ? WHERE parent_company_id = ?', args: [master_id, dupId] },
           // Delete the duplicate company
           { sql: 'DELETE FROM companies WHERE id = ?', args: [dupId] },
         ],

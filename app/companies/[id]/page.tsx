@@ -32,9 +32,12 @@ interface Company {
   notes?: string;
   status?: string;
   assigned_user?: string;
+  parent_company_id?: number;
   created_at: string;
   attendees: Attendee[];
   conferences?: ConferenceItem[];
+  parent_company?: { id: number; name: string } | null;
+  child_companies?: { id: number; name: string; website: string | null; company_type: string | null; attendee_count: number }[];
 }
 
 function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
@@ -359,7 +362,17 @@ export default function CompanyDetailPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{company.name}</h1>
+                  <div>
+                    <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{company.name}</h1>
+                    {company.parent_company && (
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        Subsidiary of{' '}
+                        <Link href={`/companies/${company.parent_company.id}`} className="text-procare-bright-blue hover:underline">
+                          {company.parent_company.name}
+                        </Link>
+                      </p>
+                    )}
+                  </div>
                   <div className="flex gap-2 flex-shrink-0">
                     <button onClick={() => setIsEditing(true)} className="btn-secondary text-sm flex items-center gap-2">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -654,6 +667,33 @@ export default function CompanyDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Child / subsidiary companies */}
+          {company.child_companies && company.child_companies.length > 0 && (
+            <div className="card">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">
+                Communities ({company.child_companies.length})
+              </h2>
+              <div className="space-y-2">
+                {company.child_companies.map(child => (
+                  <Link
+                    key={child.id}
+                    href={`/companies/${child.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{child.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {child.company_type && <span className="text-xs text-gray-500">{child.company_type}</span>}
+                        <span className="text-xs text-gray-400">{child.attendee_count} attendees</span>
+                      </div>
+                    </div>
+                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>{/* end grid */}

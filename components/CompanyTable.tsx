@@ -17,6 +17,8 @@ interface Company {
   notes?: string;
   status?: string;
   assigned_user?: string;
+  parent_company_id?: number;
+  parent_company_name?: string;
   attendee_count: number;
   conference_count: number;
   conference_names?: string;
@@ -373,6 +375,11 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   <Link href={`/companies/${company.id}`} className="font-semibold text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
                     {company.name}
                   </Link>
+                  {company.parent_company_name && (
+                    <span className="text-[10px] text-gray-400 ml-1">
+                      (<Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">{company.parent_company_name}</Link>)
+                    </span>
+                  )}
                 </div>
                 <button onClick={() => handleDeleteOne(company.id, company.name)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -431,6 +438,13 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
                       {company.name}
                     </Link>
+                    {company.parent_company_name && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        <Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">
+                          {company.parent_company_name}
+                        </Link>
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">

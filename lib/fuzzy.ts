@@ -40,13 +40,14 @@ export async function findMatchingCompany(
 ): Promise<{ id: number; name: string } | null> {
   await dbReady;
   const result = await db.execute({
-    sql: 'SELECT id, name FROM companies',
+    sql: 'SELECT id, name, website FROM companies',
     args: [],
   });
 
   const companies = result.rows.map((r) => ({
     id: Number(r.id),
     name: String(r.name ?? ''),
+    website: r.website ? String(r.website) : null,
   }));
 
   if (companies.length === 0) return null;

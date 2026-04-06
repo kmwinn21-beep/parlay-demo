@@ -140,6 +140,7 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
+    `ALTER TABLE companies ADD COLUMN parent_company_id INTEGER REFERENCES companies(id)`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -233,6 +234,7 @@ export interface Company {
   notes?: string;
   status?: string;
   assigned_user?: string;
+  parent_company_id?: number;
   created_at: string;
   attendee_count?: number;
 }
@@ -272,4 +274,5 @@ export interface ParsedAttendee {
   title?: string;
   company?: string;
   email?: string;
+  website?: string;
 }
