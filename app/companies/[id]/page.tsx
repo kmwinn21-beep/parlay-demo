@@ -83,7 +83,6 @@ export default function CompanyDetailPage() {
   const [editData, setEditData] = useState<Partial<Company>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [attendeeSearch, setAttendeeSearch] = useState('');
   const [attendeePage, setAttendeePage] = useState(1);
   const ATTENDEE_PAGE_SIZE = 100;
   const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
@@ -235,14 +234,7 @@ export default function CompanyDetailPage() {
     }
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch]);
-
-  const filteredAttendees = (company?.attendees || []).filter((a) => {
-    if (!attendeeSearch) return true;
-    const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
-    return fullName.includes(attendeeSearch.toLowerCase()) ||
-      (a.title?.toLowerCase().includes(attendeeSearch.toLowerCase()));
-  });
+  const filteredAttendees = company?.attendees || [];
 
   const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
   const paginatedAttendees = filteredAttendees.slice((attendeePage - 1) * ATTENDEE_PAGE_SIZE, attendeePage * ATTENDEE_PAGE_SIZE);
@@ -348,60 +340,59 @@ export default function CompanyDetailPage() {
                 </select>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button onClick={handleSave} disabled={isSaving} className="btn-primary">
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? 'Saving...' : 'Save'}
               </button>
               <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="btn-danger">
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         ) : (
           <div>
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-xl bg-procare-gold flex items-center justify-center text-procare-dark-blue text-xl font-bold font-serif flex-shrink-0">
-                  {company.name[0]}
-                </div>
-                <div>
+            {/* Header: avatar, name, badges, actions */}
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-xl bg-procare-gold flex items-center justify-center text-procare-dark-blue text-xl font-bold font-serif flex-shrink-0">
+                {company.name[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
                   <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{company.name}</h1>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {company.company_type && (
-                      <span className="badge-blue">{company.company_type}</span>
-                    )}
-                    {company.profit_type && (
-                      <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
-                        {company.profit_type}
-                      </span>
-                    )}
-                    <span className="badge-gray">{company.attendees.length} attendees</span>
-                    {company.assigned_user && (
-                      <span className={`${getBadgeClass(company.assigned_user, colorMaps.user || {})} hidden md:inline-flex items-center gap-1`}>
-                        <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {company.assigned_user}
-                      </span>
-                    )}
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button onClick={() => setIsEditing(true)} className="btn-secondary text-sm flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span className="hidden sm:inline">Edit</span>
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setIsEditing(true)} className="btn-secondary text-sm flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span className="hidden sm:inline">Edit</span>
-                </button>
-                <button onClick={handleDelete} disabled={isDeleting} className="btn-danger text-sm flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  <span className="hidden sm:inline">Delete</span>
-                </button>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {company.company_type && (
+                    <span className="badge-blue">{company.company_type}</span>
+                  )}
+                  {company.profit_type && (
+                    <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
+                      {company.profit_type}
+                    </span>
+                  )}
+                  <span className="badge-gray">{company.attendees.length} attendees</span>
+                  {company.assigned_user && (
+                    <span className={`${getBadgeClass(company.assigned_user, colorMaps.user || {})} inline-flex items-center gap-1`}>
+                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {company.assigned_user}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
+            {/* Metadata fields */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Website</p>
                 {company.website ? (
@@ -409,7 +400,7 @@ export default function CompanyDetailPage() {
                     href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-procare-bright-blue hover:underline"
+                    className="text-sm text-procare-bright-blue hover:underline break-all"
                   >
                     {company.website.replace(/^https?:\/\//, '')}
                   </a>
@@ -424,50 +415,26 @@ export default function CompanyDetailPage() {
                 <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
               </div>
               {company.notes && (
-                <div className="md:col-span-3">
+                <div className="col-span-2 md:col-span-3">
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Notes</p>
                   <p className="text-sm text-gray-600">{company.notes}</p>
                 </div>
               )}
             </div>
-
-            {company.assigned_user && (
-              <div className="flex justify-end mt-4 md:hidden">
-                <span className={`${getBadgeClass(company.assigned_user, colorMaps.user || {})} items-center gap-1`}>
-                  <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  {company.assigned_user}
-                </span>
-              </div>
-            )}
           </div>
         )}
       </div>
 
       {/* Attendees */}
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4">
           <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
             Attendees ({company.attendees.length})
           </h2>
-          <div className="relative">
-            <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              value={attendeeSearch}
-              onChange={(e) => setAttendeeSearch(e.target.value)}
-              placeholder="Search attendees..."
-              className="input-field pl-9 w-48"
-            />
-          </div>
         </div>
 
         {filteredAttendees.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-4">
-            {attendeeSearch ? 'No attendees match your search.' : 'No attendees for this company yet.'}
-          </p>
+          <p className="text-sm text-gray-400 text-center py-4">No attendees for this company yet.</p>
         ) : (
           <>
             {/* Mobile card layout */}
