@@ -11,8 +11,17 @@ interface Conference {
   end_date: string;
   location: string;
   notes?: string;
+  internal_attendees?: string;
   created_at: string;
   attendee_count: number;
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0]?.substring(0, 2).toUpperCase() || '';
 }
 
 const MONTH_NAMES = [
@@ -321,9 +330,7 @@ export default function ConferencesPage() {
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider pl-1">{monthName}</h3>
 
               <div className="grid grid-cols-1 gap-3">
-                {monthConfs.map((conf) => {
-                  const { city, state } = parseLocation(conf.location);
-                  return (
+                {monthConfs.map((conf) => (
                     <Link
                       key={conf.id}
                       href={`/conferences/${conf.id}`}
@@ -351,10 +358,22 @@ export default function ConferencesPage() {
                               </svg>
                               {conf.location}
                             </span>
-                            {city && state && (
-                              <span className="badge-blue text-xs">{city}, {state}</span>
-                            )}
                           </div>
+                          {conf.internal_attendees && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {conf.internal_attendees.split(',').filter(Boolean).map((user, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-gray-300 bg-gray-50 text-xs text-gray-600"
+                                >
+                                  <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
+                                  {getInitials(user)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           {conf.notes && (
                             <p className="text-sm text-gray-500 mt-1.5 line-clamp-1">{conf.notes}</p>
                           )}
@@ -367,8 +386,7 @@ export default function ConferencesPage() {
                         </div>
                       </div>
                     </Link>
-                  );
-                })}
+                ))}
               </div>
             </div>
           ))}
