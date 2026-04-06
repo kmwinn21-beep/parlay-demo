@@ -124,7 +124,19 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ── Step 3: Batch-insert new companies ──
+        // ── Step 3a: Update existing companies with CSV-provided company_type ──
+        const existingToUpdate = uniqueCompanyNames.filter((n) => {
+          const id = companyIdCache.get(n);
+          return id !== undefined && id > 0 && companyTypeMap.has(n);
+        });
+        if (existingToUpdate.length > 0) {
+          await batchInsert(existingToUpdate, (n) => ({
+            sql: 'UPDATE companies SET company_type = ? WHERE id = ? AND (company_type IS NULL OR company_type = ?)',
+            args: [companyTypeMap.get(n)!, companyIdCache.get(n)!, companyTypeMap.get(n)!],
+          }));
+        }
+
+        // ── Step 3b: Batch-insert new companies ──
         const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
         if (newCoNames.length > 0) {
           const results = await batchInsert(newCoNames, (n) => {

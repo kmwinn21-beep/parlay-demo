@@ -421,7 +421,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
-                {company.company_type && <span className="badge-blue inline-flex items-center gap-1"><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
+                {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
                 {company.assigned_user && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
                     <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -480,7 +480,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                       </p>
                     )}
                   </td>
-                  <td className="px-3 py-3">{company.company_type ? <span className="badge-blue inline-flex items-center gap-1"><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-3">{company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
                     {company.assigned_user ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
