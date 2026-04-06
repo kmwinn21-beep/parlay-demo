@@ -145,6 +145,8 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE companies ADD COLUMN parent_company_id INTEGER REFERENCES companies(id)`,
     `ALTER TABLE companies ADD COLUMN entity_structure TEXT`,
     `ALTER TABLE companies ADD COLUMN wse INTEGER`,
+    `ALTER TABLE companies ADD COLUMN services TEXT`,
+    `ALTER TABLE companies ADD COLUMN icp TEXT DEFAULT 'False'`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -203,6 +205,15 @@ export async function initDb(): Promise<void> {
     { category: 'company_type', value: 'Operator', sort_order: 8 },
     { category: 'entity_structure', value: 'Parent', sort_order: 1 },
     { category: 'entity_structure', value: 'Child', sort_order: 2 },
+    { category: 'services', value: 'IL', sort_order: 1 },
+    { category: 'services', value: 'AL', sort_order: 2 },
+    { category: 'services', value: 'MC', sort_order: 3 },
+    { category: 'services', value: 'SNF', sort_order: 4 },
+    { category: 'services', value: 'CCRC', sort_order: 5 },
+    { category: 'services', value: 'Other', sort_order: 6 },
+    { category: 'services', value: 'N/A', sort_order: 7 },
+    { category: 'icp', value: 'True', sort_order: 1 },
+    { category: 'icp', value: 'False', sort_order: 2 },
   ];
   for (const seed of newCategorySeeds) {
     try {
@@ -243,6 +254,8 @@ export interface Company {
   parent_company_id?: number;
   entity_structure?: string;
   wse?: number;
+  services?: string[];
+  icp?: string;
   created_at: string;
   attendee_count?: number;
 }

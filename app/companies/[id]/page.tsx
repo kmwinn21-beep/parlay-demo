@@ -8,6 +8,7 @@ import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
+import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -38,6 +39,8 @@ interface Company {
   assigned_user?: string;
   parent_company_id?: number;
   entity_structure?: string;
+  services?: string[];
+  icp?: string;
   created_at: string;
   attendees: Attendee[];
   conferences?: ConferenceItem[];
@@ -107,10 +110,12 @@ export default function CompanyDetailPage() {
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
+  const [servicesOptions, setServicesOptions] = useState<string[]>([]);
+  const [icpOptions, setIcpOptions] = useState<string[]>([]);
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, allCompaniesRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=company_type'),
@@ -118,6 +123,8 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=action'),
         fetch('/api/config?category=user'),
         fetch('/api/config?category=entity_structure'),
+        fetch('/api/config?category=services'),
+        fetch('/api/config?category=icp'),
         fetch('/api/companies'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
@@ -132,6 +139,8 @@ export default function CompanyDetailPage() {
         wse: data.wse ?? '',
         assigned_user: data.assigned_user || '',
         entity_structure: data.entity_structure || '',
+        services: Array.isArray(data.services) ? data.services : [],
+        icp: data.icp || 'False',
       });
       if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
       if (compTypeRes.ok) setCompanyTypeOptions((await compTypeRes.json()).map((o: { value: string }) => o.value));
@@ -139,6 +148,8 @@ export default function CompanyDetailPage() {
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { value: string }) => o.value));
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
+      if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
+      if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value));
       if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
 
       // For parent companies, include child company IDs in meetings, follow-ups, and notes queries
@@ -323,7 +334,24 @@ export default function CompanyDetailPage() {
       <div className="card">
         {isEditing ? (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Company</h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Company</h2>
+              <div>
+                <label className="label">ICP</label>
+                <div className="inline-flex items-center rounded-lg border border-gray-200 p-1 bg-gray-50">
+                  {(icpOptions.length > 0 ? icpOptions : ['True', 'False']).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setEditData((p) => ({ ...p, icp: option }))}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${String(editData.icp || 'False') === option ? 'bg-procare-bright-blue text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="label">Company Name *</label>
@@ -408,6 +436,16 @@ export default function CompanyDetailPage() {
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
+              </div>
+              <div className="md:col-span-2">
+                <MultiSelectDropdown
+                  label="Services"
+                  options={servicesOptions}
+                  values={Array.isArray(editData.services) ? editData.services : []}
+                  onChange={(values) => setEditData((p) => ({ ...p, services: values }))}
+                  placeholder="Select services..."
+                  emptyMessage="No services configured. Add options in the Admin panel."
+                />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

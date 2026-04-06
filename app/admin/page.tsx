@@ -23,6 +23,8 @@ const CATEGORIES = [
   { key: 'next_steps', label: 'Next Steps' },
   { key: 'seniority', label: 'Seniority Levels' },
   { key: 'profit_type', label: 'Profit Types' },
+  { key: 'services', label: 'Services' },
+  { key: 'icp', label: 'ICP' },
   { key: 'user', label: 'Users' },
 ];
 
@@ -393,7 +395,7 @@ export default function AdminPage() {
       <BackButton />
       <div>
         <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Admin Panel</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage dropdown options for company types, statuses, actions, next steps, seniority levels, profit types, and users.</p>
+        <p className="text-sm text-gray-500 mt-1">Manage dropdown options for company types, statuses, actions, next steps, seniority levels, profit types, services, ICP, and users.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
