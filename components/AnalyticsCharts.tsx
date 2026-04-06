@@ -54,8 +54,14 @@ function buildSeniorityData(attendees: Attendee[]) {
 }
 
 function buildCompanyTypeData(attendees: Attendee[]) {
+  const seen = new Set<number>();
   const counts: Record<string, number> = {};
   for (const a of attendees) {
+    // Count each company only once (by company_id)
+    if (a.company_id != null) {
+      if (seen.has(a.company_id)) continue;
+      seen.add(a.company_id);
+    }
     const type = a.company_type || 'Other';
     counts[type] = (counts[type] || 0) + 1;
   }
@@ -71,9 +77,10 @@ interface CustomLabelProps {
   innerRadius: number;
   outerRadius: number;
   percent: number;
+  value: number;
 }
 
-function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }: CustomLabelProps) {
+function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, value }: CustomLabelProps) {
   if (percent < 0.05) return null;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
@@ -81,7 +88,7 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   return (
     <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={600}>
-      {`${(percent * 100).toFixed(0)}%`}
+      {value}
     </text>
   );
 }
@@ -91,6 +98,33 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
   const configOptions = useConfigOptions();
   const seniorityAll = buildSeniorityData(attendees);
   const companyTypeData = buildCompanyTypeData(attendees);
+
+  // Visibility toggles for company type and seniority charts
+  const [visibleCompanyTypes, setVisibleCompanyTypes] = useState<Set<string> | null>(null);
+  const [showCompanyTypeFilter, setShowCompanyTypeFilter] = useState(false);
+  const [visibleSeniorities, setVisibleSeniorities] = useState<Set<string> | null>(null);
+  const [showSeniorityFilter, setShowSeniorityFilter] = useState(false);
+
+  const allCompanyTypeNames = companyTypeData.map(d => d.name);
+  const allSeniorityNames = seniorityAll.map(d => d.name);
+
+  const effectiveVisibleCompanyTypes = visibleCompanyTypes ?? new Set(allCompanyTypeNames);
+  const effectiveVisibleSeniorities = visibleSeniorities ?? new Set(allSeniorityNames);
+
+  const filteredCompanyTypeData = companyTypeData.filter(d => effectiveVisibleCompanyTypes.has(d.name));
+  const filteredSeniorityData = seniorityAll.filter(d => effectiveVisibleSeniorities.has(d.name));
+
+  const toggleCompanyType = (name: string) => {
+    const current = new Set(effectiveVisibleCompanyTypes);
+    if (current.has(name)) current.delete(name); else current.add(name);
+    setVisibleCompanyTypes(current);
+  };
+
+  const toggleSeniority = (name: string) => {
+    const current = new Set(effectiveVisibleSeniorities);
+    if (current.has(name)) current.delete(name); else current.add(name);
+    setVisibleSeniorities(current);
+  };
 
   // Dynamic labels from Admin Panel config
   const actionLabels = configOptions.action || [];
@@ -175,24 +209,53 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Company Type Breakdown */}
         <div className="card">
-          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
-            Attendee Type Breakdown
-          </h3>
-          {companyTypeData.length === 0 ? (
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
+              Company Type Breakdown
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowCompanyTypeFilter(!showCompanyTypeFilter)}
+              className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+              title="Filter visible company types"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filter
+            </button>
+          </div>
+          {showCompanyTypeFilter && (
+            <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-3">
+              {allCompanyTypeNames.map((name) => (
+                <label key={name} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                  <input
+                    type="checkbox"
+                    checked={effectiveVisibleCompanyTypes.has(name)}
+                    onChange={() => toggleCompanyType(name)}
+                    className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                  />
+                  {name}
+                </label>
+              ))}
+            </div>
+          )}
+          {filteredCompanyTypeData.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No company type data available.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
-                  data={companyTypeData}
+                  data={filteredCompanyTypeData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
                   label={renderCustomLabel}
+                  innerRadius={50}
                   outerRadius={90}
                   dataKey="value"
                 >
-                  {companyTypeData.map((entry) => (
+                  {filteredCompanyTypeData.map((entry) => (
                     <Cell
                       key={entry.name}
                       fill={getHex(entry.name, colorMaps.company_type || {})}
@@ -211,24 +274,53 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
 
         {/* Seniority Distribution */}
         <div className="card">
-          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
-            Seniority Distribution — All Attendees
-          </h3>
-          {seniorityAll.length === 0 ? (
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
+              Attendee Seniority
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowSeniorityFilter(!showSeniorityFilter)}
+              className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+              title="Filter visible seniority levels"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filter
+            </button>
+          </div>
+          {showSeniorityFilter && (
+            <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-3">
+              {allSeniorityNames.map((name) => (
+                <label key={name} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                  <input
+                    type="checkbox"
+                    checked={effectiveVisibleSeniorities.has(name)}
+                    onChange={() => toggleSeniority(name)}
+                    className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                  />
+                  {name}
+                </label>
+              ))}
+            </div>
+          )}
+          {filteredSeniorityData.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No attendee data available.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
-                  data={seniorityAll}
+                  data={filteredSeniorityData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
                   label={renderCustomLabel}
+                  innerRadius={50}
                   outerRadius={90}
                   dataKey="value"
                 >
-                  {seniorityAll.map((entry) => (
+                  {filteredSeniorityData.map((entry) => (
                     <Cell
                       key={entry.name}
                       fill={getHex(entry.name, colorMaps.seniority || {})}
