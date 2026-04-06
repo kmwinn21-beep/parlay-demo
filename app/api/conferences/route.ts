@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Fuse from 'fuse.js';
 import { db, dbReady } from '@/lib/db';
 import { parseFile } from '@/lib/parsers';
+import {
+  buildCompanyMatcher,
+  buildAttendeeMatcher,
+  matchCompany,
+  matchAttendee,
+} from '@/lib/matching';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,20 +92,13 @@ export async function POST(request: NextRequest) {
           db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
         ]);
 
-        // ── Step 2: Build company lookup (exact + fuzzy) ──
+        // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
         type CoRow = { id: number; name: string };
         const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
           id: Number(r.id),
           name: String(r.name ?? ''),
         }));
-        const companyExactMap = new Map<string, number>(); // lowercase -> id
-        for (const c of existingCompanies) companyExactMap.set(c.name.toLowerCase().trim(), c.id);
-
-        const companyFuse = new Fuse(existingCompanies, {
-          keys: ['name'],
-          threshold: 0.3,
-          includeScore: true,
-        });
+        const companyMatcher = buildCompanyMatcher(existingCompanies);
 
         // Resolve company name -> id (or mark -1 = needs insert)
         const companyIdCache = new Map<string, number>(); // original cased name -> id
@@ -109,16 +107,11 @@ export async function POST(request: NextRequest) {
         const uniqueCompanyNames = Array.from(companyNameSet);
 
         for (const coName of uniqueCompanyNames) {
-          const key = coName.toLowerCase();
-          if (companyExactMap.has(key)) {
-            companyIdCache.set(coName, companyExactMap.get(key)!);
+          const hit = matchCompany(coName, existingCompanies, companyMatcher);
+          if (hit) {
+            companyIdCache.set(coName, hit.match.id);
           } else {
-            const hits = companyFuse.search(coName);
-            if (hits.length > 0 && (hits[0].score ?? 1) <= 0.3) {
-              companyIdCache.set(coName, hits[0].item.id);
-            } else {
-              companyIdCache.set(coName, -1); // new company
-            }
+            companyIdCache.set(coName, -1); // new company
           }
         }
 
@@ -135,20 +128,13 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ── Step 4: Build attendee lookup (exact + fuzzy) ──
+        // ── Step 4: Build attendee lookup (exact + normalised + fuzzy) ──
         type AtRow = { id: number; full_name: string };
         const existingAttendees: AtRow[] = existingAtRes.rows.map((r) => ({
           id: Number(r.id),
-          full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim().toLowerCase(),
+          full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(),
         }));
-        const attendeeExactMap = new Map<string, number>(); // "first last" lowercase -> id
-        for (const a of existingAttendees) attendeeExactMap.set(a.full_name, a.id);
-
-        const attendeeFuse = new Fuse(existingAttendees, {
-          keys: ['full_name'],
-          threshold: 0.3,
-          includeScore: true,
-        });
+        const attendeeMatcher = buildAttendeeMatcher(existingAttendees);
 
         // Resolve each attendee row (deduplicated by name)
         const attendeeIdCache = new Map<string, number>(); // "first last" lowercase -> id
@@ -163,26 +149,22 @@ export async function POST(request: NextRequest) {
           if (seen.has(key)) continue;
           seen.add(key);
 
-          if (attendeeExactMap.has(key)) {
-            attendeeIdCache.set(key, attendeeExactMap.get(key)!);
+          const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher);
+          if (hit) {
+            attendeeIdCache.set(key, hit.match.id);
           } else {
-            const hits = attendeeFuse.search(`${fname} ${lname}`);
-            if (hits.length > 0 && (hits[0].score ?? 1) <= 0.3) {
-              attendeeIdCache.set(key, hits[0].item.id);
-            } else {
-              // Mark for insertion
-              attendeeIdCache.set(key, -1);
-              const companyId = p.company?.trim()
-                ? (companyIdCache.get(p.company.trim()) ?? null)
-                : null;
-              newAttendees.push({
-                first_name: fname,
-                last_name: lname,
-                title: p.title?.trim() || undefined,
-                company_id: companyId && companyId > 0 ? companyId : null,
-                email: p.email?.trim() || undefined,
-              });
-            }
+            // Mark for insertion
+            attendeeIdCache.set(key, -1);
+            const companyId = p.company?.trim()
+              ? (companyIdCache.get(p.company.trim()) ?? null)
+              : null;
+            newAttendees.push({
+              first_name: fname,
+              last_name: lname,
+              title: p.title?.trim() || undefined,
+              company_id: companyId && companyId > 0 ? companyId : null,
+              email: p.email?.trim() || undefined,
+            });
           }
         }
 
