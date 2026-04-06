@@ -130,14 +130,37 @@ export function classifySeniority(title?: string): string {
 
   const t = title.toLowerCase();
 
-  const cSuiteTerms = ['ceo', 'cfo', 'coo', 'cto', 'cpo', 'cmo', 'chro', 'chief', 'president', 'founder', 'owner'];
-  if (cSuiteTerms.some((term) => t.includes(term))) return 'C-Suite';
+  // --- C-Suite (highest priority) ---
+  // Full phrases – checked first so "co-founder & chairman" → C-Suite
+  if (/\b(chief|president|founder|co-founder|cofounder|co founder|owner|co-owner|principal|principle|prinicipal)\b/.test(t)) return 'C-Suite';
+  // Common C-Suite acronyms (word-boundary to avoid false positives)
+  if (/\b(ceo|cfo|coo|cto|cpo|cmo|chro|cdo|cgo|cio|clo|cno|cro|cso|creo)\b/.test(t)) return 'C-Suite';
 
-  const vpTerms = ['vice president', 'vp', 'evp', 'svp', 'avp'];
-  if (vpTerms.some((term) => t.includes(term))) return 'VP Level';
+  // --- BOD (Board of Directors) ---
+  if (/\b(board|chairman|chairwoman|executive\s+chairman)\b/.test(t)) return 'BOD';
+  // "Chair" only when clearly a board role (e.g. "Chair - Healthcare")
+  if (/\bchair\b/.test(t) && !/\bchair(man|woman|person)\b/.test(t)) return 'BOD';
 
-  if (t.includes('director')) return 'Director';
-  if (t.includes('manager')) return 'Manager';
+  // --- Executive Director (before general Director check) ---
+  if (/\bexecutive\s+director\b/.test(t)) return 'ED';
+
+  // --- VP / SVP ---
+  if (/\b(vice\s+president|svp|evp|avp)\b/.test(t)) return 'VP/SVP';
+  if (/\bvp\b/.test(t)) return 'VP/SVP';
+  if (/\bcontroller\b/.test(t)) return 'VP/SVP';
+
+  // --- Director ---
+  if (/\bdirector\b/.test(t)) return 'Director';
+  if (/\bdon\b/.test(t)) return 'Director';
+
+  // --- Manager ---
+  if (/\bmanager\b/.test(t)) return 'Manager';
+
+  // --- Associate (standalone role, not "Associate Director" which is caught above) ---
+  if (/\bassociate\b/.test(t)) return 'Associate';
+
+  // --- Admin ---
+  if (/\bassistant\s+administrator\b/.test(t)) return 'Admin';
 
   return 'Other';
 }

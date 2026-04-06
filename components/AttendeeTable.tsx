@@ -110,7 +110,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
-  const [massEditFields, setMassEditFields] = useState<{ status?: string; title?: string; company_id?: string }>({});
+  const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string }>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
@@ -217,7 +217,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const handleMassEdit = async () => {
     const fields: Record<string, string | number | null> = {};
     if (massEditFields.status) fields.status = massEditFields.status;
-    if (massEditFields.title !== undefined && massEditFields.title !== '') fields.title = massEditFields.title;
+    if (massEditFields.seniority) fields.seniority = massEditFields.seniority;
     if (massEditFields.company_id) fields.company_id = parseInt(massEditFields.company_id);
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
@@ -330,9 +330,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               </select>
             </div>
             <div>
-              <label className="label text-xs">Title / Seniority Keyword</label>
-              <input value={massEditFields.title || ''} onChange={e => setMassEditFields(p => ({ ...p, title: e.target.value }))} placeholder="e.g. VP, Director, CEO" className="input-field w-48 text-sm" />
-              <p className="text-xs text-gray-400 mt-0.5">Seniority auto-detects from title unless overridden</p>
+              <label className="label text-xs">Seniority</label>
+              <select value={massEditFields.seniority || ''} onChange={e => setMassEditFields(p => ({ ...p, seniority: e.target.value }))} className="input-field w-48 text-sm">
+                <option value="">— no change —</option>
+                {seniorityConfigOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
             <div>
               <label className="label text-xs">Company</label>
