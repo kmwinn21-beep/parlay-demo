@@ -6,9 +6,6 @@ import {
   buildAttendeeMatcher,
   matchCompany,
   matchAttendee,
-  extractDomain,
-  extractDomainFromWebsite,
-  detectParentCompany,
 } from '@/lib/matching';
 
 async function batchInsert<T>(
@@ -123,16 +120,7 @@ export async function POST(
       }
     }
 
-    // Build a domain→company_name map from uploaded entries for cross-referencing
-    const uploadDomainMap = new Map<string, string>();
-    companyEntries.forEach((entry, coName) => {
-      const domain = extractDomain(entry.email, entry.website);
-      if (domain && !uploadDomainMap.has(domain)) {
-        uploadDomainMap.set(domain, coName);
-      }
-    });
-
-    // Phase 1: Match companies using name + domain matching
+    // Match companies using name + domain matching
     companyEntries.forEach((entry, coName) => {
       const hit = matchCompany(coName, existingCompanies, companyMatcher, entry.email, entry.website);
       if (hit) {
@@ -189,53 +177,6 @@ export async function POST(
       }
     }
 
-    // Phase 2: Parent/child detection
-    // Build a list of all companies (existing + newly created) with domain info
-    type ParentCandidate = { id: number; name: string; domain?: string | null };
-    const allCompanies: ParentCandidate[] = [
-      ...existingCompanies.map((c) => ({
-        id: c.id,
-        name: c.name,
-        domain: extractDomainFromWebsite(c.website ?? undefined),
-      })),
-    ];
-    // Add newly created companies with their domain info
-    companyEntries.forEach((entry, coName) => {
-      const coId = companyIdCache.get(coName);
-      if (coId && coId > 0 && !allCompanies.find((c) => c.id === coId)) {
-        allCompanies.push({
-          id: coId,
-          name: coName,
-          domain: extractDomain(entry.email, entry.website),
-        });
-      }
-    });
-
-    // For each new company in the upload, check if it's a child of an existing parent
-    const parentUpdates: Array<{ childId: number; parentId: number }> = [];
-
-    companyEntries.forEach((entry, coName) => {
-      const coId = companyIdCache.get(coName);
-      if (!coId || coId <= 0) return;
-
-      const childDomain = extractDomain(entry.email, entry.website);
-      // Only check companies other than this one as parent candidates
-      const candidates = allCompanies.filter((c) => c.id !== coId);
-      const parent = detectParentCompany(coName, childDomain, candidates);
-
-      if (parent) {
-        parentUpdates.push({ childId: coId, parentId: parent.id });
-      }
-    });
-
-    // Apply parent_company_id updates
-    if (parentUpdates.length > 0) {
-      await batchInsert(parentUpdates, (u) => ({
-        sql: 'UPDATE companies SET parent_company_id = ? WHERE id = ? AND parent_company_id IS NULL',
-        args: [u.parentId, u.childId],
-      }));
-    }
-
     // Attendees stay with their own company — child contacts are NOT redirected to the parent
     const resolveCompanyId = (coName: string): number | null => {
       const coId = companyIdCache.get(coName);
@@ -254,6 +195,8 @@ export async function POST(
     const attendeeIdCache = new Map<string, number>();
     type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string };
     const newAttendees: NewAttendee[] = [];
+    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null };
+    const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
     const seen = new Set<string>();
 
     for (const p of newEntries) {
@@ -266,6 +209,16 @@ export async function POST(
       const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher);
       if (hit) {
         attendeeIdCache.set(key, hit.match.id);
+        // Update the existing attendee's company, title, and email from the CSV
+        const companyId = p.company?.trim()
+          ? resolveCompanyId(p.company.trim())
+          : null;
+        existingAttendeeUpdates.push({
+          id: hit.match.id,
+          company_id: companyId && companyId > 0 ? companyId : null,
+          title: p.title?.trim() || null,
+          email: p.email?.trim() || null,
+        });
       } else {
         attendeeIdCache.set(key, -1);
         const companyId = p.company?.trim()
@@ -279,6 +232,14 @@ export async function POST(
           email: p.email?.trim() || undefined,
         });
       }
+    }
+
+    // Batch-update existing matched attendees with CSV company/title/email
+    if (existingAttendeeUpdates.length > 0) {
+      await batchInsert(existingAttendeeUpdates, (u) => ({
+        sql: 'UPDATE attendees SET company_id = ?, title = COALESCE(?, title), email = COALESCE(?, email) WHERE id = ?',
+        args: [u.company_id, u.title, u.email, u.id],
+      }));
     }
 
     // Batch-insert new attendees
