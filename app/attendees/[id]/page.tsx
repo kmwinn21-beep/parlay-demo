@@ -434,7 +434,11 @@ export default function AttendeeDetailPage() {
                     </div>
                     {attendee.company_name ? (
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
+                        {attendee.company_id ? (
+                          <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
+                        )}
                         {attendee.company_website && <a href={attendee.company_website.startsWith('http') ? attendee.company_website : `https://${attendee.company_website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-procare-bright-blue hover:underline">{attendee.company_website}</a>}
                       </div>
                     ) : <p className="text-sm text-gray-400">—</p>}
