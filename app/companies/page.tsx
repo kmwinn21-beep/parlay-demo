@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
+import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { useForm } from 'react-hook-form';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 
@@ -24,6 +25,8 @@ interface AddCompanyForm {
   website: string;
   profit_type: string;
   company_type: string;
+  services: string[];
+  icp: string;
   notes: string;
   assigned_user: string;
 }
@@ -34,11 +37,21 @@ export default function CompaniesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<AddCompanyForm>();
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AddCompanyForm>({
+    defaultValues: { services: [], icp: 'False' },
+  });
   const configOptions = useConfigOptions();
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
+  const servicesOptions = configOptions.services ?? [];
+  const icpOptions = configOptions.icp ?? ['True', 'False'];
   const userOptions = configOptions.user ?? [];
+  const selectedServices = watch('services') ?? [];
+  const icp = watch('icp') || 'False';
+
+  useEffect(() => {
+    register('services');
+  }, [register]);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -69,7 +82,7 @@ export default function CompaniesPage() {
         throw new Error(err.error || 'Failed to create');
       }
       toast.success('Company added!');
-      reset();
+      reset({ services: [], icp: 'False' });
       setShowAddForm(false);
       fetchCompanies();
     } catch (err) {
@@ -149,6 +162,32 @@ export default function CompaniesPage() {
                 <input {...register('notes')} className="input-field" placeholder="Any notes..." />
               </div>
               <div>
+                <MultiSelectDropdown
+                  label="Services"
+                  options={servicesOptions}
+                  values={selectedServices}
+                  onChange={(values) => setValue('services', values)}
+                  placeholder="Select services..."
+                  emptyMessage="No services configured. Add options in the Admin panel."
+                />
+              </div>
+              <div>
+                <label className="label">ICP</label>
+                <div className="inline-flex items-center rounded-lg border border-gray-200 p-1 bg-gray-50">
+                  {icpOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setValue('icp', option)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${icp === option ? 'bg-procare-bright-blue text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                <input type="hidden" {...register('icp')} />
+              </div>
+              <div>
                 <label className="label">Assigned User</label>
                 <select {...register('assigned_user')} className="input-field">
                   <option value="">Select user...</option>
@@ -162,7 +201,7 @@ export default function CompaniesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowAddForm(false); reset(); }}
+                onClick={() => { setShowAddForm(false); reset({ services: [], icp: 'False' }); }}
                 className="btn-secondary"
               >
                 Cancel

@@ -58,6 +58,11 @@ export async function PUT(
             sql: 'UPDATE companies SET profit_type = ? WHERE profit_type = ?',
             args: [value, oldValue],
           });
+        } else if (category === 'icp') {
+          await db.execute({
+            sql: 'UPDATE companies SET icp = ? WHERE icp = ?',
+            args: [value, oldValue],
+          });
         } else if (category === 'next_steps') {
           await db.execute({
             sql: 'UPDATE conference_attendee_details SET next_steps = ? WHERE next_steps = ?',
@@ -72,6 +77,16 @@ export async function PUT(
                     ','
                   )
                   WHERE ',' || COALESCE(action, '') || ',' LIKE '%,' || ? || ',%'`,
+            args: [oldValue, value, oldValue],
+          });
+        } else if (category === 'services') {
+          await db.execute({
+            sql: `UPDATE companies
+                  SET services = TRIM(
+                    REPLACE(',' || COALESCE(services, '') || ',', ',' || ? || ',', ',' || ? || ','),
+                    ','
+                  )
+                  WHERE ',' || COALESCE(services, '') || ',' LIKE '%,' || ? || ',%'`,
             args: [oldValue, value, oldValue],
           });
         }

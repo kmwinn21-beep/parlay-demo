@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 
+function parseServices(value: unknown): string[] {
+  if (!value) return [];
+  return String(value)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function serializeServices(services: unknown): string | null {
+  if (!Array.isArray(services)) return null;
+  const cleaned = services.map((v) => String(v).trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned.join(',') : null;
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
@@ -79,7 +93,15 @@ export async function GET(
       ? { id: Number(parentResult.rows[0].id), name: String(parentResult.rows[0].name) }
       : null;
 
-    return NextResponse.json({ ...company, attendees, conferences, child_companies, parent_company });
+    return NextResponse.json({
+      ...company,
+      services: parseServices(company.services),
+      icp: company.icp ? String(company.icp) : 'False',
+      attendees,
+      conferences,
+      child_companies,
+      parent_company,
+    });
   } catch (error) {
     console.error('GET /api/companies/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch company' }, { status: 500 });
@@ -93,7 +115,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -108,11 +130,15 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ? WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ? WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp === 'True' ? 'True' : 'False', params.id],
     });
 
-    return NextResponse.json(updatedResult.rows[0]);
+    return NextResponse.json({
+      ...updatedResult.rows[0],
+      services: parseServices(updatedResult.rows[0].services),
+      icp: updatedResult.rows[0].icp ? String(updatedResult.rows[0].icp) : 'False',
+    });
   } catch (error) {
     console.error('PUT /api/companies/[id] error:', error);
     return NextResponse.json({ error: 'Failed to update company' }, { status: 500 });
