@@ -109,7 +109,7 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
+  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'meetings' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
   const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
@@ -423,11 +423,19 @@ export default function ConferenceDetailPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Conference</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+              <div>
                 <label className="label">Conference Name *</label>
                 <input
                   value={editData.name || ''}
                   onChange={(e) => setEditData((p) => ({ ...p, name: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">Location *</label>
+                <input
+                  value={editData.location || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, location: e.target.value }))}
                   className="input-field"
                 />
               </div>
@@ -447,23 +455,6 @@ export default function ConferenceDetailPage() {
                   value={editData.end_date || ''}
                   onChange={(e) => setEditData((p) => ({ ...p, end_date: e.target.value }))}
                   className="input-field"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">Location *</label>
-                <input
-                  value={editData.location || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, location: e.target.value }))}
-                  className="input-field"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">Notes</label>
-                <textarea
-                  value={editData.notes || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, notes: e.target.value }))}
-                  className="input-field resize-none"
-                  rows={3}
                 />
               </div>
               <div className="md:col-span-2" ref={internalDropdownRef}>
@@ -637,16 +628,22 @@ export default function ConferenceDetailPage() {
             Companies
           </button>
           <button
-            onClick={() => setActiveTab('analytics')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setActiveTab('meetings')}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'meetings' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
-            Analytics
+            Meetings{confMeetings.length > 0 ? ` (${confMeetings.length})` : ''}
           </button>
           <button
             onClick={() => setActiveTab('follow-ups')}
             className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
-            Meetings &amp; Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
+            Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Analytics
           </button>
           <button
             onClick={() => setActiveTab('notes')}
@@ -1000,128 +997,126 @@ export default function ConferenceDetailPage() {
       )}
 
       {/* Follow Ups Tab */}
-      {activeTab === 'follow-ups' && (
-        <div className="space-y-6">
-          {/* Meetings */}
-          <div className="card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
-                Meetings
-                {confMeetings.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-gray-500">
-                    ({confMeetings.length})
-                  </span>
-                )}
-              </h2>
-            </div>
-            <MeetingsTable
-              meetings={confMeetings}
-              actionOptions={actionOptions}
-              colorMap={colorMaps.action || {}}
-              userOptions={userOptions}
-              onOutcomeChange={async (meetingId, outcome) => {
-                setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
-                try {
-                  const res = await fetch('/api/meetings', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: meetingId, outcome }),
-                  });
-                  if (!res.ok) throw new Error();
-                  toast.success('Outcome updated.');
-                } catch {
-                  fetchConference();
-                  toast.error('Failed to update outcome.');
-                }
-              }}
-              onDelete={async (meetingId) => {
-                if (!confirm('Delete this meeting? This cannot be undone.')) return;
-                try {
-                  const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
-                  if (!res.ok) throw new Error();
-                  toast.success('Meeting deleted.');
-                  fetchConference();
-                } catch {
-                  toast.error('Failed to delete meeting.');
-                }
-              }}
-              onEdit={async (meetingId, data) => {
-                setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
-                try {
-                  const res = await fetch(`/api/meetings/${meetingId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                  });
-                  if (!res.ok) throw new Error();
-                  toast.success('Meeting updated.');
-                } catch {
-                  fetchConference();
-                  toast.error('Failed to update meeting.');
-                }
-              }}
-            />
+      {activeTab === 'meetings' && (
+        <div className="card p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+              Meetings
+              {confMeetings.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({confMeetings.length})
+                </span>
+              )}
+            </h2>
           </div>
+          <MeetingsTable
+            meetings={confMeetings}
+            actionOptions={actionOptions}
+            colorMap={colorMaps.action || {}}
+            userOptions={userOptions}
+            onOutcomeChange={async (meetingId, outcome) => {
+              setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
+              try {
+                const res = await fetch('/api/meetings', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: meetingId, outcome }),
+                });
+                if (!res.ok) throw new Error();
+                toast.success('Outcome updated.');
+              } catch {
+                fetchConference();
+                toast.error('Failed to update outcome.');
+              }
+            }}
+            onDelete={async (meetingId) => {
+              if (!confirm('Delete this meeting? This cannot be undone.')) return;
+              try {
+                const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error();
+                toast.success('Meeting deleted.');
+                fetchConference();
+              } catch {
+                toast.error('Failed to delete meeting.');
+              }
+            }}
+            onEdit={async (meetingId, data) => {
+              setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+              try {
+                const res = await fetch(`/api/meetings/${meetingId}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(data),
+                });
+                if (!res.ok) throw new Error();
+                toast.success('Meeting updated.');
+              } catch {
+                fetchConference();
+                toast.error('Failed to update meeting.');
+              }
+            }}
+          />
+        </div>
+      )}
 
-          {/* Follow Ups */}
-          <div className="card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Follow Ups</h2>
-                {confFollowUps.length > 0 && (
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    {confFollowUps.filter(f => !f.completed).length} pending · {confFollowUps.filter(f => f.completed).length} completed
-                  </p>
-                )}
-              </div>
+      {activeTab === 'follow-ups' && (
+        <div className="card p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Follow Ups</h2>
+              {confFollowUps.length > 0 && (
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {confFollowUps.filter(f => !f.completed).length} pending · {confFollowUps.filter(f => f.completed).length} completed
+                </p>
+              )}
             </div>
-            <FollowUpsTable
-              followUps={confFollowUps}
-              onToggle={async (attendeeId, conferenceId, completed) => {
+          </div>
+          <FollowUpsTable
+            followUps={confFollowUps}
+            onToggle={async (attendeeId, conferenceId, completed) => {
+              setConfFollowUps(prev =>
+                prev.map(fu =>
+                  fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+                    ? { ...fu, completed }
+                    : fu
+                )
+              );
+              try {
+                const res = await fetch('/api/follow-ups', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+                });
+                if (!res.ok) throw new Error();
+              } catch {
                 setConfFollowUps(prev =>
                   prev.map(fu =>
                     fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                      ? { ...fu, completed }
+                      ? { ...fu, completed: !completed }
                       : fu
                   )
                 );
-                try {
-                  const res = await fetch('/api/follow-ups', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
-                  });
-                  if (!res.ok) throw new Error();
-                } catch {
-                  setConfFollowUps(prev =>
-                    prev.map(fu =>
-                      fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                        ? { ...fu, completed: !completed }
-                        : fu
-                    )
-                  );
-                  toast.error('Failed to update.');
-                }
-              }}
-              onDelete={async (attendeeId, conferenceId) => {
-                if (!confirm('Are you sure you want to delete this follow-up?')) return;
-                const prev = confFollowUps;
-                setConfFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
-                try {
-                  const res = await fetch('/api/follow-ups', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
-                  });
-                  if (!res.ok) throw new Error();
-                  toast.success('Follow-up deleted.');
-                } catch {
-                  setConfFollowUps(prev);
-                  toast.error('Failed to delete follow-up.');
-                }
-              }}
-            />
-          </div>
+                toast.error('Failed to update.');
+              }
+            }}
+            onDelete={async (attendeeId, conferenceId) => {
+              if (!confirm('Are you sure you want to delete this follow-up?')) return;
+              const prev = confFollowUps;
+              setConfFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
+              try {
+                const res = await fetch('/api/follow-ups', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
+                });
+                if (!res.ok) throw new Error();
+                toast.success('Follow-up deleted.');
+              } catch {
+                setConfFollowUps(prev);
+                toast.error('Failed to delete follow-up.');
+              }
+            }}
+          />
         </div>
       )}
     </div>
