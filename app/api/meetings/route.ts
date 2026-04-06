@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
           a.title,
           co.id AS company_id,
           co.name AS company_name,
+          co.wse AS company_wse,
           c.name AS conference_name
         FROM meetings m
         JOIN attendees a ON m.attendee_id = a.id
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest) {
         title: r.title != null ? String(r.title) : null,
         company_id: r.company_id != null ? Number(r.company_id) : null,
         company_name: r.company_name != null ? String(r.company_name) : null,
+        company_wse: r.company_wse != null ? Number(r.company_wse) : null,
         conference_name: String(r.conference_name ?? ''),
       }))
     );

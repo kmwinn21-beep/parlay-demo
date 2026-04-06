@@ -21,6 +21,7 @@ export interface Meeting {
   title: string | null;
   company_id: number | null;
   company_name: string | null;
+  company_wse: number | null;
   conference_name: string;
 }
 
@@ -39,11 +40,11 @@ function formatMeetingTime(t: string) {
   return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function MeetingInfoTooltip({ scheduledBy, location, attendees }: { scheduledBy?: string | null; location?: string | null; attendees?: string | null }) {
+function MeetingInfoTooltip({ scheduledBy, location, attendees, companyWse }: { scheduledBy?: string | null; location?: string | null; attendees?: string | null; companyWse?: number | null }) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const attendeeList = attendees ? attendees.split(',').map(n => n.trim()).filter(Boolean) : [];
-  const hasContent = scheduledBy || location || attendeeList.length > 0;
+  const hasContent = scheduledBy || location || attendeeList.length > 0 || companyWse != null;
 
   const handleMouseEnter = () => {
     if (!ref.current || !hasContent) return;
@@ -82,6 +83,15 @@ function MeetingInfoTooltip({ scheduledBy, location, attendees }: { scheduledBy?
               <div>
                 <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Additional Attendees</p>
                 <ul className="space-y-1">{attendeeList.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+              </div>
+            )}
+            {companyWse != null && (
+              <div>
+                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">WSE</p>
+                <p className="flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                  {Number(companyWse).toLocaleString()}
+                </p>
               </div>
             )}
           </div>
@@ -481,7 +491,7 @@ export function MeetingsTable({
                       <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
                     ) : null}
                   </div>
-                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
+                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
                   {onEdit && (
                     <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-procare-bright-blue p-1 rounded" title="Edit">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -550,8 +560,8 @@ export function MeetingsTable({
                 />
               ) : (
               <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
-                <td className="px-3 py-2 font-medium text-gray-800">
-                  <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug">
+                <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                  <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
                     {m.first_name} {m.last_name}
                   </Link>
                 </td>
@@ -597,7 +607,7 @@ export function MeetingsTable({
                   />
                 </td>
                 <td className="px-3 py-2">
-                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} />
+                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
                 </td>
                 {hasActions && (
                   <td className="px-3 py-2">

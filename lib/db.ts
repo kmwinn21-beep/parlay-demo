@@ -144,6 +144,7 @@ export async function initDb(): Promise<void> {
     )`,
     `ALTER TABLE companies ADD COLUMN parent_company_id INTEGER REFERENCES companies(id)`,
     `ALTER TABLE companies ADD COLUMN entity_structure TEXT`,
+    `ALTER TABLE companies ADD COLUMN wse INTEGER`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -241,6 +242,7 @@ export interface Company {
   assigned_user?: string;
   parent_company_id?: number;
   entity_structure?: string;
+  wse?: number;
   created_at: string;
   attendee_count?: number;
 }

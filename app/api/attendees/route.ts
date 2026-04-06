@@ -10,7 +10,7 @@ export async function GET() {
                    COALESCE(a.status, 'Unknown') as status,
                    a.seniority,
                    a.created_at,
-                   co.name as company_name, co.company_type,
+                   co.name as company_name, co.company_type, co.wse as company_wse,
                    COUNT(DISTINCT ca.conference_id) as conference_count,
                    GROUP_CONCAT(DISTINCT c.name) as conference_names,
                    CASE WHEN EXISTS (

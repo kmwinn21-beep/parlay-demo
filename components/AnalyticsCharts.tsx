@@ -450,8 +450,8 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
               <tbody className="divide-y divide-gray-100">
                 {activityRows.map(({ attendee, detail }) => (
                   <tr key={attendee.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">
-                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline">
+                    <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
+                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>

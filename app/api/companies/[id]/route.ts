@@ -93,7 +93,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -108,8 +108,8 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ? WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ? WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, params.id],
     });
 
     return NextResponse.json(updatedResult.rows[0]);
