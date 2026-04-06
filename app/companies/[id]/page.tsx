@@ -103,6 +103,8 @@ export default function CompanyDetailPage() {
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
   const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
   const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
+  const [attendeesExpanded, setAttendeesExpanded] = useState(false);
+  const ATTENDEE_COLLAPSED_COUNT = 4;
 
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
@@ -309,7 +311,10 @@ export default function CompanyDetailPage() {
   const filteredAttendees = company?.attendees || [];
 
   const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
-  const paginatedAttendees = filteredAttendees.slice((attendeePage - 1) * ATTENDEE_PAGE_SIZE, attendeePage * ATTENDEE_PAGE_SIZE);
+  const displayedAttendees = attendeesExpanded
+    ? filteredAttendees
+    : filteredAttendees.slice(0, ATTENDEE_COLLAPSED_COUNT);
+  const paginatedAttendees = displayedAttendees;
 
   if (isLoading) {
     return (
@@ -605,10 +610,25 @@ export default function CompanyDetailPage() {
 
       {/* Attendees */}
       <div className="card">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
             Attendees ({company.attendees.length})
           </h2>
+          {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
+            <button
+              onClick={() => setAttendeesExpanded(prev => !prev)}
+              className="text-gray-400 hover:text-procare-bright-blue transition-colors p-1 rounded hover:bg-gray-50"
+              title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {attendeesExpanded ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                )}
+              </svg>
+            </button>
+          )}
         </div>
 
         {filteredAttendees.length === 0 ? (
@@ -745,16 +765,6 @@ export default function CompanyDetailPage() {
           </>
         )}
 
-        {/* Attendee pagination */}
-        {attendeeTotalPages > 1 && (
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-            <span className="text-xs text-gray-500">Page {attendeePage} of {attendeeTotalPages} · {filteredAttendees.length} total</span>
-            <div className="flex items-center gap-2">
-              <button disabled={attendeePage === 1} onClick={() => setAttendeePage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
-              <button disabled={attendeePage >= attendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
-            </div>
-          </div>
-        )}
       </div>
 
           {/* Meetings */}
