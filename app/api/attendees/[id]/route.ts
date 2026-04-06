@@ -136,6 +136,10 @@ export async function PATCH(
       setClauses.push('seniority = ?');
       args.push(seniority || null);
     }
+    if ('company_id' in body) {
+      setClauses.push('company_id = ?');
+      args.push(company_id || null);
+    }
 
     if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

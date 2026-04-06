@@ -17,6 +17,7 @@ interface ConfigOption {
 
 const CATEGORIES = [
   { key: 'company_type', label: 'Company Types' },
+  { key: 'entity_structure', label: 'Entity Structure' },
   { key: 'status', label: 'Status Options' },
   { key: 'action', label: 'Actions' },
   { key: 'next_steps', label: 'Next Steps' },

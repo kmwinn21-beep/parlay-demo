@@ -7,7 +7,7 @@ export async function GET() {
     await dbReady;
     const result = await db.execute({
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes,
-              COALESCE(co.status, 'Unknown') as status, co.assigned_user, co.parent_company_id, co.created_at,
+              COALESCE(co.status, 'Unknown') as status, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at,
               COUNT(DISTINCT a.id) as attendee_count,
               COUNT(DISTINCT ca.conference_id) as conference_count,
               GROUP_CONCAT(DISTINCT conf.name) as conference_names,
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     await dbReady;
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
     const resolvedType = company_type || classifyCompanyType(name) || null;
 
     const result = await db.execute({
-      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
-      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null],
+      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user, entity_structure) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null, entity_structure || null],
     });
 
     return NextResponse.json(result.rows[0], { status: 201 });
