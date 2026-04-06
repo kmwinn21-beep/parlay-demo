@@ -408,7 +408,7 @@ export default function AttendeeDetailPage() {
                       <div className="flex flex-wrap gap-2 mt-2">
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
                         <span className={`badge ${statusCls}`}>{currentStatus}</span>
-                        {attendee.company_type && <span className="badge-blue">{attendee.company_type}</span>}
+                        {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
                       </div>
                     </div>
                   </div>

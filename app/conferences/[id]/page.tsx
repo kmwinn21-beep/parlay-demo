@@ -855,7 +855,7 @@ export default function ConferenceDetailPage() {
                           ) : (
                             <span className="text-xs text-gray-700">{attendee.company_name}</span>
                           )}
-                          {attendee.company_type && <span className="badge-blue text-xs">{attendee.company_type}</span>}
+                          {attendee.company_type && <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>}
                         </div>
                       )}
                       <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
@@ -936,7 +936,7 @@ export default function ConferenceDetailPage() {
                       </td>
                       <td className="px-4 py-3">
                         {attendee.company_type ? (
-                          <span className="badge-blue text-xs">{attendee.company_type}</span>
+                          <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}

@@ -142,6 +142,18 @@ export async function POST(
       }
     });
 
+    // Update existing matched companies with CSV-provided company_type
+    const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
+      const id = companyIdCache.get(n);
+      return id !== undefined && id > 0 && entry.company_type;
+    });
+    if (existingToUpdate.length > 0) {
+      await batchInsert(existingToUpdate, ([n, entry]) => ({
+        sql: 'UPDATE companies SET company_type = ? WHERE id = ? AND (company_type IS NULL OR company_type = ?)',
+        args: [entry.company_type!, companyIdCache.get(n)!, entry.company_type!],
+      }));
+    }
+
     // Batch-insert new companies (with auto-detected company type and website)
     const newCoNames = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
     if (newCoNames.length > 0) {
