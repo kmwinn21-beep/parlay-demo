@@ -7,7 +7,7 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { ids, fields } = body as {
       ids: number[];
-      fields: { status?: string; title?: string; company_id?: number | null; notes?: string };
+      fields: { status?: string; title?: string; seniority?: string; company_id?: number | null; notes?: string };
     };
 
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -22,6 +22,7 @@ export async function PATCH(request: NextRequest) {
 
     if ('status' in fields) { setClauses.push('status = ?'); baseArgs.push(fields.status || 'Unknown'); }
     if ('title' in fields) { setClauses.push('title = ?'); baseArgs.push(fields.title || null); }
+    if ('seniority' in fields) { setClauses.push('seniority = ?'); baseArgs.push(fields.seniority || null); }
     if ('company_id' in fields) { setClauses.push('company_id = ?'); baseArgs.push(fields.company_id ?? null); }
     if ('notes' in fields) { setClauses.push('notes = ?'); baseArgs.push(fields.notes || null); }
 
