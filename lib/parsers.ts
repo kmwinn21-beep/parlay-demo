@@ -48,6 +48,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const titleCol = findColumn(headers, 'title', 'job_title', 'job title', 'position', 'role', 'designation');
   const companyCol = findColumn(headers, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm');
   const emailCol = findColumn(headers, 'email', 'email_address', 'email address', 'e_mail', 'e-mail');
+  const websiteCol = findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website');
 
   const attendees: ParsedAttendee[] = [];
 
@@ -93,6 +94,9 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
     }
     if (emailCol && row[emailCol]) {
       attendee.email = String(row[emailCol]).trim();
+    }
+    if (websiteCol && row[websiteCol]) {
+      attendee.website = String(row[websiteCol]).trim();
     }
 
     attendees.push(attendee);

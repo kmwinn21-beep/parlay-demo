@@ -8,6 +8,127 @@ export const FUZZY_MATCH_THRESHOLD = 0.35;
 /** Fuse.js score threshold for attendee name fuzzy matches (slightly tighter). */
 export const ATTENDEE_FUZZY_THRESHOLD = 0.3;
 
+/* ─── Domain extraction ───────────────────────────────────────────────────── */
+
+/** Common email providers whose domains should NOT be used for company matching. */
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com',
+  'icloud.com', 'mail.com', 'protonmail.com', 'proton.me', 'zoho.com',
+  'ymail.com', 'live.com', 'msn.com', 'me.com', 'mac.com',
+  'comcast.net', 'att.net', 'sbcglobal.net', 'verizon.net', 'cox.net',
+  'charter.net', 'earthlink.net', 'optonline.net', 'frontier.com',
+]);
+
+/**
+ * Extract the root domain from an email address.
+ * Returns null for free email providers (gmail, yahoo, etc.) since those
+ * cannot reliably identify a company.
+ */
+export function extractDomainFromEmail(email?: string): string | null {
+  if (!email) return null;
+  const at = email.lastIndexOf('@');
+  if (at < 0) return null;
+  const domain = email.slice(at + 1).toLowerCase().trim();
+  if (!domain || !domain.includes('.')) return null;
+  if (FREE_EMAIL_DOMAINS.has(domain)) return null;
+  return domain;
+}
+
+/**
+ * Extract the root domain from a website URL.
+ * Handles URLs with or without protocol, strips www prefix.
+ */
+export function extractDomainFromWebsite(website?: string): string | null {
+  if (!website) return null;
+  let url = website.trim().toLowerCase();
+  // Strip protocol
+  url = url.replace(/^https?:\/\//, '');
+  // Strip path/query
+  url = url.split('/')[0].split('?')[0].split('#')[0];
+  // Strip www prefix
+  url = url.replace(/^www\./, '');
+  // Strip port
+  url = url.split(':')[0];
+  if (!url || !url.includes('.')) return null;
+  return url;
+}
+
+/**
+ * Extract a domain from any available source — email first, then website.
+ */
+export function extractDomain(email?: string, website?: string): string | null {
+  return extractDomainFromEmail(email) ?? extractDomainFromWebsite(website);
+}
+
+/* ─── Parent/child company detection ──────────────────────────────────────── */
+
+/**
+ * Common words that appear in child company names for senior living communities.
+ * These words + a parent name suggest a parent/child relationship.
+ * e.g., "Sunrise of Arlington" is a child of "Sunrise Senior Living"
+ */
+const CHILD_INDICATORS = [
+  ' of ', ' at ', ' - ', ' — ', ' – ',
+];
+
+/**
+ * Try to detect if `childName` is a child/community of any company in `parentCandidates`.
+ * Uses two strategies:
+ *  1. Name containment: does the child name start with or contain a known parent name?
+ *  2. Domain matching: do they share the same email domain?
+ *
+ * Returns the parent company ID if a parent is found, otherwise null.
+ */
+export function detectParentCompany<T extends { id: number; name: string; domain?: string | null }>(
+  childName: string,
+  childDomain: string | null,
+  parentCandidates: T[],
+): T | null {
+  const childNorm = childName.toLowerCase().trim();
+
+  // Strategy 1: Name-based detection
+  // Check if child name starts with a known parent's normalized name
+  // plus a child indicator (e.g., "Sunrise of Arlington" starts with "sunrise" + " of ")
+  for (const parent of parentCandidates) {
+    const parentNorm = parent.name.toLowerCase().trim();
+    // Skip very short names to avoid false positives
+    if (parentNorm.length < 4) continue;
+    // Skip if names are the same
+    if (childNorm === parentNorm) continue;
+
+    // Check: "ParentName of Location" or "ParentName - Location" patterns
+    for (const indicator of CHILD_INDICATORS) {
+      if (childNorm.startsWith(parentNorm + indicator)) {
+        return parent;
+      }
+      // Also handle "ParentName at Location" where parent name is a significant prefix
+      const parentWords = parentNorm.split(/\s+/);
+      if (parentWords.length >= 2) {
+        const parentPrefix = parentWords.slice(0, 2).join(' ');
+        if (parentPrefix.length >= 4 && childNorm.startsWith(parentPrefix + indicator)) {
+          return parent;
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Domain-based detection
+  // If the child has a domain and it matches a parent's domain, link them
+  if (childDomain) {
+    for (const parent of parentCandidates) {
+      if (parent.domain && parent.domain === childDomain) {
+        // Only treat as parent if names are different (otherwise it's the same company)
+        const parentNorm = parent.name.toLowerCase().trim();
+        if (childNorm !== parentNorm) {
+          return parent;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 /* ─── Company-name normalisation ───────────────────────────────────────────── */
 
 /** Legal-entity suffixes that rarely distinguish one company from another. */
@@ -95,13 +216,17 @@ export type MatchResult<T> = { match: T; score: number } | null;
  *  1. Exact match on raw lowercase name
  *  2. Exact match on normalised name (strips LLC, Inc, etc.)
  *  3. Exact match on deep-normalised name (also strips Group, Holdings, etc.)
- *  4. Fuzzy match via Fuse.js on normalised names
+ *  4. Domain match: if an email or website domain matches an existing company's domain
+ *  5. Fuzzy match via Fuse.js on normalised names
  */
-export function matchCompany<T extends { id: number; name: string }>(
+export function matchCompany<T extends { id: number; name: string; website?: string | null }>(
   companyName: string,
   existing: T[],
   /** Pre-built maps & fuse index — pass from buildCompanyMatcher for batch use */
-  matcher?: CompanyMatcher<T>
+  matcher?: CompanyMatcher<T>,
+  /** Optional email/website for domain-based matching */
+  email?: string,
+  website?: string,
 ): MatchResult<T> {
   const m = matcher ?? buildCompanyMatcher(existing);
   const rawKey = companyName.toLowerCase().trim();
@@ -120,7 +245,14 @@ export function matchCompany<T extends { id: number; name: string }>(
   const deepExact = m.deepMap.get(deepKey);
   if (deepExact) return { match: deepExact, score: 0.1 };
 
-  // Stage 4: fuzzy on normalised names
+  // Stage 4: domain-based matching
+  const domain = extractDomain(email, website);
+  if (domain) {
+    const domainHit = m.domainMap.get(domain);
+    if (domainHit) return { match: domainHit, score: 0.15 };
+  }
+
+  // Stage 5: fuzzy on normalised names
   const hits = m.fuse.search(normKey);
   if (hits.length > 0 && (hits[0].score ?? 1) <= FUZZY_MATCH_THRESHOLD) {
     return { match: hits[0].item._original, score: hits[0].score ?? FUZZY_MATCH_THRESHOLD };
@@ -129,20 +261,22 @@ export function matchCompany<T extends { id: number; name: string }>(
   return null;
 }
 
-export interface CompanyMatcher<T extends { id: number; name: string }> {
+export interface CompanyMatcher<T extends { id: number; name: string; website?: string | null }> {
   exactMap: Map<string, T>;
   normMap: Map<string, T>;
   deepMap: Map<string, T>;
+  domainMap: Map<string, T>;
   fuse: Fuse<{ _normalized: string; _original: T }>;
 }
 
 /** Pre-build company lookup structures once for batch matching. */
-export function buildCompanyMatcher<T extends { id: number; name: string }>(
+export function buildCompanyMatcher<T extends { id: number; name: string; website?: string | null }>(
   existing: T[]
 ): CompanyMatcher<T> {
   const exactMap = new Map<string, T>();
   const normMap = new Map<string, T>();
   const deepMap = new Map<string, T>();
+  const domainMap = new Map<string, T>();
 
   const fuseItems: { _normalized: string; _original: T }[] = [];
 
@@ -156,6 +290,12 @@ export function buildCompanyMatcher<T extends { id: number; name: string }>(
     if (!normMap.has(normKey)) normMap.set(normKey, c);
     if (!deepMap.has(deepKey)) deepMap.set(deepKey, c);
 
+    // Build domain map from company website
+    const domain = extractDomainFromWebsite(c.website ?? undefined);
+    if (domain && !domainMap.has(domain)) {
+      domainMap.set(domain, c);
+    }
+
     fuseItems.push({ _normalized: normKey, _original: c });
   }
 
@@ -165,7 +305,7 @@ export function buildCompanyMatcher<T extends { id: number; name: string }>(
     includeScore: true,
   });
 
-  return { exactMap, normMap, deepMap, fuse };
+  return { exactMap, normMap, deepMap, domainMap, fuse };
 }
 
 /**

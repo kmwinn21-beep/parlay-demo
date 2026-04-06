@@ -18,30 +18,47 @@ export async function GET(
 
     const company = companyResult.rows[0];
 
-    const attendeesResult = await db.execute({
-      sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count,
-                   GROUP_CONCAT(DISTINCT conf.name) as conference_names
-            FROM attendees a
-            LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
-            LEFT JOIN conferences conf ON ca.conference_id = conf.id
-            WHERE a.company_id = ?
-            GROUP BY a.id
-            ORDER BY a.last_name, a.first_name`,
-      args: [params.id],
-    });
+    const [attendeesResult, confsResult, childCompaniesResult, parentResult] = await Promise.all([
+      db.execute({
+        sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count,
+                     GROUP_CONCAT(DISTINCT conf.name) as conference_names
+              FROM attendees a
+              LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
+              LEFT JOIN conferences conf ON ca.conference_id = conf.id
+              WHERE a.company_id = ?
+              GROUP BY a.id
+              ORDER BY a.last_name, a.first_name`,
+        args: [params.id],
+      }),
+      db.execute({
+        sql: `SELECT DISTINCT c.id, c.name, c.start_date, c.end_date, c.location
+              FROM conferences c
+              JOIN conference_attendees ca ON c.id = ca.conference_id
+              JOIN attendees a ON ca.attendee_id = a.id
+              WHERE a.company_id = ?
+              ORDER BY c.start_date DESC`,
+        args: [params.id],
+      }),
+      db.execute({
+        sql: `SELECT c.id, c.name, c.website, c.company_type,
+                     COUNT(DISTINCT a.id) as attendee_count
+              FROM companies c
+              LEFT JOIN attendees a ON c.id = a.company_id
+              WHERE c.parent_company_id = ?
+              GROUP BY c.id
+              ORDER BY c.name`,
+        args: [params.id],
+      }),
+      company.parent_company_id
+        ? db.execute({
+            sql: 'SELECT id, name FROM companies WHERE id = ?',
+            args: [company.parent_company_id],
+          })
+        : Promise.resolve({ rows: [] }),
+    ]);
 
     const attendees = attendeesResult.rows.map((r) => ({ ...r }));
 
-    // Distinct conferences this company has attended, most recent first
-    const confsResult = await db.execute({
-      sql: `SELECT DISTINCT c.id, c.name, c.start_date, c.end_date, c.location
-            FROM conferences c
-            JOIN conference_attendees ca ON c.id = ca.conference_id
-            JOIN attendees a ON ca.attendee_id = a.id
-            WHERE a.company_id = ?
-            ORDER BY c.start_date DESC`,
-      args: [params.id],
-    });
     const conferences = confsResult.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name),
@@ -50,7 +67,19 @@ export async function GET(
       location: String(r.location),
     }));
 
-    return NextResponse.json({ ...company, attendees, conferences });
+    const child_companies = childCompaniesResult.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name),
+      website: r.website ? String(r.website) : null,
+      company_type: r.company_type ? String(r.company_type) : null,
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+
+    const parent_company = parentResult.rows.length > 0
+      ? { id: Number(parentResult.rows[0].id), name: String(parentResult.rows[0].name) }
+      : null;
+
+    return NextResponse.json({ ...company, attendees, conferences, child_companies, parent_company });
   } catch (error) {
     console.error('GET /api/companies/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch company' }, { status: 500 });
@@ -135,10 +164,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
 
-    // Unlink attendees from this company, then delete the company
+    // Unlink attendees from this company, clear child references, then delete the company
     await db.batch(
       [
         { sql: 'UPDATE attendees SET company_id = NULL WHERE company_id = ?', args: [params.id] },
+        { sql: 'UPDATE companies SET parent_company_id = NULL WHERE parent_company_id = ?', args: [params.id] },
         { sql: 'DELETE FROM companies WHERE id = ?', args: [params.id] },
       ],
       'write'

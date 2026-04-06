@@ -88,15 +88,16 @@ export async function POST(request: NextRequest) {
       if (valid.length > 0) {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes] = await Promise.all([
-          db.execute({ sql: 'SELECT id, name FROM companies', args: [] }),
+          db.execute({ sql: 'SELECT id, name, website FROM companies', args: [] }),
           db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
         ]);
 
         // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
-        type CoRow = { id: number; name: string };
+        type CoRow = { id: number; name: string; website?: string | null };
         const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
           id: Number(r.id),
           name: String(r.name ?? ''),
+          website: r.website ? String(r.website) : null,
         }));
         const companyMatcher = buildCompanyMatcher(existingCompanies);
 

@@ -6,6 +6,9 @@ import {
   buildAttendeeMatcher,
   matchCompany,
   matchAttendee,
+  extractDomain,
+  extractDomainFromWebsite,
+  detectParentCompany,
 } from '@/lib/matching';
 
 async function batchInsert<T>(
@@ -88,49 +91,148 @@ export async function POST(
 
     // Load all existing companies and attendees for matching
     const [existingCoRes, existingAtRes] = await Promise.all([
-      db.execute({ sql: 'SELECT id, name FROM companies', args: [] }),
+      db.execute({ sql: 'SELECT id, name, website FROM companies', args: [] }),
       db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
     ]);
 
-    // Build company lookup (exact + normalised + fuzzy)
-    type CoRow = { id: number; name: string };
+    // Build company lookup (exact + normalised + domain + fuzzy)
+    type CoRow = { id: number; name: string; website?: string | null };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
+      website: r.website ? String(r.website) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
+    // Collect unique company names with associated email/website for domain matching
     const companyIdCache = new Map<string, number>();
-    const companyNameSet = new Set<string>();
-    newEntries.forEach((p) => { if (p.company?.trim()) companyNameSet.add(p.company.trim()); });
-    const uniqueCompanyNames = Array.from(companyNameSet);
+    type CompanyEntry = { name: string; email?: string; website?: string };
+    const companyEntries = new Map<string, CompanyEntry>();
+    for (const p of newEntries) {
+      if (p.company?.trim()) {
+        const coName = p.company.trim();
+        if (!companyEntries.has(coName)) {
+          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim() });
+        } else {
+          // If we don't have an email/website yet for this company, pick it up
+          const existing = companyEntries.get(coName)!;
+          if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
+          if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
+        }
+      }
+    }
 
-    for (const coName of uniqueCompanyNames) {
-      const hit = matchCompany(coName, existingCompanies, companyMatcher);
+    // Build a domain→company_name map from uploaded entries for cross-referencing
+    const uploadDomainMap = new Map<string, string>();
+    companyEntries.forEach((entry, coName) => {
+      const domain = extractDomain(entry.email, entry.website);
+      if (domain && !uploadDomainMap.has(domain)) {
+        uploadDomainMap.set(domain, coName);
+      }
+    });
+
+    // Phase 1: Match companies using name + domain matching
+    companyEntries.forEach((entry, coName) => {
+      const hit = matchCompany(coName, existingCompanies, companyMatcher, entry.email, entry.website);
       if (hit) {
         companyIdCache.set(coName, hit.match.id);
       } else {
         companyIdCache.set(coName, -1);
       }
-    }
+    });
 
-    // Batch-insert new companies (with auto-detected company type)
-    const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
+    // Batch-insert new companies (with auto-detected company type and website)
+    const newCoNames = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
     if (newCoNames.length > 0) {
       const results = await batchInsert(newCoNames, (n) => {
+        const entry = companyEntries.get(n)!;
         const detectedType = classifyCompanyType(n);
-        return {
-          sql: detectedType
-            ? 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id'
-            : 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-          args: detectedType ? [n, detectedType] : [n],
-        };
+        const website = entry.website || null;
+        if (detectedType && website) {
+          return {
+            sql: 'INSERT INTO companies (name, company_type, website) VALUES (?, ?, ?) RETURNING id',
+            args: [n, detectedType, website],
+          };
+        } else if (detectedType) {
+          return {
+            sql: 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id',
+            args: [n, detectedType],
+          };
+        } else if (website) {
+          return {
+            sql: 'INSERT INTO companies (name, website) VALUES (?, ?) RETURNING id',
+            args: [n, website],
+          };
+        } else {
+          return {
+            sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
+            args: [n],
+          };
+        }
       });
       for (let i = 0; i < newCoNames.length; i++) {
         const id = Number(results[i]?.rows[0]?.id ?? 0);
         if (id > 0) companyIdCache.set(newCoNames[i], id);
       }
     }
+
+    // Phase 2: Parent/child detection
+    // Build a list of all companies (existing + newly created) with domain info
+    type ParentCandidate = { id: number; name: string; domain?: string | null };
+    const allCompanies: ParentCandidate[] = [
+      ...existingCompanies.map((c) => ({
+        id: c.id,
+        name: c.name,
+        domain: extractDomainFromWebsite(c.website ?? undefined),
+      })),
+    ];
+    // Add newly created companies with their domain info
+    companyEntries.forEach((entry, coName) => {
+      const coId = companyIdCache.get(coName);
+      if (coId && coId > 0 && !allCompanies.find((c) => c.id === coId)) {
+        allCompanies.push({
+          id: coId,
+          name: coName,
+          domain: extractDomain(entry.email, entry.website),
+        });
+      }
+    });
+
+    // For each new company in the upload, check if it's a child of an existing parent
+    const parentUpdates: Array<{ childId: number; parentId: number }> = [];
+    const childToParentRedirect = new Map<number, number>();
+
+    companyEntries.forEach((entry, coName) => {
+      const coId = companyIdCache.get(coName);
+      if (!coId || coId <= 0) return;
+
+      const childDomain = extractDomain(entry.email, entry.website);
+      // Only check companies other than this one as parent candidates
+      const candidates = allCompanies.filter((c) => c.id !== coId);
+      const parent = detectParentCompany(coName, childDomain, candidates);
+
+      if (parent) {
+        parentUpdates.push({ childId: coId, parentId: parent.id });
+        childToParentRedirect.set(coId, parent.id);
+      }
+    });
+
+    // Apply parent_company_id updates
+    if (parentUpdates.length > 0) {
+      await batchInsert(parentUpdates, (u) => ({
+        sql: 'UPDATE companies SET parent_company_id = ? WHERE id = ? AND parent_company_id IS NULL',
+        args: [u.parentId, u.childId],
+      }));
+    }
+
+    // Phase 3: Redirect attendees from child companies to parent companies
+    // When a child entity is detected, assign the attendee to the parent company instead
+    const resolveCompanyId = (coName: string): number | null => {
+      const coId = companyIdCache.get(coName);
+      if (!coId || coId <= 0) return null;
+      // If this company is a child, redirect to parent
+      return childToParentRedirect.get(coId) ?? coId;
+    };
 
     // Build attendee lookup (exact + normalised + fuzzy)
     type AtRow = { id: number; full_name: string };
@@ -158,7 +260,7 @@ export async function POST(
       } else {
         attendeeIdCache.set(key, -1);
         const companyId = p.company?.trim()
-          ? (companyIdCache.get(p.company.trim()) ?? null)
+          ? resolveCompanyId(p.company.trim())
           : null;
         newAttendees.push({
           first_name: fname,
