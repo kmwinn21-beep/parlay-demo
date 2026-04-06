@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { classifyCompanyType } from '@/lib/parsers';
 
 export async function GET() {
   try {
@@ -42,9 +43,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
     }
 
+    // Auto-detect company type if not explicitly provided
+    const resolvedType = company_type || classifyCompanyType(name) || null;
+
     const result = await db.execute({
       sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null],
+      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null],
     });
 
     return NextResponse.json(result.rows[0], { status: 201 });

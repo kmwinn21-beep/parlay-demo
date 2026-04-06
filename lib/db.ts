@@ -194,6 +194,8 @@ export async function initDb(): Promise<void> {
     { category: 'profit_type', value: 'For-Profit', sort_order: 1 },
     { category: 'profit_type', value: 'Non-Profit', sort_order: 2 },
     { category: 'action', value: 'Pending', sort_order: 5 },
+    { category: 'company_type', value: 'Capital', sort_order: 7 },
+    { category: 'company_type', value: 'Operator', sort_order: 8 },
   ];
   for (const seed of newCategorySeeds) {
     try {
