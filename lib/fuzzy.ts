@@ -1,5 +1,8 @@
-import Fuse from 'fuse.js';
 import { db, dbReady } from './db';
+import {
+  matchCompany,
+  matchAttendee,
+} from './matching';
 
 export async function findMatchingAttendee(
   firstName: string,
@@ -24,17 +27,9 @@ export async function findMatchingAttendee(
     full_name: `${a.first_name} ${a.last_name}`,
   }));
 
-  const fuse = new Fuse(searchList, {
-    keys: ['full_name'],
-    threshold: 0.3,
-    includeScore: true,
-  });
-
-  const fullName = `${firstName} ${lastName}`;
-  const results = fuse.search(fullName);
-
-  if (results.length > 0 && results[0].score !== undefined && results[0].score <= 0.3) {
-    return results[0].item;
+  const hit = matchAttendee(firstName, lastName, searchList);
+  if (hit) {
+    return { id: hit.match.id, first_name: hit.match.full_name.split(' ')[0] ?? '', last_name: hit.match.full_name.split(' ').slice(1).join(' ') };
   }
 
   return null;
@@ -56,16 +51,9 @@ export async function findMatchingCompany(
 
   if (companies.length === 0) return null;
 
-  const fuse = new Fuse(companies, {
-    keys: ['name'],
-    threshold: 0.3,
-    includeScore: true,
-  });
-
-  const results = fuse.search(companyName);
-
-  if (results.length > 0 && results[0].score !== undefined && results[0].score <= 0.3) {
-    return results[0].item;
+  const hit = matchCompany(companyName, companies);
+  if (hit) {
+    return hit.match;
   }
 
   return null;

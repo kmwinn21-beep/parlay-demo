@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Fuse from 'fuse.js';
 import { db, dbReady } from '@/lib/db';
 import { parseFile, classifyCompanyType } from '@/lib/parsers';
+import {
+  buildCompanyMatcher,
+  buildAttendeeMatcher,
+  matchCompany,
+  matchAttendee,
+} from '@/lib/matching';
 
 async function batchInsert<T>(
   items: T[],
@@ -87,20 +92,13 @@ export async function POST(
       db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
     ]);
 
-    // Build company lookup
+    // Build company lookup (exact + normalised + fuzzy)
     type CoRow = { id: number; name: string };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
     }));
-    const companyExactMap = new Map<string, number>();
-    for (const c of existingCompanies) companyExactMap.set(c.name.toLowerCase().trim(), c.id);
-
-    const companyFuse = new Fuse(existingCompanies, {
-      keys: ['name'],
-      threshold: 0.3,
-      includeScore: true,
-    });
+    const companyMatcher = buildCompanyMatcher(existingCompanies);
 
     const companyIdCache = new Map<string, number>();
     const companyNameSet = new Set<string>();
@@ -108,16 +106,11 @@ export async function POST(
     const uniqueCompanyNames = Array.from(companyNameSet);
 
     for (const coName of uniqueCompanyNames) {
-      const key = coName.toLowerCase();
-      if (companyExactMap.has(key)) {
-        companyIdCache.set(coName, companyExactMap.get(key)!);
+      const hit = matchCompany(coName, existingCompanies, companyMatcher);
+      if (hit) {
+        companyIdCache.set(coName, hit.match.id);
       } else {
-        const hits = companyFuse.search(coName);
-        if (hits.length > 0 && (hits[0].score ?? 1) <= 0.3) {
-          companyIdCache.set(coName, hits[0].item.id);
-        } else {
-          companyIdCache.set(coName, -1);
-        }
+        companyIdCache.set(coName, -1);
       }
     }
 
@@ -139,20 +132,13 @@ export async function POST(
       }
     }
 
-    // Build attendee lookup
+    // Build attendee lookup (exact + normalised + fuzzy)
     type AtRow = { id: number; full_name: string };
     const existingAttendees: AtRow[] = existingAtRes.rows.map((r) => ({
       id: Number(r.id),
-      full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim().toLowerCase(),
+      full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(),
     }));
-    const attendeeExactMap = new Map<string, number>();
-    for (const a of existingAttendees) attendeeExactMap.set(a.full_name, a.id);
-
-    const attendeeFuse = new Fuse(existingAttendees, {
-      keys: ['full_name'],
-      threshold: 0.3,
-      includeScore: true,
-    });
+    const attendeeMatcher = buildAttendeeMatcher(existingAttendees);
 
     const attendeeIdCache = new Map<string, number>();
     type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string };
@@ -166,25 +152,21 @@ export async function POST(
       if (seen.has(key)) continue;
       seen.add(key);
 
-      if (attendeeExactMap.has(key)) {
-        attendeeIdCache.set(key, attendeeExactMap.get(key)!);
+      const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher);
+      if (hit) {
+        attendeeIdCache.set(key, hit.match.id);
       } else {
-        const hits = attendeeFuse.search(`${fname} ${lname}`);
-        if (hits.length > 0 && (hits[0].score ?? 1) <= 0.3) {
-          attendeeIdCache.set(key, hits[0].item.id);
-        } else {
-          attendeeIdCache.set(key, -1);
-          const companyId = p.company?.trim()
-            ? (companyIdCache.get(p.company.trim()) ?? null)
-            : null;
-          newAttendees.push({
-            first_name: fname,
-            last_name: lname,
-            title: p.title?.trim() || undefined,
-            company_id: companyId && companyId > 0 ? companyId : null,
-            email: p.email?.trim() || undefined,
-          });
-        }
+        attendeeIdCache.set(key, -1);
+        const companyId = p.company?.trim()
+          ? (companyIdCache.get(p.company.trim()) ?? null)
+          : null;
+        newAttendees.push({
+          first_name: fname,
+          last_name: lname,
+          title: p.title?.trim() || undefined,
+          company_id: companyId && companyId > 0 ? companyId : null,
+          email: p.email?.trim() || undefined,
+        });
       }
     }
 
