@@ -16,6 +16,7 @@ interface Company {
   company_type?: string;
   notes?: string;
   status?: string;
+  assigned_user?: string;
   attendee_count: number;
   conference_count: number;
   conference_names?: string;
@@ -115,7 +116,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, status: 140, attendees: 110, conferences: 120, actions: 110 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110 };
 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const colorMaps = useConfigColors();
@@ -380,6 +381,14 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
                 {company.company_type && <span className="badge-blue">{company.company_type}</span>}
+                {company.assigned_user && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    {company.assigned_user}
+                  </span>
+                )}
               </div>
               <div className="mt-2 ml-6 flex items-center gap-4">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -405,6 +414,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 </th>
                 <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>
                 <th className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>
                 <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
                 <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
@@ -413,7 +423,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
@@ -423,6 +433,18 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     </Link>
                   </td>
                   <td className="px-3 py-3">{company.company_type ? <span className="badge-blue">{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-3">
+                    {company.assigned_user ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                        <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {company.assigned_user}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3"><span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span></td>
                   <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
                   <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>

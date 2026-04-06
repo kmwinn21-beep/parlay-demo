@@ -110,7 +110,7 @@ export default function ConferenceDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
-  const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
+  const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
