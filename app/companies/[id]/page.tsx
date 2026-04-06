@@ -11,7 +11,7 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
-import { effectiveSeniority } from '@/lib/parsers';
+import { effectiveSeniority, classifyICP } from '@/lib/parsers';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -136,7 +136,7 @@ export default function CompanyDetailPage() {
         profit_type: data.profit_type || '',
         company_type: data.company_type || '',
         notes: data.notes || '',
-        wse: data.wse ?? '',
+        wse: data.wse ?? undefined,
         assigned_user: data.assigned_user || '',
         entity_structure: data.entity_structure || '',
         services: Array.isArray(data.services) ? data.services : [],
@@ -182,6 +182,16 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     fetchCompany();
   }, [fetchCompany]);
+
+  // Auto-classify ICP when WSE, Company Type, or Services change in edit mode
+  useEffect(() => {
+    if (!isEditing) return;
+    const services = Array.isArray(editData.services) ? editData.services.join(',') : '';
+    const wse = editData.wse != null ? Number(editData.wse) : null;
+    const icp = classifyICP(wse, editData.company_type || null, services || null);
+    setEditData((p) => ({ ...p, icp }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, editData.wse, editData.company_type, editData.services]);
 
   const handleSave = async () => {
     if (!editData.name) {
@@ -468,7 +478,16 @@ export default function CompanyDetailPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{company.name}</h1>
+                    <h1 className="text-2xl font-bold text-procare-dark-blue font-serif flex items-center gap-2">
+                      {company.name}
+                      {company.icp === 'True' && (
+                        <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-green-100 flex-shrink-0">
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      )}
+                    </h1>
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
                         Subsidiary of{' '}
@@ -522,7 +541,7 @@ export default function CompanyDetailPage() {
             </div>
 
             {/* Metadata fields */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Website</p>
                 {company.website ? (
@@ -555,6 +574,29 @@ export default function CompanyDetailPage() {
                     {company.wse.toLocaleString()}
                   </span>
                 ) : <p className="text-sm text-gray-400">—</p>}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Services</p>
+                {company.services && company.services.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {company.services.map(s => (
+                      <span key={s} className="badge-gray text-xs">{s}</span>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-gray-400">—</p>}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">ICP</p>
+                {company.icp === 'True' ? (
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    True
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-500">False</span>
+                )}
               </div>
             </div>
           </div>

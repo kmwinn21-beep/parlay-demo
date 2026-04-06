@@ -52,6 +52,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const companyTypeCol = findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type');
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
   const wseCol = findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees');
+  const servicesCol = findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting');
 
   const attendees: ParsedAttendee[] = [];
 
@@ -111,6 +112,12 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
       const rawWse = String(row[wseCol]).trim().replace(/[^0-9]/g, '');
       if (rawWse) {
         attendee.wse = rawWse;
+      }
+    }
+    if (servicesCol && row[servicesCol]) {
+      const rawServices = String(row[servicesCol]).trim();
+      if (rawServices) {
+        attendee.services = parseServicesValue(rawServices);
       }
     }
 
@@ -270,4 +277,61 @@ export function classifyCompanyType(companyName?: string): string | null {
   if (operatorScore === maxScore) return 'Operator';
   if (capitalScore === maxScore) return 'Capital';
   return 'Vendor';
+}
+
+/**
+ * Parse a raw services string from a CSV/Excel cell into a comma-separated
+ * string of canonical service codes (IL, AL, MC, SNF, CCRC, Other).
+ *
+ * Values may be separated by semicolons, commas, colons, dashes, slashes,
+ * pipes, or other delimiters. Each token is matched against known variations.
+ */
+export function parseServicesValue(raw: string): string {
+  // Split on common delimiters: ; , : / \ | and also whitespace-padded -
+  const tokens = raw.split(/[;,:\\/|]+|\s+-\s+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+
+  const matched = new Set<string>();
+
+  for (const token of tokens) {
+    // Exact abbreviation matches
+    if (token === 'il') { matched.add('IL'); continue; }
+    if (token === 'al') { matched.add('AL'); continue; }
+    if (token === 'mc') { matched.add('MC'); continue; }
+    if (token === 'snf') { matched.add('SNF'); continue; }
+    if (token === 'ccrc') { matched.add('CCRC'); continue; }
+
+    // Full-text / variation matches
+    if (/\bindependent\s*living\b/.test(token)) { matched.add('IL'); continue; }
+    if (/\bassisted\s*living\b/.test(token)) { matched.add('AL'); continue; }
+    if (/\bmemory\s*care\b/.test(token)) { matched.add('MC'); continue; }
+    if (/\bskilled\s*nursing\b/.test(token)) { matched.add('SNF'); continue; }
+    if (/\bnursing\s*home\b/.test(token)) { matched.add('SNF'); continue; }
+    if (/\bcontinuing\s*care\s*retirement\s*communit/.test(token)) { matched.add('CCRC'); continue; }
+    if (/\blife\s*plan\s*communit/.test(token)) { matched.add('CCRC'); continue; }
+  }
+
+  if (matched.size === 0) return '';
+  return Array.from(matched).join(',');
+}
+
+/**
+ * Determine if a company meets the Ideal Customer Profile (ICP) criteria.
+ * Requirements:
+ *   - WSE between 250 and 6,000 (inclusive)
+ *   - Company Type is "Operator"
+ *   - Services include at least one of: AL, MC, SNF, CCRC
+ */
+export function classifyICP(
+  wse: number | null | undefined,
+  companyType: string | null | undefined,
+  services: string | null | undefined
+): string {
+  if (!wse || wse < 250 || wse > 6000) return 'False';
+  if (!companyType || companyType !== 'Operator') return 'False';
+  if (!services) return 'False';
+
+  const serviceList = services.split(',').map((s) => s.trim());
+  const icpServices = ['AL', 'MC', 'SNF', 'CCRC'];
+  const hasIcpService = serviceList.some((s) => icpServices.includes(s));
+  return hasIcpService ? 'True' : 'False';
 }
