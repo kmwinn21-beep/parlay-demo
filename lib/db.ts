@@ -285,4 +285,5 @@ export interface ParsedAttendee {
   website?: string;
   company_type?: string;
   assigned_user?: string;
+  wse?: string;
 }

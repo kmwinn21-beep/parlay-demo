@@ -93,28 +93,29 @@ export async function POST(
 
     // Load all existing companies and attendees for matching
     const [existingCoRes, existingAtRes] = await Promise.all([
-      db.execute({ sql: 'SELECT id, name, website FROM companies', args: [] }),
+      db.execute({ sql: 'SELECT id, name, website, parent_company_id FROM companies', args: [] }),
       db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
     ]);
 
     // Build company lookup (exact + normalised + domain + fuzzy)
-    type CoRow = { id: number; name: string; website?: string | null };
+    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
       website: r.website ? String(r.website) : null,
+      parent_company_id: r.parent_company_id ? Number(r.parent_company_id) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
     // Collect unique company names with associated email/website/company_type/assigned_user for domain matching
     const companyIdCache = new Map<string, number>();
-    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string };
+    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string; wse?: number };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of valid) {
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: p.assigned_user?.trim() });
+          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: p.assigned_user?.trim(), wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined });
         } else {
           // If we don't have an email/website/company_type/assigned_user yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
@@ -122,6 +123,10 @@ export async function POST(
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
           if (!existing.assigned_user && p.assigned_user?.trim()) existing.assigned_user = p.assigned_user.trim();
+          if (!existing.wse && p.wse?.trim()) {
+            const wseVal = parseInt(p.wse.trim(), 10);
+            if (!isNaN(wseVal) && wseVal > 0) existing.wse = wseVal;
+          }
         }
       }
     }
@@ -136,23 +141,48 @@ export async function POST(
       }
     });
 
+    // Redirect WSE values from child companies to their parent companies
+    const parentWseUpdates = new Map<number, number>(); // parent company id -> wse value
+    for (const [coName, entry] of Array.from(companyEntries.entries())) {
+      if (!entry.wse) continue;
+      const coId = companyIdCache.get(coName);
+      if (!coId || coId <= 0) continue;
+      const company = existingCompanies.find((c) => c.id === coId);
+      if (company?.parent_company_id) {
+        // Child company: redirect WSE to parent, clear from child entry
+        if (!parentWseUpdates.has(company.parent_company_id)) {
+          parentWseUpdates.set(company.parent_company_id, entry.wse);
+        }
+        entry.wse = undefined;
+      }
+    }
+
+    // Apply redirected WSE values to parent companies
+    if (parentWseUpdates.size > 0) {
+      await batchInsert(Array.from(parentWseUpdates.entries()), ([parentId, wseVal]) => ({
+        sql: 'UPDATE companies SET wse = COALESCE(?, wse) WHERE id = ?',
+        args: [wseVal, parentId],
+      }));
+    }
+
     // Update existing matched companies with CSV-provided fields
     const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
       const id = companyIdCache.get(n);
-      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website);
+      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse);
     });
     if (existingToUpdate.length > 0) {
       await batchInsert(existingToUpdate, ([n, entry]) => ({
         sql: `UPDATE companies SET
           company_type = COALESCE(?, company_type),
           assigned_user = COALESCE(?, assigned_user),
-          website = COALESCE(?, website)
+          website = COALESCE(?, website),
+          wse = COALESCE(?, wse)
           WHERE id = ?`,
-        args: [entry.company_type || null, entry.assigned_user || null, entry.website || null, companyIdCache.get(n)!],
+        args: [entry.company_type || null, entry.assigned_user || null, entry.website || null, entry.wse ?? null, companyIdCache.get(n)!],
       }));
     }
 
-    // Batch-insert new companies (with auto-detected company type, website, and assigned_user)
+    // Batch-insert new companies (with auto-detected company type, website, assigned_user, and wse)
     const newCoNames = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
     if (newCoNames.length > 0) {
       const results = await batchInsert(newCoNames, (n) => {
@@ -160,9 +190,10 @@ export async function POST(
         const detectedType = entry.company_type || classifyCompanyType(n);
         const website = entry.website || null;
         const assignedUser = entry.assigned_user || null;
+        const wse = entry.wse ?? null;
         return {
-          sql: 'INSERT INTO companies (name, company_type, website, assigned_user) VALUES (?, ?, ?, ?) RETURNING id',
-          args: [n, detectedType || null, website, assignedUser],
+          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse) VALUES (?, ?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, assignedUser, wse],
         };
       });
       for (let i = 0; i < newCoNames.length; i++) {
