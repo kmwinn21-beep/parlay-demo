@@ -16,7 +16,7 @@ interface Conference { id: number; name: string; start_date: string; end_date: s
 
 interface Attendee {
   id: number; first_name: string; last_name: string; title?: string;
-  company_id?: number; company_name?: string; company_type?: string; company_website?: string;
+  company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
   email?: string; notes?: string; action?: string; next_steps?: string;
   next_steps_notes?: string; status?: string; seniority?: string; created_at: string; conferences: Conference[];
 }
@@ -424,7 +424,17 @@ export default function AttendeeDetailPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Company</p>
+                      {attendee.company_assigned_user && (
+                        <span className={`${getBadgeClass(attendee.company_assigned_user, colorMaps.user || {})} inline-flex items-center gap-1`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                            <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                          </svg>
+                          {attendee.company_assigned_user}
+                        </span>
+                      )}
+                    </div>
                     {attendee.company_name ? (
                       <div>
                         <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>

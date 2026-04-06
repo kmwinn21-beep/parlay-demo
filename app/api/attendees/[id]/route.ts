@@ -8,7 +8,7 @@ export async function GET(
   try {
     await dbReady;
     const attendeeResult = await db.execute({
-      sql: `SELECT a.*, co.name as company_name, co.company_type, co.website as company_website
+      sql: `SELECT a.*, co.name as company_name, co.company_type, co.website as company_website, co.assigned_user as company_assigned_user
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
             WHERE a.id = ?`,
