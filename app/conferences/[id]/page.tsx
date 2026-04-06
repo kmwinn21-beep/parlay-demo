@@ -382,13 +382,14 @@ export default function ConferenceDetailPage() {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
-      if (result.new_count === 0) {
+      if (result.new_count === 0 && (!result.updated_count || result.updated_count === 0)) {
         toast.success('All attendees in the file are already in this conference.');
       } else {
-        const msg = result.skipped_count > 0
-          ? `${result.new_count} new attendee(s) added. ${result.skipped_count} already existed.`
-          : `${result.new_count} attendee(s) added!`;
-        toast.success(msg);
+        const parts: string[] = [];
+        if (result.new_count > 0) parts.push(`${result.new_count} new attendee(s) added`);
+        if (result.updated_count > 0) parts.push(`${result.updated_count} existing record(s) updated`);
+        if (result.skipped_count > 0) parts.push(`${result.skipped_count} unchanged`);
+        toast.success(parts.join('. ') + '.');
       }
       fetchConference();
     } catch (err) {

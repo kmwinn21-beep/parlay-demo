@@ -104,12 +104,20 @@ export async function POST(request: NextRequest) {
         // Resolve company name -> id (or mark -1 = needs insert)
         const companyIdCache = new Map<string, number>(); // original cased name -> id
         const companyTypeMap = new Map<string, string>(); // company name -> company_type from file
+        const companyAssignedUserMap = new Map<string, string>(); // company name -> assigned_user from file
+        const companyWebsiteMap = new Map<string, string>(); // company name -> website from file
         const companyNameSet = new Set<string>();
         valid.forEach((p) => {
           if (p.company?.trim()) {
             companyNameSet.add(p.company.trim());
             if (p.company_type?.trim() && !companyTypeMap.has(p.company.trim())) {
               companyTypeMap.set(p.company.trim(), p.company_type.trim());
+            }
+            if (p.assigned_user?.trim() && !companyAssignedUserMap.has(p.company.trim())) {
+              companyAssignedUserMap.set(p.company.trim(), p.assigned_user.trim());
+            }
+            if (p.website?.trim() && !companyWebsiteMap.has(p.company.trim())) {
+              companyWebsiteMap.set(p.company.trim(), p.website.trim());
             }
           }
         });
@@ -124,15 +132,19 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ── Step 3a: Update existing companies with CSV-provided company_type ──
+        // ── Step 3a: Update existing companies with CSV-provided fields ──
         const existingToUpdate = uniqueCompanyNames.filter((n) => {
           const id = companyIdCache.get(n);
-          return id !== undefined && id > 0 && companyTypeMap.has(n);
+          return id !== undefined && id > 0 && (companyTypeMap.has(n) || companyAssignedUserMap.has(n) || companyWebsiteMap.has(n));
         });
         if (existingToUpdate.length > 0) {
           await batchInsert(existingToUpdate, (n) => ({
-            sql: 'UPDATE companies SET company_type = ? WHERE id = ? AND (company_type IS NULL OR company_type = ?)',
-            args: [companyTypeMap.get(n)!, companyIdCache.get(n)!, companyTypeMap.get(n)!],
+            sql: `UPDATE companies SET
+              company_type = COALESCE(?, company_type),
+              assigned_user = COALESCE(?, assigned_user),
+              website = COALESCE(?, website)
+              WHERE id = ?`,
+            args: [companyTypeMap.get(n) || null, companyAssignedUserMap.get(n) || null, companyWebsiteMap.get(n) || null, companyIdCache.get(n)!],
           }));
         }
 
@@ -141,15 +153,11 @@ export async function POST(request: NextRequest) {
         if (newCoNames.length > 0) {
           const results = await batchInsert(newCoNames, (n) => {
             const detectedType = companyTypeMap.get(n) || classifyCompanyType(n);
-            if (detectedType) {
-              return {
-                sql: 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id',
-                args: [n, detectedType],
-              };
-            }
+            const assignedUser = companyAssignedUserMap.get(n) || null;
+            const website = companyWebsiteMap.get(n) || null;
             return {
-              sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-              args: [n],
+              sql: 'INSERT INTO companies (name, company_type, assigned_user, website) VALUES (?, ?, ?, ?) RETURNING id',
+              args: [n, detectedType || null, assignedUser, website],
             };
           });
           for (let i = 0; i < newCoNames.length; i++) {
@@ -170,6 +178,8 @@ export async function POST(request: NextRequest) {
         const attendeeIdCache = new Map<string, number>(); // "first last" lowercase -> id
         type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string };
         const newAttendees: NewAttendee[] = [];
+        type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null };
+        const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
         const seen = new Set<string>();
 
         for (const p of valid) {
@@ -182,6 +192,16 @@ export async function POST(request: NextRequest) {
           const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher);
           if (hit) {
             attendeeIdCache.set(key, hit.match.id);
+            // Update the existing attendee's company, title, and email from the CSV
+            const companyId = p.company?.trim()
+              ? (companyIdCache.get(p.company.trim()) ?? null)
+              : null;
+            existingAttendeeUpdates.push({
+              id: hit.match.id,
+              company_id: companyId && companyId > 0 ? companyId : null,
+              title: p.title?.trim() || null,
+              email: p.email?.trim() || null,
+            });
           } else {
             // Mark for insertion
             attendeeIdCache.set(key, -1);
@@ -196,6 +216,14 @@ export async function POST(request: NextRequest) {
               email: p.email?.trim() || undefined,
             });
           }
+        }
+
+        // ── Step 4b: Batch-update existing matched attendees with CSV fields ──
+        if (existingAttendeeUpdates.length > 0) {
+          await batchInsert(existingAttendeeUpdates, (u) => ({
+            sql: 'UPDATE attendees SET company_id = COALESCE(?, company_id), title = COALESCE(?, title), email = COALESCE(?, email) WHERE id = ?',
+            args: [u.company_id, u.title, u.email, u.id],
+          }));
         }
 
         // ── Step 5: Batch-insert new attendees ──
