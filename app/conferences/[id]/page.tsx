@@ -1139,6 +1139,28 @@ export default function ConferenceDetailPage() {
                 toast.error('Failed to delete follow-up.');
               }
             }}
+            userOptions={userOptions}
+            onRepChange={async (attendeeId, conferenceId, rep) => {
+              setConfFollowUps(prev =>
+                prev.map(fu =>
+                  fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+                    ? { ...fu, assigned_rep: rep }
+                    : fu
+                )
+              );
+              try {
+                const res = await fetch('/api/follow-ups', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, assigned_rep: rep }),
+                });
+                if (!res.ok) throw new Error();
+                toast.success('Rep updated.');
+              } catch {
+                fetchConference();
+                toast.error('Failed to update rep.');
+              }
+            }}
           />
         </div>
       )}

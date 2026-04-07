@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
           cad.next_steps,
           cad.next_steps_notes,
           cad.completed,
+          cad.assigned_rep,
           a.first_name,
           a.last_name,
           a.title,
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
         conference_name: String(r.conference_name ?? ''),
         start_date: String(r.start_date ?? ''),
         entity_notes_count: Number(r.entity_notes_count ?? 0),
+        assigned_rep: r.assigned_rep != null ? String(r.assigned_rep) : null,
       }))
     );
   } catch (error) {
@@ -89,7 +91,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.execute({
-      sql: 'UPDATE conference_attendee_details SET next_steps = NULL, next_steps_notes = NULL, completed = 0 WHERE attendee_id = ? AND conference_id = ?',
+      sql: 'UPDATE conference_attendee_details SET next_steps = NULL, next_steps_notes = NULL, completed = 0, assigned_rep = NULL WHERE attendee_id = ? AND conference_id = ?',
       args: [attendee_id, conference_id],
     });
 
@@ -103,15 +105,35 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     await dbReady;
-    const { attendee_id, conference_id, completed } = await request.json();
+    const body = await request.json();
+    const { attendee_id, conference_id, completed, assigned_rep } = body;
 
-    if (attendee_id == null || conference_id == null || completed == null) {
-      return NextResponse.json({ error: 'attendee_id, conference_id, and completed are required' }, { status: 400 });
+    if (attendee_id == null || conference_id == null) {
+      return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
     }
 
+    const setClauses: string[] = [];
+    const args: (string | number | null)[] = [];
+
+    if (completed != null) {
+      setClauses.push('completed = ?');
+      args.push(completed ? 1 : 0);
+    }
+
+    if ('assigned_rep' in body) {
+      setClauses.push('assigned_rep = ?');
+      args.push(assigned_rep ?? null);
+    }
+
+    if (setClauses.length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
+    args.push(attendee_id, conference_id);
+
     await db.execute({
-      sql: 'UPDATE conference_attendee_details SET completed = ? WHERE attendee_id = ? AND conference_id = ?',
-      args: [completed ? 1 : 0, attendee_id, conference_id],
+      sql: `UPDATE conference_attendee_details SET ${setClauses.join(', ')} WHERE attendee_id = ? AND conference_id = ?`,
+      args,
     });
 
     return NextResponse.json({ success: true });

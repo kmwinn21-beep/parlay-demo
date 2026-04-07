@@ -38,16 +38,21 @@ export async function POST(request: NextRequest) {
   try {
     await dbReady;
     const body = await request.json();
-    const { attendee_id, conference_id, action, next_steps, next_steps_notes } = body;
+    const { attendee_id, conference_id, action, next_steps, next_steps_notes, assigned_rep } = body;
 
     if (!attendee_id || !conference_id) {
       return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
     }
 
     const result = await db.execute({
-      sql: `INSERT OR REPLACE INTO conference_attendee_details
-              (attendee_id, conference_id, action, next_steps, next_steps_notes)
-            VALUES (?, ?, ?, ?, ?)
+      sql: `INSERT INTO conference_attendee_details
+              (attendee_id, conference_id, action, next_steps, next_steps_notes, assigned_rep)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(attendee_id, conference_id) DO UPDATE SET
+              action = excluded.action,
+              next_steps = excluded.next_steps,
+              next_steps_notes = excluded.next_steps_notes,
+              assigned_rep = excluded.assigned_rep
             RETURNING *`,
       args: [
         attendee_id,
@@ -55,6 +60,7 @@ export async function POST(request: NextRequest) {
         action ?? null,
         next_steps ?? null,
         next_steps_notes ?? null,
+        assigned_rep ?? null,
       ],
     });
 

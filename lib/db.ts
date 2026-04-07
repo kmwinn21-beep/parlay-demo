@@ -142,6 +142,7 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
+    `ALTER TABLE conference_attendee_details ADD COLUMN assigned_rep TEXT`,
     `ALTER TABLE companies ADD COLUMN parent_company_id INTEGER REFERENCES companies(id)`,
     `ALTER TABLE companies ADD COLUMN entity_structure TEXT`,
     `ALTER TABLE companies ADD COLUMN wse INTEGER`,

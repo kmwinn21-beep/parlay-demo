@@ -29,6 +29,7 @@ interface ConferenceDetail {
   action?: string;
   next_steps?: string;
   next_steps_notes?: string;
+  assigned_rep?: string;
 }
 
 
@@ -163,6 +164,7 @@ export default function AttendeeDetailPage() {
       action: conferenceDetail?.action ?? null,
       next_steps: conferenceDetail?.next_steps ?? null,
       next_steps_notes: conferenceDetail?.next_steps_notes ?? null,
+      assigned_rep: conferenceDetail?.assigned_rep ?? null,
       ...fields,
     };
     const res = await fetch('/api/conference-details', {
@@ -241,6 +243,28 @@ export default function AttendeeDetailPage() {
     }
   };
 
+  const handleRepChange = async (attendeeId: number, conferenceId: number, rep: string | null) => {
+    setFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+          ? { ...fu, assigned_rep: rep }
+          : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, assigned_rep: rep }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Rep updated.');
+    } catch {
+      fetchFollowUps();
+      toast.error('Failed to update rep.');
+    }
+  };
+
   const handleStatus = async (value: string) => {
     try { await patchAttendee({ status: value, company_id: attendee?.company_id ?? null }); toast.success('Status updated.'); }
     catch { toast.error('Failed to update status.'); }
@@ -256,19 +280,64 @@ export default function AttendeeDetailPage() {
     } catch { toast.error('Failed to update action.'); }
   };
 
-  const handleNextSteps = async (value: string) => {
+  // Next steps modal state
+  const [showNextStepsModal, setShowNextStepsModal] = useState(false);
+  const [pendingNextStep, setPendingNextStep] = useState('');
+  const [nextStepRep, setNextStepRep] = useState('');
+  const [nextStepNote, setNextStepNote] = useState('');
+  const [isSubmittingNextStep, setIsSubmittingNextStep] = useState(false);
+
+  const handleNextSteps = (value: string) => {
     if (!selectedConferenceId) { toast.error('Please select a conference first.'); return; }
-    const newVal = conferenceDetail?.next_steps === value ? undefined : value;
+    // If clicking the already-active next step, deselect it
+    if (conferenceDetail?.next_steps === value) {
+      upsertConferenceDetail({ next_steps: undefined, next_steps_notes: undefined, assigned_rep: undefined })
+        .then(() => { setConfOtherNotes(''); fetchFollowUps(); })
+        .catch(() => toast.error('Failed to update next steps.'));
+      return;
+    }
+    // Open the modal for assignment
+    setPendingNextStep(value);
+    setNextStepRep('');
+    setNextStepNote('');
+    setShowNextStepsModal(true);
+  };
+
+  const handleSubmitNextStep = async () => {
+    if (!nextStepRep) { toast.error('Please assign a rep.'); return; }
+    setIsSubmittingNextStep(true);
     try {
-      await upsertConferenceDetail({ next_steps: newVal, next_steps_notes: newVal === 'Other' ? confOtherNotes : undefined });
-      if (newVal !== 'Other') setConfOtherNotes('');
-    } catch { toast.error('Failed to update next steps.'); }
+      await upsertConferenceDetail({
+        next_steps: pendingNextStep,
+        next_steps_notes: pendingNextStep === 'Other' ? confOtherNotes : undefined,
+        assigned_rep: nextStepRep,
+      });
+      // If there is a note, add it to the attendee's notes
+      if (nextStepNote.trim()) {
+        const noteContent = nextStepRep
+          ? `[${nextStepRep}] ${nextStepNote.trim()}`
+          : nextStepNote.trim();
+        await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entity_type: 'attendee', entity_id: Number(id), content: noteContent }),
+        });
+        fetchNotes();
+      }
+      fetchFollowUps();
+      setShowNextStepsModal(false);
+      toast.success('Follow-up assigned.');
+    } catch {
+      toast.error('Failed to assign follow-up.');
+    } finally {
+      setIsSubmittingNextStep(false);
+    }
   };
 
   const handleSaveOtherNotes = async () => {
     if (!selectedConferenceId) return;
     try {
-      await upsertConferenceDetail({ next_steps: 'Other', next_steps_notes: confOtherNotes });
+      await upsertConferenceDetail({ next_steps: 'Other', next_steps_notes: confOtherNotes, assigned_rep: conferenceDetail?.assigned_rep });
       toast.success('Saved.');
     } catch { toast.error('Failed to save.'); }
   };
@@ -439,7 +508,7 @@ export default function AttendeeDetailPage() {
                         ) : (
                           <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
                         )}
-                        {attendee.company_website && <a href={attendee.company_website.startsWith('http') ? attendee.company_website : `https://${attendee.company_website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-procare-bright-blue hover:underline">{attendee.company_website}</a>}
+
                       </div>
                     ) : <p className="text-sm text-gray-400">—</p>}
                   </div>
@@ -497,7 +566,7 @@ export default function AttendeeDetailPage() {
                 )}
               </h2>
             </div>
-            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} />
+            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
           </div>
 
           {/* Notes */}
@@ -672,6 +741,14 @@ export default function AttendeeDetailPage() {
                       <button onClick={handleSaveOtherNotes} className="btn-primary mt-2 text-xs">Save</button>
                     </div>
                   )}
+                  {conferenceDetail?.assigned_rep && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-blue-600">
+                        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                      </svg>
+                      <span className="text-xs text-blue-700 font-medium" title={conferenceDetail.assigned_rep}>Assigned to {(() => { const parts = conferenceDetail.assigned_rep!.trim().split(/\s+/); return parts.length >= 2 ? (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase() : parts[0].charAt(0).toUpperCase(); })()}</span>
+                    </div>
+                  )}
                 </div>
 
 
@@ -680,6 +757,80 @@ export default function AttendeeDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Next Steps Assignment Modal */}
+      {showNextStepsModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-procare-dark-blue font-serif">Assign Follow Up</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Next Step: <span className="font-medium text-gray-700">{pendingNextStep}</span>
+              </p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Assign To *
+                </label>
+                <select
+                  value={nextStepRep}
+                  onChange={e => setNextStepRep(e.target.value)}
+                  className="input-field text-sm w-full"
+                >
+                  <option value="">Select a user...</option>
+                  {userOptions.map(user => (
+                    <option key={user} value={user}>{user}</option>
+                  ))}
+                </select>
+              </div>
+              {pendingNextStep === 'Other' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                    Next Step Description
+                  </label>
+                  <textarea
+                    value={confOtherNotes}
+                    onChange={e => setConfOtherNotes(e.target.value)}
+                    placeholder="Describe the next step..."
+                    className="input-field resize-none w-full text-sm"
+                    rows={2}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Notes <span className="text-gray-400 font-normal normal-case">(optional — will be added to Attendee Notes)</span>
+                </label>
+                <textarea
+                  value={nextStepNote}
+                  onChange={e => setNextStepNote(e.target.value)}
+                  placeholder="Enter any notes..."
+                  className="input-field resize-none w-full text-sm"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowNextStepsModal(false)}
+                className="btn-secondary text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitNextStep}
+                disabled={isSubmittingNextStep}
+                className="btn-primary text-sm"
+              >
+                {isSubmittingNextStep ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

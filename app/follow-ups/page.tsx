@@ -124,6 +124,28 @@ export default function FollowUpsPage() {
     }
   };
 
+  const handleRepChange = async (attendeeId: number, conferenceId: number, rep: string | null) => {
+    setFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+          ? { ...fu, assigned_rep: rep }
+          : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, assigned_rep: rep }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Rep updated.');
+    } catch {
+      fetchData();
+      toast.error('Failed to update rep.');
+    }
+  };
+
   const filtered = followUps.filter((fu) => {
     if (filter === 'pending') return !fu.completed;
     if (filter === 'completed') return fu.completed;
@@ -235,7 +257,7 @@ export default function FollowUpsPage() {
               <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
             </div>
           ) : (
-            <FollowUpsTable followUps={filtered} onToggle={handleToggle} onDelete={handleDeleteFollowUp} />
+            <FollowUpsTable followUps={filtered} onToggle={handleToggle} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
           )}
         </div>
       </div>

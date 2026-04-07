@@ -1,7 +1,7 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { NotesPopover } from './NotesPopover';
 
 export interface FollowUp {
   attendee_id: number;
@@ -16,6 +16,14 @@ export interface FollowUp {
   conference_name: string;
   start_date: string;
   entity_notes_count: number;
+  assigned_rep: string | null;
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 function formatDate(d: string) {
@@ -29,11 +37,19 @@ export function FollowUpsTable({
   followUps,
   onToggle,
   onDelete,
+  userOptions = [],
+  onRepChange,
 }: {
   followUps: FollowUp[];
   onToggle: (attendeeId: number, conferenceId: number, completed: boolean) => void;
   onDelete?: (attendeeId: number, conferenceId: number) => void;
+  userOptions?: string[];
+  onRepChange?: (attendeeId: number, conferenceId: number, rep: string | null) => void;
 }) {
+  const [editingRepKey, setEditingRepKey] = useState<string | null>(null);
+
+  const canEditRep = onRepChange && userOptions.length > 0;
+
   if (followUps.length === 0) {
     return (
       <div className="text-center py-8">
@@ -63,9 +79,53 @@ export function FollowUpsTable({
                   >
                     {fu.first_name} {fu.last_name}
                   </Link>
-                  {fu.entity_notes_count > 0 && (
-                    <NotesPopover attendeeId={fu.attendee_id} notesCount={fu.entity_notes_count} />
-                  )}
+                  {canEditRep ? (
+                    editingRepKey === `${fu.attendee_id}-${fu.conference_id}` ? (
+                      <select
+                        autoFocus
+                        className="text-[10px] border border-blue-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        value={fu.assigned_rep || ''}
+                        onChange={(e) => {
+                          const val = e.target.value || null;
+                          onRepChange!(fu.attendee_id, fu.conference_id, val);
+                          setEditingRepKey(null);
+                        }}
+                        onBlur={() => setEditingRepKey(null)}
+                      >
+                        <option value="">— none —</option>
+                        {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingRepKey(`${fu.attendee_id}-${fu.conference_id}`)}
+                        title={fu.assigned_rep ? `${fu.assigned_rep} — click to change` : 'Click to assign rep'}
+                      >
+                        {fu.assigned_rep ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5">
+                              <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                            </svg>
+                            {getInitials(fu.assigned_rep)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-300 border border-dashed border-gray-200 hover:border-blue-300 hover:text-blue-400 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5">
+                              <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                            </svg>
+                            —
+                          </span>
+                        )}
+                      </button>
+                    )
+                  ) : fu.assigned_rep ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200" title={fu.assigned_rep}>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5">
+                        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                      </svg>
+                      {getInitials(fu.assigned_rep)}
+                    </span>
+                  ) : null}
                 </div>
                 {fu.title && <p className="text-xs text-gray-500 mt-0.5">{fu.title}</p>}
                 {fu.company_name && <p className="text-xs text-gray-500">{fu.company_name}</p>}
@@ -134,7 +194,7 @@ export function FollowUpsTable({
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Company</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Next Step</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Conference</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Note</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Rep</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Done</th>
               {onDelete && <th className="px-3 py-2"></th>}
             </tr>
@@ -171,9 +231,47 @@ export function FollowUpsTable({
                   <p className="text-gray-400">{formatDate(fu.start_date)}</p>
                 </td>
                 <td className="px-3 py-2">
-                  {fu.entity_notes_count > 0
-                    ? <NotesPopover attendeeId={fu.attendee_id} notesCount={fu.entity_notes_count} />
-                    : <span className="text-gray-300">—</span>}
+                  {canEditRep && editingRepKey === `${fu.attendee_id}-${fu.conference_id}` ? (
+                    <select
+                      autoFocus
+                      className="text-xs border border-blue-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      value={fu.assigned_rep || ''}
+                      onChange={(e) => {
+                        const val = e.target.value || null;
+                        onRepChange!(fu.attendee_id, fu.conference_id, val);
+                        setEditingRepKey(null);
+                      }}
+                      onBlur={() => setEditingRepKey(null)}
+                    >
+                      <option value="">— none —</option>
+                      {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  ) : canEditRep ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingRepKey(`${fu.attendee_id}-${fu.conference_id}`)}
+                      className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+                      title={fu.assigned_rep ? `${fu.assigned_rep} — click to change` : 'Click to assign rep'}
+                    >
+                      {fu.assigned_rep
+                        ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                              <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                            </svg>
+                            {getInitials(fu.assigned_rep)}
+                          </span>
+                        : <span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>}
+                    </button>
+                  ) : (
+                    fu.assigned_rep
+                      ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200" title={fu.assigned_rep}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                            <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                          </svg>
+                          {getInitials(fu.assigned_rep)}
+                        </span>
+                      : <span className="text-gray-300">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <button
