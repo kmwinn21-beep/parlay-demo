@@ -680,7 +680,6 @@ export default function CompanyDetailPage() {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
-                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -747,14 +746,6 @@ export default function CompanyDetailPage() {
                       </td>
                       <td className="px-4 py-3">
                         <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/attendees/${attendee.id}`}
-                          className="text-procare-bright-blue hover:underline text-xs font-medium"
-                        >
-                          View
-                        </Link>
                       </td>
                     </tr>
                     );
