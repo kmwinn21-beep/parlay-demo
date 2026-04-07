@@ -88,7 +88,7 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE config_options ADD COLUMN color TEXT`,
     // Seed default colors for existing options
     `UPDATE config_options SET color = 'yellow' WHERE category = 'status' AND value = 'Client' AND color IS NULL`,
-    `UPDATE config_options SET color = 'red' WHERE category = 'status' AND value = 'Hot Prospect' AND color IS NULL`,
+    `UPDATE config_options SET color = 'red' WHERE category = 'status' AND value = 'Priority' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'status' AND value = 'Interested' AND color IS NULL`,
     `UPDATE config_options SET color = 'dark' WHERE category = 'status' AND value = 'Not Interested' AND color IS NULL`,
     `UPDATE config_options SET color = 'gray' WHERE category = 'status' AND value = 'Unknown' AND color IS NULL`,
@@ -150,6 +150,13 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE companies ADD COLUMN icp TEXT DEFAULT 'False'`,
     `ALTER TABLE entity_notes ADD COLUMN conference_name TEXT`,
     `ALTER TABLE entity_notes ADD COLUMN rep TEXT`,
+    // Event Type default colors
+    `UPDATE config_options SET color = 'blue' WHERE category = 'event_type' AND value = 'Sponsored Event' AND color IS NULL`,
+    `UPDATE config_options SET color = 'orange' WHERE category = 'event_type' AND value = 'Lunch' AND color IS NULL`,
+    `UPDATE config_options SET color = 'purple' WHERE category = 'event_type' AND value = 'Dinner' AND color IS NULL`,
+    `UPDATE config_options SET color = 'teal' WHERE category = 'event_type' AND value = 'Procare Hosted' AND color IS NULL`,
+    `UPDATE config_options SET color = 'green' WHERE category = 'event_type' AND value = 'Partner' AND color IS NULL`,
+    `UPDATE config_options SET color = 'yellow' WHERE category = 'event_type' AND value = 'Conference Event' AND color IS NULL`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -166,7 +173,7 @@ export async function initDb(): Promise<void> {
       { category: 'company_type', value: 'Partner', sort_order: 5 },
       { category: 'company_type', value: 'Other', sort_order: 6 },
       { category: 'status', value: 'Client', sort_order: 1 },
-      { category: 'status', value: 'Hot Prospect', sort_order: 2 },
+      { category: 'status', value: 'Priority', sort_order: 2 },
       { category: 'status', value: 'Interested', sort_order: 3 },
       { category: 'status', value: 'Not Interested', sort_order: 4 },
       { category: 'status', value: 'Unknown', sort_order: 5 },
@@ -217,6 +224,12 @@ export async function initDb(): Promise<void> {
     { category: 'services', value: 'N/A', sort_order: 7 },
     { category: 'icp', value: 'True', sort_order: 1 },
     { category: 'icp', value: 'False', sort_order: 2 },
+    { category: 'event_type', value: 'Sponsored Event', sort_order: 1 },
+    { category: 'event_type', value: 'Lunch', sort_order: 2 },
+    { category: 'event_type', value: 'Dinner', sort_order: 3 },
+    { category: 'event_type', value: 'Procare Hosted', sort_order: 4 },
+    { category: 'event_type', value: 'Partner', sort_order: 5 },
+    { category: 'event_type', value: 'Conference Event', sort_order: 6 },
   ];
   for (const seed of newCategorySeeds) {
     try {

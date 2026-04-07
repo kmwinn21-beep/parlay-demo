@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
+import { PriorityLeads, PriorityLead } from '@/components/PriorityLeads';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -70,6 +71,38 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
   }));
 }
 
+async function getPriorityLeads(): Promise<PriorityLead[]> {
+  await dbReady;
+  const result = await db.execute({
+    sql: `SELECT c.id, c.name, c.assigned_user, c.wse,
+            COALESCE(conf_agg.conference_count, 0) as conference_count,
+            conf_agg.conference_names
+          FROM companies c
+          LEFT JOIN (
+            SELECT a2.company_id,
+                   COUNT(DISTINCT ca.conference_id) as conference_count,
+                   GROUP_CONCAT(DISTINCT conf.name) as conference_names
+            FROM attendees a2
+            JOIN conference_attendees ca ON a2.id = ca.attendee_id
+            JOIN (SELECT * FROM conferences ORDER BY start_date DESC) conf ON ca.conference_id = conf.id
+            GROUP BY a2.company_id
+          ) conf_agg ON c.id = conf_agg.company_id
+          WHERE c.status = 'Priority'
+          ORDER BY c.name ASC
+          LIMIT 10`,
+    args: [],
+  });
+  return result.rows.map((r) => ({
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+    assigned_user: r.assigned_user ? String(r.assigned_user) : null,
+    wse: r.wse != null ? Number(r.wse) : null,
+    conference_count: Number(r.conference_count ?? 0),
+    conference_names: r.conference_names ? String(r.conference_names) : undefined,
+  }));
+}
+
+
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -80,7 +113,7 @@ function formatDate(dateStr: string) {
 }
 
 export default async function DashboardPage() {
-  const [stats, recentConferences, upcomingConferences] = await Promise.all([getStats(), getRecentConferences(), getUpcomingConferences()]);
+  const [stats, recentConferences, upcomingConferences, priorityLeads] = await Promise.all([getStats(), getRecentConferences(), getUpcomingConferences(), getPriorityLeads()]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -295,46 +328,21 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Quick Actions */}
+        {/* Priority Leads */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-procare-dark-blue mb-5 font-serif">Quick Actions</h2>
-          <div className="space-y-3">
-            <Link href="/conferences/new" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group">
-              <div className="w-9 h-9 rounded-lg bg-procare-dark-blue flex items-center justify-center group-hover:bg-procare-bright-blue transition-colors flex-shrink-0">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex items-center gap-2">
+              Priority Leads
+              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
                 </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-800">Add Conference</p>
-                <p className="text-xs text-gray-400">Import attendees from file</p>
-              </div>
-            </Link>
-
-            <Link href="/attendees" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group">
-              <div className="w-9 h-9 rounded-lg bg-procare-bright-blue flex items-center justify-center group-hover:bg-procare-dark-blue transition-colors flex-shrink-0">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-800">View Attendees</p>
-                <p className="text-xs text-gray-400">Search and manage contacts</p>
-              </div>
-            </Link>
-
-            <Link href="/companies" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group">
-              <div className="w-9 h-9 rounded-lg bg-procare-gold flex items-center justify-center flex-shrink-0">
-                <svg className="w-4 h-4 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-800">Manage Companies</p>
-                <p className="text-xs text-gray-400">View and merge companies</p>
-              </div>
-            </Link>
+              </span>
+            </h2>
+            <Link href="/companies" className="text-sm text-procare-bright-blue hover:underline">View all &rarr;</Link>
           </div>
+          <PriorityLeads leads={priorityLeads} />
         </div>
       </div>
     </div>
