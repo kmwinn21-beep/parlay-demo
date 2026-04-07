@@ -148,6 +148,8 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE companies ADD COLUMN wse INTEGER`,
     `ALTER TABLE companies ADD COLUMN services TEXT`,
     `ALTER TABLE companies ADD COLUMN icp TEXT DEFAULT 'False'`,
+    `ALTER TABLE entity_notes ADD COLUMN conference_name TEXT`,
+    `ALTER TABLE entity_notes ADD COLUMN rep TEXT`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }

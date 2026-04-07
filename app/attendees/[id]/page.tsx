@@ -314,13 +314,18 @@ export default function AttendeeDetailPage() {
       });
       // If there is a note, add it to the attendee's notes
       if (nextStepNote.trim()) {
-        const noteContent = nextStepRep
-          ? `[${nextStepRep}] ${nextStepNote.trim()}`
-          : nextStepNote.trim();
+        const noteContent = nextStepNote.trim();
+        const selectedConf = attendee?.conferences.find(c => String(c.id) === selectedConferenceId);
         await fetch('/api/notes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entity_type: 'attendee', entity_id: Number(id), content: noteContent }),
+          body: JSON.stringify({
+            entity_type: 'attendee',
+            entity_id: Number(id),
+            content: noteContent,
+            conference_name: selectedConf?.name || null,
+            rep: nextStepRep || null,
+          }),
         });
         fetchNotes();
       }
@@ -574,6 +579,7 @@ export default function AttendeeDetailPage() {
             entityType="attendee"
             entityId={Number(id)}
             initialNotes={attendeeNotes}
+            conferences={attendee.conferences}
           />
         </div>
 

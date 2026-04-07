@@ -10,6 +10,8 @@ export interface EntityNote {
   content: string;
   created_at: string;
   company_name?: string;
+  conference_name?: string | null;
+  rep?: string | null;
 }
 
 function formatDateTime(dt: string) {
@@ -35,11 +37,13 @@ export function NotesSection({
   entityId,
   initialNotes = [],
   parentEntityId,
+  conferences = [],
 }: {
   entityType: 'attendee' | 'company' | 'conference';
   entityId: number;
   initialNotes?: EntityNote[];
   parentEntityId?: number;
+  conferences?: Array<{ id: number; name: string }>;
 }) {
   const [notes, setNotes] = useState<EntityNote[]>(initialNotes);
   const [isAdding, setIsAdding] = useState(false);
@@ -53,6 +57,7 @@ export function NotesSection({
   }, [initialNotes]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
+  const [selectedConference, setSelectedConference] = useState('');
 
   useEffect(() => {
     fetch('/api/config?category=user')
@@ -67,20 +72,26 @@ export function NotesSection({
   const handleSubmit = async () => {
     if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
     setIsSubmitting(true);
-    const content = selectedUser
-      ? `[${selectedUser}] ${noteText.trim()}`
-      : noteText.trim();
+    const content = noteText.trim();
+    const conferenceName = selectedConference || 'General Note';
     try {
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity_type: entityType, entity_id: entityId, content }),
+        body: JSON.stringify({
+          entity_type: entityType,
+          entity_id: entityId,
+          content,
+          conference_name: conferenceName,
+          rep: selectedUser || null,
+        }),
       });
       if (!res.ok) throw new Error();
       const newNote: EntityNote = await res.json();
       setNotes(prev => [newNote, ...prev]);
       setNoteText('');
       setSelectedUser('');
+      setSelectedConference('');
       setIsAdding(false);
       toast.success('Note saved.');
     } catch {
@@ -131,23 +142,42 @@ export function NotesSection({
 
       {isAdding && (
         <div className="mb-5 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
-          {userOptions.length > 0 && (
-            <div className="mb-3">
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                Entered By
-              </label>
-              <select
-                value={selectedUser}
-                onChange={e => setSelectedUser(e.target.value)}
-                className="input-field text-sm w-full sm:w-64"
-              >
-                <option value="">Select user...</option>
-                {userOptions.map(user => (
-                  <option key={user} value={user}>{user}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-3 mb-3">
+            {userOptions.length > 0 && (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Entered By
+                </label>
+                <select
+                  value={selectedUser}
+                  onChange={e => setSelectedUser(e.target.value)}
+                  className="input-field text-sm w-full"
+                >
+                  <option value="">Select user...</option>
+                  {userOptions.map(user => (
+                    <option key={user} value={user}>{user}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {conferences.length > 0 && (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Conference
+                </label>
+                <select
+                  value={selectedConference}
+                  onChange={e => setSelectedConference(e.target.value)}
+                  className="input-field text-sm w-full"
+                >
+                  <option value="">Select Conference (if applicable)</option>
+                  {conferences.map(conf => (
+                    <option key={conf.id} value={conf.name}>{conf.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
           <textarea
             value={noteText}
             onChange={e => setNoteText(e.target.value)}
@@ -167,7 +197,7 @@ export function NotesSection({
             </button>
             <button
               type="button"
-              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); }}
+              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(''); }}
               className="btn-secondary text-sm"
             >
               Cancel
@@ -186,6 +216,12 @@ export function NotesSection({
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-44">
                   Date / Time
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-36">
+                  Conference
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28">
+                  Rep
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Note
                 </th>
@@ -200,6 +236,12 @@ export function NotesSection({
                   <tr key={note.id} className="hover:bg-gray-50 align-top">
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap w-44">
                       {formatDateTime(note.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap w-36">
+                      {note.conference_name || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap w-28">
+                      {note.rep || '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-800">
                       {parentEntityId && note.entity_id !== parentEntityId && note.company_name && (

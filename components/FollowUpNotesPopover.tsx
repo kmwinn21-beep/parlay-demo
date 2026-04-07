@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 
 function formatNoteDate(dt: string) {
   const d = new Date(dt);
@@ -62,7 +63,15 @@ interface PopoverNote {
   rep?: string | null;
 }
 
-export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; notesCount: number }) {
+export function FollowUpNotesPopover({
+  attendeeId,
+  notesCount,
+  conferenceName,
+}: {
+  attendeeId: number;
+  notesCount: number;
+  conferenceName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState<PopoverNote[]>([]);
   const [totalCount, setTotalCount] = useState(notesCount);
@@ -70,6 +79,15 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Add note form state
+  const [isAdding, setIsAdding] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [selectedUser, setSelectedUser] = useState('');
+  const [selectedConference, setSelectedConference] = useState(conferenceName || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [conferences, setConferences] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,6 +102,21 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
       .finally(() => setLoading(false));
   }, [open, attendeeId]);
 
+  // Fetch user options and attendee conferences when adding
+  useEffect(() => {
+    if (!isAdding) return;
+    fetch('/api/config?category=user')
+      .then(res => res.json())
+      .then((data: { value: string }[]) => setUserOptions(data.map(d => d.value)))
+      .catch(() => {});
+    fetch(`/api/attendees/${attendeeId}`)
+      .then(res => res.json())
+      .then((data: { conferences?: { id: number; name: string }[] }) => {
+        if (data.conferences) setConferences(data.conferences);
+      })
+      .catch(() => {});
+  }, [isAdding, attendeeId]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -92,6 +125,7 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
         btnRef.current && !btnRef.current.contains(e.target as Node)
       ) {
         setOpen(false);
+        setIsAdding(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -103,11 +137,42 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
       const rect = btnRef.current.getBoundingClientRect();
       const PADDING = 8;
       const cardWidth = Math.min(480, window.innerWidth - PADDING * 2);
-      // Align card's left edge with button, but clamp so it never exits the viewport
       const left = Math.max(PADDING, Math.min(rect.left, window.innerWidth - cardWidth - PADDING));
       setPos({ top: rect.top, left, width: cardWidth });
     }
     setOpen(v => !v);
+    if (open) setIsAdding(false);
+  };
+
+  const handleSubmitNote = async () => {
+    if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_type: 'attendee',
+          entity_id: attendeeId,
+          content: noteText.trim(),
+          conference_name: selectedConference || 'General Note',
+          rep: selectedUser || null,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const newNote: PopoverNote = await res.json();
+      setNotes(prev => [newNote, ...prev]);
+      setTotalCount(prev => prev + 1);
+      setNoteText('');
+      setSelectedUser('');
+      setSelectedConference(conferenceName || '');
+      setIsAdding(false);
+      toast.success('Note saved.');
+    } catch {
+      toast.error('Failed to save note.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -142,20 +207,92 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
               <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
                 Notes {totalCount > 0 && `(${totalCount})`}
               </span>
-              <Link
-                href={`/attendees/${attendeeId}`}
-                className="text-xs text-procare-bright-blue hover:underline font-medium"
-                onClick={() => setOpen(false)}
-              >
-                Open record →
-              </Link>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAdding(v => !v)}
+                  className="text-xs text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Add New Note
+                </button>
+                <Link
+                  href={`/attendees/${attendeeId}`}
+                  className="text-xs text-procare-bright-blue hover:underline font-medium"
+                  onClick={() => setOpen(false)}
+                >
+                  Open record →
+                </Link>
+              </div>
             </div>
+
+            {isAdding && (
+              <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {userOptions.length > 0 && (
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-0.5">Entered By</label>
+                      <select
+                        value={selectedUser}
+                        onChange={e => setSelectedUser(e.target.value)}
+                        className="w-full text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      >
+                        <option value="">Select user...</option>
+                        {userOptions.map(user => <option key={user} value={user}>{user}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {conferences.length > 0 && (
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-0.5">Conference</label>
+                      <select
+                        value={selectedConference}
+                        onChange={e => setSelectedConference(e.target.value)}
+                        className="w-full text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      >
+                        <option value="">Select Conference (if applicable)</option>
+                        {conferences.map(conf => <option key={conf.id} value={conf.name}>{conf.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Enter your note..."
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleSubmitNote}
+                    disabled={isSubmitting}
+                    className="px-3 py-1 bg-procare-bright-blue text-white text-xs font-medium rounded hover:bg-procare-dark-blue transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Submit'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(conferenceName || ''); }}
+                    className="px-3 py-1 bg-white text-gray-600 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-y-auto max-h-64">
               {loading ? (
                 <p className="text-sm text-gray-400 italic text-center py-6">Loading...</p>
-              ) : notes.length === 0 ? (
-                <p className="text-sm text-gray-400 italic text-center py-6">No notes yet.</p>
-              ) : (
+              ) : notes.length === 0 && !isAdding ? (
+                <p className="text-sm text-gray-400 italic text-center py-6">No notes yet. Click &quot;Add New Note&quot; to get started.</p>
+              ) : notes.length === 0 ? null : (
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                     <tr>
