@@ -131,7 +131,7 @@ export default function ConferenceDetailPage() {
   const internalDropdownRef = useRef<HTMLDivElement>(null);
 
   // Resizable column widths
-  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80, actions: 100 });
+  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -913,9 +913,6 @@ export default function ConferenceDetailPage() {
                       <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
-                    <th className="px-4 py-3 relative" style={{ width: colWidths.actions }}>
-                      <div onMouseDown={e => startResize(e, 'actions')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -973,23 +970,6 @@ export default function ConferenceDetailPage() {
                           ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
                           : <span className="text-gray-300">—</span>
                         }
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Link
-                            href={`/attendees/${attendee.id}`}
-                            className="text-procare-bright-blue hover:underline text-xs font-medium"
-                          >
-                            View
-                          </Link>
-                          <button
-                            onClick={() => handleRemoveOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)}
-                            disabled={isRemoving}
-                            className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50"
-                          >
-                            Remove
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))}
