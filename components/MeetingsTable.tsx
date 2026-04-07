@@ -141,9 +141,10 @@ function OutcomeButton({
   };
 
   const preset = value ? getPreset(colorMap[value]) : null;
+
   const btnClass = preset
-    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
-    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap';
+    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap opacity-70` // ADDED: opacity-70
+    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap opacity-70'; // ADDED: opacity-70
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -180,7 +181,10 @@ function OutcomeButton({
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
                 onClick={() => { onChange(opt); setOpen(false); }}
               >
-                <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0`} style={{ backgroundColor: p.swatch }} />
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: p.swatch }}
+                />
                 <span className={opt === value ? 'font-semibold' : ''}>{opt}</span>
               </button>
             );
