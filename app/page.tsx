@@ -88,12 +88,8 @@ export default async function DashboardPage() {
       <div className="bg-procare-dark-blue rounded-2xl p-8 text-white relative overflow-hidden">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold font-serif mb-2">
-            Senior Housing Conference Hub
+            Conference Tracking
           </h1>
-          <p className="text-blue-200 text-base">
-            Track and manage your conference attendees — all in one place.
-          </p>
-          <p className="text-blue-300 text-sm mt-1 italic">Caring for people who care for people.</p>
         </div>
         {/* Decorative element */}
         <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-procare-bright-blue opacity-20" />
@@ -158,7 +154,7 @@ export default async function DashboardPage() {
             <svg className="w-5 h-5 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Current &amp; Upcoming Conferences
+            Current &amp; Upcoming
             <span className="text-sm font-normal text-gray-500">({upcomingConferences.length})</span>
           </h2>
           <Link href="/conferences" className="text-sm text-procare-bright-blue hover:underline">View all →</Link>
@@ -231,7 +227,7 @@ export default async function DashboardPage() {
         {/* Recent Conferences */}
         <div className="lg:col-span-2 card">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Recent Conferences</h2>
+            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Recent</h2>
             <Link href="/conferences" className="text-sm text-procare-bright-blue hover:underline">
               View all →
             </Link>
