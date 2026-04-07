@@ -45,8 +45,8 @@ export async function GET() {
             LEFT JOIN companies parent ON co.parent_company_id = parent.id
             LEFT JOIN (
               SELECT company_id,
-                     GROUP_CONCAT(DISTINCT first_name || ' ' || last_name || '|' || COALESCE(title, ''), '~~~') as attendee_summary
-              FROM attendees
+                     GROUP_CONCAT(first_name || ' ' || last_name || '|' || COALESCE(title, ''), '~~~') as attendee_summary
+              FROM (SELECT DISTINCT company_id, first_name, last_name, title FROM attendees)
               GROUP BY company_id
             ) att_summary ON co.id = att_summary.company_id
             ORDER BY co.name`,
