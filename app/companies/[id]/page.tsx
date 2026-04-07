@@ -308,6 +308,28 @@ export default function CompanyDetailPage() {
     }
   };
 
+  const handleRepChange = async (attendeeId: number, conferenceId: number, rep: string | null) => {
+    setCompanyFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+          ? { ...fu, assigned_rep: rep }
+          : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, assigned_rep: rep }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Rep updated.');
+    } catch {
+      fetchCompany();
+      toast.error('Failed to update rep.');
+    }
+  };
+
   const filteredAttendees = company?.attendees || [];
 
   const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
@@ -831,7 +853,7 @@ export default function CompanyDetailPage() {
                 )}
               </h2>
             </div>
-            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} />
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
           </div>
 
           {/* Notes */}
