@@ -11,31 +11,52 @@ export async function GET() {
                    a.seniority,
                    a.created_at,
                    co.name as company_name, co.company_type, co.wse as company_wse,
-                   COUNT(DISTINCT ca.conference_id) as conference_count,
-                   GROUP_CONCAT(DISTINCT c.name) as conference_names,
-                   CASE WHEN EXISTS (
-                     SELECT 1 FROM conference_attendee_details cad
-                     WHERE cad.attendee_id = a.id
-                     AND cad.next_steps IS NOT NULL AND cad.next_steps != ''
-                     AND (cad.completed IS NULL OR cad.completed = 0)
-                   ) THEN 1 ELSE 0 END as has_pending_follow_ups,
-                   (SELECT COUNT(*) FROM entity_notes en WHERE en.entity_type = 'attendee' AND en.entity_id = a.id) as notes_count,
-                   (SELECT GROUP_CONCAT(sub.content, '|||') FROM (
-                     SELECT content FROM entity_notes
-                     WHERE entity_type = 'attendee' AND entity_id = a.id
-                     ORDER BY created_at DESC LIMIT 2
-                   ) sub) as recent_notes_concat
+                   COALESCE(conf_agg.conference_count, 0) as conference_count,
+                   conf_agg.conference_names,
+                   COALESCE(fu.has_pending, 0) as has_pending_follow_ups,
+                   COALESCE(nc.notes_count, 0) as notes_count,
+                   rn.recent_notes_concat
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
-            LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
-            LEFT JOIN conferences c ON ca.conference_id = c.id
-            GROUP BY a.id
+            LEFT JOIN (
+              SELECT ca.attendee_id,
+                     COUNT(DISTINCT ca.conference_id) as conference_count,
+                     GROUP_CONCAT(DISTINCT c.name) as conference_names
+              FROM conference_attendees ca
+              JOIN conferences c ON ca.conference_id = c.id
+              GROUP BY ca.attendee_id
+            ) conf_agg ON a.id = conf_agg.attendee_id
+            LEFT JOIN (
+              SELECT cad.attendee_id, 1 as has_pending
+              FROM conference_attendee_details cad
+              WHERE cad.next_steps IS NOT NULL AND cad.next_steps != ''
+                AND (cad.completed IS NULL OR cad.completed = 0)
+              GROUP BY cad.attendee_id
+            ) fu ON a.id = fu.attendee_id
+            LEFT JOIN (
+              SELECT entity_id, COUNT(*) as notes_count
+              FROM entity_notes
+              WHERE entity_type = 'attendee'
+              GROUP BY entity_id
+            ) nc ON a.id = nc.entity_id
+            LEFT JOIN (
+              SELECT entity_id, GROUP_CONCAT(content, '|||') as recent_notes_concat
+              FROM (
+                SELECT entity_id, content
+                FROM entity_notes
+                WHERE entity_type = 'attendee'
+                ORDER BY created_at DESC
+              )
+              GROUP BY entity_id
+            ) rn ON a.id = rn.entity_id
             ORDER BY a.last_name, a.first_name`,
       args: [],
     });
 
     const attendees = result.rows.map((r) => ({ ...r }));
-    return NextResponse.json(attendees);
+    return NextResponse.json(attendees, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
+    });
   } catch (error) {
     console.error('GET /api/attendees error:', error);
     return NextResponse.json({ error: 'Failed to fetch attendees' }, { status: 500 });

@@ -102,8 +102,34 @@ export default function AttendeesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 w-40 bg-gray-200 rounded animate-pulse" />
+            <div className="h-4 w-56 bg-gray-100 rounded animate-pulse" />
+          </div>
+          <div className="h-10 w-32 bg-gray-200 rounded-lg animate-pulse" />
+        </div>
+        <div className="card">
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1 h-10 bg-gray-100 rounded animate-pulse" />
+            <div className="h-10 w-28 bg-gray-100 rounded animate-pulse" />
+            <div className="h-10 w-28 bg-gray-100 rounded animate-pulse" />
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex gap-4 items-center">
+                <div className="h-4 w-4 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-28 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />
+                <div className="h-6 w-8 bg-gray-100 rounded-full animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
