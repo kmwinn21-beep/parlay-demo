@@ -143,8 +143,8 @@ function OutcomeButton({
   const preset = value ? getPreset(colorMap[value]) : null;
 
   const btnClass = preset
-    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap opacity-70` // ADDED: opacity-70
-    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap opacity-70'; // ADDED: opacity-70
+    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
+    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap';
 
   return (
     <div ref={ref} className="relative inline-block">
