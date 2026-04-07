@@ -14,7 +14,6 @@ interface RecentConference {
   start_date: string;
   end_date: string;
   location: string;
-  attendee_count: number;
   internal_attendees: string[];
 }
 
@@ -35,11 +34,8 @@ async function getStats(): Promise<DashboardStats> {
 async function getRecentConferences(): Promise<RecentConference[]> {
   await dbReady;
   const result = await db.execute({
-    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
-                 COUNT(ca.attendee_id) as attendee_count
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees
           FROM conferences c
-          LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
-          GROUP BY c.id
           ORDER BY c.start_date DESC
           LIMIT 5`,
     args: [],
@@ -50,7 +46,6 @@ async function getRecentConferences(): Promise<RecentConference[]> {
     start_date: String(r.start_date ?? ''),
     end_date: String(r.end_date ?? ''),
     location: String(r.location ?? ''),
-    attendee_count: Number(r.attendee_count ?? 0),
     internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
   }));
 }
@@ -59,12 +54,9 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
   await dbReady;
   const today = new Date().toISOString().slice(0, 10);
   const result = await db.execute({
-    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
-                 COUNT(ca.attendee_id) as attendee_count
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees
           FROM conferences c
-          LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
           WHERE c.end_date >= ?
-          GROUP BY c.id
           ORDER BY c.start_date ASC`,
     args: [today],
   });
@@ -74,7 +66,6 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
     start_date: String(r.start_date ?? ''),
     end_date: String(r.end_date ?? ''),
     location: String(r.location ?? ''),
-    attendee_count: Number(r.attendee_count ?? 0),
     internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
   }));
 }
@@ -200,7 +191,6 @@ export default async function DashboardPage() {
                   <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="badge-blue text-xs">{conf.attendee_count} attendees</span>
                       {conf.internal_attendees.length > 0 && (
                         <span className="relative group/tip">
                           <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-procare-bright-blue cursor-default">
@@ -301,9 +291,6 @@ export default async function DashboardPage() {
                           </span>
                         </span>
                       )}
-                      <span className="badge-blue text-xs">
-                        {conf.attendee_count} attendees
-                      </span>
                     </div>
                   </div>
                 </Link>
