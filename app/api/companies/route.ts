@@ -22,21 +22,33 @@ export async function GET() {
     const result = await db.execute({
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
               COALESCE(co.status, 'Unknown') as status, COALESCE(co.icp, 'False') as icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at,
-              COUNT(DISTINCT a.id) as attendee_count,
-              COUNT(DISTINCT ca.conference_id) as conference_count,
-              GROUP_CONCAT(DISTINCT conf.name) as conference_names,
+              COALESCE(att_agg.attendee_count, 0) as attendee_count,
+              COALESCE(conf_agg.conference_count, 0) as conference_count,
+              conf_agg.conference_names,
               parent.name as parent_company_name,
-              (SELECT GROUP_CONCAT(sub.info, '~~~') FROM (
-                SELECT DISTINCT a2.first_name || ' ' || a2.last_name || '|' || COALESCE(a2.title, '') as info
-                FROM attendees a2
-                WHERE a2.company_id = co.id
-              ) sub) as attendee_summary
+              att_summary.attendee_summary
             FROM companies co
-            LEFT JOIN attendees a ON co.id = a.company_id
-            LEFT JOIN conference_attendees ca ON a.id = ca.attendee_id
-            LEFT JOIN conferences conf ON ca.conference_id = conf.id
+            LEFT JOIN (
+              SELECT company_id, COUNT(*) as attendee_count
+              FROM attendees
+              GROUP BY company_id
+            ) att_agg ON co.id = att_agg.company_id
+            LEFT JOIN (
+              SELECT a2.company_id,
+                     COUNT(DISTINCT ca.conference_id) as conference_count,
+                     GROUP_CONCAT(DISTINCT conf.name) as conference_names
+              FROM attendees a2
+              JOIN conference_attendees ca ON a2.id = ca.attendee_id
+              JOIN conferences conf ON ca.conference_id = conf.id
+              GROUP BY a2.company_id
+            ) conf_agg ON co.id = conf_agg.company_id
             LEFT JOIN companies parent ON co.parent_company_id = parent.id
-            GROUP BY co.id
+            LEFT JOIN (
+              SELECT company_id,
+                     GROUP_CONCAT(DISTINCT first_name || ' ' || last_name || '|' || COALESCE(title, ''), '~~~') as attendee_summary
+              FROM attendees
+              GROUP BY company_id
+            ) att_summary ON co.id = att_summary.company_id
             ORDER BY co.name`,
       args: [],
     });
@@ -46,7 +58,9 @@ export async function GET() {
       services: parseServices(r.services),
       icp: r.icp ? String(r.icp) : 'False',
     }));
-    return NextResponse.json(companies);
+    return NextResponse.json(companies, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
+    });
   } catch (error) {
     console.error('GET /api/companies error:', error);
     return NextResponse.json({ error: 'Failed to fetch companies' }, { status: 500 });
