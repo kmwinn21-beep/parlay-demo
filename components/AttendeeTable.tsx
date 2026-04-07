@@ -436,7 +436,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
                     <td className="px-3 py-3 overflow-hidden">
-                      <Link href={`/attendees/${attendee.id}`} className="font-medium text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                      <Link href={`/attendees/${attendee.id}`} className="font-medium text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>
