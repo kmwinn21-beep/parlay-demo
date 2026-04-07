@@ -13,6 +13,7 @@ import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 
 interface Attendee {
@@ -103,6 +104,7 @@ export default function ConferenceDetailPage() {
   const router = useRouter();
   const id = params.id as string;
   const colorMaps = useConfigColors();
+  const configOptions = useConfigOptions();
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -121,6 +123,8 @@ export default function ConferenceDetailPage() {
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [filterSeniority, setFilterSeniority] = useState('');
+  const [filterCompanyType, setFilterCompanyType] = useState('');
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
@@ -400,17 +404,24 @@ export default function ConferenceDetailPage() {
     }
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch]);
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType]);
+
+  const seniorityFilterOptions = configOptions.seniority ?? [];
+  const companyTypeFilterOptions = configOptions.company_type ?? [];
 
   const filteredAttendees = (conference?.attendees || [])
     .filter((a) => {
-      if (!attendeeSearch) return true;
-      const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
-      return (
-        fullName.includes(attendeeSearch.toLowerCase()) ||
-        (a.company_name?.toLowerCase().includes(attendeeSearch.toLowerCase())) ||
-        (a.title?.toLowerCase().includes(attendeeSearch.toLowerCase()))
-      );
+      if (attendeeSearch) {
+        const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
+        if (!(
+          fullName.includes(attendeeSearch.toLowerCase()) ||
+          (a.company_name?.toLowerCase().includes(attendeeSearch.toLowerCase())) ||
+          (a.title?.toLowerCase().includes(attendeeSearch.toLowerCase()))
+        )) return false;
+      }
+      if (filterSeniority && effectiveSeniority(a.seniority, a.title) !== filterSeniority) return false;
+      if (filterCompanyType && (a.company_type || '') !== filterCompanyType) return false;
+      return true;
     })
     .sort((a, b) => {
       let aVal = '', bVal = '';
@@ -677,7 +688,7 @@ export default function ConferenceDetailPage() {
             Analytics
           </button>
           <button
-            onClick={() => setActiveTab('notes')}
+            onClick={() => { setActiveTab('notes'); loadCompanies(); }}
             className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'notes' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Notes{confNotes.length > 0 ? ` (${confNotes.length})` : ''}
@@ -752,6 +763,14 @@ export default function ConferenceDetailPage() {
                   className="input-field pl-9 w-56"
                 />
               </div>
+              <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto text-sm">
+                <option value="">All Seniorities</option>
+                {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-auto text-sm">
+                <option value="">All Types</option>
+                {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
 
@@ -1016,6 +1035,9 @@ export default function ConferenceDetailPage() {
           entityType="conference"
           entityId={Number(id)}
           initialNotes={confNotes}
+          companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name }))}
+          attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: a.company_id, company_name: a.company_name }))}
+          currentConferenceName={conference?.name}
         />
       )}
 

@@ -29,18 +29,24 @@ interface Company {
   name: string;
 }
 
+interface ConferenceOption {
+  id: number;
+  name: string;
+}
+
 interface AddAttendeeForm {
   first_name: string;
   last_name: string;
   title: string;
   company_id: string;
   email: string;
-  notes: string;
+  conference_id: string;
 }
 
 export default function AttendeesPage() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,13 +55,15 @@ export default function AttendeesPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [atRes, coRes] = await Promise.all([
+      const [atRes, coRes, confRes] = await Promise.all([
         fetch('/api/attendees'),
         fetch('/api/companies'),
+        fetch('/api/conferences'),
       ]);
-      const [atData, coData] = await Promise.all([atRes.json(), coRes.json()]);
+      const [atData, coData, confData] = await Promise.all([atRes.json(), coRes.json(), confRes.json()]);
       setAttendees(atData);
       setCompanies(coData);
+      setConferences(Array.isArray(confData) ? confData.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : []);
     } catch {
       toast.error('Failed to load data');
     } finally {
@@ -81,13 +89,31 @@ export default function AttendeesPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...data,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          title: data.title,
+          email: data.email,
           company_id: data.company_id ? parseInt(data.company_id) : null,
         }),
       });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Failed to create');
+      }
+      await res.json();
+      // If a conference was selected, associate the attendee with it
+      if (data.conference_id) {
+        await fetch(`/api/conferences/${data.conference_id}/attendees/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: data.first_name,
+            last_name: data.last_name,
+            title: data.title || '',
+            company: '',
+            email: data.email || '',
+          }),
+        });
       }
       toast.success('Attendee added!');
       reset();
@@ -201,8 +227,14 @@ export default function AttendeesPage() {
                 />
               </div>
               <div>
-                <label className="label">Notes</label>
-                <input {...register('notes')} className="input-field" placeholder="Any notes..." />
+                <label className="label">Conference *</label>
+                <select {...register('conference_id', { required: 'Please select a conference' })} className="input-field">
+                  <option value="">Select a conference...</option>
+                  {conferences.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                {errors.conference_id && <p className="text-red-500 text-xs mt-1">{errors.conference_id.message}</p>}
               </div>
             </div>
             <div className="flex gap-3 mt-4">

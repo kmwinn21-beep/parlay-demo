@@ -580,6 +580,9 @@ export default function AttendeeDetailPage() {
             entityId={Number(id)}
             initialNotes={attendeeNotes}
             conferences={attendee.conferences}
+            currentAttendeeName={`${attendee.first_name} ${attendee.last_name}`}
+            currentCompanyName={attendee.company_name}
+            currentCompanyId={attendee.company_id}
           />
         </div>
 

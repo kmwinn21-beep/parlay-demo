@@ -862,6 +862,10 @@ export default function CompanyDetailPage() {
             entityId={Number(id)}
             initialNotes={companyNotes}
             parentEntityId={company.child_companies && company.child_companies.length > 0 ? Number(id) : undefined}
+            conferences={company.conferences || []}
+            attendees={(company.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: Number(id), company_name: company.name }))}
+            currentCompanyName={company.name}
+            currentCompanyId={Number(id)}
           />
 
         </div>{/* end left column */}

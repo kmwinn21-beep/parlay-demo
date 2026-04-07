@@ -149,7 +149,9 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
+  const userFilterOptions = configOptions.user ?? [];
   const [search, setSearch] = useState('');
+  const [filterSFOwner, setFilterSFOwner] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
@@ -172,7 +174,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterType, filterStatus, filterConfCounts, filterConference, filterICP]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP]);
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
@@ -214,12 +216,13 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const filtered = useMemo(() => {
     const list = companies.filter(c => {
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
+      const matchSFOwner = !filterSFOwner || (c.assigned_user || '') === filterSFOwner;
       const matchType = !filterType || c.company_type === filterType;
       const matchStatus = !filterStatus || (c.status || 'Unknown') === filterStatus;
       const matchConf = confCountMatches(Number(c.conference_count));
       const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
       const matchICP = !filterICP || (c.icp || 'False') === filterICP;
-      return matchSearch && matchType && matchStatus && matchConf && matchConference && matchICP;
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -231,7 +234,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, search, filterType, filterStatus, filterConfCounts, filterConference, filterICP, sortKey, sortDir]);
+  }, [companies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -285,7 +288,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0);
+  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0);
 
   return (
     <div>
@@ -306,6 +309,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         </button>
         {/* Filter controls - always visible on desktop, collapsible on mobile */}
         <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
+          <select value={filterSFOwner} onChange={e => setFilterSFOwner(e.target.value)} className="input-field w-auto">
+            <option value="">All SF Owners</option>
+            {userFilterOptions.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
           <select value={filterType} onChange={e => setFilterType(e.target.value)} className="input-field w-auto">
             <option value="">All Types</option>
             {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
