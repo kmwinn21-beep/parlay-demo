@@ -102,7 +102,6 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
-  const [filterHasFollowUps, setFilterHasFollowUps] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -124,7 +123,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps]);
+  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts]);
 
   const seniorityFilterOptions = useMemo(() => {
     if (seniorityConfigOptions.length > 0) return seniorityConfigOptions;
@@ -172,8 +171,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       const matchStatus = !filterStatus || (a.status || 'Unknown') === filterStatus;
       const matchSeniority = !filterSeniority || effectiveSeniority(a.seniority, a.title) === filterSeniority;
       const matchConf = confCountMatches(Number(a.conference_count));
-      const matchFollowUps = !filterHasFollowUps || a.has_pending_follow_ups === true;
-      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchFollowUps;
+      return matchSearch && matchType && matchStatus && matchSeniority && matchConf;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -187,7 +185,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterHasFollowUps, sortKey, sortDir]);
+  }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -236,7 +234,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterHasFollowUps ? 1 : 0);
+  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0);
 
   return (
     <div>
@@ -288,14 +286,6 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               </div>
             )}
           </div>
-
-          {/* Has Follow-Ups toggle */}
-          <button
-            onClick={() => setFilterHasFollowUps(v => !v)}
-            className={`input-field w-auto flex items-center gap-2 text-sm ${filterHasFollowUps ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : ''}`}
-          >
-            Has Follow-Ups
-          </button>
         </div>
 
         {selectedIds.size >= 1 && (

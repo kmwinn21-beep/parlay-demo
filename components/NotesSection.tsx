@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 
 export interface EntityNote {
@@ -32,18 +33,63 @@ function isLongNote(content: string) {
   return content.length > 300 || content.split('\n').length > 4;
 }
 
+// Render note content with hyperlinked bracketed names
+function NoteContent({ content }: { content: string }) {
+  // Match patterns like [Name] or [Name / Company]
+  const parts = content.split(/(\[[^\]]+\])/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const bracketMatch = part.match(/^\[([^\]]+)\]$/);
+        if (!bracketMatch) return <span key={i}>{part}</span>;
+        const inner = bracketMatch[1];
+        // Check if it's [Attendee Name / Company Name] format
+        const slashParts = inner.split(' / ');
+        if (slashParts.length === 2) {
+          return (
+            <span key={i} className="text-procare-bright-blue font-medium">
+              [{slashParts[0]} / {slashParts[1]}]
+            </span>
+          );
+        }
+        // Single name in brackets
+        return (
+          <span key={i} className="text-procare-bright-blue font-medium">
+            [{inner}]
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 export function NotesSection({
   entityType,
   entityId,
   initialNotes = [],
   parentEntityId,
   conferences = [],
+  companies = [],
+  attendees = [],
+  // Context about the current entity for cross-posting
+  currentAttendeeName,
+  currentCompanyName,
+  currentCompanyId,
+  currentAttendeeId,
+  currentConferenceName,
 }: {
   entityType: 'attendee' | 'company' | 'conference';
   entityId: number;
   initialNotes?: EntityNote[];
   parentEntityId?: number;
   conferences?: Array<{ id: number; name: string }>;
+  companies?: Array<{ id: number; name: string }>;
+  attendees?: Array<{ id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }>;
+  currentAttendeeName?: string;
+  currentCompanyName?: string;
+  currentCompanyId?: number;
+  currentAttendeeId?: number;
+  currentConferenceName?: string;
 }) {
   const [notes, setNotes] = useState<EntityNote[]>(initialNotes);
   const [isAdding, setIsAdding] = useState(false);
@@ -58,6 +104,8 @@ export function NotesSection({
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedConference, setSelectedConference] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
 
   useEffect(() => {
     fetch('/api/config?category=user')
@@ -69,29 +117,201 @@ export function NotesSection({
       .catch(() => {});
   }, []);
 
+  // Filter attendees by selected company when on conference notes
+  const filteredAttendees = selectedCompanyId
+    ? attendees.filter(a => String(a.company_id) === selectedCompanyId)
+    : attendees;
+
   const handleSubmit = async () => {
     if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
     setIsSubmitting(true);
     const content = noteText.trim();
-    const conferenceName = selectedConference || 'General Note';
+    const conferenceName = selectedConference || (entityType === 'conference' ? currentConferenceName : '') || 'General Note';
+    const repValue = selectedUser || null;
+
     try {
+      // Resolve selected entities
+      let selAttendee: (typeof attendees)[0] | undefined;
+      let selCompany: (typeof companies)[0] | undefined;
+      let selConf: (typeof conferences)[0] | undefined;
+      let attendeeLabel = '';
+      let companyLabel = '';
+
+      if (entityType === 'conference') {
+        selCompany = companies.find(c => String(c.id) === selectedCompanyId);
+        selAttendee = filteredAttendees.find(a => String(a.id) === selectedAttendeeId);
+        attendeeLabel = selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : '';
+        companyLabel = selCompany ? selCompany.name : '';
+      } else if (entityType === 'company') {
+        selConf = conferences.find(c => c.name === selectedConference);
+        selAttendee = attendees.find(a => String(a.id) === selectedAttendeeId);
+        attendeeLabel = selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : '';
+        companyLabel = currentCompanyName || '';
+      } else if (entityType === 'attendee') {
+        selConf = conferences.find(c => c.name === selectedConference);
+        attendeeLabel = currentAttendeeName || '';
+        companyLabel = currentCompanyName || '';
+      }
+
+      // Determine primary note content based on where it's being saved:
+      // Conference page: [Attendee Name / Company] Note Body
+      // Company page: [Attendee Name] Note Body
+      // Attendee page: Note Body (plain)
+      let primaryContent = content;
+      if (entityType === 'conference' && selAttendee) {
+        primaryContent = companyLabel
+          ? `[${attendeeLabel} / ${companyLabel}] ${content}`
+          : `[${attendeeLabel}] ${content}`;
+      } else if (entityType === 'company' && selAttendee) {
+        primaryContent = `[${attendeeLabel}] ${content}`;
+      }
+      // entityType === 'attendee': plain content (no prefix)
+
+      // 1. Create the primary note with the correct content
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entity_type: entityType,
           entity_id: entityId,
-          content,
+          content: primaryContent,
           conference_name: conferenceName,
-          rep: selectedUser || null,
+          rep: repValue,
         }),
       });
       if (!res.ok) throw new Error();
       const newNote: EntityNote = await res.json();
       setNotes(prev => [newNote, ...prev]);
+
+      // 2. Cross-post based on entity type and selections
+      // Rules for cross-posted notes:
+      //   Conference notes: [Attendee Name / Company] Note Body
+      //   Company notes: [Attendee Name] Note Body
+      //   Attendee notes: Note Body (plain)
+      const crossPostPromises: Promise<unknown>[] = [];
+
+      if (entityType === 'company') {
+        // Cross-post to conference: [Attendee / Company] format
+        if (selConf) {
+          const confContent = selAttendee
+            ? (companyLabel ? `[${attendeeLabel} / ${companyLabel}] ${content}` : `[${attendeeLabel}] ${content}`)
+            : content;
+          crossPostPromises.push(
+            fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity_type: 'conference',
+                entity_id: selConf.id,
+                content: confContent,
+                conference_name: conferenceName,
+                rep: repValue,
+              }),
+            })
+          );
+        }
+
+        // Cross-post to attendee: plain content
+        if (selAttendee) {
+          crossPostPromises.push(
+            fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity_type: 'attendee',
+                entity_id: selAttendee.id,
+                content,
+                conference_name: conferenceName,
+                rep: repValue,
+              }),
+            })
+          );
+        }
+      } else if (entityType === 'conference') {
+        // Cross-post to company: [Attendee Name] format
+        if (selCompany) {
+          const companyContent = selAttendee ? `[${attendeeLabel}] ${content}` : content;
+          crossPostPromises.push(
+            fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity_type: 'company',
+                entity_id: selCompany.id,
+                content: companyContent,
+                conference_name: conferenceName,
+                rep: repValue,
+              }),
+            })
+          );
+        }
+
+        // Cross-post to attendee: plain content
+        if (selAttendee) {
+          crossPostPromises.push(
+            fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity_type: 'attendee',
+                entity_id: selAttendee.id,
+                content,
+                conference_name: conferenceName,
+                rep: repValue,
+              }),
+            })
+          );
+        }
+      } else if (entityType === 'attendee') {
+        // Cross-post to company: [Attendee Name] format
+        const companyId = currentCompanyId;
+        if (companyId) {
+          crossPostPromises.push(
+            fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity_type: 'company',
+                entity_id: companyId,
+                content: `[${attendeeLabel}] ${content}`,
+                conference_name: conferenceName,
+                rep: repValue,
+              }),
+            })
+          );
+        }
+
+        // Cross-post to conference: [Attendee Name / Company] format
+        if (selConf) {
+          const confPrefix = companyLabel
+            ? `[${attendeeLabel} / ${companyLabel}]`
+            : `[${attendeeLabel}]`;
+          crossPostPromises.push(
+            fetch('/api/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity_type: 'conference',
+                entity_id: selConf.id,
+                content: `${confPrefix} ${content}`,
+                conference_name: conferenceName,
+                rep: repValue,
+              }),
+            })
+          );
+        }
+      }
+
+      // Execute all cross-posts (fire and forget, don't block the user)
+      if (crossPostPromises.length > 0) {
+        await Promise.allSettled(crossPostPromises);
+      }
+
       setNoteText('');
       setSelectedUser('');
       setSelectedConference('');
+      setSelectedCompanyId('');
+      setSelectedAttendeeId('');
       setIsAdding(false);
       toast.success('Note saved.');
     } catch {
@@ -177,6 +397,44 @@ export function NotesSection({
                 </select>
               </div>
             )}
+            {/* Company dropdown for conference notes */}
+            {entityType === 'conference' && companies.length > 0 && (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Company
+                </label>
+                <select
+                  value={selectedCompanyId}
+                  onChange={e => { setSelectedCompanyId(e.target.value); setSelectedAttendeeId(''); }}
+                  className="input-field text-sm w-full"
+                >
+                  <option value="">Select Company (if applicable)</option>
+                  {companies.map(comp => (
+                    <option key={comp.id} value={comp.id}>{comp.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Attendee dropdown for conference and company notes */}
+            {(entityType === 'conference' || entityType === 'company') && attendees.length > 0 && (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Attendee
+                </label>
+                <select
+                  value={selectedAttendeeId}
+                  onChange={e => setSelectedAttendeeId(e.target.value)}
+                  className="input-field text-sm w-full"
+                >
+                  <option value="">Select Attendee (if applicable)</option>
+                  {filteredAttendees.map(att => (
+                    <option key={att.id} value={att.id}>{att.first_name} {att.last_name}{att.company_name ? ` (${att.company_name})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Company dropdown for company notes - for attendee association */}
+            {entityType === 'company' && conferences.length === 0 && companies.length === 0 && null}
           </div>
           <textarea
             value={noteText}
@@ -197,7 +455,7 @@ export function NotesSection({
             </button>
             <button
               type="button"
-              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(''); }}
+              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(''); setSelectedCompanyId(''); setSelectedAttendeeId(''); }}
               className="btn-secondary text-sm"
             >
               Cancel
@@ -216,10 +474,10 @@ export function NotesSection({
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-44">
                   Date / Time
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-36">
+                <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">
                   Conference
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28">
+                <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-12">
                   Rep
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -237,11 +495,11 @@ export function NotesSection({
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap w-44">
                       {formatDateTime(note.created_at)}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap w-36">
+                    <td className="px-2 py-3 text-xs text-gray-600 w-24 break-words">
                       {note.conference_name || '—'}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap w-28">
-                      {note.rep || '—'}
+                    <td className="px-2 py-3 text-xs text-gray-600 whitespace-nowrap w-12 text-center" title={note.rep || undefined}>
+                      {note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-800">
                       {parentEntityId && note.entity_id !== parentEntityId && note.company_name && (
@@ -250,7 +508,7 @@ export function NotesSection({
                         </span>
                       )}
                       <p className={`whitespace-pre-wrap leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
-                        {note.content}
+                        <NoteContent content={note.content} />
                       </p>
                       {long && (
                         <button
