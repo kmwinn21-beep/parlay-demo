@@ -14,6 +14,7 @@ export default function FollowUpsPage() {
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending');
+  const [activeTab, setActiveTab] = useState<'meetings' | 'followups'>('meetings');
   const colorMaps = useConfigColors();
 
   const fetchData = useCallback(async () => {
@@ -186,81 +187,110 @@ export default function FollowUpsPage() {
         </div>
       )}
 
-      {/* Meetings Section */}
-      <div>
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif mb-3">Meetings</h2>
-        <div className="card p-0 overflow-hidden">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
-            </div>
-          ) : (
-            <MeetingsTable
-              meetings={meetings}
-              actionOptions={actionOptions}
-              colorMap={colorMaps.action || {}}
-              userOptions={userOptions}
-              onOutcomeChange={handleOutcomeChange}
-              onDelete={handleDeleteMeeting}
-              onEdit={async (meetingId, data) => {
-                setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
-                try {
-                  const res = await fetch(`/api/meetings/${meetingId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                  });
-                  if (!res.ok) throw new Error();
-                  toast.success('Meeting updated.');
-                } catch {
-                  fetchData();
-                  toast.error('Failed to update meeting.');
-                }
-              }}
-            />
-          )}
-        </div>
+      {/* Top-level tabs */}
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex gap-6 whitespace-nowrap">
+          <button
+            type="button"
+            onClick={() => setActiveTab('meetings')}
+            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'meetings'
+                ? 'border-procare-bright-blue text-procare-bright-blue'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Meetings ({meetings.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('followups')}
+            className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'followups'
+                ? 'border-procare-bright-blue text-procare-bright-blue'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Follow Ups ({followUps.length})
+          </button>
+        </nav>
       </div>
 
-      {/* Follow Ups Section */}
-      <div>
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif mb-3">Follow Ups</h2>
-
-        {/* Filter tabs */}
-        <div className="border-b border-gray-200 overflow-x-auto mb-4">
-          <nav className="flex gap-6 whitespace-nowrap">
-            {(['pending', 'all', 'completed'] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setFilter(tab)}
-                className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors capitalize ${
-                  filter === tab
-                    ? 'border-procare-bright-blue text-procare-bright-blue'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab === 'pending'
-                  ? `Pending (${pendingCount})`
-                  : tab === 'completed'
-                  ? `Completed (${completedCount})`
-                  : `All (${followUps.length})`}
-              </button>
-            ))}
-          </nav>
+      {/* Meetings Tab Content */}
+      {activeTab === 'meetings' && (
+        <div>
+          <div className="card p-0 overflow-hidden">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+              </div>
+            ) : (
+              <MeetingsTable
+                meetings={meetings}
+                actionOptions={actionOptions}
+                colorMap={colorMaps.action || {}}
+                userOptions={userOptions}
+                onOutcomeChange={handleOutcomeChange}
+                onDelete={handleDeleteMeeting}
+                onEdit={async (meetingId, data) => {
+                  setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+                  try {
+                    const res = await fetch(`/api/meetings/${meetingId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(data),
+                    });
+                    if (!res.ok) throw new Error();
+                    toast.success('Meeting updated.');
+                  } catch {
+                    fetchData();
+                    toast.error('Failed to update meeting.');
+                  }
+                }}
+              />
+            )}
+          </div>
         </div>
+      )}
 
-        {/* Table */}
-        <div className="card p-0 overflow-hidden">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-48">
-              <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
-            </div>
-          ) : (
-            <FollowUpsTable followUps={filtered} onToggle={handleToggle} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
-          )}
+      {/* Follow Ups Tab Content */}
+      {activeTab === 'followups' && (
+        <div>
+          {/* Filter tabs */}
+          <div className="border-b border-gray-200 overflow-x-auto mb-4">
+            <nav className="flex gap-6 whitespace-nowrap">
+              {(['pending', 'all', 'completed'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setFilter(tab)}
+                  className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors capitalize ${
+                    filter === tab
+                      ? 'border-procare-bright-blue text-procare-bright-blue'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab === 'pending'
+                    ? `Pending (${pendingCount})`
+                    : tab === 'completed'
+                    ? `Completed (${completedCount})`
+                    : `All (${followUps.length})`}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Table */}
+          <div className="card p-0 overflow-hidden">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+              </div>
+            ) : (
+              <FollowUpsTable followUps={filtered} onToggle={handleToggle} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

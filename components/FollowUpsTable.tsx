@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
 
 export interface FollowUp {
   attendee_id: number;
@@ -148,7 +149,7 @@ export function FollowUpsTable({
                       Done
                     </>
                   ) : (
-                    'Mark Done'
+                    'Done'
                   )}
                 </button>
                 {onDelete && (
@@ -171,14 +172,19 @@ export function FollowUpsTable({
                 <span className="text-xs text-gray-500">{fu.next_steps_notes}</span>
               )}
             </div>
-            <div className="mt-1.5">
+            <div className="mt-1.5 flex items-center gap-2">
               <Link
                 href={`/conferences/${fu.conference_id}`}
                 className="text-xs text-procare-bright-blue hover:underline"
               >
                 {fu.conference_name}
               </Link>
-              <span className="text-xs text-gray-400 ml-1">· {formatDate(fu.start_date)}</span>
+              <span className="text-xs text-gray-400">· {formatDate(fu.start_date)}</span>
+              <FollowUpNotesPopover
+                attendeeId={fu.attendee_id}
+                notesCount={Number(fu.entity_notes_count)}
+                conferenceName={fu.conference_name}
+              />
             </div>
           </div>
         ))}
@@ -195,7 +201,8 @@ export function FollowUpsTable({
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Next Step</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Conference</th>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Rep</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Done</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Status</th>
               {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -274,6 +281,13 @@ export function FollowUpsTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
+                  <FollowUpNotesPopover
+                    attendeeId={fu.attendee_id}
+                    notesCount={Number(fu.entity_notes_count)}
+                    conferenceName={fu.conference_name}
+                  />
+                </td>
+                <td className="px-3 py-2">
                   <button
                     type="button"
                     onClick={() => onToggle(fu.attendee_id, fu.conference_id, !fu.completed)}
@@ -291,7 +305,7 @@ export function FollowUpsTable({
                         Done
                       </>
                     ) : (
-                      'Mark Done'
+                      'Done'
                     )}
                   </button>
                 </td>
