@@ -266,7 +266,9 @@ export default function AttendeeDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
-    try { await patchAttendee({ status: value, company_id: attendee?.company_id ?? null }); toast.success('Status updated.'); }
+    const current = attendee?.status || 'Unknown';
+    const newStatus = current === value ? '' : value;
+    try { await patchAttendee({ status: newStatus, company_id: attendee?.company_id ?? null }); toast.success(newStatus ? 'Status updated.' : 'Status cleared.'); }
     catch { toast.error('Failed to update status.'); }
   };
 
