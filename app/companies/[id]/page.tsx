@@ -219,15 +219,17 @@ export default function CompanyDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
+    const currentStatus = company?.status || 'Unknown';
+    const newStatus = currentStatus === value ? '' : value;
     try {
       const res = await fetch(`/api/companies/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: value }),
+        body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error();
-      setCompany(prev => prev ? { ...prev, status: value } : prev);
-      toast.success(`Status set to "${value}" — all attendees updated.`);
+      setCompany(prev => prev ? { ...prev, status: newStatus } : prev);
+      toast.success(newStatus ? `Status set to "${newStatus}" — all attendees updated.` : 'Status cleared — all attendees updated.');
     } catch {
       toast.error('Failed to update status.');
     }
