@@ -396,6 +396,7 @@ export function MeetingsTable({
   onDelete,
   onEdit,
   userOptions = [],
+  hideCompany = false,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -404,6 +405,7 @@ export function MeetingsTable({
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
   userOptions?: string[];
+  hideCompany?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -494,13 +496,13 @@ export function MeetingsTable({
                       {m.first_name} {m.last_name}
                     </Link>
                     {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
-                    {m.company_name && m.company_id ? (
+                    {!hideCompany && (m.company_name && m.company_id ? (
                       <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5">
                         {m.company_name}
                       </Link>
                     ) : m.company_name ? (
                       <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
-                    ) : null}
+                    ) : null)}
                   </div>
                   <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
                   {onEdit && (
@@ -549,7 +551,7 @@ export function MeetingsTable({
               <SortHeader label="Name" col="name" />
               <SortHeader label="Title" col="title" />
               <SortHeader label="Rep" col="scheduled_by" />
-              <SortHeader label="Company" col="company" />
+              {!hideCompany && <SortHeader label="Company" col="company" />}
               <SortHeader label="Date/Time" col="datetime" />
               <SortHeader label="Conference" col="conference" />
               <SortHeader label="Outcome" col="outcome" />
@@ -566,7 +568,7 @@ export function MeetingsTable({
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
                   onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                  colSpan={8 + (hasActions ? 1 : 0)}
+                  colSpan={(hideCompany ? 7 : 8) + (hasActions ? 1 : 0)}
                   userOptions={userOptions}
                 />
               ) : (
@@ -591,6 +593,7 @@ export function MeetingsTable({
                     <span className="text-gray-300">—</span>
                   )}
                 </td>
+                {!hideCompany && (
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   {m.company_name && m.company_id ? (
                     <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
@@ -600,6 +603,7 @@ export function MeetingsTable({
                     <span className="text-gray-300">—</span>
                   )}
                 </td>
+                )}
                 <td className="px-3 py-2 text-gray-600 leading-snug">
                   <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
                   <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
