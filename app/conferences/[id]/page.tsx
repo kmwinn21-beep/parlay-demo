@@ -89,6 +89,7 @@ interface ConferenceDetail {
   next_steps?: string;
   next_steps_notes?: string;
   notes?: string;
+  assigned_rep?: string;
 }
 
 function formatDate(dateStr: string) {
@@ -700,7 +701,7 @@ export default function ConferenceDetailPage() {
             onClick={() => setActiveTab('analytics')}
             className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
-            Analytics
+            Insights
           </button>
           <button
             onClick={() => { setActiveTab('notes'); loadCompanies(); }}
@@ -1041,7 +1042,7 @@ export default function ConferenceDetailPage() {
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} />
+        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} conferenceName={conference?.name || ''} />
       )}
 
       {/* Notes Tab */}
