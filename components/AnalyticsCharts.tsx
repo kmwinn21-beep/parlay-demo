@@ -241,7 +241,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             </div>
           )}
           {filteredCompanyTypeData.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-8">No company type data available.</p>
+            <p className="text-xs text-gray-500 text-center py-8">No company type data available.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
@@ -306,7 +306,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             </div>
           )}
           {filteredSeniorityData.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-8">No attendee data available.</p>
+            <p className="text-xs text-gray-500 text-center py-8">No attendee data available.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
@@ -374,7 +374,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             )}
             {filteredActionLabels.map((label) => (
               <div key={label} className="flex items-center justify-between">
-                <span className="text-sm text-gray-700">{label}</span>
+                <span className="text-xs text-gray-700">{label}</span>
                 <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-bright-blue text-white">
                   {actionCounts[label] || 0}
                 </span>
@@ -415,7 +415,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
               )}
               {filteredNextStepsLabels.map((label) => (
                 <div key={label} className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className="text-xs text-gray-700">{label}</span>
                   <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-dark-blue text-white">
                     {nextStepsCounts[label] || 0}
                   </span>
@@ -436,7 +436,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             Attendee Activity
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
