@@ -40,6 +40,13 @@ function formatMeetingTime(t: string) {
   return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
 function MeetingInfoTooltip({ scheduledBy, location, attendees, companyWse }: { scheduledBy?: string | null; location?: string | null; attendees?: string | null; companyWse?: number | null }) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -520,11 +527,11 @@ export function MeetingsTable({
                     onChange={(val) => onOutcomeChange(m.id, val)}
                   />
                   {m.scheduled_by && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap" title={m.scheduled_by}>
                       <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {m.scheduled_by}
+                      {getInitials(m.scheduled_by)}
                     </span>
                   )}
                 </div>
@@ -541,7 +548,7 @@ export function MeetingsTable({
             <tr className="bg-gray-50 border-b border-gray-200">
               <SortHeader label="Name" col="name" />
               <SortHeader label="Title" col="title" />
-              <SortHeader label="Scheduled By" col="scheduled_by" />
+              <SortHeader label="Rep" col="scheduled_by" />
               <SortHeader label="Company" col="company" />
               <SortHeader label="Date/Time" col="datetime" />
               <SortHeader label="Conference" col="conference" />
@@ -574,11 +581,11 @@ export function MeetingsTable({
                 </td>
                 <td className="px-3 py-2 leading-snug">
                   {m.scheduled_by ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap" title={m.scheduled_by}>
                       <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {m.scheduled_by}
+                      {getInitials(m.scheduled_by)}
                     </span>
                   ) : (
                     <span className="text-gray-300">—</span>
