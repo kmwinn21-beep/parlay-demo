@@ -301,7 +301,7 @@ export default async function DashboardPage() {
                 </svg>
               </span>
             </h2>
-            <Link href="/companies" className="text-sm text-procare-bright-blue hover:underline">View all &rarr;</Link>
+            <Link href="/companies?status=Priority" className="text-sm text-procare-bright-blue hover:underline">View all &rarr;</Link>
           </div>
           <PriorityLeads leads={priorityLeads} />
         </div>
