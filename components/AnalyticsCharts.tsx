@@ -9,6 +9,11 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from 'recharts';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -35,11 +40,13 @@ interface ConferenceDetail {
   next_steps?: string;
   next_steps_notes?: string;
   notes?: string;
+  assigned_rep?: string;
 }
 
 interface AnalyticsChartsProps {
   attendees: Attendee[];
   conferenceDetails: ConferenceDetail[];
+  conferenceName: string;
 }
 
 function buildSeniorityData(attendees: Attendee[]) {
@@ -93,7 +100,7 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 }
 
-export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChartsProps) {
+export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName }: AnalyticsChartsProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
   const seniorityAll = buildSeniorityData(attendees);
@@ -128,17 +135,11 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
 
   // Dynamic labels from Admin Panel config
   const actionLabels = configOptions.action || [];
-  const nextStepsLabels = configOptions.next_steps || [];
-
-  // Visibility toggles — all visible by default
+  // Visibility toggles — all visible by default except "Pending"
   const [visibleActions, setVisibleActions] = useState<Set<string> | null>(null);
-  const [visibleNextSteps, setVisibleNextSteps] = useState<Set<string> | null>(null);
   const [showActionFilter, setShowActionFilter] = useState(false);
-  const [showNextStepsFilter, setShowNextStepsFilter] = useState(false);
 
-  // Initialize visibility sets once options load
-  const effectiveVisibleActions = visibleActions ?? new Set(actionLabels);
-  const effectiveVisibleNextSteps = visibleNextSteps ?? new Set(nextStepsLabels);
+  const effectiveVisibleActions = visibleActions ?? new Set(actionLabels.filter(l => l !== 'Pending'));
 
   const toggleAction = (label: string) => {
     const current = new Set(effectiveVisibleActions);
@@ -150,42 +151,66 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
     setVisibleActions(current);
   };
 
-  const toggleNextStep = (label: string) => {
-    const current = new Set(effectiveVisibleNextSteps);
-    if (current.has(label)) {
-      current.delete(label);
-    } else {
-      current.add(label);
-    }
-    setVisibleNextSteps(current);
-  };
-
   // Filtered labels based on visibility selection
   const filteredActionLabels = actionLabels.filter(l => effectiveVisibleActions.has(l));
-  const filteredNextStepsLabels = nextStepsLabels.filter(l => effectiveVisibleNextSteps.has(l));
 
-  // Count actions — action field may contain comma-separated multiple values
-  const actionCounts: Record<string, number> = {};
-  for (const label of actionLabels) actionCounts[label] = 0;
+  // Build per-rep action data for stacked bar chart
+  const repActionData: Record<string, Record<string, number>> = {};
   for (const d of conferenceDetails) {
+    const rep = d.assigned_rep || 'Unassigned';
+    if (!repActionData[rep]) repActionData[rep] = {};
     if (d.action) {
       const actions = d.action.split(',').map(s => s.trim()).filter(Boolean);
       for (const a of actions) {
         if (actionLabels.includes(a)) {
-          actionCounts[a] = (actionCounts[a] || 0) + 1;
+          repActionData[rep][a] = (repActionData[rep][a] || 0) + 1;
         }
       }
     }
   }
 
-  // Count next steps
-  const nextStepsCounts: Record<string, number> = {};
-  for (const label of nextStepsLabels) nextStepsCounts[label] = 0;
-  for (const d of conferenceDetails) {
-    if (d.next_steps && nextStepsLabels.includes(d.next_steps)) {
-      nextStepsCounts[d.next_steps] = (nextStepsCounts[d.next_steps] || 0) + 1;
-    }
-  }
+  // Build chart data: each entry is { rep, total, [actionLabel]: percentage, [actionLabel + '_count']: count }
+  const stackedData = Object.entries(repActionData)
+    .map(([rep, actions]) => {
+      const total = filteredActionLabels.reduce((sum, label) => sum + (actions[label] || 0), 0);
+      const entry: Record<string, string | number> = { rep, total };
+      for (const label of filteredActionLabels) {
+        const count = actions[label] || 0;
+        entry[label] = total > 0 ? Math.round((count / total) * 100) : 0;
+        entry[label + '_count'] = count;
+      }
+      return entry;
+    })
+    .filter(d => (d.total as number) > 0)
+    .sort((a, b) => (b.total as number) - (a.total as number));
+
+  // Custom label renderer factory — looks up the individual segment value from data
+  const makeStackedLabel = (dataKey: string) => {
+    const StackedLabel = (props: any) => {
+    const { x, y, width, height, index } = props;
+    const entry = stackedData[index];
+    const segmentValue = entry ? (entry[dataKey] as number) : 0;
+    if (!segmentValue || segmentValue < 1) return <text />;
+    const text = `${segmentValue}%`;
+    const textWidth = text.length * 7;
+    if (width < textWidth + 4 || height < 14) return <text />;
+    return (
+      <text
+        x={x + width / 2}
+        y={y + height / 2}
+        fill="white"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={600}
+      >
+        {text}
+      </text>
+    );
+    };
+    StackedLabel.displayName = `StackedLabel(${dataKey})`;
+    return StackedLabel;
+  };
 
   // Build attendee activity table (attendees with action OR next_steps)
   const detailMap = new Map<number, ConferenceDetail>();
@@ -203,10 +228,14 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
     if (attendee) activityRows.push({ attendee, detail });
   });
 
+  const chartTitle = conferenceName ? `${conferenceName} Activities Summary` : 'Activities Summary';
+  const barHeight = 40;
+  const chartHeight = Math.max(300, stackedData.length * barHeight + 80);
+
   return (
     <div className="space-y-8">
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Company Type Breakdown */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -337,96 +366,88 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           )}
         </div>
 
-        {/* Actions & Next Steps */}
-        <div className="card">
-          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
-            Actions &amp; Next Steps
+      </div>
+
+      {/* Stacked Bar Chart — Activities Summary by Rep */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
+            {chartTitle}
           </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
-              <button
-                type="button"
-                onClick={() => setShowActionFilter(!showActionFilter)}
-                className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
-                title="Filter visible actions"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Filter
-              </button>
-            </div>
-            {showActionFilter && (
-              <div className="bg-gray-50 rounded-lg p-2 space-y-1">
-                {actionLabels.map((label) => (
-                  <label key={label} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
-                    <input
-                      type="checkbox"
-                      checked={effectiveVisibleActions.has(label)}
-                      onChange={() => toggleAction(label)}
-                      className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            )}
-            {filteredActionLabels.map((label) => (
-              <div key={label} className="flex items-center justify-between">
-                <span className="text-sm text-gray-700">{label}</span>
-                <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-sm font-bold bg-procare-bright-blue text-white">
-                  {actionCounts[label] || 0}
-                </span>
-              </div>
-            ))}
-            {filteredActionLabels.length === 0 && (
-              <p className="text-sm text-gray-400 italic">No actions selected</p>
-            )}
-            <div className="border-t border-gray-100 pt-3">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Next Steps</p>
-                <button
-                  type="button"
-                  onClick={() => setShowNextStepsFilter(!showNextStepsFilter)}
-                  className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
-                  title="Filter visible next steps"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                  </svg>
-                  Filter
-                </button>
-              </div>
-              {showNextStepsFilter && (
-                <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-2">
-                  {nextStepsLabels.map((label) => (
-                    <label key={label} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
-                      <input
-                        type="checkbox"
-                        checked={effectiveVisibleNextSteps.has(label)}
-                        onChange={() => toggleNextStep(label)}
-                        className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              )}
-              {filteredNextStepsLabels.map((label) => (
-                <div key={label} className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-700">{label}</span>
-                  <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-sm font-bold bg-procare-dark-blue text-white">
-                    {nextStepsCounts[label] || 0}
-                  </span>
-                </div>
-              ))}
-              {filteredNextStepsLabels.length === 0 && (
-                <p className="text-sm text-gray-400 italic">No next steps selected</p>
-              )}
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowActionFilter(!showActionFilter)}
+            className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+            title="Filter visible actions"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filter
+          </button>
         </div>
+        {showActionFilter && (
+          <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-3">
+            {actionLabels.map((label) => (
+              <label key={label} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={effectiveVisibleActions.has(label)}
+                  onChange={() => toggleAction(label)}
+                  className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        )}
+        {stackedData.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-8">No activity data available</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={chartHeight}>
+            <BarChart
+              data={stackedData}
+              layout="vertical"
+              margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+              barSize={28}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+              <YAxis
+                type="category"
+                dataKey="rep"
+                tick={{ fontSize: 12 }}
+                width={120}
+              />
+              <Tooltip
+                formatter={(value: any, name: any, props: any) => {
+                  const count = props.payload[name + '_count'] || 0;
+                  return [`${value}% (${count})`, name];
+                }}
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+              />
+              <Legend
+                align="center"
+                wrapperStyle={{
+                  fontSize: 'clamp(12px, 1vw, 14px)',
+                  lineHeight: '1.8',
+                  paddingTop: '14px',
+                  marginTop: '14px',
+                }}
+              />
+              {filteredActionLabels.map((label) => (
+                <Bar
+                  key={label}
+                  dataKey={label}
+                  stackId="actions"
+                  fill={getHex(label, colorMaps.action || {})}
+                  name={label}
+                  label={makeStackedLabel(label)}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Attendee Activity Table */}
