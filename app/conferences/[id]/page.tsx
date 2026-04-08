@@ -10,6 +10,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
 import { CompanyTable } from '@/components/CompanyTable';
+import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { BackButton } from '@/components/BackButton';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -113,15 +114,17 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'meetings' | 'analytics' | 'follow-ups' | 'notes'>('attendees');
+  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'meetings' | 'analytics' | 'follow-ups' | 'social' | 'notes'>('attendees');
   const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
+  const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
@@ -166,7 +169,7 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
@@ -174,6 +177,8 @@ export default function ConferenceDetailPage() {
         fetch(`/api/meetings?conference_id=${id}`),
         fetch('/api/config?category=action'),
         fetch('/api/config?category=user'),
+        fetch(`/api/social-events?conference_id=${id}`),
+        fetch('/api/config?category=event_type'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -181,6 +186,8 @@ export default function ConferenceDetailPage() {
       const followUpsData = followUpsRes.ok ? await followUpsRes.json() : [];
       const notesData = notesRes.ok ? await notesRes.json() : [];
       const meetingsData = meetingsRes.ok ? await meetingsRes.json() : [];
+      const socialData = socialRes.ok ? await socialRes.json() : [];
+      const eventTypeData = eventTypeRes.ok ? await eventTypeRes.json() : [];
       const actionData = actionRes.ok ? await actionRes.json() : [];
       const userData = userRes.ok ? await userRes.json() : [];
       setConference(data);
@@ -188,8 +195,10 @@ export default function ConferenceDetailPage() {
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
       setConfNotes(Array.isArray(notesData) ? notesData : []);
       setConfMeetings(Array.isArray(meetingsData) ? meetingsData : []);
+      setConfSocialEvents(Array.isArray(socialData) ? socialData : []);
       setActionOptions(actionData.map((o: { value: string }) => o.value));
       setUserOptions(userData.map((o: { value: string }) => o.value));
+      setEventTypeOptions(eventTypeData.map((o: { value: string }) => o.value));
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -680,6 +689,12 @@ export default function ConferenceDetailPage() {
             className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
+          </button>
+          <button
+            onClick={() => { setActiveTab('social'); loadCompanies(); }}
+            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'social' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            Social{confSocialEvents.length > 0 ? ` (${confSocialEvents.length})` : ''}
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
@@ -1185,6 +1200,19 @@ export default function ConferenceDetailPage() {
             }}
           />
         </div>
+      )}
+
+      {activeTab === 'social' && (
+        <SocialEventsTable
+          conferenceId={Number(id)}
+          conferenceName={conference?.name || ''}
+          events={confSocialEvents}
+          onRefresh={fetchConference}
+          userOptions={userOptions}
+          eventTypeOptions={eventTypeOptions}
+          companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name }))}
+          attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: a.company_id, company_name: a.company_name, company_type: a.company_type }))}
+        />
       )}
     </div>
   );
