@@ -46,6 +46,7 @@ interface Company {
   conferences?: ConferenceItem[];
   parent_company?: { id: number; name: string } | null;
   child_companies?: { id: number; name: string; website: string | null; company_type: string | null; attendee_count: number }[];
+  related_companies?: { id: number; name: string; company_type: string | null }[];
 }
 
 function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
@@ -115,6 +116,14 @@ export default function CompanyDetailPage() {
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
 
+  // Operator / Capital relationship state
+  const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
+  const [capitalTypeValues, setCapitalTypeValues] = useState<Set<string>>(new Set());
+  const [showRelateModal, setShowRelateModal] = useState(false);
+  const [relateSearch, setRelateSearch] = useState('');
+  const [relateResults, setRelateResults] = useState<{ id: number; name: string; company_type: string | null }[]>([]);
+  const [relateSaving, setRelateSaving] = useState(false);
+
   const fetchCompany = useCallback(async () => {
     try {
       const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes] = await Promise.all([
@@ -145,7 +154,24 @@ export default function CompanyDetailPage() {
         icp: data.icp || 'False',
       });
       if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
-      if (compTypeRes.ok) setCompanyTypeOptions((await compTypeRes.json()).map((o: { value: string }) => o.value));
+      if (compTypeRes.ok) {
+        const compTypeData = await compTypeRes.json();
+        setCompanyTypeOptions(compTypeData.map((o: { value: string }) => o.value));
+        // Identify Operator and Capital type values by their config option IDs
+        // so the relationship section works even if option names change in Admin
+        const opVals = new Set<string>();
+        const capVals = new Set<string>();
+        for (const opt of compTypeData) {
+          const v = (opt.value as string).toLowerCase();
+          if (v.includes('operator') || v === 'opco' || v === 'own/op') {
+            opVals.add(opt.value as string);
+          } else if (v.includes('capital') || v === 'propco') {
+            capVals.add(opt.value as string);
+          }
+        }
+        setOperatorTypeValues(opVals);
+        setCapitalTypeValues(capVals);
+      }
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { value: string }) => o.value));
@@ -194,6 +220,29 @@ export default function CompanyDetailPage() {
     setEditData((p) => ({ ...p, icp }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, editData.wse, editData.company_type, editData.services]);
+
+  // Search companies for relate modal
+  useEffect(() => {
+    if (!showRelateModal || relateSearch.length < 2) {
+      setRelateResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    fetch('/api/companies', { signal: controller.signal })
+      .then(r => r.json())
+      .then((companies: { id: number; name: string; company_type?: string }[]) => {
+        const existingRelatedIds = new Set((company?.related_companies || []).map(c => c.id));
+        const q = relateSearch.toLowerCase();
+        setRelateResults(
+          companies
+            .filter(c => c.id !== Number(id) && !existingRelatedIds.has(c.id) && c.name.toLowerCase().includes(q))
+            .slice(0, 10)
+            .map(c => ({ id: c.id, name: c.name, company_type: c.company_type || null }))
+        );
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [showRelateModal, relateSearch, id, company?.related_companies]);
 
   const handleSave = async () => {
     if (!editData.name) {
@@ -265,6 +314,43 @@ export default function CompanyDetailPage() {
       toast.error('Failed to update company.');
     } finally {
       setSavingCompanyAttendeeId(null);
+    }
+  };
+
+  const handleAddRelationship = async (relatedCompanyId: number) => {
+    setRelateSaving(true);
+    try {
+      const res = await fetch('/api/companies/relationships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id_1: Number(id), company_id_2: relatedCompanyId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Relationship added.');
+      setShowRelateModal(false);
+      setRelateSearch('');
+      setRelateResults([]);
+      fetchCompany();
+    } catch {
+      toast.error('Failed to add relationship.');
+    } finally {
+      setRelateSaving(false);
+    }
+  };
+
+  const handleRemoveRelationship = async (relatedCompanyId: number) => {
+    if (!confirm('Remove this relationship?')) return;
+    try {
+      const res = await fetch('/api/companies/relationships', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id_1: Number(id), company_id_2: relatedCompanyId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Relationship removed.');
+      fetchCompany();
+    } catch {
+      toast.error('Failed to remove relationship.');
     }
   };
 
@@ -948,6 +1034,112 @@ export default function CompanyDetailPage() {
                   </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Operator / Capital Relationships — shown when company type is Operator or Capital */}
+          {company.company_type && (operatorTypeValues.has(company.company_type) || capitalTypeValues.has(company.company_type)) && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                  Operator / Capital Relationships
+                </h2>
+                <button
+                  onClick={() => setShowRelateModal(true)}
+                  className="text-xs text-procare-bright-blue hover:underline font-medium"
+                >
+                  + Add
+                </button>
+              </div>
+              {!company.related_companies || company.related_companies.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-3">No related companies yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {company.related_companies.map(rel => (
+                    <div
+                      key={rel.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group"
+                    >
+                      <Link href={`/companies/${rel.id}`} className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
+                        {rel.company_type && (
+                          <span className={`mt-1 ${getBadgeClass(rel.company_type, colorMaps.company_type || {})}`}>
+                            {rel.company_type}
+                          </span>
+                        )}
+                      </Link>
+                      <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                        <button
+                          onClick={() => handleRemoveRelationship(rel.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+                          title="Remove relationship"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                        <Link href={`/companies/${rel.id}`}>
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Relate modal */}
+              {showRelateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                  <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+                    <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
+                      Add Related Company
+                    </h3>
+                    <input
+                      type="text"
+                      placeholder="Search companies..."
+                      value={relateSearch}
+                      onChange={(e) => setRelateSearch(e.target.value)}
+                      className="input w-full mb-3"
+                      autoFocus
+                    />
+                    <div className="max-h-60 overflow-y-auto space-y-1">
+                      {relateResults.length === 0 && relateSearch.length >= 2 && (
+                        <p className="text-sm text-gray-400 text-center py-3">No companies found.</p>
+                      )}
+                      {relateResults.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => handleAddRelationship(c.id)}
+                          disabled={relateSaving}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{c.name}</p>
+                            {c.company_type && (
+                              <span className={`mt-0.5 ${getBadgeClass(c.company_type, colorMaps.company_type || {})}`}>
+                                {c.company_type}
+                              </span>
+                            )}
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}
+                        className="btn-secondary text-sm"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
