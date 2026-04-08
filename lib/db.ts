@@ -166,6 +166,22 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (company_id_2) REFERENCES companies(id) ON DELETE CASCADE
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_company_rel_unique ON company_relationships(company_id_1, company_id_2)`,
+    `CREATE TABLE IF NOT EXISTS social_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL,
+      entered_by TEXT,
+      internal_attendees TEXT,
+      event_type TEXT,
+      host TEXT,
+      location TEXT,
+      event_date TEXT,
+      event_time TEXT,
+      invite_only TEXT DEFAULT 'No',
+      prospect_attendees TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
