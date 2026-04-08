@@ -1,28 +1,96 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 
+function FilterSelect({ value, onChange, label, children }: { value: string; onChange: (v: string) => void; label: string; children: React.ReactNode }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} className="input-field w-auto text-sm">
+      <option value="">{label}</option>
+      {children}
+    </select>
+  );
+}
+
+function FilterDropdown({ label, options, selected, onToggle, onClear }: { label: string; options: string[]; selected: Set<string>; onToggle: (v: string) => void; onClear: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`input-field w-auto flex items-center gap-2 text-sm whitespace-nowrap ${selected.size > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
+      >
+        {label}{selected.size > 0 ? ` (${selected.size})` : ''}
+        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2 min-w-[180px] max-h-56 overflow-y-auto">
+          {options.length === 0 ? (
+            <div className="px-2 py-1.5 text-sm text-gray-400">No options</div>
+          ) : options.map(opt => (
+            <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
+              <input type="checkbox" checked={selected.has(opt)} onChange={() => onToggle(opt)} className="accent-procare-bright-blue" />
+              <span className="truncate">{opt}</span>
+            </label>
+          ))}
+          {selected.size > 0 && (
+            <button onClick={onClear} className="text-xs text-red-500 hover:underline px-2 mt-1">Clear</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [conferenceOptions, setConferenceOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending');
   const [activeTab, setActiveTab] = useState<'meetings' | 'followups'>('meetings');
   const colorMaps = useConfigColors();
 
+  // Shared filters
+  const [filterRep, setFilterRep] = useState('');
+  const [filterConference, setFilterConference] = useState('');
+
+  // Meetings-specific filters
+  const [filterOutcome, setFilterOutcome] = useState<Set<string>>(new Set());
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+
+  // Follow-ups-specific filters
+  const [filterNextStep, setFilterNextStep] = useState<Set<string>>(new Set());
+
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   const fetchData = useCallback(async () => {
     try {
-      const [fuRes, mtgRes, cfgRes] = await Promise.all([
+      const [fuRes, mtgRes, cfgRes, confRes] = await Promise.all([
         fetch('/api/follow-ups'),
         fetch('/api/meetings'),
         fetch('/api/config'),
+        fetch('/api/conferences'),
       ]);
       if (!fuRes.ok) throw new Error();
       if (!mtgRes.ok) throw new Error();
@@ -38,6 +106,15 @@ export default function FollowUpsPage() {
           setActionOptions(actionOpts.map((o: { value: string }) => o.value));
           const userOpts = cfgData.filter((o: { category: string }) => o.category === 'user');
           setUserOptions(userOpts.map((o: { value: string }) => o.value));
+          const nsOpts = cfgData.filter((o: { category: string }) => o.category === 'next_steps');
+          setNextStepsOptions(nsOpts.map((o: { value: string }) => o.value));
+        }
+      }
+
+      if (confRes.ok) {
+        const confData = await confRes.json();
+        if (Array.isArray(confData)) {
+          setConferenceOptions(confData.map((c: { name: string }) => c.name).filter(Boolean));
         }
       }
     } catch {
@@ -147,11 +224,36 @@ export default function FollowUpsPage() {
     }
   };
 
-  const filtered = followUps.filter((fu) => {
-    if (filter === 'pending') return !fu.completed;
-    if (filter === 'completed') return fu.completed;
-    return true;
-  });
+  const toggleOutcome = (v: string) => setFilterOutcome(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
+  const toggleNextStep = (v: string) => setFilterNextStep(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
+
+  const filteredMeetings = useMemo(() => {
+    return meetings.filter(m => {
+      if (filterRep && (m.scheduled_by || '') !== filterRep) return false;
+      if (filterConference && m.conference_name !== filterConference) return false;
+      if (filterOutcome.size > 0 && !filterOutcome.has(m.outcome || '')) return false;
+      if (filterDateFrom && m.meeting_date < filterDateFrom) return false;
+      if (filterDateTo && m.meeting_date > filterDateTo) return false;
+      return true;
+    });
+  }, [meetings, filterRep, filterConference, filterOutcome, filterDateFrom, filterDateTo]);
+
+  const filteredFollowUps = useMemo(() => {
+    return followUps.filter(fu => {
+      if (filter === 'pending' && fu.completed) return false;
+      if (filter === 'completed' && !fu.completed) return false;
+      if (filterRep && (fu.assigned_rep || '') !== filterRep) return false;
+      if (filterConference && fu.conference_name !== filterConference) return false;
+      if (filterNextStep.size > 0 && !filterNextStep.has(fu.next_steps)) return false;
+      return true;
+    });
+  }, [followUps, filter, filterRep, filterConference, filterNextStep]);
+
+  const meetingsFilterCount = (filterRep ? 1 : 0) + (filterConference ? 1 : 0) + (filterOutcome.size > 0 ? 1 : 0) + (filterDateFrom || filterDateTo ? 1 : 0);
+  const followUpsFilterCount = (filterRep ? 1 : 0) + (filterConference ? 1 : 0) + (filterNextStep.size > 0 ? 1 : 0);
+  const activeFilterCount = activeTab === 'meetings' ? meetingsFilterCount : followUpsFilterCount;
+
+  const filtered = filteredFollowUps;
 
   const pendingCount = followUps.filter((fu) => !fu.completed).length;
   const completedCount = followUps.filter((fu) => fu.completed).length;
@@ -218,6 +320,52 @@ export default function FollowUpsPage() {
       {/* Meetings Tab Content */}
       {activeTab === 'meetings' && (
         <div>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <button
+              onClick={() => setShowMobileFilters(v => !v)}
+              className={`lg:hidden input-field w-auto flex items-center gap-2 text-sm ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              <svg className={`w-3 h-3 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
+              <FilterSelect value={filterRep} onChange={setFilterRep} label="All Reps">
+                {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+              </FilterSelect>
+              <FilterSelect value={filterConference} onChange={setFilterConference} label="All Conferences">
+                {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </FilterSelect>
+              <FilterDropdown
+                label="Outcome"
+                options={actionOptions}
+                selected={filterOutcome}
+                onToggle={toggleOutcome}
+                onClear={() => setFilterOutcome(new Set())}
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={e => setFilterDateFrom(e.target.value)}
+                  className="input-field w-auto text-sm"
+                  title="From date"
+                  placeholder="From"
+                />
+                <span className="text-gray-400 text-xs">to</span>
+                <input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={e => setFilterDateTo(e.target.value)}
+                  className="input-field w-auto text-sm"
+                  title="To date"
+                  placeholder="To"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="card p-0 overflow-hidden">
             {isLoading ? (
               <div className="flex items-center justify-center h-32">
@@ -225,7 +373,7 @@ export default function FollowUpsPage() {
               </div>
             ) : (
               <MeetingsTable
-                meetings={meetings}
+                meetings={filteredMeetings}
                 actionOptions={actionOptions}
                 colorMap={colorMaps.action || {}}
                 userOptions={userOptions}
@@ -255,6 +403,33 @@ export default function FollowUpsPage() {
       {/* Follow Ups Tab Content */}
       {activeTab === 'followups' && (
         <div>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <button
+              onClick={() => setShowMobileFilters(v => !v)}
+              className={`lg:hidden input-field w-auto flex items-center gap-2 text-sm ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              <svg className={`w-3 h-3 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
+              <FilterSelect value={filterRep} onChange={setFilterRep} label="All Reps">
+                {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+              </FilterSelect>
+              <FilterSelect value={filterConference} onChange={setFilterConference} label="All Conferences">
+                {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </FilterSelect>
+              <FilterDropdown
+                label="Next Step"
+                options={nextStepsOptions}
+                selected={filterNextStep}
+                onToggle={toggleNextStep}
+                onClear={() => setFilterNextStep(new Set())}
+              />
+            </div>
+          </div>
+
           {/* Filter tabs */}
           <div className="border-b border-gray-200 overflow-x-auto mb-4">
             <nav className="flex gap-6 whitespace-nowrap">
