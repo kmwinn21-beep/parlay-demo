@@ -28,6 +28,16 @@ export async function POST(request: NextRequest) {
           { sql: 'UPDATE attendees SET company_id = ? WHERE company_id = ?', args: [master_id, dupId] },
           // Reassign child companies from duplicate to master
           { sql: 'UPDATE companies SET parent_company_id = ? WHERE parent_company_id = ?', args: [master_id, dupId] },
+          // Transfer relationships from duplicate to master (ignore conflicts)
+          { sql: `INSERT OR IGNORE INTO company_relationships (company_id_1, company_id_2)
+                  SELECT CASE WHEN company_id_1 = ? THEN MIN(?, company_id_2) ELSE MIN(company_id_1, ?) END,
+                         CASE WHEN company_id_1 = ? THEN MAX(?, company_id_2) ELSE MAX(company_id_1, ?) END
+                  FROM company_relationships WHERE company_id_1 = ? OR company_id_2 = ?`,
+            args: [dupId, master_id, master_id, dupId, master_id, master_id, dupId, dupId] },
+          // Remove old relationships for the duplicate
+          { sql: 'DELETE FROM company_relationships WHERE company_id_1 = ? OR company_id_2 = ?', args: [dupId, dupId] },
+          // Remove any self-referencing relationship if master was related to the duplicate
+          { sql: 'DELETE FROM company_relationships WHERE company_id_1 = company_id_2', args: [] },
           // Delete the duplicate company
           { sql: 'DELETE FROM companies WHERE id = ?', args: [dupId] },
         ],

@@ -32,7 +32,7 @@ export async function GET(
 
     const company = companyResult.rows[0];
 
-    const [attendeesResult, confsResult, childCompaniesResult, parentResult] = await Promise.all([
+    const [attendeesResult, confsResult, childCompaniesResult, parentResult, relatedResult] = await Promise.all([
       db.execute({
         sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count,
                      GROUP_CONCAT(DISTINCT conf.name) as conference_names
@@ -69,6 +69,15 @@ export async function GET(
             args: [company.parent_company_id],
           })
         : Promise.resolve({ rows: [] }),
+      db.execute({
+        sql: `SELECT c.id, c.name, c.company_type
+              FROM companies c
+              INNER JOIN company_relationships cr
+                ON (cr.company_id_1 = c.id AND cr.company_id_2 = ?)
+                OR (cr.company_id_2 = c.id AND cr.company_id_1 = ?)
+              ORDER BY c.name`,
+        args: [params.id, params.id],
+      }),
     ]);
 
     const attendees = attendeesResult.rows.map((r) => ({ ...r }));
@@ -93,6 +102,12 @@ export async function GET(
       ? { id: Number(parentResult.rows[0].id), name: String(parentResult.rows[0].name) }
       : null;
 
+    const related_companies = relatedResult.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name),
+      company_type: r.company_type ? String(r.company_type) : null,
+    }));
+
     return NextResponse.json({
       ...company,
       services: parseServices(company.services),
@@ -101,6 +116,7 @@ export async function GET(
       conferences,
       child_companies,
       parent_company,
+      related_companies,
     });
   } catch (error) {
     console.error('GET /api/companies/[id] error:', error);
@@ -190,11 +206,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
 
-    // Unlink attendees from this company, clear child references, then delete the company
+    // Unlink attendees from this company, clear child references, remove relationships, then delete the company
     await db.batch(
       [
         { sql: 'UPDATE attendees SET company_id = NULL WHERE company_id = ?', args: [params.id] },
         { sql: 'UPDATE companies SET parent_company_id = NULL WHERE parent_company_id = ?', args: [params.id] },
+        { sql: 'DELETE FROM company_relationships WHERE company_id_1 = ? OR company_id_2 = ?', args: [params.id, params.id] },
         { sql: 'DELETE FROM companies WHERE id = ?', args: [params.id] },
       ],
       'write'

@@ -157,6 +157,15 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'teal' WHERE category = 'event_type' AND value = 'Procare Hosted' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'event_type' AND value = 'Partner' AND color IS NULL`,
     `UPDATE config_options SET color = 'yellow' WHERE category = 'event_type' AND value = 'Conference Event' AND color IS NULL`,
+    `CREATE TABLE IF NOT EXISTS company_relationships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id_1 INTEGER NOT NULL,
+      company_id_2 INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id_1) REFERENCES companies(id) ON DELETE CASCADE,
+      FOREIGN KEY (company_id_2) REFERENCES companies(id) ON DELETE CASCADE
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_company_rel_unique ON company_relationships(company_id_1, company_id_2)`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
