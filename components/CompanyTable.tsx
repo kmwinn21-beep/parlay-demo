@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
@@ -146,6 +147,7 @@ const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
+  const searchParams = useSearchParams();
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
@@ -153,7 +155,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [search, setSearch] = useState('');
   const [filterSFOwner, setFilterSFOwner] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') ?? '');
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterConference, setFilterConference] = useState('');
