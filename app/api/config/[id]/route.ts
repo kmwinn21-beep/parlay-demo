@@ -40,13 +40,24 @@ export async function PUT(
     if (oldValue !== value) {
       try {
         if (category === 'status') {
+          // Status is stored as comma-separated values — use padded REPLACE to match exact entries
           await db.execute({
-            sql: 'UPDATE attendees SET status = ? WHERE status = ?',
-            args: [value, oldValue],
+            sql: `UPDATE attendees
+                  SET status = TRIM(
+                    REPLACE(',' || COALESCE(status, '') || ',', ',' || ? || ',', ',' || ? || ','),
+                    ','
+                  )
+                  WHERE ',' || COALESCE(status, '') || ',' LIKE '%,' || ? || ',%'`,
+            args: [oldValue, value, oldValue],
           });
           await db.execute({
-            sql: 'UPDATE companies SET status = ? WHERE status = ?',
-            args: [value, oldValue],
+            sql: `UPDATE companies
+                  SET status = TRIM(
+                    REPLACE(',' || COALESCE(status, '') || ',', ',' || ? || ',', ',' || ? || ','),
+                    ','
+                  )
+                  WHERE ',' || COALESCE(status, '') || ',' LIKE '%,' || ? || ',%'`,
+            args: [oldValue, value, oldValue],
           });
         } else if (category === 'company_type') {
           await db.execute({

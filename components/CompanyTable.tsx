@@ -220,7 +220,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
       const matchSFOwner = !filterSFOwner || (c.assigned_user || '') === filterSFOwner;
       const matchType = !filterType || c.company_type === filterType;
-      const matchStatus = !filterStatus || (c.status || 'Unknown') === filterStatus;
+      const matchStatus = !filterStatus || (c.status || 'Unknown').split(',').map(s => s.trim()).some(s => s === filterStatus);
       const matchConf = confCountMatches(Number(c.conference_count));
       const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
       const matchICP = !filterICP || (c.icp || 'False') === filterICP;
@@ -438,7 +438,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 </button>
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
+                <span className="flex flex-wrap gap-1">{(company.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
                 {company.assigned_user && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
@@ -517,7 +517,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                       <span className="text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3"><span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span></td>
+                  <td className="px-3 py-3"><span className="flex flex-wrap gap-1">{(company.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span></td>
                   <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
                   <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>
                   <td className="px-3 py-3">

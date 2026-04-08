@@ -72,7 +72,7 @@ export async function PUT(
         action || null,
         next_steps || null,
         next_steps_notes || null,
-        status || 'Unknown',
+        status !== undefined ? status : '',
         seniority || null,
         params.id,
       ],
@@ -126,7 +126,7 @@ export async function PATCH(
     }
     if ('status' in body) {
       setClauses.push('status = ?');
-      args.push(status || 'Unknown');
+      args.push(status !== undefined ? status : '');
     }
     if ('notes' in body) {
       setClauses.push('notes = ?');

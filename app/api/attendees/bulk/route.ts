@@ -20,7 +20,7 @@ export async function PATCH(request: NextRequest) {
     const setClauses: string[] = [];
     const baseArgs: (string | number | null)[] = [];
 
-    if ('status' in fields) { setClauses.push('status = ?'); baseArgs.push(fields.status || 'Unknown'); }
+    if ('status' in fields) { setClauses.push('status = ?'); baseArgs.push(fields.status ?? ''); }
     if ('title' in fields) { setClauses.push('title = ?'); baseArgs.push(fields.title || null); }
     if ('seniority' in fields) { setClauses.push('seniority = ?'); baseArgs.push(fields.seniority || null); }
     if ('company_id' in fields) { setClauses.push('company_id = ?'); baseArgs.push(fields.company_id ?? null); }
