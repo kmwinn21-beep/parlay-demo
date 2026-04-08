@@ -658,69 +658,140 @@ export function SocialEventsTable({
       {events.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No social events yet. Click &quot;Add Social Event&quot; to get started.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Entered By</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Internal</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Type</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Host</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Location</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Time</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Invite Only</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Prospects</th>
-                <th className="px-3 py-3 w-10" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {events.map(event => (
-                <tr key={event.id} className="hover:bg-gray-50 align-top">
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.entered_by || '—'}</td>
-                  <td className="px-3 py-3 text-gray-700">
+        <>
+          {/* Mobile card layout */}
+          <div className="md:hidden space-y-3">
+            {events.map(event => (
+              <div key={event.id} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-procare-dark-blue">{event.event_type || 'Social Event'}</p>
+                    <p className="text-xs text-gray-500">{event.host || '—'}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(event)}
+                      className="text-gray-300 hover:text-procare-bright-blue transition-colors p-1"
+                      title="Edit event"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(event.id)}
+                      className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                      title="Delete event"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</p>
+                    <p className="text-gray-700">{formatDate(event.event_date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Time</p>
+                    <p className="text-gray-700">{formatTime(event.event_time)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location</p>
+                    <p className="text-gray-700">{event.location || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Invite Only</p>
+                    <p className="text-gray-700">{event.invite_only === 'Yes' ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entered By</p>
+                    <p className="text-gray-700">{event.entered_by || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal</p>
                     <InternalAttendeePill internalAttendees={event.internal_attendees} />
-                  </td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.event_type || '—'}</td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.host || '—'}</td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.location || '—'}</td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(event.event_date)}</td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(event.event_time)}</td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.invite_only === 'Yes' ? 'Yes' : 'No'}</td>
-                  <td className="px-3 py-3">
-                    <ProspectAttendeePill prospectAttendees={event.prospect_attendees} notes={event.notes} attendees={attendees} />
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(event)}
-                        className="text-gray-300 hover:text-procare-bright-blue transition-colors"
-                        title="Edit event"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(event.id)}
-                        className="text-gray-300 hover:text-red-500 transition-colors"
-                        title="Delete event"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Prospects</span>
+                  <ProspectAttendeePill prospectAttendees={event.prospect_attendees} notes={event.notes} attendees={attendees} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Entered By</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Internal</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Type</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Host</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Location</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Time</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Invite Only</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Prospects</th>
+                  <th className="px-3 py-3 w-10" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {events.map(event => (
+                  <tr key={event.id} className="hover:bg-gray-50 align-top">
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.entered_by || '—'}</td>
+                    <td className="px-3 py-3 text-gray-700">
+                      <InternalAttendeePill internalAttendees={event.internal_attendees} />
+                    </td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.event_type || '—'}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.host || '—'}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.location || '—'}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(event.event_date)}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(event.event_time)}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{event.invite_only === 'Yes' ? 'Yes' : 'No'}</td>
+                    <td className="px-3 py-3">
+                      <ProspectAttendeePill prospectAttendees={event.prospect_attendees} notes={event.notes} attendees={attendees} />
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(event)}
+                          className="text-gray-300 hover:text-procare-bright-blue transition-colors"
+                          title="Edit event"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(event.id)}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                          title="Delete event"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
