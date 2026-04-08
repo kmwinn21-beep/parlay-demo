@@ -90,6 +90,11 @@ export async function PUT(
                   WHERE ',' || COALESCE(action, '') || ',' LIKE '%,' || ? || ',%'`,
             args: [oldValue, value, oldValue],
           });
+          // Also update meetings.outcome to stay in sync
+          await db.execute({
+            sql: 'UPDATE meetings SET outcome = ? WHERE outcome = ?',
+            args: [value, oldValue],
+          });
         } else if (category === 'services') {
           await db.execute({
             sql: `UPDATE companies

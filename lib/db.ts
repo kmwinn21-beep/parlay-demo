@@ -182,6 +182,15 @@ export async function initDb(): Promise<void> {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
+    // Add action_key column for stable identification of meeting-related actions
+    `ALTER TABLE config_options ADD COLUMN action_key TEXT`,
+    // Seed action_key for known meeting actions (match by category + known default values)
+    `UPDATE config_options SET action_key = 'meeting_scheduled' WHERE category = 'action' AND value = 'Meeting Scheduled' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'meeting_held' WHERE category = 'action' AND value = 'Meeting Held' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'rescheduled' WHERE category = 'action' AND value = 'Rescheduled' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'cancelled' WHERE category = 'action' AND value = 'Cancelled' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'no_show' WHERE category = 'action' AND value = 'Meeting No-Show' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'pending' WHERE category = 'action' AND value = 'Pending' AND action_key IS NULL`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -204,9 +213,11 @@ export async function initDb(): Promise<void> {
       { category: 'status', value: 'Unknown', sort_order: 5 },
       { category: 'action', value: 'Meeting Scheduled', sort_order: 1 },
       { category: 'action', value: 'Meeting Held', sort_order: 2 },
-      { category: 'action', value: 'Social Conversation', sort_order: 3 },
-      { category: 'action', value: 'Meeting No-Show', sort_order: 4 },
-      { category: 'action', value: 'Pending', sort_order: 5 },
+      { category: 'action', value: 'Rescheduled', sort_order: 3 },
+      { category: 'action', value: 'Cancelled', sort_order: 4 },
+      { category: 'action', value: 'Meeting No-Show', sort_order: 5 },
+      { category: 'action', value: 'Social Conversation', sort_order: 6 },
+      { category: 'action', value: 'Pending', sort_order: 7 },
       { category: 'next_steps', value: 'Schedule Follow Up Meeting', sort_order: 1 },
       { category: 'next_steps', value: 'General Follow Up', sort_order: 2 },
       { category: 'next_steps', value: 'Other', sort_order: 3 },
@@ -235,6 +246,8 @@ export async function initDb(): Promise<void> {
     { category: 'seniority', value: 'Other', sort_order: 10 },
     { category: 'profit_type', value: 'For-Profit', sort_order: 1 },
     { category: 'profit_type', value: 'Non-Profit', sort_order: 2 },
+    { category: 'action', value: 'Rescheduled', sort_order: 3 },
+    { category: 'action', value: 'Cancelled', sort_order: 4 },
     { category: 'action', value: 'Pending', sort_order: 5 },
     { category: 'company_type', value: 'Capital', sort_order: 7 },
     { category: 'company_type', value: 'Operator', sort_order: 8 },
@@ -261,6 +274,24 @@ export async function initDb(): Promise<void> {
       await db.execute({
         sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
         args: [seed.category, seed.value, seed.sort_order],
+      });
+    } catch { /* ignore */ }
+  }
+
+  // Always ensure action_key is set for meeting-related actions (runs every startup)
+  const actionKeySeeds: Array<{ key: string; value: string }> = [
+    { key: 'meeting_scheduled', value: 'Meeting Scheduled' },
+    { key: 'meeting_held', value: 'Meeting Held' },
+    { key: 'rescheduled', value: 'Rescheduled' },
+    { key: 'cancelled', value: 'Cancelled' },
+    { key: 'no_show', value: 'Meeting No-Show' },
+    { key: 'pending', value: 'Pending' },
+  ];
+  for (const { key, value } of actionKeySeeds) {
+    try {
+      await db.execute({
+        sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND value = ? AND (action_key IS NULL OR action_key = '')",
+        args: [key, value],
       });
     } catch { /* ignore */ }
   }

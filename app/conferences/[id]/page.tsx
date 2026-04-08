@@ -124,6 +124,7 @@ export default function ConferenceDetailPage() {
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
@@ -198,6 +199,11 @@ export default function ConferenceDetailPage() {
       setConfMeetings(Array.isArray(meetingsData) ? meetingsData : []);
       setConfSocialEvents(Array.isArray(socialData) ? socialData : []);
       setActionOptions(actionData.map((o: { value: string }) => o.value));
+      setActionConfigs(actionData.map((o: { id: number; value: string; action_key?: string | null }) => ({
+        id: o.id,
+        value: o.value,
+        action_key: o.action_key ?? null,
+      })));
       setUserOptions(userData.map((o: { value: string }) => o.value));
       setEventTypeOptions(eventTypeData.map((o: { value: string }) => o.value));
       setEditData({
@@ -1042,7 +1048,7 @@ export default function ConferenceDetailPage() {
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} conferenceName={conference?.name || ''} />
+        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} conferenceName={conference?.name || ''} actionConfigs={actionConfigs} />
       )}
 
       {/* Notes Tab */}

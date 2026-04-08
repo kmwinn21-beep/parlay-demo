@@ -101,9 +101,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
     }
 
+    // Look up the current display name for "Pending" by action_key
+    const pendingConfig = await db.execute({
+      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'pending' LIMIT 1",
+      args: [],
+    });
+    const pendingName = pendingConfig.rows.length > 0
+      ? String(pendingConfig.rows[0].value)
+      : 'Pending';
+
     const result = await db.execute({
       sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
@@ -113,10 +122,20 @@ export async function POST(request: NextRequest) {
         location ?? null,
         scheduled_by ?? null,
         additional_attendees ?? null,
+        pendingName,
       ],
     });
 
-    // Also update the conference_attendee_details action to include "Meeting Scheduled"
+    // Look up the current display name for "Meeting Scheduled" by action_key
+    const meetingScheduledConfig = await db.execute({
+      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' LIMIT 1",
+      args: [],
+    });
+    const meetingScheduledName = meetingScheduledConfig.rows.length > 0
+      ? String(meetingScheduledConfig.rows[0].value)
+      : 'Meeting Scheduled';
+
+    // Also update the conference_attendee_details action to include the meeting scheduled action
     const existing = await db.execute({
       sql: 'SELECT action FROM conference_attendee_details WHERE attendee_id = ? AND conference_id = ?',
       args: [attendee_id, conference_id],
@@ -125,7 +144,7 @@ export async function POST(request: NextRequest) {
     if (existing.rows.length > 0) {
       const currentAction = String(existing.rows[0].action ?? '');
       const actions = new Set(currentAction.split(',').map(a => a.trim()).filter(Boolean));
-      actions.add('Meeting Scheduled');
+      actions.add(meetingScheduledName);
       await db.execute({
         sql: 'UPDATE conference_attendee_details SET action = ? WHERE attendee_id = ? AND conference_id = ?',
         args: [Array.from(actions).join(','), attendee_id, conference_id],
@@ -133,7 +152,7 @@ export async function POST(request: NextRequest) {
     } else {
       await db.execute({
         sql: 'INSERT OR REPLACE INTO conference_attendee_details (attendee_id, conference_id, action) VALUES (?, ?, ?)',
-        args: [attendee_id, conference_id, 'Meeting Scheduled'],
+        args: [attendee_id, conference_id, meetingScheduledName],
       });
     }
 

@@ -17,7 +17,6 @@ import {
 } from 'recharts';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getHex, getBadgeClass } from '@/lib/colors';
 import { NotesPopover } from './NotesPopover';
 
@@ -43,10 +42,17 @@ interface ConferenceDetail {
   assigned_rep?: string;
 }
 
+interface ActionConfig {
+  id: number;
+  value: string;
+  action_key: string | null;
+}
+
 interface AnalyticsChartsProps {
   attendees: Attendee[];
   conferenceDetails: ConferenceDetail[];
   conferenceName: string;
+  actionConfigs: ActionConfig[];
 }
 
 function buildSeniorityData(attendees: Attendee[]) {
@@ -100,9 +106,8 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 }
 
-export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName }: AnalyticsChartsProps) {
+export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, actionConfigs }: AnalyticsChartsProps) {
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
   const seniorityAll = buildSeniorityData(attendees);
   const companyTypeData = buildCompanyTypeData(attendees);
 
@@ -133,85 +138,6 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName }
     setVisibleSeniorities(current);
   };
 
-  // Dynamic labels from Admin Panel config
-  const actionLabels = configOptions.action || [];
-  // Visibility toggles — all visible by default except "Pending"
-  const [visibleActions, setVisibleActions] = useState<Set<string> | null>(null);
-  const [showActionFilter, setShowActionFilter] = useState(false);
-
-  const effectiveVisibleActions = visibleActions ?? new Set(actionLabels.filter(l => l !== 'Pending'));
-
-  const toggleAction = (label: string) => {
-    const current = new Set(effectiveVisibleActions);
-    if (current.has(label)) {
-      current.delete(label);
-    } else {
-      current.add(label);
-    }
-    setVisibleActions(current);
-  };
-
-  // Filtered labels based on visibility selection
-  const filteredActionLabels = actionLabels.filter(l => effectiveVisibleActions.has(l));
-
-  // Build per-rep action data for stacked bar chart
-  const repActionData: Record<string, Record<string, number>> = {};
-  for (const d of conferenceDetails) {
-    const rep = d.assigned_rep || 'Unassigned';
-    if (!repActionData[rep]) repActionData[rep] = {};
-    if (d.action) {
-      const actions = d.action.split(',').map(s => s.trim()).filter(Boolean);
-      for (const a of actions) {
-        if (actionLabels.includes(a)) {
-          repActionData[rep][a] = (repActionData[rep][a] || 0) + 1;
-        }
-      }
-    }
-  }
-
-  // Build chart data: each entry is { rep, total, [actionLabel]: percentage, [actionLabel + '_count']: count }
-  const stackedData = Object.entries(repActionData)
-    .map(([rep, actions]) => {
-      const total = filteredActionLabels.reduce((sum, label) => sum + (actions[label] || 0), 0);
-      const entry: Record<string, string | number> = { rep, total };
-      for (const label of filteredActionLabels) {
-        const count = actions[label] || 0;
-        entry[label] = total > 0 ? Math.round((count / total) * 100) : 0;
-        entry[label + '_count'] = count;
-      }
-      return entry;
-    })
-    .filter(d => (d.total as number) > 0)
-    .sort((a, b) => (b.total as number) - (a.total as number));
-
-  // Custom label renderer factory — looks up the individual segment value from data
-  const makeStackedLabel = (dataKey: string) => {
-    const StackedLabel = (props: any) => {
-    const { x, y, width, height, index } = props;
-    const entry = stackedData[index];
-    const segmentValue = entry ? (entry[dataKey] as number) : 0;
-    if (!segmentValue || segmentValue < 1) return <text />;
-    const text = `${segmentValue}%`;
-    const textWidth = text.length * 7;
-    if (width < textWidth + 4 || height < 14) return <text />;
-    return (
-      <text
-        x={x + width / 2}
-        y={y + height / 2}
-        fill="white"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={11}
-        fontWeight={600}
-      >
-        {text}
-      </text>
-    );
-    };
-    StackedLabel.displayName = `StackedLabel(${dataKey})`;
-    return StackedLabel;
-  };
-
   // Build attendee activity table (attendees with action OR next_steps)
   const detailMap = new Map<number, ConferenceDetail>();
   for (const d of conferenceDetails) {
@@ -228,9 +154,117 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName }
     if (attendee) activityRows.push({ attendee, detail });
   });
 
-  const chartTitle = conferenceName ? `${conferenceName} Activities Summary` : 'Activities Summary';
-  const barHeight = 40;
-  const chartHeight = Math.max(300, stackedData.length * barHeight + 80);
+  // Meetings Summary chart — resolve meeting actions by action_key (ID-based) from config
+  // Each action_key stably identifies a meeting action regardless of display name changes
+  const MEETING_KEYS = ['meeting_scheduled', 'meeting_held', 'rescheduled', 'cancelled', 'no_show'] as const;
+  const MEETING_CHART_LABELS: Record<string, string> = {
+    meeting_scheduled: 'Meetings Scheduled',
+    meeting_held: 'Meetings Held',
+    rescheduled: 'Rescheduled',
+    cancelled: 'Cancelled',
+    no_show: 'No-Show',
+  };
+
+  // Fallback name patterns for matching when action_key is not yet set
+  const MEETING_KEY_PATTERNS: Record<string, RegExp> = {
+    meeting_scheduled: /meeting\s*scheduled/i,
+    meeting_held: /meeting\s*held/i,
+    rescheduled: /reschedul/i,
+    cancelled: /cancel/i,
+    no_show: /no[\s-]*show/i,
+  };
+
+  // Build lookup: action_key → { id, displayName } using config option IDs
+  // Primary: match by action_key field; Fallback: match by name pattern
+  const keyToConfig: Record<string, { id: number; displayName: string }> = {};
+  for (const key of MEETING_KEYS) {
+    // First try exact action_key match
+    const byKey = actionConfigs.find(cfg => cfg.action_key === key);
+    if (byKey) {
+      keyToConfig[key] = { id: byKey.id, displayName: byKey.value };
+    } else {
+      // Fallback: match by name pattern against action configs
+      const byPattern = actionConfigs.find(cfg => MEETING_KEY_PATTERNS[key]?.test(cfg.value));
+      if (byPattern) {
+        keyToConfig[key] = { id: byPattern.id, displayName: byPattern.value };
+      }
+    }
+  }
+
+  // Map display names for chart labels and legend
+  const meetingActionDisplayNames: Record<string, string> = {};
+  for (const key of MEETING_KEYS) {
+    if (keyToConfig[key]) {
+      meetingActionDisplayNames[keyToConfig[key].displayName] = MEETING_CHART_LABELS[key];
+    }
+  }
+
+  // Count conference details by matching action text against resolved display names
+  const resolvedKeys = MEETING_KEYS.filter(k => keyToConfig[k]);
+  const meetingCounts: Record<string, number> = {};
+  for (const key of resolvedKeys) meetingCounts[key] = 0;
+
+  for (const d of conferenceDetails) {
+    if (d.action) {
+      const actions = d.action.split(',').map(s => s.trim()).filter(Boolean);
+      for (const a of actions) {
+        for (const key of resolvedKeys) {
+          if (a === keyToConfig[key].displayName) {
+            meetingCounts[key]++;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  const meetingsScheduledTotal = meetingCounts['meeting_scheduled'] || 0;
+  const outcomeKeys = MEETING_KEYS.filter(k => k !== 'meeting_scheduled' && keyToConfig[k]);
+  const meetingSummaryData: Record<string, string | number>[] = meetingsScheduledTotal > 0
+    ? [{
+        name: 'Meetings',
+        ...Object.fromEntries(outcomeKeys.map(key => [
+          keyToConfig[key].displayName,
+          Math.round((meetingCounts[key] / meetingsScheduledTotal) * 100),
+        ])),
+        ...Object.fromEntries(outcomeKeys.map(key => [
+          keyToConfig[key].displayName + '_count',
+          meetingCounts[key],
+        ])),
+      }]
+    : [];
+  const meetingOutcomeKeys = outcomeKeys.map(k => keyToConfig[k].displayName);
+
+  const meetingsChartTitle = conferenceName
+    ? `${conferenceName} Meetings Summary`
+    : 'Meetings Summary';
+
+  const makeMeetingLabel = (dataKey: string) => {
+    const MeetingLabel = (props: any) => {
+      const { x, y, width, height, index } = props;
+      const entry = meetingSummaryData[index];
+      const segmentValue = entry ? (entry[dataKey] as number) : 0;
+      if (!segmentValue || segmentValue < 1) return <text />;
+      const text = `${segmentValue}%`;
+      const textWidth = text.length * 7;
+      if (width < textWidth + 4 || height < 14) return <text />;
+      return (
+        <text
+          x={x + width / 2}
+          y={y + height / 2}
+          fill="white"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={11}
+          fontWeight={600}
+        >
+          {text}
+        </text>
+      );
+    };
+    MeetingLabel.displayName = `MeetingLabel(${dataKey})`;
+    return MeetingLabel;
+  };
 
   return (
     <div className="space-y-8">
@@ -368,66 +402,44 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName }
 
       </div>
 
-      {/* Stacked Bar Chart — Activities Summary by Rep */}
+      {/* Horizontal Stacked Bar Chart — Meetings Summary */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
-            {chartTitle}
+            {meetingsChartTitle}
           </h3>
-          <button
-            type="button"
-            onClick={() => setShowActionFilter(!showActionFilter)}
-            className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
-            title="Filter visible actions"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            Filter
-          </button>
+          <span className="text-sm text-gray-500">
+            Total Meetings Scheduled: {meetingsScheduledTotal}
+          </span>
         </div>
-        {showActionFilter && (
-          <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-3">
-            {actionLabels.map((label) => (
-              <label key={label} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
-                <input
-                  type="checkbox"
-                  checked={effectiveVisibleActions.has(label)}
-                  onChange={() => toggleAction(label)}
-                  className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        )}
-        {stackedData.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-8">No activity data available</p>
+        {meetingSummaryData.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-8">No meetings data available</p>
         ) : (
-          <ResponsiveContainer width="100%" height={chartHeight}>
+          <ResponsiveContainer width="100%" height={140}>
             <BarChart
-              data={stackedData}
+              data={meetingSummaryData}
               layout="vertical"
               margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-              barSize={28}
+              barSize={36}
             >
               <CartesianGrid strokeDasharray="3 3" horizontal={false} />
               <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
               <YAxis
                 type="category"
-                dataKey="rep"
+                dataKey="name"
                 tick={{ fontSize: 12 }}
-                width={120}
+                width={80}
               />
               <Tooltip
                 formatter={(value: any, name: any, props: any) => {
                   const count = props.payload[name + '_count'] || 0;
-                  return [`${value}% (${count})`, name];
+                  return [`${value}% (${count})`, meetingActionDisplayNames[name] || name];
                 }}
                 contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
               />
               <Legend
                 align="center"
+                formatter={(value: string) => meetingActionDisplayNames[value] || value}
                 wrapperStyle={{
                   fontSize: 'clamp(12px, 1vw, 14px)',
                   lineHeight: '1.8',
@@ -435,14 +447,14 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName }
                   marginTop: '14px',
                 }}
               />
-              {filteredActionLabels.map((label) => (
+              {meetingOutcomeKeys.map((key) => (
                 <Bar
-                  key={label}
-                  dataKey={label}
-                  stackId="actions"
-                  fill={getHex(label, colorMaps.action || {})}
-                  name={label}
-                  label={makeStackedLabel(label)}
+                  key={key}
+                  dataKey={key}
+                  stackId="meetings"
+                  fill={getHex(key, colorMaps.action || {})}
+                  name={key}
+                  label={makeMeetingLabel(key)}
                 />
               ))}
             </BarChart>
