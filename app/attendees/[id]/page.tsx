@@ -414,6 +414,14 @@ export default function AttendeeDetailPage() {
       if (!res.ok) throw new Error();
       toast.success('Meeting deleted.');
       fetchMeetings();
+      // Refresh conference detail to reflect deselected actions
+      if (selectedConferenceId) {
+        const detailRes = await fetch(`/api/conference-details?attendee_id=${id}&conference_id=${selectedConferenceId}`);
+        if (detailRes.ok) {
+          const data = await detailRes.json();
+          setConferenceDetail(data);
+        }
+      }
     } catch {
       toast.error('Failed to delete meeting.');
     }
