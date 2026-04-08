@@ -154,7 +154,7 @@ export async function PATCH(
     const body = await request.json();
     const { status } = body;
 
-    if (!status) {
+    if (status === undefined || status === null) {
       return NextResponse.json({ error: 'status is required' }, { status: 400 });
     }
 
