@@ -73,6 +73,17 @@ export function Header() {
         <p className="text-xs text-gray-500 hidden sm:block">Senior Housing Conference Hub</p>
       </div>
       <div className="flex items-center gap-2">
+        {/* Add New Conference */}
+        <Link
+          href="/conferences/new"
+          className="flex items-center gap-2 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Add New Conference"
+        >
+          <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span className="text-sm font-medium text-procare-dark-blue hidden lg:block">Conference</span>
+        </Link>
         {/* Conference Navigator */}
         <div className="relative" ref={dropdownRef}>
           <button
