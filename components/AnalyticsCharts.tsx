@@ -243,7 +243,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           {filteredCompanyTypeData.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No company type data available.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={340}>
               <PieChart>
                 <Pie
                   data={filteredCompanyTypeData}
@@ -308,7 +308,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           {filteredSeniorityData.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No attendee data available.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={340}>
               <PieChart>
                 <Pie
                   data={filteredSeniorityData}
