@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
 import { PriorityLeads, PriorityLead } from '@/components/PriorityLeads';
+import AttendeesTooltip from '@/components/AttendeesTooltip';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -221,27 +222,7 @@ export default async function DashboardPage() {
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {conf.internal_attendees.length > 0 && (
-                        <span className="relative group/tip">
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-procare-bright-blue cursor-default">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </span>
-                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex flex-col items-center z-20">
-                            <span className="rounded-lg bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl">
-                              <span className="block font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Internal Attendees</span>
-                              <span className="block space-y-1">
-                                {conf.internal_attendees.map((name, i) => (
-                                  <span key={i} className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
-                                    <span className="whitespace-nowrap">{name}</span>
-                                  </span>
-                                ))}
-                              </span>
-                            </span>
-                            <span className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" />
-                          </span>
-                        </span>
+                        <AttendeesTooltip attendees={conf.internal_attendees} />
                       )}
                     </div>
                     <svg className="w-4 h-4 text-gray-300 group-hover:text-procare-bright-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -298,27 +279,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                       {conf.internal_attendees.length > 0 && (
-                        <span className="relative group/tip2">
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-procare-bright-blue cursor-default">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </span>
-                          <span className="pointer-events-none absolute bottom-full right-0 mb-2 hidden group-hover/tip2:flex flex-col items-end z-20">
-                            <span className="rounded-lg bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl">
-                              <span className="block font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Internal Attendees</span>
-                              <span className="block space-y-1">
-                                {conf.internal_attendees.map((name, i) => (
-                                  <span key={i} className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
-                                    <span className="whitespace-nowrap">{name}</span>
-                                  </span>
-                                ))}
-                              </span>
-                            </span>
-                            <span className="w-2 h-2 bg-gray-900 rotate-45 -mt-1 mr-2" />
-                          </span>
-                        </span>
+                        <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
                       )}
                     </div>
                   </div>
