@@ -885,6 +885,7 @@ export default function CompanyDetailPage() {
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
               userOptions={userOptions}
+              hideCompany
               onOutcomeChange={async (meetingId, outcome) => {
                 setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {

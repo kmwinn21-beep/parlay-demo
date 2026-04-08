@@ -544,7 +544,7 @@ export default function AttendeeDetailPage() {
                 )}
               </h2>
             </div>
-            <MeetingsTable meetings={meetings} actionOptions={actionOptions} colorMap={colorMaps.action || {}} userOptions={userOptions} onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
+            <MeetingsTable meetings={meetings} actionOptions={actionOptions} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
               setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
               try {
                 const res = await fetch(`/api/meetings/${meetingId}`, {
