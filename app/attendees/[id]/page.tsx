@@ -266,8 +266,9 @@ export default function AttendeeDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
-    const current = attendee?.status || 'Unknown';
-    const newStatus = current === value ? '' : value;
+    const currentStatuses = new Set((attendee?.status || '').split(',').map(s => s.trim()).filter(Boolean));
+    if (currentStatuses.has(value)) { currentStatuses.delete(value); } else { currentStatuses.add(value); }
+    const newStatus = Array.from(currentStatuses).join(',');
     try { await patchAttendee({ status: newStatus, company_id: attendee?.company_id ?? null }); toast.success(newStatus ? 'Status updated.' : 'Status cleared.'); }
     catch { toast.error('Failed to update status.'); }
   };
@@ -424,7 +425,7 @@ export default function AttendeeDetailPage() {
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
   const currentStatus = attendee.status || 'Unknown';
-  const statusCls = getPillClass(currentStatus, colorMaps.status || {});
+  const currentStatuses = new Set(currentStatus.split(',').map(s => s.trim()).filter(Boolean));
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -483,7 +484,9 @@ export default function AttendeeDetailPage() {
                       {attendee.title && <p className="text-gray-600 mt-1">{attendee.title}</p>}
                       <div className="flex flex-wrap gap-2 mt-2">
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
-                        <span className={`badge ${statusCls}`}>{currentStatus}</span>
+                        {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
+                          <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{s}</span>
+                        )) : <span className={`badge ${getPillClass('Unknown', colorMaps.status || {})}`}>Unknown</span>}
                         {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
                       </div>
                     </div>
@@ -615,7 +618,7 @@ export default function AttendeeDetailPage() {
             <div className="flex flex-wrap gap-2">
               {statusOptions.map(val => (
                 <button key={val} onClick={() => handleStatus(val)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatus === val ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatuses.has(val) ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
                   {val}
                 </button>
               ))}

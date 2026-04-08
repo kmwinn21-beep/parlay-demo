@@ -88,7 +88,7 @@ async function getPriorityLeads(): Promise<PriorityLead[]> {
             JOIN (SELECT * FROM conferences ORDER BY start_date DESC) conf ON ca.conference_id = conf.id
             GROUP BY a2.company_id
           ) conf_agg ON c.id = conf_agg.company_id
-          WHERE c.status = 'Priority'
+          WHERE ',' || COALESCE(c.status, '') || ',' LIKE '%,Priority,%'
           ORDER BY c.name ASC
           LIMIT 10`,
     args: [],

@@ -268,8 +268,9 @@ export default function CompanyDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
-    const currentStatus = company?.status || 'Unknown';
-    const newStatus = currentStatus === value ? '' : value;
+    const currentStatuses = new Set((company?.status || '').split(',').map(s => s.trim()).filter(Boolean));
+    if (currentStatuses.has(value)) { currentStatuses.delete(value); } else { currentStatuses.add(value); }
+    const newStatus = Array.from(currentStatuses).join(',');
     try {
       const res = await fetch(`/api/companies/${id}`, {
         method: 'PATCH',
@@ -278,7 +279,7 @@ export default function CompanyDetailPage() {
       });
       if (!res.ok) throw new Error();
       setCompany(prev => prev ? { ...prev, status: newStatus } : prev);
-      toast.success(newStatus ? `Status set to "${newStatus}" — all attendees updated.` : 'Status cleared — all attendees updated.');
+      toast.success(newStatus ? 'Status updated — all attendees updated.' : 'Status cleared — all attendees updated.');
     } catch {
       toast.error('Failed to update status.');
     }
@@ -679,7 +680,12 @@ export default function CompanyDetailPage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                <span className={getBadgeClass(company.status || 'Unknown', colorMaps.status || {})}>{company.status || 'Unknown'}</span>
+                <span className="flex flex-wrap gap-1">
+                  {(company.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => (
+                    <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
+                  ))}
+                  {!(company.status || '').trim() && <span className={getBadgeClass('Unknown', colorMaps.status || {})}>Unknown</span>}
+                </span>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">WSE</p>
@@ -966,7 +972,8 @@ export default function CompanyDetailPage() {
             <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
             <div className="flex flex-wrap gap-2">
               {statusOptions.map(val => {
-                const isActive = (company.status || 'Unknown') === val;
+                const activeStatuses = new Set((company.status || '').split(',').map(s => s.trim()).filter(Boolean));
+                const isActive = activeStatuses.has(val);
                 return (
                   <button
                     key={val}
