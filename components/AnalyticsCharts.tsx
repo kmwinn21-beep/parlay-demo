@@ -469,7 +469,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
             Attendee Activity
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Name</th>
@@ -484,14 +484,14 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                 {activityRows.map(({ attendee, detail }) => (
                   <tr key={attendee.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
-                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block break-word" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
+                    <td className="px-4 py-3 text-gray-600 max-w-[140px] break-word">
                       {attendee.title || <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 max-w-[140px] truncate">
+                    <td className="px-4 py-3 max-w-[140px] break-word">
                       {attendee.company_name ? (
                         attendee.company_id ? (
                           <Link href={`/companies/${attendee.company_id}`} className="text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
