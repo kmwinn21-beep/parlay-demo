@@ -266,7 +266,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                   formatter={(value: number, name: string) => [value, name]}
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
                 />
-                <Legend   align="left"   className="text-xs sm:text-sm"   wrapperStyle={{     fontSize: 'clamp(10px, 1vw, 12px)',     lineHeight: '1.8',     paddingTop: '10px',     marginTop: '12px',   }} />
+                <Legend   align="center"   className="text-xs sm:text-sm"   wrapperStyle={{     fontSize: 'clamp(10px, 1vw, 12px)',     lineHeight: '1.8',     paddingTop: '14px',     marginTop: '14px',   }} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -331,7 +331,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                   formatter={(value: number, name: string) => [value, name]}
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
                 />
-                <Legend   align="left"   className="text-xs sm:text-sm"   wrapperStyle={{     fontSize: 'clamp(10px, 1vw, 12px)',     lineHeight: '1.8',     paddingTop: '10px',     marginTop: '12px',   }} />
+                <Legend   align="center"   className="text-xs sm:text-sm"   wrapperStyle={{     fontSize: 'clamp(10px, 1vw, 12px)',     lineHeight: '1.8',     paddingTop: '14px',     marginTop: '14px',   }} />
               </PieChart>
             </ResponsiveContainer>
           )}
