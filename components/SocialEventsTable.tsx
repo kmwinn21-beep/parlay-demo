@@ -276,6 +276,7 @@ export function SocialEventsTable({
         const crossPostPromises: Promise<unknown>[] = [];
         const noteContent = formData.notes.trim();
         const eventLabel = formData.event_type ? `[${formData.event_type}]` : '[Social Event]';
+        const attendeeEventLabel = `[${conferenceName} | ${formData.event_type || 'Social Event'} | ${formData.host || 'N/A'}]`;
         const enteredBy = formData.entered_by || null;
 
         // Post to conference notes
@@ -307,7 +308,7 @@ export function SocialEventsTable({
               body: JSON.stringify({
                 entity_type: 'attendee',
                 entity_id: attId,
-                content: `${eventLabel} ${noteContent}`,
+                content: `${attendeeEventLabel} ${noteContent}`,
                 conference_name: conferenceName,
                 rep: enteredBy,
               }),
