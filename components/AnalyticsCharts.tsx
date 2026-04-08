@@ -252,7 +252,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                   labelLine={false}
                   label={renderCustomLabel}
                   innerRadius={50}
-                  outerRadius={90}
+                  outerRadius={105}
                   dataKey="value"
                 >
                   {filteredCompanyTypeData.map((entry) => (
@@ -317,7 +317,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                   labelLine={false}
                   label={renderCustomLabel}
                   innerRadius={50}
-                  outerRadius={90}
+                  outerRadius={105}
                   dataKey="value"
                 >
                   {filteredSeniorityData.map((entry) => (
