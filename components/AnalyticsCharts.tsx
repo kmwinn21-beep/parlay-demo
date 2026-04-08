@@ -216,7 +216,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             <button
               type="button"
               onClick={() => setShowCompanyTypeFilter(!showCompanyTypeFilter)}
-              className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+              className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
               title="Filter visible company types"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -228,7 +228,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           {showCompanyTypeFilter && (
             <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-3">
               {allCompanyTypeNames.map((name) => (
-                <label key={name} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                <label key={name} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
                   <input
                     type="checkbox"
                     checked={effectiveVisibleCompanyTypes.has(name)}
@@ -241,7 +241,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             </div>
           )}
           {filteredCompanyTypeData.length === 0 ? (
-            <p className="text-xs text-gray-500 text-center py-8">No company type data available.</p>
+            <p className="text-sm text-gray-500 text-center py-8">No company type data available.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
@@ -281,7 +281,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             <button
               type="button"
               onClick={() => setShowSeniorityFilter(!showSeniorityFilter)}
-              className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+              className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
               title="Filter visible seniority levels"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -293,7 +293,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           {showSeniorityFilter && (
             <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-3">
               {allSeniorityNames.map((name) => (
-                <label key={name} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                <label key={name} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
                   <input
                     type="checkbox"
                     checked={effectiveVisibleSeniorities.has(name)}
@@ -306,7 +306,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             </div>
           )}
           {filteredSeniorityData.length === 0 ? (
-            <p className="text-xs text-gray-500 text-center py-8">No attendee data available.</p>
+            <p className="text-sm text-gray-500 text-center py-8">No attendee data available.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
@@ -344,11 +344,11 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
           </h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
               <button
                 type="button"
                 onClick={() => setShowActionFilter(!showActionFilter)}
-                className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+                className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
                 title="Filter visible actions"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -360,7 +360,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             {showActionFilter && (
               <div className="bg-gray-50 rounded-lg p-2 space-y-1">
                 {actionLabels.map((label) => (
-                  <label key={label} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                  <label key={label} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
                     <input
                       type="checkbox"
                       checked={effectiveVisibleActions.has(label)}
@@ -374,22 +374,22 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             )}
             {filteredActionLabels.map((label) => (
               <div key={label} className="flex items-center justify-between">
-                <span className="text-xs text-gray-700">{label}</span>
-                <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-bright-blue text-white">
+                <span className="text-sm text-gray-700">{label}</span>
+                <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-sm font-bold bg-procare-bright-blue text-white">
                   {actionCounts[label] || 0}
                 </span>
               </div>
             ))}
             {filteredActionLabels.length === 0 && (
-              <p className="text-xs text-gray-400 italic">No actions selected</p>
+              <p className="text-sm text-gray-400 italic">No actions selected</p>
             )}
             <div className="border-t border-gray-100 pt-3">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Next Steps</p>
+                <p className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Next Steps</p>
                 <button
                   type="button"
                   onClick={() => setShowNextStepsFilter(!showNextStepsFilter)}
-                  className="text-xs text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+                  className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
                   title="Filter visible next steps"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -401,7 +401,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
               {showNextStepsFilter && (
                 <div className="bg-gray-50 rounded-lg p-2 space-y-1 mb-2">
                   {nextStepsLabels.map((label) => (
-                    <label key={label} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                    <label key={label} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800">
                       <input
                         type="checkbox"
                         checked={effectiveVisibleNextSteps.has(label)}
@@ -415,14 +415,14 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
               )}
               {filteredNextStepsLabels.map((label) => (
                 <div key={label} className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-700">{label}</span>
-                  <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold bg-procare-dark-blue text-white">
+                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-sm font-bold bg-procare-dark-blue text-white">
                     {nextStepsCounts[label] || 0}
                   </span>
                 </div>
               ))}
               {filteredNextStepsLabels.length === 0 && (
-                <p className="text-xs text-gray-400 italic">No next steps selected</p>
+                <p className="text-sm text-gray-400 italic">No next steps selected</p>
               )}
             </div>
           </div>
@@ -436,15 +436,15 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
             Attendee Activity
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Next Step</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Title</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Company</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Next Step</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -476,7 +476,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails }: AnalyticsChart
                     </td>
                     <td className="px-4 py-3">
                       {detail.next_steps ? (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-sm font-semibold bg-green-100 text-green-800">
                           {detail.next_steps}
                         </span>
                       ) : <span className="text-gray-300">—</span>}
