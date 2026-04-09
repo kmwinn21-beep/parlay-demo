@@ -17,6 +17,7 @@ interface RecentConference {
   end_date: string;
   location: string;
   internal_attendees: string[];
+  attendee_count: number;
 }
 
 async function getStats(): Promise<DashboardStats> {
@@ -36,7 +37,8 @@ async function getStats(): Promise<DashboardStats> {
 async function getRecentConferences(): Promise<RecentConference[]> {
   await dbReady;
   const result = await db.execute({
-    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
+            (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
           ORDER BY c.start_date DESC
           LIMIT 5`,
@@ -49,6 +51,7 @@ async function getRecentConferences(): Promise<RecentConference[]> {
     end_date: String(r.end_date ?? ''),
     location: String(r.location ?? ''),
     internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+    attendee_count: Number(r.attendee_count ?? 0),
   }));
 }
 
@@ -56,7 +59,8 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
   await dbReady;
   const today = new Date().toISOString().slice(0, 10);
   const result = await db.execute({
-    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
+            (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
           WHERE c.end_date >= ?
           ORDER BY c.start_date ASC`,
@@ -69,6 +73,7 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
     end_date: String(r.end_date ?? ''),
     location: String(r.location ?? ''),
     internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+    attendee_count: Number(r.attendee_count ?? 0),
   }));
 }
 
@@ -221,8 +226,17 @@ export default async function DashboardPage() {
                   <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {conf.internal_attendees.length > 0 && (
-                        <AttendeesTooltip attendees={conf.internal_attendees} />
+                      {conf.attendee_count === 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
+                          </svg>
+                          Awaiting Attendee Upload
+                        </span>
+                      ) : (
+                        conf.internal_attendees.length > 0 && (
+                          <AttendeesTooltip attendees={conf.internal_attendees} />
+                        )
                       )}
                     </div>
                     <svg className="w-4 h-4 text-gray-300 group-hover:text-procare-bright-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -278,8 +292,17 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                      {conf.internal_attendees.length > 0 && (
-                        <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
+                      {conf.attendee_count === 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
+                          </svg>
+                          Awaiting Attendee Upload
+                        </span>
+                      ) : (
+                        conf.internal_attendees.length > 0 && (
+                          <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
+                        )
                       )}
                     </div>
                   </div>
