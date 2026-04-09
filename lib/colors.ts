@@ -135,9 +135,9 @@ export function buildColorMap(options: Array<{ value: string; color: string | nu
 
 /** Get badge class for a value, using its color from the map */
 export function getBadgeClass(value: string | undefined, colorMap: ColorMap): string {
-  if (!value) return `inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${FALLBACK.badgeClass}`;
+  if (!value) return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${FALLBACK.badgeClass}`;
   const preset = getPreset(colorMap[value]);
-  return `inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${preset.badgeClass}`;
+  return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.badgeClass}`;
 }
 
 /** Get pill class for a value (solid bg, used on detail pages) */
