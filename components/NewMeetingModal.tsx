@@ -192,7 +192,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Schedule New Meeting</h2>
           <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -202,7 +202,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 min-h-0 px-6 py-4 space-y-4">
           {/* Rep */}
           <div>
             <label className={labelClass}>Rep</label>
@@ -321,7 +321,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 shrink-0">
           <button
             type="button"
             onClick={handleClose}
