@@ -113,7 +113,7 @@ export function Header() {
             </svg>
           </button>
           {showAddNew && (
-            <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Add New</p>
               </div>
@@ -179,7 +179,7 @@ export function Header() {
             </svg>
           </button>
           {showConferences && (
-            <div className="absolute right-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Go to Conference</p>
               </div>
@@ -208,11 +208,11 @@ export function Header() {
           )}
         </div>
 
-        {/* Admin Panel — only visible to administrators */}
+        {/* Admin Panel — hidden on mobile, only visible to administrators */}
         {user?.role === 'administrator' && (
           <Link
             href="/admin"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${pathname === '/admin' ? 'bg-gray-100' : ''}`}
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${pathname === '/admin' ? 'bg-gray-100' : ''}`}
             title="Admin Panel"
           >
             <svg className="w-4 h-4 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,9 +223,9 @@ export function Header() {
           </Link>
         )}
 
-        {/* User menu */}
+        {/* User menu — hidden on mobile */}
         {user && (
-          <div className="flex items-center gap-1">
+          <div className="hidden sm:flex items-center gap-1">
             <Link
               href="/auth/account"
               className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
