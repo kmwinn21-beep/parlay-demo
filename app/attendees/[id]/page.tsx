@@ -897,6 +897,7 @@ export default function AttendeeDetailPage() {
         onSuccess={fetchFollowUps}
         defaultAttendeeId={Number(id)}
         defaultConferenceId={selectedConferenceId ? Number(selectedConferenceId) : undefined}
+        defaultCompanyId={attendee?.company_id}
       />
     </div>
   );

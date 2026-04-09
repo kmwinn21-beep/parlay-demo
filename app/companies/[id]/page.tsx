@@ -1169,12 +1169,7 @@ export default function CompanyDetailPage() {
         isOpen={showAssignFollowUp}
         onClose={() => setShowAssignFollowUp(false)}
         onSuccess={fetchCompany}
-        companyId={Number(id)}
-        companyAttendees={(company?.attendees || []).map(a => ({
-          id: a.id,
-          first_name: a.first_name,
-          last_name: a.last_name,
-        }))}
+        defaultCompanyId={Number(id)}
       />
     </div>
   );

@@ -9,139 +9,273 @@ import {
   resolveRepNames,
 } from '@/lib/useUserOptions';
 
-interface AttendeeOption {
-  id: number;
-  first_name: string;
-  last_name: string;
-}
-
 interface ConferenceOption {
   id: number;
   name: string;
   start_date: string;
 }
 
+interface CompanyOption {
+  id: number;
+  name: string;
+}
+
+interface AttendeeOption {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 export interface AssignFollowUpModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  /** Pre-selects the attendee (e.g. when opened from Attendee Details page) */
-  defaultAttendeeId?: number;
-  /** Pre-selects the conference (e.g. when currently viewing a conference) */
+  /** Pre-selects and locks in the conference */
   defaultConferenceId?: number;
-  /** When set, attendee dropdown is filtered to this company's attendees */
-  companyId?: number;
-  /** Pre-loaded attendees for the company (avoids an extra fetch) */
-  companyAttendees?: AttendeeOption[];
+  /** Pre-selects the company (auto-selects when conference is chosen that includes it) */
+  defaultCompanyId?: number;
+  /** Pre-selects the attendee */
+  defaultAttendeeId?: number;
 }
 
 function formatDateShort(d: string) {
   if (!d) return '';
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 export function AssignFollowUpModal({
   isOpen,
   onClose,
   onSuccess,
-  defaultAttendeeId,
   defaultConferenceId,
-  companyAttendees,
+  defaultCompanyId,
+  defaultAttendeeId,
 }: AssignFollowUpModalProps) {
   const userOptions = useUserOptions();
   const actionOptions = useConfigWithIds('next_steps');
 
+  // Form values
   const [repIds, setRepIds] = useState<number[]>([]);
-  const [attendeeId, setAttendeeId] = useState<string>('');
   const [conferenceId, setConferenceId] = useState<string>('');
+  const [companyId, setCompanyId] = useState<string>('');
+  const [attendeeId, setAttendeeId] = useState<string>('');
   const [actionId, setActionId] = useState<string>('');
   const [nextStepDesc, setNextStepDesc] = useState('');
   const [notes, setNotes] = useState('');
 
-  const [attendees, setAttendees] = useState<AttendeeOption[]>([]);
-  const [conferences, setConferences] = useState<ConferenceOption[]>([]);
-  const [attendeeCompanyId, setAttendeeCompanyId] = useState<number | null>(null);
+  // Cascade data
+  const [allConferences, setAllConferences] = useState<ConferenceOption[]>([]);
+  const [confCompanies, setConfCompanies] = useState<CompanyOption[]>([]);
+  const [companyAttendeesInConf, setCompanyAttendeesInConf] = useState<AttendeeOption[]>([]);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingAttendees, setIsLoadingAttendees] = useState(false);
+  // Loading states
   const [isLoadingConferences, setIsLoadingConferences] = useState(false);
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [isLoadingAttendees, setIsLoadingAttendees] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedAction = actionOptions.find(a => String(a.id) === actionId);
   const isOther = selectedAction?.value.toLowerCase() === 'other';
 
-  const loadConferencesForAttendee = async (aid: string) => {
-    if (!aid) {
-      setConferences([]);
-      setAttendeeCompanyId(null);
+  // ---------------------------------------------------------------------------
+  // Cascade loaders
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Load companies present at `confId`. Pass `autoCompanyId` to auto-select
+   * a company on the initial open (not on user-driven conference changes).
+   */
+  const loadConferenceCompanies = async (
+    confId: string,
+    autoCompanyId?: number
+  ) => {
+    if (!confId) {
+      setConfCompanies([]);
+      setCompanyId('');
+      setAttendeeId('');
+      setCompanyAttendeesInConf([]);
       return;
     }
-    setIsLoadingConferences(true);
+    setIsLoadingCompanies(true);
     try {
-      const res = await fetch(`/api/attendees/${aid}`);
-      const data = await res.json();
-      setConferences(
-        (data.conferences || []).map((c: { id: number; name: string; start_date: string }) => ({
-          id: Number(c.id),
-          name: String(c.name),
-          start_date: String(c.start_date),
-        }))
+      // Fetch the conference to get its attendees (and thus company IDs)
+      const [confData, allCompanies] = await Promise.all([
+        fetch(`/api/conferences/${confId}`).then(r => r.json()),
+        fetch('/api/companies').then(r => r.json()),
+      ]);
+
+      const confAttendees: Array<{ id: number; company_id?: number }> =
+        confData.attendees || [];
+      const attendeeIdSet = new Set(confAttendees.map(a => Number(a.id)));
+      const companyIdSet = new Set(
+        confAttendees.map(a => a.company_id).filter(Boolean) as number[]
       );
-      setAttendeeCompanyId(data.company_id ? Number(data.company_id) : null);
+
+      const filtered: CompanyOption[] = (
+        allCompanies as Array<{ id: number; name: string }>
+      )
+        .filter(c => companyIdSet.has(c.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setConfCompanies(filtered);
+
+      // Auto-select company when present in this conference
+      if (autoCompanyId && companyIdSet.has(autoCompanyId)) {
+        setCompanyId(String(autoCompanyId));
+        await loadCompanyAttendeesInConf(
+          String(autoCompanyId),
+          attendeeIdSet,
+          autoCompanyId
+        );
+      } else {
+        setCompanyId('');
+        setAttendeeId('');
+        setCompanyAttendeesInConf([]);
+      }
     } catch {
-      toast.error('Failed to load conferences');
+      toast.error('Failed to load companies for conference');
     } finally {
-      setIsLoadingConferences(false);
+      setIsLoadingCompanies(false);
     }
   };
 
-  // Reset form and load data on open
+  /**
+   * Load company attendees who also attended the selected conference.
+   * `confAttendeeSet` can be supplied directly to avoid stale-state reads.
+   * `autoAttendeeId` triggers auto-selection if the attendee is in the list.
+   */
+  const loadCompanyAttendeesInConf = async (
+    compId: string,
+    confAttendeeSet: Set<number>,
+    autoComp?: number, // only used to decide whether to auto-select attendee
+  ) => {
+    if (!compId) {
+      setCompanyAttendeesInConf([]);
+      setAttendeeId('');
+      return;
+    }
+    setIsLoadingAttendees(true);
+    try {
+      const compData = await fetch(`/api/companies/${compId}`).then(r =>
+        r.json()
+      );
+      const all: Array<{ id: number; first_name: string; last_name: string }> =
+        compData.attendees || [];
+      const inConf = all
+        .filter(a => confAttendeeSet.has(Number(a.id)))
+        .map(a => ({
+          id: Number(a.id),
+          first_name: String(a.first_name),
+          last_name: String(a.last_name),
+        }));
+      setCompanyAttendeesInConf(inConf);
+
+      // Auto-select attendee only during the initial open cascade
+      if (defaultAttendeeId && autoComp !== undefined) {
+        const found = inConf.find(a => a.id === defaultAttendeeId);
+        if (found) setAttendeeId(String(defaultAttendeeId));
+      }
+    } catch {
+      toast.error('Failed to load attendees');
+    } finally {
+      setIsLoadingAttendees(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // On modal open: reset form and load conferences (with optional auto-selects)
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!isOpen) return;
 
     setRepIds([]);
-    setAttendeeId(defaultAttendeeId ? String(defaultAttendeeId) : '');
-    setConferenceId(defaultConferenceId ? String(defaultConferenceId) : '');
+    setConferenceId('');
+    setCompanyId('');
+    setAttendeeId('');
     setActionId('');
     setNextStepDesc('');
     setNotes('');
-    setConferences([]);
-    setAttendeeCompanyId(null);
+    setConfCompanies([]);
+    setCompanyAttendeesInConf([]);
 
-    if (companyAttendees && companyAttendees.length > 0) {
-      setAttendees(companyAttendees);
-    } else {
-      setIsLoadingAttendees(true);
-      fetch('/api/attendees')
-        .then(r => r.json())
-        .then((data: Array<{ id: number; first_name: string; last_name: string }>) =>
-          setAttendees(
-            data.map(a => ({
-              id: Number(a.id),
-              first_name: String(a.first_name),
-              last_name: String(a.last_name),
-            }))
-          )
-        )
-        .catch(() => toast.error('Failed to load attendees'))
-        .finally(() => setIsLoadingAttendees(false));
-    }
+    setIsLoadingConferences(true);
+    fetch('/api/conferences')
+      .then(r => r.json())
+      .then(async (data: ConferenceOption[]) => {
+        const sorted = [...data].sort((a, b) =>
+          b.start_date.localeCompare(a.start_date)
+        );
+        setAllConferences(sorted);
 
-    if (defaultAttendeeId) {
-      loadConferencesForAttendee(String(defaultAttendeeId));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (defaultConferenceId) {
+          setConferenceId(String(defaultConferenceId));
+          // Pass defaultCompanyId so companies cascade auto-selects it
+          await loadConferenceCompanies(
+            String(defaultConferenceId),
+            defaultCompanyId
+          );
+        }
+      })
+      .catch(() => toast.error('Failed to load conferences'))
+      .finally(() => setIsLoadingConferences(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const handleAttendeeChange = (aid: string) => {
-    setAttendeeId(aid);
-    setConferenceId('');
-    loadConferencesForAttendee(aid);
+  // ---------------------------------------------------------------------------
+  // User-driven handlers (no auto-selection of downstream values)
+  // ---------------------------------------------------------------------------
+  const handleConferenceChange = async (confId: string) => {
+    setConferenceId(confId);
+    setCompanyId('');
+    setAttendeeId('');
+    setCompanyAttendeesInConf([]);
+    // Pass defaultCompanyId so it auto-selects if present in this conference
+    await loadConferenceCompanies(confId, defaultCompanyId);
   };
 
+  const handleCompanyChange = async (compId: string) => {
+    setCompanyId(compId);
+    setAttendeeId('');
+    setCompanyAttendeesInConf([]);
+    if (!compId || !conferenceId) return;
+    // Re-fetch conference attendees to rebuild the filter set
+    setIsLoadingAttendees(true);
+    try {
+      const [confData, compData] = await Promise.all([
+        fetch(`/api/conferences/${conferenceId}`).then(r => r.json()),
+        fetch(`/api/companies/${compId}`).then(r => r.json()),
+      ]);
+      const confAttIds = new Set<number>(
+        (confData.attendees || []).map((a: { id: number }) => Number(a.id))
+      );
+      const all: Array<{ id: number; first_name: string; last_name: string }> =
+        compData.attendees || [];
+      setCompanyAttendeesInConf(
+        all
+          .filter(a => confAttIds.has(Number(a.id)))
+          .map(a => ({
+            id: Number(a.id),
+            first_name: String(a.first_name),
+            last_name: String(a.last_name),
+          }))
+      );
+    } catch {
+      toast.error('Failed to load attendees');
+    } finally {
+      setIsLoadingAttendees(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Submit
+  // ---------------------------------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!attendeeId || !conferenceId || !actionId) {
-      toast.error('Attendee, Conference, and Follow Up Action are required.');
+    if (!conferenceId || !companyId || !attendeeId || !actionId) {
+      toast.error('Conference, Company, Attendee, and Follow Up Action are required.');
       return;
     }
 
@@ -165,39 +299,56 @@ export function AssignFollowUpModal({
       }
 
       if (notes.trim()) {
-        const conf = conferences.find(c => String(c.id) === conferenceId);
+        const conf = allConferences.find(c => String(c.id) === conferenceId);
         const confName = conf?.name ?? null;
-        const repDisplay = repIds.length > 0 ? resolveRepNames(repIds.join(','), userOptions) : null;
+        const repDisplay =
+          repIds.length > 0
+            ? resolveRepNames(repIds.join(','), userOptions)
+            : null;
 
-        const notePayloads = [
-          { entity_type: 'attendee', entity_id: Number(attendeeId) },
-          { entity_type: 'conference', entity_id: Number(conferenceId) },
-          ...(attendeeCompanyId
-            ? [{ entity_type: 'company', entity_id: attendeeCompanyId }]
-            : []),
-        ];
-
-        await Promise.allSettled(
-          notePayloads.map(p =>
-            fetch('/api/notes', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...p,
-                content: notes.trim(),
-                conference_name: confName,
-                rep: repDisplay,
-              }),
-            })
-          )
-        );
+        await Promise.allSettled([
+          fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              entity_type: 'attendee',
+              entity_id: Number(attendeeId),
+              content: notes.trim(),
+              conference_name: confName,
+              rep: repDisplay,
+            }),
+          }),
+          fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              entity_type: 'company',
+              entity_id: Number(companyId),
+              content: notes.trim(),
+              conference_name: confName,
+              rep: repDisplay,
+            }),
+          }),
+          fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              entity_type: 'conference',
+              entity_id: Number(conferenceId),
+              content: notes.trim(),
+              rep: repDisplay,
+            }),
+          }),
+        ]);
       }
 
       toast.success('Follow-up assigned!');
       onSuccess();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to assign follow-up');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to assign follow-up'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -209,14 +360,26 @@ export function AssignFollowUpModal({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Assign Follow Up</h2>
+          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+            Assign Follow Up
+          </h2>
           <button
             type="button"
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -234,47 +397,80 @@ export function AssignFollowUpModal({
             />
           </div>
 
-          {/* Attendee */}
+          {/* Conference */}
           <div>
-            <label className="label">Attendee *</label>
-            {isLoadingAttendees ? (
-              <div className="input-field text-gray-400 text-sm">Loading attendees…</div>
+            <label className="label">Conference *</label>
+            {isLoadingConferences ? (
+              <div className="input-field text-gray-400 text-sm">
+                Loading conferences…
+              </div>
             ) : (
               <select
-                value={attendeeId}
-                onChange={e => handleAttendeeChange(e.target.value)}
+                value={conferenceId}
+                onChange={e => handleConferenceChange(e.target.value)}
                 className="input-field"
                 required
               >
-                <option value="">Select attendee…</option>
-                {attendees.map(a => (
-                  <option key={a.id} value={String(a.id)}>
-                    {a.first_name} {a.last_name}
+                <option value="">Select conference…</option>
+                {allConferences.map(c => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name} ({formatDateShort(c.start_date)})
                   </option>
                 ))}
               </select>
             )}
           </div>
 
-          {/* Conference */}
+          {/* Company — filtered to companies that attended the selected conference */}
           <div>
-            <label className="label">Conference *</label>
-            {isLoadingConferences ? (
-              <div className="input-field text-gray-400 text-sm">Loading conferences…</div>
+            <label className="label">Company *</label>
+            {isLoadingCompanies ? (
+              <div className="input-field text-gray-400 text-sm">
+                Loading companies…
+              </div>
             ) : (
               <select
-                value={conferenceId}
-                onChange={e => setConferenceId(e.target.value)}
+                value={companyId}
+                onChange={e => handleCompanyChange(e.target.value)}
                 className="input-field"
                 required
-                disabled={!attendeeId}
+                disabled={!conferenceId}
               >
                 <option value="">
-                  {attendeeId ? 'Select conference…' : 'Select an attendee first'}
+                  {conferenceId
+                    ? 'Select company…'
+                    : 'Select a conference first'}
                 </option>
-                {conferences.map(c => (
+                {confCompanies.map(c => (
                   <option key={c.id} value={String(c.id)}>
-                    {c.name} ({formatDateShort(c.start_date)})
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Attendee — filtered to company attendees who attended the conference */}
+          <div>
+            <label className="label">Attendee *</label>
+            {isLoadingAttendees ? (
+              <div className="input-field text-gray-400 text-sm">
+                Loading attendees…
+              </div>
+            ) : (
+              <select
+                value={attendeeId}
+                onChange={e => setAttendeeId(e.target.value)}
+                className="input-field"
+                required
+                disabled={!companyId}
+              >
+                <option value="">
+                  {companyId ? 'Select attendee…' : 'Select a company first'}
+                </option>
+                {companyAttendeesInConf.map(a => (
+                  <option key={a.id} value={String(a.id)}>
+                    {a.first_name} {a.last_name}
                   </option>
                 ))}
               </select>
@@ -292,7 +488,9 @@ export function AssignFollowUpModal({
             >
               <option value="">Select action…</option>
               {actionOptions.map(a => (
-                <option key={a.id} value={String(a.id)}>{a.value}</option>
+                <option key={a.id} value={String(a.id)}>
+                  {a.value}
+                </option>
               ))}
             </select>
           </div>
@@ -324,7 +522,11 @@ export function AssignFollowUpModal({
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="btn-primary flex-1"
+            >
               {isSubmitting ? 'Assigning…' : 'Assign Follow Up'}
             </button>
             <button type="button" onClick={onClose} className="btn-secondary">
