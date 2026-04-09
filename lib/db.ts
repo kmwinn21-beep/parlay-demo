@@ -68,6 +68,22 @@ export async function initDb(): Promise<void> {
     );
   `);
 
+  // Users table for authentication
+  await db.execute({
+    sql: `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'administrator')),
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      verification_token TEXT,
+      reset_token TEXT,
+      reset_token_expires INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    args: [],
+  });
+
   // Run migrations — ignore errors if columns already exist
   const migrations = [
     `ALTER TABLE attendees ADD COLUMN action TEXT`,
