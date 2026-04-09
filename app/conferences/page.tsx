@@ -379,10 +379,19 @@ export default function ConferencesPage() {
                           )}
                         </div>
                         <div className="ml-6 flex-shrink-0 text-right">
-                          <div className="bg-procare-dark-blue text-white rounded-xl px-4 py-2 text-center min-w-[80px]">
-                            <p className="text-2xl font-bold font-serif">{conf.attendee_count}</p>
-                            <p className="text-xs text-blue-300">attendees</p>
-                          </div>
+                          {conf.attendee_count === 0 ? (
+                            <div className="flex flex-col items-center gap-1 px-4 py-2 min-w-[80px]">
+                              <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
+                              </svg>
+                              <p className="text-xs text-amber-600 font-medium leading-tight text-center">Awaiting Attendee Upload</p>
+                            </div>
+                          ) : (
+                            <div className="bg-procare-dark-blue text-white rounded-xl px-4 py-2 text-center min-w-[80px]">
+                              <p className="text-2xl font-bold font-serif">{conf.attendee_count}</p>
+                              <p className="text-xs text-blue-300">attendees</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </Link>

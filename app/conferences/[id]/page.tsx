@@ -622,9 +622,18 @@ export default function ConferenceDetailPage() {
                   </svg>
                   {conference.location}
                 </span>
-                <span className="badge-blue">
-                  {conference.attendees.length} attendees
-                </span>
+                {conference.attendees.length === 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-300">
+                    <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
+                    </svg>
+                    Awaiting Attendee Upload
+                  </span>
+                ) : (
+                  <span className="badge-blue">
+                    {conference.attendees.length} attendees
+                  </span>
+                )}
               </div>
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
