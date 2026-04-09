@@ -509,7 +509,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                     </td>
                     <td className="px-4 py-3">
                       {detail.next_steps ? (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-sm font-semibold bg-green-100 text-green-800">
+                        <span className={getBadgeClass(detail.next_steps, colorMaps.next_steps || {})}>
                           {detail.next_steps}
                         </span>
                       ) : <span className="text-gray-300">—</span>}
