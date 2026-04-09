@@ -55,6 +55,7 @@ export default function AttendeeDetailPage() {
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [actionKeyMap, setActionKeyMap] = useState<Record<string, string | null>>({});
   const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<string[]>([]);
@@ -115,6 +116,7 @@ export default function AttendeeDetailPage() {
       setCompanies(coData);
       setStatusOptions(statusData.map((o: { value: string }) => o.value));
       setActionOptions(actionData.map((o: { value: string }) => o.value));
+      setActionKeyMap(Object.fromEntries(actionData.map((o: { value: string; action_key: string | null }) => [o.value, o.action_key])));
       setNextStepsOptions(nextStepsData.map((o: { value: string }) => o.value));
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
       setUserOptions(userData.map((o: { value: string }) => o.value));
@@ -277,7 +279,27 @@ export default function AttendeeDetailPage() {
     if (!selectedConferenceId) { toast.error('Please select a conference first.'); return; }
     try {
       const current = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
-      if (current.has(value)) current.delete(value); else current.add(value);
+      if (current.has(value)) current.delete(value); else {
+        current.add(value);
+        // When selecting Cancelled or No Show, deselect Held and Pending
+        const selectedKey = actionKeyMap[value];
+        if (selectedKey === 'cancelled' || selectedKey === 'no_show') {
+          const keysToRemove = ['meeting_held', 'pending'];
+          for (const opt of Array.from(current)) {
+            if (opt !== value && keysToRemove.includes(actionKeyMap[opt] ?? '')) {
+              current.delete(opt);
+            }
+          }
+        }
+        // When selecting Scheduled, deselect Cancelled
+        if (selectedKey === 'meeting_scheduled') {
+          for (const opt of Array.from(current)) {
+            if (opt !== value && actionKeyMap[opt] === 'cancelled') {
+              current.delete(opt);
+            }
+          }
+        }
+      }
       const newAction = Array.from(current).join(',') || undefined;
       await upsertConferenceDetail({ action: newAction });
     } catch { toast.error('Failed to update action.'); }

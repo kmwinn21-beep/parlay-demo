@@ -101,14 +101,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
     }
 
-    // Look up the current display name for "Pending" by action_key
-    const pendingConfig = await db.execute({
-      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'pending' LIMIT 1",
+    // Look up the current display name for "Meeting Scheduled" by action_key
+    const meetingScheduledConfig = await db.execute({
+      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' LIMIT 1",
       args: [],
     });
-    const pendingName = pendingConfig.rows.length > 0
-      ? String(pendingConfig.rows[0].value)
-      : 'Pending';
+    const meetingScheduledName = meetingScheduledConfig.rows.length > 0
+      ? String(meetingScheduledConfig.rows[0].value)
+      : 'Meeting Scheduled';
 
     const result = await db.execute({
       sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome)
@@ -122,18 +122,9 @@ export async function POST(request: NextRequest) {
         location ?? null,
         scheduled_by ?? null,
         additional_attendees ?? null,
-        pendingName,
+        meetingScheduledName,
       ],
     });
-
-    // Look up the current display name for "Meeting Scheduled" by action_key
-    const meetingScheduledConfig = await db.execute({
-      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' LIMIT 1",
-      args: [],
-    });
-    const meetingScheduledName = meetingScheduledConfig.rows.length > 0
-      ? String(meetingScheduledConfig.rows[0].value)
-      : 'Meeting Scheduled';
 
     // Also update the conference_attendee_details action to include the meeting scheduled action
     const existing = await db.execute({
@@ -194,7 +185,34 @@ export async function PATCH(request: NextRequest) {
       if (existing.rows.length > 0) {
         const currentAction = String(existing.rows[0].action ?? '');
         const actions = new Set(currentAction.split(',').map(a => a.trim()).filter(Boolean));
-        if (outcome) actions.add(outcome);
+        if (outcome) {
+          actions.add(outcome);
+
+          // When outcome is Cancelled or No Show, remove conflicting actions (Held, Pending)
+          const outcomeKeyResult = await db.execute({
+            sql: "SELECT action_key FROM config_options WHERE category = 'action' AND value = ? LIMIT 1",
+            args: [outcome],
+          });
+          const outcomeKey = outcomeKeyResult.rows[0]?.action_key as string | undefined;
+          if (outcomeKey === 'cancelled' || outcomeKey === 'no_show') {
+            const conflicting = await db.execute({
+              sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key IN ('meeting_held', 'pending')",
+              args: [],
+            });
+            for (const row of conflicting.rows) {
+              actions.delete(String(row.value));
+            }
+          }
+          if (outcomeKey === 'meeting_scheduled') {
+            const cancelledResult = await db.execute({
+              sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'cancelled' LIMIT 1",
+              args: [],
+            });
+            for (const row of cancelledResult.rows) {
+              actions.delete(String(row.value));
+            }
+          }
+        }
         await db.execute({
           sql: 'UPDATE conference_attendee_details SET action = ? WHERE attendee_id = ? AND conference_id = ?',
           args: [Array.from(actions).join(','), attendee_id as number, conference_id as number],
