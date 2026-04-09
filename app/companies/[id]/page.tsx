@@ -14,6 +14,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { effectiveSeniority, classifyICP } from '@/lib/parsers';
 import { type UserOption, parseRepIds, resolveRepInitials } from '@/lib/useUserOptions';
+import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -122,6 +123,7 @@ export default function CompanyDetailPage() {
   const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
   const [capitalTypeValues, setCapitalTypeValues] = useState<Set<string>>(new Set());
   const [showRelateModal, setShowRelateModal] = useState(false);
+  const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [relateSearch, setRelateSearch] = useState('');
   const [relateResults, setRelateResults] = useState<{ id: number; name: string; company_type: string | null }[]>([]);
   const [relateSaving, setRelateSaving] = useState(false);
@@ -937,7 +939,7 @@ export default function CompanyDetailPage() {
 
           {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
                 Follow Ups
                 {companyFollowUps.length > 0 && (
@@ -946,6 +948,16 @@ export default function CompanyDetailPage() {
                   </span>
                 )}
               </h2>
+              <button
+                type="button"
+                onClick={() => setShowAssignFollowUp(true)}
+                className="btn-primary flex items-center gap-1.5 text-sm py-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Assign Follow Up
+              </button>
             </div>
             <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
           </div>
@@ -1152,6 +1164,18 @@ export default function CompanyDetailPage() {
         </div>
 
       </div>{/* end grid */}
+
+      <AssignFollowUpModal
+        isOpen={showAssignFollowUp}
+        onClose={() => setShowAssignFollowUp(false)}
+        onSuccess={fetchCompany}
+        companyId={Number(id)}
+        companyAttendees={(company?.attendees || []).map(a => ({
+          id: a.id,
+          first_name: a.first_name,
+          last_name: a.last_name,
+        }))}
+      />
     </div>
   );
 }

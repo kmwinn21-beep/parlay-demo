@@ -8,6 +8,8 @@ import {
   type UserOption,
   parseRepIds,
   resolveRepInitials,
+  useConfigWithIds,
+  resolveConfigValue,
 } from '@/lib/useUserOptions';
 
 export interface FollowUp {
@@ -78,6 +80,7 @@ export function FollowUpsTable({
   userOptions?: UserOption[];
   onRepChange?: (attendeeId: number, conferenceId: number, rep: string | null) => void;
 }) {
+  const nextStepsOpts = useConfigWithIds('next_steps');
   const [editingRepKey, setEditingRepKey] = useState<string | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
 
@@ -199,7 +202,7 @@ export function FollowUpsTable({
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
-                  {fu.next_steps}
+                  {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                 </span>
                 {fu.next_steps_notes && (
                   <span className="text-xs text-gray-500">{fu.next_steps_notes}</span>
@@ -262,7 +265,7 @@ export function FollowUpsTable({
                   </td>
                   <td className="px-3 py-2">
                     <span className={`inline-flex px-2 py-0.5 rounded-full font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
-                      {fu.next_steps}
+                      {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                     </span>
                     {fu.next_steps_notes && (
                       <p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>

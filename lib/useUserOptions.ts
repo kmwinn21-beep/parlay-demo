@@ -84,3 +84,57 @@ export function resolveRepInitials(stored: string | null | undefined, opts: User
     })
     .filter(Boolean) as string[];
 }
+
+// ---------------------------------------------------------------------------
+// Generic config-with-IDs hook (for any category)
+// ---------------------------------------------------------------------------
+
+const configWithIdsCache: Record<string, { options: UserOption[]; ts: number }> = {};
+
+/**
+ * Fetch config options with their IDs for any category.
+ * Results are cached per-category for 30 seconds.
+ */
+export function useConfigWithIds(category: string): UserOption[] {
+  const [options, setOptions] = useState<UserOption[]>(
+    configWithIdsCache[category]?.options ?? []
+  );
+
+  useEffect(() => {
+    const cached = configWithIdsCache[category];
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      setOptions(cached.options);
+      return;
+    }
+    fetch(`/api/config?category=${encodeURIComponent(category)}`)
+      .then(r => r.json())
+      .then((rows: { id: number; value: string; sort_order: number }[]) => {
+        const opts = [...rows]
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map(o => ({ id: Number(o.id), value: String(o.value) }));
+        configWithIdsCache[category] = { options: opts, ts: Date.now() };
+        setOptions(opts);
+      })
+      .catch(() => {});
+  }, [category]);
+
+  return options;
+}
+
+/**
+ * Resolve a stored value (ID string or legacy name string) to a display value.
+ * - If stored is a numeric string, looks up the option by ID.
+ * - Otherwise returns stored as-is (backward compat).
+ */
+export function resolveConfigValue(
+  stored: string | null | undefined,
+  opts: UserOption[]
+): string {
+  if (!stored) return '';
+  const num = parseInt(stored, 10);
+  if (!isNaN(num) && String(num) === stored.trim()) {
+    const found = opts.find(o => o.id === num);
+    if (found) return found.value;
+  }
+  return stored;
+}

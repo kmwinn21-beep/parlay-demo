@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { NewMeetingModal } from './NewMeetingModal';
 import { NewNoteModal } from './NewNoteModal';
+import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { useUser } from './UserContext';
 
 const pageTitles: Record<string, string> = {
@@ -48,6 +49,7 @@ export function Header() {
   const [isLoadingConfs, setIsLoadingConfs] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
@@ -125,6 +127,16 @@ export function Header() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                   <span className="text-sm font-medium text-gray-800">Note</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddNew(false); setShowFollowUpModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
+                >
+                  <svg className="w-[18px] h-[18px] text-procare-dark-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-800">Follow Up</span>
                 </button>
                 <button
                   type="button"
@@ -242,6 +254,7 @@ export function Header() {
       </div>
       <NewMeetingModal isOpen={showMeetingModal} onClose={() => setShowMeetingModal(false)} />
       <NewNoteModal isOpen={showNoteModal} onClose={() => setShowNoteModal(false)} />
+      <AssignFollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onSuccess={() => {}} />
     </header>
   );
 }

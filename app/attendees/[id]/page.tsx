@@ -11,6 +11,7 @@ import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { parseRepIds, resolveRepNames } from '@/lib/useUserOptions';
+import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
@@ -63,6 +64,8 @@ export default function AttendeeDetailPage() {
   const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
+
+  const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -600,7 +603,7 @@ export default function AttendeeDetailPage() {
 
           {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
                 Follow Ups
                 {followUps.length > 0 && (
@@ -609,6 +612,16 @@ export default function AttendeeDetailPage() {
                   </span>
                 )}
               </h2>
+              <button
+                type="button"
+                onClick={() => setShowAssignFollowUp(true)}
+                className="btn-primary flex items-center gap-1.5 text-sm py-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Assign Follow Up
+              </button>
             </div>
             <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
           </div>
@@ -877,6 +890,14 @@ export default function AttendeeDetailPage() {
           </div>
         </div>
       )}
+
+      <AssignFollowUpModal
+        isOpen={showAssignFollowUp}
+        onClose={() => setShowAssignFollowUp(false)}
+        onSuccess={fetchFollowUps}
+        defaultAttendeeId={Number(id)}
+        defaultConferenceId={selectedConferenceId ? Number(selectedConferenceId) : undefined}
+      />
     </div>
   );
 }
