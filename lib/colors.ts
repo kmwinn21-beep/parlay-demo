@@ -29,10 +29,10 @@ export const COLOR_PRESETS: ColorPreset[] = [
   {
     key: 'dark-blue',
     label: 'Dark Blue',
-    hex: '#0B3C62',
+    hex: '#0b3c62',
     swatch: '#0B3C62',
     badgeClass: 'bg-blue-900/10 text-blue-900 border border-blue-800/30',
-    pillClass: 'bg-procare-dark-blue text-white border border-procare-dark-blue', // CHANGE THIS
+    pillClass:  'bg-blue-900/10 text-blue-900 border border-blue-800/30', // CHANGE THIS
   },
   {
     key: 'red',
@@ -40,15 +40,15 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#dc2626',
     swatch: '#dc2626',
     badgeClass: 'bg-red-100 text-red-700 border border-red-300',
-    pillClass: 'bg-red-500 text-white border border-red-600', // CHANGE THIS
+    pillClass: 'bg-red-100 text-red-700 border border-red-300', // CHANGE THIS
   },
   {
     key: 'green',
     label: 'Green',
-    hex: '#16a34a',
-    swatch: '#16a34a',
+    hex: '#22c55e',
+    swatch: '#DCFCE7',
     badgeClass: 'bg-green-100 text-green-700 border border-green-300',
-    pillClass: 'bg-green-500 text-white border border-green-600', // CHANGE THIS
+    pillClass: 'bg-green-100 text-green-700 border border-green-300', // CHANGE THIS
   },
   {
     key: 'yellow',
@@ -56,7 +56,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#FFCB3F',
     swatch: '#eab308',
     badgeClass: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
-    pillClass: 'bg-yellow-400 text-yellow-900 border border-yellow-500', // CHANGE THIS
+    pillClass: 'bg-yellow-100 text-yellow-800 border border-yellow-300', // CHANGE THIS
   },
   {
     key: 'orange',
@@ -64,7 +64,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#ea580c',
     swatch: '#ea580c',
     badgeClass: 'bg-orange-100 text-orange-700 border border-orange-300',
-    pillClass: 'bg-orange-500 text-white border border-orange-600', // CHANGE THIS
+    pillClass: 'bg-orange-100 text-orange-700 border border-orange-300', // CHANGE THIS
   },
   {
     key: 'purple',
@@ -72,7 +72,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#7c3aed',
     swatch: '#7c3aed',
     badgeClass: 'bg-purple-100 text-purple-700 border border-purple-300',
-    pillClass: 'bg-purple-500 text-white border border-purple-600', // CHANGE THIS
+    pillClass: 'bg-purple-100 text-purple-700 border border-purple-300', // CHANGE THIS
   },
   {
     key: 'pink',
@@ -80,7 +80,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#db2777',
     swatch: '#db2777',
     badgeClass: 'bg-pink-100 text-pink-700 border border-pink-300',
-    pillClass: 'bg-pink-500 text-white border border-pink-600', // CHANGE THIS
+    pillClass:  'bg-pink-100 text-pink-700 border border-pink-300', // CHANGE THIS
   },
   {
     key: 'teal',
@@ -88,7 +88,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#0d9488',
     swatch: '#0d9488',
     badgeClass: 'bg-teal-100 text-teal-700 border border-teal-300',
-    pillClass: 'bg-teal-500 text-white border border-teal-600', // CHANGE THIS
+    pillClass: 'bg-teal-100 text-teal-700 border border-teal-300', // CHANGE THIS
   },
   {
     key: 'gray',
@@ -96,7 +96,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#6b7280',
     swatch: '#6b7280',
     badgeClass: 'bg-gray-100 text-gray-600 border border-gray-300',
-    pillClass: 'bg-gray-200 text-gray-700 border border-gray-300', // CHANGE THIS
+    pillClass: 'bg-gray-100 text-gray-600 border border-gray-300', // CHANGE THIS
   },
   {
     key: 'dark',
@@ -104,7 +104,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
     hex: '#1f2937',
     swatch: '#1f2937',
     badgeClass: 'bg-gray-800 text-white border border-gray-800',
-    pillClass: 'bg-gray-900 text-white border border-gray-800', // CHANGE THIS
+    pillClass: 'bg-gray-800 text-white border border-gray-800', // CHANGE THIS
   },
 ];
 
