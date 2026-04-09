@@ -183,7 +183,7 @@ export default function AttendeesPage() {
       {/* Add Attendee Form */}
       {showAddForm && (
         <div className="card border-2 border-procare-bright-blue">
-          <h2 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">Add New Attendee</h2>
+          <h2 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">Add Attendee</h2>
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
