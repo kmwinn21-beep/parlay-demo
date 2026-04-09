@@ -10,6 +10,7 @@ import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
+import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 
 interface Company {
   id: number;
@@ -148,12 +149,13 @@ const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
+  const userOptionsFull = useUserOptions();
   const searchParams = useSearchParams();
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
-  const userFilterOptions = configOptions.user ?? [];
   const [search, setSearch] = useState('');
+  // filterSFOwner stores a user ID (as string) for filtering, or '' for all
   const [filterSFOwner, setFilterSFOwner] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') ?? '');
@@ -220,7 +222,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const filtered = useMemo(() => {
     const list = companies.filter(c => {
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
-      const matchSFOwner = !filterSFOwner || (c.assigned_user || '') === filterSFOwner;
+      const matchSFOwner = !filterSFOwner || parseRepIds(c.assigned_user).map(String).includes(filterSFOwner);
       const matchType = !filterType || c.company_type === filterType;
       const matchStatus = !filterStatus || (c.status || 'Unknown').split(',').map(s => s.trim()).some(s => s === filterStatus);
       const matchConf = confCountMatches(Number(c.conference_count));
@@ -321,7 +323,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
           <select value={filterSFOwner} onChange={e => setFilterSFOwner(e.target.value)} className="input-field w-auto">
             <option value="">All SF Owners</option>
-            {userFilterOptions.map(u => <option key={u} value={u}>{u}</option>)}
+            {userOptionsFull.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
           </select>
           <select value={filterType} onChange={e => setFilterType(e.target.value)} className="input-field w-auto">
             <option value="">All Types</option>
@@ -452,14 +454,14 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className="flex flex-wrap gap-1">{(company.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
-                {company.assigned_user && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                {company.assigned_user && resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
                     <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                    {company.assigned_user}
+                    {ini}
                   </span>
-                )}
+                ))}
               </div>
               <div className="mt-2 ml-6 flex items-center gap-4">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -519,11 +521,15 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   <td className="px-3 py-3">{company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
                     {company.assigned_user ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
-                        <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {company.assigned_user}
+                      <span className="inline-flex flex-wrap gap-1">
+                        {resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {ini}
+                          </span>
+                        ))}
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>

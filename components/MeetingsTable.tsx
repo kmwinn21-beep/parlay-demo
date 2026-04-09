@@ -4,6 +4,13 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPreset, type ColorMap } from '@/lib/colors';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import {
+  type UserOption,
+  parseRepIds,
+  resolveRepNames,
+  resolveRepInitials,
+} from '@/lib/useUserOptions';
 
 export interface Meeting {
   id: number;
@@ -40,18 +47,50 @@ function formatMeetingTime(t: string) {
   return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 0) return '';
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+/** Render initials pills for a stored scheduled_by value (CSV of IDs or legacy name) */
+function RepPills({
+  scheduledBy,
+  userOptions,
+  size = 'sm',
+}: {
+  scheduledBy: string | null;
+  userOptions: UserOption[];
+  size?: 'sm' | 'xs';
+}) {
+  const initials = resolveRepInitials(scheduledBy, userOptions);
+  if (initials.length === 0) return <span className="text-gray-300">—</span>;
+
+  const pillClass =
+    size === 'xs'
+      ? 'inline-flex items-center px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap'
+      : 'inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap';
+
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {initials.map((ini, i) => (
+        <span key={i} className={pillClass}>
+          {ini}
+        </span>
+      ))}
+    </span>
+  );
 }
 
-function MeetingInfoTooltip({ scheduledBy, location, attendees, companyWse }: { scheduledBy?: string | null; location?: string | null; attendees?: string | null; companyWse?: number | null }) {
+function MeetingInfoTooltip({
+  scheduledByDisplay,
+  location,
+  attendees,
+  companyWse,
+}: {
+  scheduledByDisplay?: string | null;
+  location?: string | null;
+  attendees?: string | null;
+  companyWse?: number | null;
+}) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const attendeeList = attendees ? attendees.split(',').map(n => n.trim()).filter(Boolean) : [];
-  const hasContent = scheduledBy || location || attendeeList.length > 0 || companyWse != null;
+  const hasContent = scheduledByDisplay || location || attendeeList.length > 0 || companyWse != null;
 
   const handleMouseEnter = () => {
     if (!ref.current || !hasContent) return;
@@ -74,10 +113,10 @@ function MeetingInfoTooltip({ scheduledBy, location, attendees, companyWse }: { 
       {pos && (
         <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
           <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5 space-y-2">
-            {scheduledBy && (
+            {scheduledByDisplay && (
               <div>
                 <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">Scheduled By</p>
-                <p>{scheduledBy}</p>
+                <p>{scheduledByDisplay}</p>
               </div>
             )}
             {location && (
@@ -89,14 +128,23 @@ function MeetingInfoTooltip({ scheduledBy, location, attendees, companyWse }: { 
             {attendeeList.length > 0 && (
               <div>
                 <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Additional Attendees</p>
-                <ul className="space-y-1">{attendeeList.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+                <ul className="space-y-1">
+                  {attendeeList.map((name, i) => (
+                    <li key={i} className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
+                      {name}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             {companyWse != null && (
               <div>
                 <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">WSE</p>
                 <p className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                  <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" />
+                  </svg>
                   {Number(companyWse).toLocaleString()}
                 </p>
               </div>
@@ -138,17 +186,12 @@ function OutcomeButton({
       const rect = btnRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const above = spaceBelow < 200 && rect.top > 200;
-      setDropdownPos({
-        top: above ? rect.top : rect.bottom + 4,
-        left: rect.left,
-        above,
-      });
+      setDropdownPos({ top: above ? rect.top : rect.bottom + 4, left: rect.left, above });
     }
     setOpen(o => !o);
   };
 
   const preset = value ? getPreset(colorMap[value]) : null;
-
   const btnClass = preset
     ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
     : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap';
@@ -165,7 +208,7 @@ function OutcomeButton({
         <div
           style={{
             position: 'fixed',
-            top: dropdownPos.above ? dropdownPos.top : dropdownPos.top,
+            top: dropdownPos.top,
             left: dropdownPos.left,
             zIndex: 9999,
             transform: dropdownPos.above ? 'translateY(-100%)' : 'translateY(0)',
@@ -188,10 +231,7 @@ function OutcomeButton({
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
                 onClick={() => { onChange(opt); setOpen(false); }}
               >
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: p.swatch }}
-                />
+                <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.swatch }} />
                 <span className={opt === value ? 'font-semibold' : ''}>{opt}</span>
               </button>
             );
@@ -221,17 +261,26 @@ function EditMeetingRow({
   onSave: (meetingId: number, data: EditFormData) => void;
   onCancel: () => void;
   onDelete?: (meetingId: number) => void;
-  userOptions?: string[];
+  userOptions?: UserOption[];
 }) {
-  const [form, setForm] = useState<EditFormData>({
+  const [form, setForm] = useState({
     meeting_date: meeting.meeting_date,
     meeting_time: meeting.meeting_time,
     location: meeting.location || '',
-    scheduled_by: meeting.scheduled_by || '',
     additional_attendees: meeting.additional_attendees || '',
   });
+  const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
+    parseRepIds(meeting.scheduled_by)
+  );
 
   const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+
+  const handleSave = () => {
+    onSave(meeting.id, {
+      ...form,
+      scheduled_by: selectedRepIds.join(','),
+    });
+  };
 
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
@@ -255,10 +304,12 @@ function EditMeetingRow({
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Scheduled By</label>
-          <select className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))}>
-            <option value="">Select user...</option>
-            {userOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
+          <RepMultiSelect
+            options={userOptions}
+            selectedIds={selectedRepIds}
+            onChange={setSelectedRepIds}
+            placeholder="Select reps..."
+          />
         </div>
         <div className="sm:col-span-2">
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
@@ -271,7 +322,7 @@ function EditMeetingRow({
             type="button"
             className="px-3 py-1.5 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
             disabled={!form.meeting_date || !form.meeting_time}
-            onClick={() => onSave(meeting.id, form)}
+            onClick={handleSave}
           >
             Save
           </button>
@@ -310,24 +361,35 @@ function EditMeetingTableRow({
   onCancel: () => void;
   onDelete?: (meetingId: number) => void;
   colSpan: number;
-  userOptions?: string[];
+  userOptions?: UserOption[];
 }) {
-  const [form, setForm] = useState<EditFormData>({
+  const [form, setForm] = useState({
     meeting_date: meeting.meeting_date,
     meeting_time: meeting.meeting_time,
     location: meeting.location || '',
-    scheduled_by: meeting.scheduled_by || '',
     additional_attendees: meeting.additional_attendees || '',
   });
+  const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
+    parseRepIds(meeting.scheduled_by)
+  );
 
   const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+
+  const handleSave = () => {
+    onSave(meeting.id, {
+      ...form,
+      scheduled_by: selectedRepIds.join(','),
+    });
+  };
 
   return (
     <tr className="bg-blue-50">
       <td colSpan={colSpan} className="px-3 py-3">
         <div className="space-y-2">
           <div className="flex items-center gap-1 mb-1">
-            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Editing meeting with {meeting.first_name} {meeting.last_name}</span>
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+              Editing meeting with {meeting.first_name} {meeting.last_name}
+            </span>
           </div>
           <div className="grid grid-cols-5 gap-2">
             <div>
@@ -344,10 +406,12 @@ function EditMeetingTableRow({
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Scheduled By</label>
-              <select className={inputClass} value={form.scheduled_by} onChange={e => setForm(f => ({ ...f, scheduled_by: e.target.value }))}>
-                <option value="">Select user...</option>
-                {userOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+              <RepMultiSelect
+                options={userOptions}
+                selectedIds={selectedRepIds}
+                onChange={setSelectedRepIds}
+                placeholder="Select reps..."
+              />
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
@@ -360,7 +424,7 @@ function EditMeetingTableRow({
                 type="button"
                 className="px-2.5 py-1 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
                 disabled={!form.meeting_date || !form.meeting_time}
-                onClick={() => onSave(meeting.id, form)}
+                onClick={handleSave}
               >
                 Save
               </button>
@@ -404,7 +468,7 @@ export function MeetingsTable({
   onOutcomeChange: (meetingId: number, outcome: string) => void;
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
-  userOptions?: string[];
+  userOptions?: UserOption[];
   hideCompany?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
@@ -413,7 +477,7 @@ export function MeetingsTable({
   const hasActions = !!onEdit;
 
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir('asc'); }
   };
 
@@ -427,7 +491,9 @@ export function MeetingsTable({
         cmp = (a.title || '').localeCompare(b.title || '');
         break;
       case 'scheduled_by':
-        cmp = (a.scheduled_by || '').localeCompare(b.scheduled_by || '');
+        cmp = resolveRepNames(a.scheduled_by, userOptions).localeCompare(
+          resolveRepNames(b.scheduled_by, userOptions)
+        );
         break;
       case 'company':
         cmp = (a.company_name || '').localeCompare(b.company_name || '');
@@ -504,10 +570,17 @@ export function MeetingsTable({
                       <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
                     ) : null)}
                   </div>
-                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
+                  <MeetingInfoTooltip
+                    scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
+                    location={m.location}
+                    attendees={m.additional_attendees}
+                    companyWse={m.company_wse}
+                  />
                   {onEdit && (
                     <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-procare-bright-blue p-1 rounded" title="Edit">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
                     </button>
                   )}
                 </div>
@@ -528,14 +601,7 @@ export function MeetingsTable({
                     colorMap={colorMap}
                     onChange={(val) => onOutcomeChange(m.id, val)}
                   />
-                  {m.scheduled_by && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap" title={m.scheduled_by}>
-                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {getInitials(m.scheduled_by)}
-                    </span>
-                  )}
+                  <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} size="xs" />
                 </div>
               </>
             )}
@@ -560,7 +626,7 @@ export function MeetingsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {sorted.map((m) => (
+            {sorted.map((m) =>
               editingId === m.id && onEdit ? (
                 <EditMeetingTableRow
                   key={m.id}
@@ -572,68 +638,64 @@ export function MeetingsTable({
                   userOptions={userOptions}
                 />
               ) : (
-              <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
-                <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                  <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
-                    {m.first_name} {m.last_name}
-                  </Link>
-                </td>
-                <td className="px-3 py-2 text-gray-600 leading-snug">
-                  <span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span>
-                </td>
-                <td className="px-3 py-2 leading-snug">
-                  {m.scheduled_by ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap" title={m.scheduled_by}>
-                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {getInitials(m.scheduled_by)}
-                    </span>
-                  ) : (
-                    <span className="text-gray-300">—</span>
-                  )}
-                </td>
-                {!hideCompany && (
-                <td className="px-3 py-2 text-gray-600 leading-snug">
-                  {m.company_name && m.company_id ? (
-                    <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
-                      {m.company_name}
+                <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
+                  <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                    <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
+                      {m.first_name} {m.last_name}
                     </Link>
-                  ) : (
-                    <span className="text-gray-300">—</span>
-                  )}
-                </td>
-                )}
-                <td className="px-3 py-2 text-gray-600 leading-snug">
-                  <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
-                  <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
-                </td>
-                <td className="px-3 py-2 text-gray-600 leading-snug">
-                  <Link href={`/conferences/${m.conference_id}`} className="text-procare-bright-blue hover:underline">
-                    {m.conference_name}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  <OutcomeButton
-                    value={m.outcome}
-                    options={actionOptions}
-                    colorMap={colorMap}
-                    onChange={(val) => onOutcomeChange(m.id, val)}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <MeetingInfoTooltip scheduledBy={m.scheduled_by} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
-                </td>
-                {hasActions && (
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-procare-bright-blue text-xs font-medium transition-colors">Edit</button>
-                    </div>
                   </td>
-                )}
-              </tr>
+                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                    <span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span>
+                  </td>
+                  <td className="px-3 py-2 leading-snug">
+                    <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} />
+                  </td>
+                  {!hideCompany && (
+                    <td className="px-3 py-2 text-gray-600 leading-snug">
+                      {m.company_name && m.company_id ? (
+                        <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                          {m.company_name}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                  )}
+                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                    <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
+                    <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
+                  </td>
+                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                    <Link href={`/conferences/${m.conference_id}`} className="text-procare-bright-blue hover:underline">
+                      {m.conference_name}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2">
+                    <OutcomeButton
+                      value={m.outcome}
+                      options={actionOptions}
+                      colorMap={colorMap}
+                      onChange={(val) => onOutcomeChange(m.id, val)}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <MeetingInfoTooltip
+                      scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
+                      location={m.location}
+                      attendees={m.additional_attendees}
+                      companyWse={m.company_wse}
+                    />
+                  </td>
+                  {hasActions && (
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-procare-bright-blue text-xs font-medium transition-colors">Edit</button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
               )
-            ))}
+            )}
           </tbody>
         </table>
       </div>

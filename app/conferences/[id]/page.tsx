@@ -16,6 +16,7 @@ import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
+import { type UserOption } from '@/lib/useUserOptions';
 
 interface Attendee {
   id: number;
@@ -125,7 +126,7 @@ export default function ConferenceDetailPage() {
   const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
-  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [filterSeniority, setFilterSeniority] = useState('');
@@ -204,7 +205,7 @@ export default function ConferenceDetailPage() {
         value: o.value,
         action_key: o.action_key ?? null,
       })));
-      setUserOptions(userData.map((o: { value: string }) => o.value));
+      setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
       setEventTypeOptions(eventTypeData.map((o: { value: string }) => o.value));
       setEditData({
         name: data.name,
@@ -538,14 +539,14 @@ export default function ConferenceDetailPage() {
                         <div className="px-3 py-2 text-sm text-gray-500">No users configured. Add users in the Admin panel.</div>
                       ) : (
                         userOptions.map((user) => {
-                          const isSelected = editInternalAttendees.includes(user);
+                          const isSelected = editInternalAttendees.includes(user.value);
                           return (
                             <button
-                              key={user}
+                              key={user.id}
                               type="button"
                               onClick={() => {
                                 setEditInternalAttendees((prev) =>
-                                  isSelected ? prev.filter((u) => u !== user) : [...prev, user]
+                                  isSelected ? prev.filter((u) => u !== user.value) : [...prev, user.value]
                                 );
                               }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
@@ -557,7 +558,7 @@ export default function ConferenceDetailPage() {
                                   </svg>
                                 )}
                               </span>
-                              {user}
+                              {user.value}
                             </button>
                           );
                         })

@@ -9,8 +9,11 @@ import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { parseRepIds, resolveRepNames } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
+import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -43,6 +46,7 @@ export default function AttendeeDetailPage() {
   const router = useRouter();
   const id = params.id as string;
   const colorMaps = useConfigColors();
+  const userOptionsFull = useUserOptions();
 
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -58,7 +62,7 @@ export default function AttendeeDetailPage() {
   const [actionKeyMap, setActionKeyMap] = useState<Record<string, string | null>>({});
   const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
-  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -119,7 +123,7 @@ export default function AttendeeDetailPage() {
       setActionKeyMap(Object.fromEntries(actionData.map((o: { value: string; action_key: string | null }) => [o.value, o.action_key])));
       setNextStepsOptions(nextStepsData.map((o: { value: string }) => o.value));
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
-      setUserOptions(userData.map((o: { value: string }) => o.value));
+      setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
     } catch {
       toast.error('Failed to load attendee');
@@ -349,7 +353,7 @@ export default function AttendeeDetailPage() {
             entity_id: Number(id),
             content: noteContent,
             conference_name: selectedConf?.name || null,
-            rep: nextStepRep || null,
+            rep: resolveRepNames(nextStepRep, userOptions) || null,
           }),
         });
         fetchNotes();
@@ -532,14 +536,14 @@ export default function AttendeeDetailPage() {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Company</p>
-                      {attendee.company_assigned_user && (
-                        <span className={`${getBadgeClass(attendee.company_assigned_user, colorMaps.user || {})} inline-flex items-center gap-1`}>
+                      {attendee.company_assigned_user && resolveRepInitials(attendee.company_assigned_user, userOptionsFull).map((ini, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
                             <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
                           </svg>
-                          {attendee.company_assigned_user}
+                          {ini}
                         </span>
-                      )}
+                      ))}
                     </div>
                     {attendee.company_name ? (
                       <div>
@@ -713,12 +717,13 @@ export default function AttendeeDetailPage() {
                       </div>
                       <div>
                         <label className="label text-[10px]">Scheduled By</label>
-                        <select value={meetingForm.scheduled_by} onChange={e => setMeetingForm(p => ({ ...p, scheduled_by: e.target.value }))} className="input-field text-xs">
-                          <option value="">Select user...</option>
-                          {userOptions.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
+                        <RepMultiSelect
+                          options={userOptions}
+                          selectedIds={parseRepIds(meetingForm.scheduled_by)}
+                          onChange={(ids) => setMeetingForm(p => ({ ...p, scheduled_by: ids.join(',') }))}
+                          triggerClass="input-field w-full text-xs flex items-center justify-between gap-2"
+                          placeholder="Select reps..."
+                        />
                       </div>
                       <div>
                         <label className="label text-[10px]">Additional Attendees</label>
@@ -817,16 +822,13 @@ export default function AttendeeDetailPage() {
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
                   Assign To *
                 </label>
-                <select
-                  value={nextStepRep}
-                  onChange={e => setNextStepRep(e.target.value)}
-                  className="input-field text-sm w-full"
-                >
-                  <option value="">Select a user...</option>
-                  {userOptions.map(user => (
-                    <option key={user} value={user}>{user}</option>
-                  ))}
-                </select>
+                <RepMultiSelect
+                  options={userOptions}
+                  selectedIds={parseRepIds(nextStepRep)}
+                  onChange={(ids) => setNextStepRep(ids.join(','))}
+                  triggerClass="input-field w-full text-sm flex items-center justify-between gap-2"
+                  placeholder="Select reps..."
+                />
               </div>
               {pendingNextStep === 'Other' && (
                 <div>

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { type UserOption } from '@/lib/useUserOptions';
 
 interface ConferenceOption {
   id: number;
@@ -29,12 +31,12 @@ interface NewMeetingModalProps {
 }
 
 export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
-  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [attendees, setAttendees] = useState<AttendeeOption[]>([]);
   const [loadingConference, setLoadingConference] = useState(false);
 
-  const [selectedRep, setSelectedRep] = useState('');
+  const [selectedRepIds, setSelectedRepIds] = useState<number[]>([]);
   const [selectedConferenceId, setSelectedConferenceId] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
@@ -53,7 +55,9 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
     if (!isOpen) return;
     fetch('/api/config?category=user')
       .then(r => r.json())
-      .then((data: { value: string }[]) => setUserOptions(data.map(d => d.value)))
+      .then((data: { id: number; value: string }[]) =>
+        setUserOptions(data.map(d => ({ id: Number(d.id), value: String(d.value) })))
+      )
       .catch(() => {});
     fetch('/api/conferences')
       .then(r => r.json())
@@ -131,7 +135,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
   const selectedCompanyName = companies.find(c => c.id === Number(selectedCompanyId))?.name || '';
 
   function resetForm() {
-    setSelectedRep('');
+    setSelectedRepIds([]);
     setSelectedConferenceId('');
     setSelectedCompanyId('');
     setSelectedAttendeeId('');
@@ -165,7 +169,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
           meeting_date: meetingDate,
           meeting_time: meetingTime,
           location: location || null,
-          scheduled_by: selectedRep || null,
+          scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
           additional_attendees: additionalAttendees || null,
         }),
       });
@@ -203,13 +207,16 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 min-h-0 px-6 py-4 space-y-4">
-          {/* Rep */}
+          {/* Rep — multiselect */}
           <div>
             <label className={labelClass}>Rep</label>
-            <select className={inputClass} value={selectedRep} onChange={e => setSelectedRep(e.target.value)}>
-              <option value="">Select rep...</option>
-              {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
+            <RepMultiSelect
+              options={userOptions}
+              selectedIds={selectedRepIds}
+              onChange={setSelectedRepIds}
+              triggerClass={`${inputClass} flex items-center justify-between gap-2`}
+              placeholder="Select reps..."
+            />
           </div>
 
           {/* Conference */}

@@ -7,6 +7,8 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { useForm } from 'react-hook-form';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { useUserOptions, parseRepIds } from '@/lib/useUserOptions';
 
 interface Company {
   id: number;
@@ -45,7 +47,7 @@ export default function CompaniesPage() {
   const profitTypeOptions = configOptions.profit_type ?? [];
   const servicesOptions = configOptions.services ?? [];
   const icpOptions = configOptions.icp ?? ['True', 'False'];
-  const userOptions = configOptions.user ?? [];
+  const userOptionsFull = useUserOptions();
   const selectedServices = watch('services') ?? [];
   const icp = watch('icp') || 'False';
 
@@ -215,10 +217,14 @@ export default function CompaniesPage() {
               </div>
               <div>
                 <label className="label">Assigned User</label>
-                <select {...register('assigned_user')} className="input-field">
-                  <option value="">Select user...</option>
-                  {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                <RepMultiSelect
+                  options={userOptionsFull}
+                  selectedIds={parseRepIds(watch('assigned_user'))}
+                  onChange={(ids) => setValue('assigned_user', ids.join(','))}
+                  triggerClass="input-field w-full flex items-center justify-between gap-2 text-sm"
+                  placeholder="Select users..."
+                />
+                <input type="hidden" {...register('assigned_user')} />
               </div>
             </div>
             <div className="flex gap-3 mt-4">

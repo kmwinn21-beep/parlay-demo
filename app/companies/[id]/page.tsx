@@ -9,9 +9,11 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { effectiveSeniority, classifyICP } from '@/lib/parsers';
+import { type UserOption, parseRepIds, resolveRepInitials } from '@/lib/useUserOptions';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -111,7 +113,7 @@ export default function CompanyDetailPage() {
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
-  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
@@ -174,7 +176,7 @@ export default function CompanyDetailPage() {
       }
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
-      if (userRes.ok) setUserOptions((await userRes.json()).map((o: { value: string }) => o.value));
+      if (userRes.ok) setUserOptions((await userRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
       if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value));
@@ -539,16 +541,13 @@ export default function CompanyDetailPage() {
               </div>
               <div>
                 <label className="label">Assigned User</label>
-                <select
-                  value={editData.assigned_user || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, assigned_user: e.target.value }))}
-                  className="input-field"
-                >
-                  <option value="">Select user...</option>
-                  {userOptions.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
+                <RepMultiSelect
+                  options={userOptions}
+                  selectedIds={parseRepIds(editData.assigned_user)}
+                  onChange={(ids) => setEditData((p) => ({ ...p, assigned_user: ids.join(',') }))}
+                  triggerClass="input-field w-full flex items-center justify-between gap-2 text-sm"
+                  placeholder="Select users..."
+                />
               </div>
               <div>
                 <label className="label">Entity Structure</label>
@@ -644,14 +643,14 @@ export default function CompanyDetailPage() {
                     </span>
                   )}
                   <span className="badge-gray">{company.attendees.length} attendees</span>
-                  {company.assigned_user && (
-                    <span className={`${getBadgeClass(company.assigned_user, colorMaps.user || {})} inline-flex items-center gap-1`}>
+                  {company.assigned_user && resolveRepInitials(company.assigned_user, userOptions).map((ini, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
                       <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {company.assigned_user}
+                      {ini}
                     </span>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>

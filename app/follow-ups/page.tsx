@@ -6,6 +6,7 @@ import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { type UserOption, parseRepIds } from '@/lib/useUserOptions';
 
 function FilterSelect({ value, onChange, label, children }: { value: string; onChange: (v: string) => void; label: string; children: React.ReactNode }) {
   return (
@@ -63,7 +64,7 @@ export default function FollowUpsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
-  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [conferenceOptions, setConferenceOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending');
@@ -105,7 +106,7 @@ export default function FollowUpsPage() {
           const actionOpts = cfgData.filter((o: { category: string }) => o.category === 'action');
           setActionOptions(actionOpts.map((o: { value: string }) => o.value));
           const userOpts = cfgData.filter((o: { category: string }) => o.category === 'user');
-          setUserOptions(userOpts.map((o: { value: string }) => o.value));
+          setUserOptions(userOpts.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
           const nsOpts = cfgData.filter((o: { category: string }) => o.category === 'next_steps');
           setNextStepsOptions(nsOpts.map((o: { value: string }) => o.value));
         }
@@ -229,7 +230,7 @@ export default function FollowUpsPage() {
 
   const filteredMeetings = useMemo(() => {
     return meetings.filter(m => {
-      if (filterRep && (m.scheduled_by || '') !== filterRep) return false;
+      if (filterRep && !parseRepIds(m.scheduled_by).map(String).includes(filterRep)) return false;
       if (filterConference && m.conference_name !== filterConference) return false;
       if (filterOutcome.size > 0 && !filterOutcome.has(m.outcome || '')) return false;
       if (filterDateFrom && m.meeting_date < filterDateFrom) return false;
@@ -242,7 +243,7 @@ export default function FollowUpsPage() {
     return followUps.filter(fu => {
       if (filter === 'pending' && fu.completed) return false;
       if (filter === 'completed' && !fu.completed) return false;
-      if (filterRep && (fu.assigned_rep || '') !== filterRep) return false;
+      if (filterRep && !parseRepIds(fu.assigned_rep).map(String).includes(filterRep)) return false;
       if (filterConference && fu.conference_name !== filterConference) return false;
       if (filterNextStep.size > 0 && !filterNextStep.has(fu.next_steps)) return false;
       return true;
@@ -332,7 +333,7 @@ export default function FollowUpsPage() {
             </button>
             <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
               <FilterSelect value={filterRep} onChange={setFilterRep} label="All Reps">
-                {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                {userOptions.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
               </FilterSelect>
               <FilterSelect value={filterConference} onChange={setFilterConference} label="All Conferences">
                 {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
@@ -415,7 +416,7 @@ export default function FollowUpsPage() {
             </button>
             <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
               <FilterSelect value={filterRep} onChange={setFilterRep} label="All Reps">
-                {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                {userOptions.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
               </FilterSelect>
               <FilterSelect value={filterConference} onChange={setFilterConference} label="All Conferences">
                 {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
