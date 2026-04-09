@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
 import { ParentChildModal } from './ParentChildModal';
+import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
@@ -165,6 +166,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showParentChildModal, setShowParentChildModal] = useState(false);
+  const [showOperatorCapitalModal, setShowOperatorCapitalModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -267,6 +269,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     const res = await fetch('/api/companies/parent-child', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent_id: parentId, child_ids: childIds }) });
     if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationship'); }
     toast.success('Parent/Child relationship created!'); setSelectedIds(new Set()); onRefresh();
+  };
+
+  const handleOperatorCapital = async (companyIds: number[]) => {
+    const res = await fetch('/api/companies/relationships/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: companyIds }) });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationships'); }
+    toast.success('Operator/Capital relationships created!'); setSelectedIds(new Set()); onRefresh();
   };
 
   const handleMassEdit = async () => {
@@ -375,6 +383,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
           <button onClick={() => setShowParentChildModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
             Create Parent/Child Relationship
+          </button>
+          <button onClick={() => setShowOperatorCapitalModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+            Create Operator/Capital Relationship
           </button>
           </>
         )}
@@ -553,6 +565,13 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         isOpen={showParentChildModal}
         onClose={() => setShowParentChildModal(false)}
         onSubmit={handleParentChild}
+        items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
+      />
+
+      <OperatorCapitalModal
+        isOpen={showOperatorCapitalModal}
+        onClose={() => setShowOperatorCapitalModal(false)}
+        onSubmit={handleOperatorCapital}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
       />
     </div>
