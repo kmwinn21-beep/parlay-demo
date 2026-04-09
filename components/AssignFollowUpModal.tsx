@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import {
@@ -36,6 +36,101 @@ export interface AssignFollowUpModalProps {
   defaultCompanyId?: number;
   /** Pre-selects the attendee */
   defaultAttendeeId?: number;
+}
+
+function SearchableSelect({
+  options,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  disabledPlaceholder,
+}: {
+  options: CompanyOption[];
+  value: string;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+  placeholder: string;
+  disabledPlaceholder: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selected = options.find(o => String(o.id) === value);
+  const filtered = options.filter(o =>
+    o.name.toLowerCase().includes(query.toLowerCase())
+  );
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    if (open) document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  // Reset query/open when disabled
+  useEffect(() => {
+    if (disabled) { setOpen(false); setQuery(''); }
+  }, [disabled]);
+
+  if (disabled) {
+    return (
+      <div className="input-field text-gray-400 text-sm cursor-not-allowed">
+        {disabledPlaceholder}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(o => !o); setQuery(''); }}
+        className={`input-field w-full flex items-center justify-between gap-2 text-sm text-left ${selected ? 'text-gray-900' : 'text-gray-400'}`}
+      >
+        <span className="truncate">{selected ? selected.name : placeholder}</span>
+        <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="p-2 border-b border-gray-100">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-procare-bright-blue"
+              placeholder="Search companies…"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-400">No matches</div>
+            ) : (
+              filtered.map(o => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => { onChange(String(o.id)); setOpen(false); setQuery(''); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${String(o.id) === value ? 'bg-blue-50 text-procare-bright-blue font-medium' : 'text-gray-800'}`}
+                >
+                  {o.name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function formatDateShort(d: string) {
@@ -429,24 +524,14 @@ export function AssignFollowUpModal({
                 Loading companies…
               </div>
             ) : (
-              <select
+              <SearchableSelect
+                options={confCompanies}
                 value={companyId}
-                onChange={e => handleCompanyChange(e.target.value)}
-                className="input-field"
-                required
+                onChange={handleCompanyChange}
                 disabled={!conferenceId}
-              >
-                <option value="">
-                  {conferenceId
-                    ? 'Select company…'
-                    : 'Select a conference first'}
-                </option>
-                {confCompanies.map(c => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="Select company…"
+                disabledPlaceholder="Select a conference first"
+              />
             )}
           </div>
 
