@@ -471,13 +471,13 @@ export function NotesSection({
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-44">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-normal w-44">
                   Date / Time
                 </th>
                 <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">
                   Conference
                 </th>
-                <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-12">
+                <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-normal w-12">
                   Rep
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -492,13 +492,13 @@ export function NotesSection({
                 const long = isLongNote(note.content);
                 return (
                   <tr key={note.id} className="hover:bg-gray-50 align-top">
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap w-44">
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-normal w-44">
                       {formatDateTime(note.created_at)}
                     </td>
                     <td className="px-2 py-3 text-xs text-gray-600 w-24 break-words">
                       {note.conference_name || '—'}
                     </td>
-                    <td className="px-2 py-3 text-xs text-gray-600 whitespace-nowrap w-12 text-center" title={note.rep || undefined}>
+                    <td className="px-2 py-3 text-xs text-gray-600 whitespace-normal w-12 text-center" title={note.rep || undefined}>
                       {note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-800">
