@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
+import { useHideBottomNav } from './BottomNavContext';
 
 interface ConferenceOption {
   id: number;
@@ -28,6 +29,7 @@ interface NewNoteModalProps {
 }
 
 export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
+  useHideBottomNav(isOpen);
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [allCompanies, setAllCompanies] = useState<CompanyOption[]>([]);

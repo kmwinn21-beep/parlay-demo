@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useHideBottomNav } from './BottomNavContext';
 
 interface OperatorCapitalItem {
   id: number;
@@ -21,6 +22,7 @@ export function OperatorCapitalModal({
   onSubmit,
   items,
 }: OperatorCapitalModalProps) {
+  useHideBottomNav(isOpen);
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;

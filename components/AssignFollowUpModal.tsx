@@ -8,6 +8,7 @@ import {
   useConfigWithIds,
   resolveRepNames,
 } from '@/lib/useUserOptions';
+import { useHideBottomNav } from './BottomNavContext';
 
 interface ConferenceOption {
   id: number;
@@ -149,6 +150,7 @@ export function AssignFollowUpModal({
   defaultCompanyId,
   defaultAttendeeId,
 }: AssignFollowUpModalProps) {
+  useHideBottomNav(isOpen);
   const userOptions = useUserOptions();
   const actionOptions = useConfigWithIds('next_steps');
 
