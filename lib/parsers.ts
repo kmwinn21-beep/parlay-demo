@@ -53,6 +53,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
   const wseCol = findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees');
   const servicesCol = findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting');
+  const icpCol = findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp');
 
   const attendees: ParsedAttendee[] = [];
 
@@ -118,6 +119,12 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
       const rawServices = String(row[servicesCol]).trim();
       if (rawServices) {
         attendee.services = parseServicesValue(rawServices);
+      }
+    }
+    if (icpCol && row[icpCol]) {
+      const rawIcp = String(row[icpCol]).trim();
+      if (rawIcp) {
+        attendee.icp = rawIcp;
       }
     }
 

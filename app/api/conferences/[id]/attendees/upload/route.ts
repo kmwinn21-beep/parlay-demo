@@ -123,13 +123,13 @@ export async function POST(
 
     // Collect unique company names with associated email/website/company_type/assigned_user for domain matching
     const companyIdCache = new Map<string, number>();
-    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string; wse?: number; services?: string };
+    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string; wse?: number; services?: string; icp?: string };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of valid) {
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: p.assigned_user?.trim(), wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined, services: p.services?.trim() || undefined });
+          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: p.assigned_user?.trim(), wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined, services: p.services?.trim() || undefined, icp: p.icp?.trim() || undefined });
         } else {
           // If we don't have an email/website/company_type/assigned_user/services yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
@@ -137,6 +137,7 @@ export async function POST(
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
           if (!existing.assigned_user && p.assigned_user?.trim()) existing.assigned_user = p.assigned_user.trim();
+          if (!existing.icp && p.icp?.trim()) existing.icp = p.icp.trim();
           if (!existing.wse && p.wse?.trim()) {
             const wseVal = parseInt(p.wse.trim(), 10);
             if (!isNaN(wseVal) && wseVal > 0) existing.wse = wseVal;
@@ -246,6 +247,19 @@ export async function POST(
     }
 
     // Compute ICP for all companies touched by this upload
+    // If the uploaded file includes an ICP column, that value overrides the calculated ICP.
+    // Otherwise, calculate ICP from company type + WSE + services rules. Default fallback is "No".
+    // Build a map of company ID -> file-provided ICP value for override lookup
+    const fileIcpByCompanyId = new Map<number, string>();
+    for (const [coName, entry] of Array.from(companyEntries.entries())) {
+      if (entry.icp) {
+        const coId = companyIdCache.get(coName);
+        if (coId && coId > 0) {
+          fileIcpByCompanyId.set(coId, entry.icp);
+        }
+      }
+    }
+
     // Re-fetch current state of all affected companies so ICP is calculated on final values
     const affectedCompanyIds = Array.from(new Set(
       Array.from(companyIdCache.values())
@@ -259,16 +273,35 @@ export async function POST(
         sql: `SELECT id, company_type, wse, services FROM companies WHERE id IN (${placeholders})`,
         args: affectedCompanyIds,
       });
+      const falseValue = icpOptions[1] ?? 'No';
       const icpUpdates: Array<{ id: number; icp: string }> = [];
       for (const row of freshRows.rows) {
-        const icp = classifyICP(
-          row.wse ? Number(row.wse) : null,
-          row.company_type ? String(row.company_type) : null,
-          row.services ? String(row.services) : null,
-          icpOptions,
-          operatorTypeValues
-        );
-        icpUpdates.push({ id: Number(row.id), icp });
+        const companyId = Number(row.id);
+        const fileIcp = fileIcpByCompanyId.get(companyId);
+        let icp: string;
+        if (fileIcp) {
+          // File-provided ICP overrides the calculated value
+          // Normalize common yes/no variants to the admin panel's configured values
+          const normalized = fileIcp.toLowerCase();
+          if (normalized === 'yes' || normalized === 'true' || normalized === 'y' || normalized === '1') {
+            icp = icpOptions[0] ?? 'Yes';
+          } else if (normalized === 'no' || normalized === 'false' || normalized === 'n' || normalized === '0') {
+            icp = falseValue;
+          } else {
+            // Use the raw value if it doesn't match known patterns
+            icp = fileIcp;
+          }
+        } else {
+          // No file ICP — calculate from rules
+          icp = classifyICP(
+            row.wse ? Number(row.wse) : null,
+            row.company_type ? String(row.company_type) : null,
+            row.services ? String(row.services) : null,
+            icpOptions,
+            operatorTypeValues
+          );
+        }
+        icpUpdates.push({ id: companyId, icp });
       }
       if (icpUpdates.length > 0) {
         await batchInsert(icpUpdates, (u) => ({

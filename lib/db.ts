@@ -163,7 +163,7 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE companies ADD COLUMN entity_structure TEXT`,
     `ALTER TABLE companies ADD COLUMN wse INTEGER`,
     `ALTER TABLE companies ADD COLUMN services TEXT`,
-    `ALTER TABLE companies ADD COLUMN icp TEXT DEFAULT 'False'`,
+    `ALTER TABLE companies ADD COLUMN icp TEXT DEFAULT 'No'`,
     `ALTER TABLE entity_notes ADD COLUMN conference_name TEXT`,
     `ALTER TABLE entity_notes ADD COLUMN rep TEXT`,
     // Event Type default colors
@@ -427,6 +427,7 @@ export interface ParsedAttendee {
   assigned_user?: string;
   wse?: string;
   services?: string;
+  icp?: string;
 }
 
 /**
