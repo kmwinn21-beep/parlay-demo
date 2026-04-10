@@ -76,6 +76,7 @@ export default function AttendeeDetailPage() {
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [showEmailTooltip, setShowEmailTooltip] = useState(false);
   const emailTooltipRef = useRef<HTMLSpanElement>(null);
+  const [conferencesExpanded, setConferencesExpanded] = useState(false);
 
   useEffect(() => {
     if (!showEmailTooltip) return;
@@ -718,25 +719,6 @@ export default function AttendeeDetailPage() {
 
         {/* Right column (1/3 width) */}
         <div className="space-y-6">
-          {/* Conferences — at the top of the right column */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">Conferences ({attendee.conferences.length})</h2>
-            {attendee.conferences.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">Not associated with any conferences.</p>
-            ) : (
-              <div className="space-y-2">
-                {attendee.conferences.map(conf => (
-                  <Link key={conf.id} href={withTrail(`/conferences/${conf.id}`, attendeeChildTrail)} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                      <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
-                    </div>
-                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
           {/* Status */}
           <div className="card">
             <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Status</h2>
@@ -748,6 +730,69 @@ export default function AttendeeDetailPage() {
                 </button>
               ))}
             </div>
+          </div>
+          {/* Conferences — collapsible */}
+          <div className="card">
+            {(() => {
+              const today = new Date().toISOString().slice(0, 10);
+              const inProgressConfs = attendee.conferences.filter(conf => conf.start_date <= today && conf.end_date >= today);
+              return (
+                <>
+                  <button
+                    onClick={() => setConferencesExpanded(prev => !prev)}
+                    className="flex items-center justify-between w-full text-left"
+                  >
+                    <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Conferences ({attendee.conferences.length})</h2>
+                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                  {!conferencesExpanded && inProgressConfs.length > 0 && (
+                    <div className="space-y-2 mt-4">
+                      {inProgressConfs.map(conf => (
+                        <Link key={conf.id} href={withTrail(`/conferences/${conf.id}`, attendeeChildTrail)} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
+                          <div className="min-w-0">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                              <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                              In Progress
+                            </span>
+                            <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                            <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                  {conferencesExpanded && (
+                    <>
+                      {attendee.conferences.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4 mt-4">Not associated with any conferences.</p>
+                      ) : (
+                        <div className="space-y-2 mt-4">
+                          {attendee.conferences.map(conf => {
+                            const isActive = conf.start_date <= today && conf.end_date >= today;
+                            return (
+                              <Link key={conf.id} href={withTrail(`/conferences/${conf.id}`, attendeeChildTrail)} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+                                <div className="min-w-0">
+                                  {isActive && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                                      <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                      In Progress
+                                    </span>
+                                  )}
+                                  <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                                  <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
+                                </div>
+                                <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Internal Relationships */}
