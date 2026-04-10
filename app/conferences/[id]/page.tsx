@@ -249,6 +249,7 @@ export default function ConferenceDetailPage() {
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
+  const [attendeeFiltersOpen, setAttendeeFiltersOpen] = useState(false);
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
@@ -872,7 +873,7 @@ export default function ConferenceDetailPage() {
               )}
               <button
                 onClick={() => setShowAddForm((v) => !v)}
-                className="btn-secondary flex items-center gap-2 text-sm"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-procare-dark-blue"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -882,7 +883,7 @@ export default function ConferenceDetailPage() {
               <button
                 onClick={() => uploadFileRef.current?.click()}
                 disabled={isUploading}
-                className="btn-secondary flex items-center gap-2 text-sm"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-procare-dark-blue disabled:opacity-50"
               >
                 {isUploading ? (
                   <>
@@ -919,16 +920,51 @@ export default function ConferenceDetailPage() {
                   className="input-field pl-9 w-56"
                 />
               </div>
-              <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto text-sm">
-                <option value="">All Seniorities</option>
-                {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-auto text-sm">
-                <option value="">All Types</option>
-                {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              {/* Filters toggle button */}
+              <button
+                onClick={() => setAttendeeFiltersOpen(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-procare-bright-blue text-white border-procare-bright-blue' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                </svg>
+                Filters
+                {(filterSeniority || filterCompanyType) && (
+                  <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-procare-bright-blue text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-procare-bright-blue">
+                    {[filterSeniority, filterCompanyType].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
+
+          {/* Collapsible attendee filters pane */}
+          {attendeeFiltersOpen && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200 flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Seniority</label>
+                <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto text-sm">
+                  <option value="">All Seniorities</option>
+                  {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Company Type</label>
+                <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-auto text-sm">
+                  <option value="">All Types</option>
+                  {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              {(filterSeniority || filterCompanyType) && (
+                <button
+                  onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 transition-colors self-end mb-0.5"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Add Attendee Inline Form */}
           {showAddForm && (
