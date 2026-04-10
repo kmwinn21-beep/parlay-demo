@@ -129,6 +129,8 @@ export default function CompanyDetailPage() {
   const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
   const [capitalTypeValues, setCapitalTypeValues] = useState<Set<string>>(new Set());
   const [showRelateModal, setShowRelateModal] = useState(false);
+  const [conferencesExpanded, setConferencesExpanded] = useState(false);
+  const [opCapRelExpanded, setOpCapRelExpanded] = useState(false);
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [relateSearch, setRelateSearch] = useState('');
   const [relateResults, setRelateResults] = useState<{ id: number; name: string; company_type: string | null }[]>([]);
@@ -829,13 +831,7 @@ export default function CompanyDetailPage() {
               className="text-gray-400 hover:text-procare-bright-blue transition-colors p-1 rounded hover:bg-gray-50"
               title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                {attendeesExpanded ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                )}
-              </svg>
+              <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
           )}
         </div>
@@ -1094,33 +1090,85 @@ export default function CompanyDetailPage() {
             </div>
           </div>
 
-          {/* Conferences this company has attended */}
+          {/* Conferences this company has attended — collapsible */}
           <div className="card">
-            <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">
-              Conferences ({company.conferences?.length ?? 0})
-            </h2>
-            {!company.conferences || company.conferences.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-3">No conferences attended yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {company.conferences.map(conf => (
-                  <Link
-                    key={conf.id}
-                    href={withTrail(`/conferences/${conf.id}`, companyChildTrail)}
-                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all"
+            {(() => {
+              const today = new Date().toISOString().slice(0, 10);
+              const confs = company.conferences || [];
+              const inProgressConfs = confs.filter(conf => conf.start_date <= today && conf.end_date >= today);
+              return (
+                <>
+                  <button
+                    onClick={() => setConferencesExpanded(prev => !prev)}
+                    className="flex items-center justify-between w-full text-left"
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
-                      </p>
+                    <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                      Conferences ({confs.length})
+                    </h2>
+                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                  {!conferencesExpanded && inProgressConfs.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      {inProgressConfs.map(conf => (
+                        <Link
+                          key={conf.id}
+                          href={withTrail(`/conferences/${conf.id}`, companyChildTrail)}
+                          className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all"
+                        >
+                          <div className="min-w-0">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                              <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                              In Progress
+                            </span>
+                            <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                            </p>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        </Link>
+                      ))}
                     </div>
-                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </Link>
-                ))}
-              </div>
-            )}
+                  )}
+                  {conferencesExpanded && (
+                    <>
+                      {confs.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-3 mt-3">No conferences attended yet.</p>
+                      ) : (
+                        <div className="space-y-2 mt-3">
+                          {confs.map(conf => {
+                            const isActive = conf.start_date <= today && conf.end_date >= today;
+                            return (
+                              <Link
+                                key={conf.id}
+                                href={withTrail(`/conferences/${conf.id}`, companyChildTrail)}
+                                className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}
+                              >
+                                <div className="min-w-0">
+                                  {isActive && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                                      <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                      In Progress
+                                    </span>
+                                  )}
+                                  <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                                  </p>
+                                </div>
+                                <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Child / subsidiary companies */}
@@ -1164,21 +1212,32 @@ export default function CompanyDetailPage() {
           {/* Operator / Capital Relationships — shown when company type is Operator or Capital */}
           {company.company_type && (operatorTypeValues.has(company.company_type) || capitalTypeValues.has(company.company_type)) && (
             <div className="card">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
-                  Operator / Capital Relationships
-                </h2>
-                <button
-                  onClick={() => setShowRelateModal(true)}
-                  className="text-xs text-procare-bright-blue hover:underline font-medium"
-                >
-                  + Add
-                </button>
-              </div>
-              {!company.related_companies || company.related_companies.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-3">No related companies yet.</p>
-              ) : (
-                <div className="space-y-2">
+              <button
+                onClick={() => setOpCapRelExpanded(prev => !prev)}
+                className="flex items-center justify-between w-full text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                    Operator / Capital Relationships
+                  </h2>
+                  {opCapRelExpanded && (
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); setShowRelateModal(true); }}
+                      className="text-xs text-procare-bright-blue hover:underline font-medium"
+                    >
+                      + Add
+                    </span>
+                  )}
+                </div>
+                <svg className={`w-5 h-5 text-gray-400 transition-transform ${opCapRelExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {opCapRelExpanded && (
+                <>
+                  {!company.related_companies || company.related_companies.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-3">No related companies yet.</p>
+                  ) : (
+                    <div className="space-y-2 mt-3">
                   {company.related_companies.map(rel => (
                     <div
                       key={rel.id}
@@ -1211,6 +1270,8 @@ export default function CompanyDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+                </>
               )}
 
               {/* Relate modal */}
