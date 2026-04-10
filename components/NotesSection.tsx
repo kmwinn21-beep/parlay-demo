@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { useUser } from '@/components/UserContext';
 
 export interface EntityNote {
   id: number;
@@ -77,6 +78,10 @@ export function NotesSection({
   currentCompanyId,
   currentAttendeeId,
   currentConferenceName,
+  // Pin support
+  onPin,
+  pinnedNoteIds = new Set(),
+  showPinnedIndicator = false,
 }: {
   entityType: 'attendee' | 'company' | 'conference';
   entityId: number;
@@ -90,12 +95,22 @@ export function NotesSection({
   currentCompanyId?: number;
   currentAttendeeId?: number;
   currentConferenceName?: string;
+  onPin?: (noteId: number, conferenceName: string | null, attendeeName: string | null, attendeeId: number | null) => void;
+  pinnedNoteIds?: Set<number>;
+  showPinnedIndicator?: boolean;
 }) {
   const [notes, setNotes] = useState<EntityNote[]>(initialNotes);
   const [isAdding, setIsAdding] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [pinOnSubmit, setPinOnSubmit] = useState(false);
+
+  // Pin modal state
+  const [pinModalNoteId, setPinModalNoteId] = useState<number | null>(null);
+  const [pinConference, setPinConference] = useState('');
+  const [pinAttendeeId, setPinAttendeeId] = useState('');
+  const { user } = useUser();
 
   // Sync notes when initialNotes prop changes (e.g. after parent fetch completes)
   useEffect(() => {
@@ -307,11 +322,27 @@ export function NotesSection({
         await Promise.allSettled(crossPostPromises);
       }
 
+      // If user opted to pin the note, create a pinned note record
+      if (pinOnSubmit && onPin && user?.email && (entityType === 'attendee' || entityType === 'company')) {
+        try {
+          const pinConferenceName = conferenceName !== 'General Note' ? conferenceName : null;
+          if (entityType === 'attendee') {
+            onPin(newNote.id, pinConferenceName, null, null);
+          } else if (entityType === 'company') {
+            const selAtt = attendees.find(a => String(a.id) === selectedAttendeeId);
+            const attName = selAtt ? `${selAtt.first_name} ${selAtt.last_name}` : null;
+            const attId = selAtt ? selAtt.id : null;
+            onPin(newNote.id, pinConferenceName, attName, attId);
+          }
+        } catch { /* non-fatal */ }
+      }
+
       setNoteText('');
       setSelectedUser('');
       setSelectedConference('');
       setSelectedCompanyId('');
       setSelectedAttendeeId('');
+      setPinOnSubmit(false);
       setIsAdding(false);
       toast.success('Note saved.');
     } catch {
@@ -339,6 +370,45 @@ export function NotesSection({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  };
+
+  const handlePinClick = (noteId: number) => {
+    if (!onPin) return;
+    const note = notes.find(n => n.id === noteId);
+    // For attendee details: if no conference associated with this note, show modal
+    if (entityType === 'attendee') {
+      if (note?.conference_name && note.conference_name !== 'General Note') {
+        // Conference already associated, pin directly
+        onPin(noteId, note.conference_name, null, null);
+      } else {
+        // Need to prompt for conference
+        setPinConference('');
+        setPinModalNoteId(noteId);
+      }
+    } else if (entityType === 'company') {
+      // Always show modal for company - to optionally associate attendee/conference
+      setPinConference(note?.conference_name && note.conference_name !== 'General Note' ? note.conference_name : '');
+      setPinAttendeeId('');
+      setPinModalNoteId(noteId);
+    } else {
+      // Conference details - shouldn't pin from here
+      return;
+    }
+  };
+
+  const handlePinSubmit = () => {
+    if (!onPin || !pinModalNoteId) return;
+    if (entityType === 'attendee' && !pinConference) {
+      toast.error('Please select a conference.');
+      return;
+    }
+    const selAttendee = attendees.find(a => String(a.id) === pinAttendeeId);
+    const attendeeName = selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : null;
+    const attendeeIdVal = selAttendee ? selAttendee.id : null;
+    onPin(pinModalNoteId, pinConference || null, attendeeName, attendeeIdVal);
+    setPinModalNoteId(null);
+    setPinConference('');
+    setPinAttendeeId('');
   };
 
   return (
@@ -444,6 +514,20 @@ export function NotesSection({
             rows={5}
             autoFocus
           />
+          {onPin && (entityType === 'attendee' || entityType === 'company') && (
+            <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={pinOnSubmit}
+                onChange={e => setPinOnSubmit(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-procare-gold focus:ring-procare-gold"
+              />
+              <svg className="w-4 h-4 text-procare-gold" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+              </svg>
+              <span className="text-sm font-medium text-gray-700">Pin Note?</span>
+            </label>
+          )}
           <div className="flex gap-2 mt-3">
             <button
               type="button"
@@ -455,7 +539,7 @@ export function NotesSection({
             </button>
             <button
               type="button"
-              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(''); setSelectedCompanyId(''); setSelectedAttendeeId(''); }}
+              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(''); setSelectedCompanyId(''); setSelectedAttendeeId(''); setPinOnSubmit(false); }}
               className="btn-secondary text-sm"
             >
               Cancel
@@ -474,7 +558,7 @@ export function NotesSection({
             const repInitials = note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : null;
             return (
               <div key={note.id} className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-all">
-                {/* Meta row: date · conference badge on left; rep pill + delete on right */}
+                {/* Meta row: date · conference badge on left; rep pill + pin on right */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
@@ -498,17 +582,28 @@ export function NotesSection({
                         {repInitials}
                       </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(note.id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
-                      title="Delete note"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    {/* Pinned indicator (shown in conference view) */}
+                    {showPinnedIndicator && pinnedNoteIds.has(note.id) && (
+                      <span className="text-procare-gold flex-shrink-0" title="Pinned in Company or Attendee details">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                        </svg>
+                      </span>
+                    )}
+                    {/* Pin button (shown in attendee and company views) */}
+                    {onPin && (entityType === 'attendee' || entityType === 'company') && (
+                      <button
+                        type="button"
+                        onClick={() => handlePinClick(note.id)}
+                        className={`transition-colors flex-shrink-0 ${pinnedNoteIds.has(note.id) ? 'text-procare-gold' : 'text-gray-300 hover:text-procare-gold'}`}
+                        title={pinnedNoteIds.has(note.id) ? 'Already pinned' : 'Pin note'}
+                        disabled={pinnedNoteIds.has(note.id)}
+                      >
+                        <svg className="w-4 h-4" fill={pinnedNoteIds.has(note.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={pinnedNoteIds.has(note.id) ? 0 : 2}>
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
                 {/* Note body */}
@@ -524,9 +619,86 @@ export function NotesSection({
                     {expanded ? 'Show Less' : 'Show Full Note'}
                   </button>
                 )}
+                {/* Delete button at bottom-right */}
+                <div className="flex justify-end mt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(note.id)}
+                    className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                    title="Delete note"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pin modal */}
+      {pinModalNoteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
+              Pin Note
+            </h3>
+            <div className="space-y-4">
+              {/* Conference selector - required for attendee, optional for company */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                  Conference {entityType === 'attendee' ? '*' : '(optional)'}
+                </label>
+                <select
+                  value={pinConference}
+                  onChange={e => setPinConference(e.target.value)}
+                  className="input-field text-sm w-full"
+                >
+                  <option value="">{entityType === 'attendee' ? 'Select a conference...' : 'None (General Note)'}</option>
+                  {conferences.map(conf => (
+                    <option key={conf.id} value={conf.name}>{conf.name}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Attendee selector - only for company details */}
+              {entityType === 'company' && attendees.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                    Attendee (optional)
+                  </label>
+                  <select
+                    value={pinAttendeeId}
+                    onChange={e => setPinAttendeeId(e.target.value)}
+                    className="input-field text-sm w-full"
+                  >
+                    <option value="">None</option>
+                    {attendees.map(att => (
+                      <option key={att.id} value={att.id}>{att.first_name} {att.last_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={handlePinSubmit}
+                className="btn-primary text-sm flex-1"
+              >
+                Pin Note
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPinModalNoteId(null); setPinConference(''); setPinAttendeeId(''); }}
+                className="btn-secondary text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

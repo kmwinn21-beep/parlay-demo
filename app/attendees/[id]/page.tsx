@@ -9,6 +9,7 @@ import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { BackButton } from '@/components/BackButton';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { parseRepIds } from '@/lib/useUserOptions';
@@ -96,6 +97,10 @@ export default function AttendeeDetailPage() {
   const [meetingForm, setMeetingForm] = useState({ meeting_date: '', meeting_time: '', location: '', scheduled_by: '', additional_attendees: '' });
   const [isSchedulingMeeting, setIsSchedulingMeeting] = useState(false);
 
+  // Pinned notes
+  const [pinnedNotes, setPinnedNotes] = useState<PinnedNote[]>([]);
+  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<number>>(new Set());
+
   // Conference-specific state
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
   const [conferenceDetail, setConferenceDetail] = useState<ConferenceDetail | null>(null);
@@ -119,6 +124,17 @@ export default function AttendeeDetailPage() {
     try {
       const res = await fetch(`/api/meetings?attendee_id=${id}`);
       if (res.ok) setMeetings(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
+  const fetchPinnedNotes = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/pinned-notes?entity_type=attendee&entity_id=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPinnedNotes(data);
+        setPinnedNoteIds(new Set(data.map((p: PinnedNote) => p.note_id)));
+      }
     } catch { /* non-fatal */ }
   }, [id]);
 
@@ -150,7 +166,7 @@ export default function AttendeeDetailPage() {
     } finally { setIsLoading(false); }
   }, [id, router]);
 
-  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings]);
+  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes]);
 
   // Load conference detail when a conference is selected
   useEffect(() => {
@@ -284,6 +300,72 @@ export default function AttendeeDetailPage() {
     } catch {
       fetchFollowUps();
       toast.error('Failed to update rep.');
+    }
+  };
+
+  const handlePinNote = async (noteId: number, conferenceName: string | null, _attendeeName: string | null, _attendeeId: number | null) => {
+    if (!user?.email) { toast.error('You must be logged in to pin notes.'); return; }
+    const attendeeName = attendee ? `${attendee.first_name} ${attendee.last_name}` : null;
+    try {
+      // Pin to attendee
+      const res = await fetch('/api/pinned-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note_id: noteId,
+          entity_type: 'attendee',
+          entity_id: Number(id),
+          pinned_by: user.email,
+          conference_name: conferenceName,
+          attendee_name: null,
+          attendee_id: null,
+        }),
+      });
+      if (!res.ok) throw new Error();
+
+      // Also pin to company if attendee has a company
+      if (attendee?.company_id) {
+        await fetch('/api/pinned-notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note_id: noteId,
+            entity_type: 'company',
+            entity_id: attendee.company_id,
+            pinned_by: user.email,
+            conference_name: conferenceName,
+            attendee_name: attendeeName,
+            attendee_id: Number(id),
+          }),
+        });
+      }
+
+      toast.success('Note pinned!');
+      fetchPinnedNotes();
+    } catch {
+      toast.error('Failed to pin note.');
+    }
+  };
+
+  const handleUnpinNote = async (pinId: number) => {
+    if (!confirm('Unpin this note?')) return;
+    try {
+      const res = await fetch('/api/pinned-notes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pinId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Note unpinned.');
+      setPinnedNotes(prev => prev.filter(p => p.id !== pinId));
+      setPinnedNoteIds(prev => {
+        const next = new Set(prev);
+        const pin = pinnedNotes.find(p => p.id === pinId);
+        if (pin) next.delete(pin.note_id);
+        return next;
+      });
+    } catch {
+      toast.error('Failed to unpin note.');
     }
   };
 
@@ -549,6 +631,9 @@ export default function AttendeeDetailPage() {
             )}
           </div>
 
+          {/* Pinned Notes */}
+          <PinnedNotesSection pinnedNotes={pinnedNotes} onUnpin={handleUnpinNote} />
+
           {/* Meetings */}
           <div className="card p-0 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
@@ -613,6 +698,8 @@ export default function AttendeeDetailPage() {
             currentAttendeeName={`${attendee.first_name} ${attendee.last_name}`}
             currentCompanyName={attendee.company_name}
             currentCompanyId={attendee.company_id}
+            onPin={handlePinNote}
+            pinnedNoteIds={pinnedNoteIds}
           />
         </div>
 

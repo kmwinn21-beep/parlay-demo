@@ -9,6 +9,7 @@ import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
 import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
@@ -233,6 +234,8 @@ export default function ConferenceDetailPage() {
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
+  const [confPinnedNoteIds, setConfPinnedNoteIds] = useState<Set<number>>(new Set());
+  const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
@@ -356,6 +359,24 @@ export default function ConferenceDetailPage() {
   useEffect(() => {
     fetchConference();
   }, [fetchConference]);
+
+  // Fetch which conference notes are pinned elsewhere
+  useEffect(() => {
+    if (confNotes.length === 0) { setConfPinnedNoteIds(new Set()); return; }
+    const noteIds = confNotes.map(n => n.id).join(',');
+    fetch(`/api/pinned-notes?note_ids=${noteIds}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((ids: number[]) => setConfPinnedNoteIds(new Set(ids)))
+      .catch(() => {});
+  }, [confNotes]);
+
+  // Fetch pinned notes for this conference
+  useEffect(() => {
+    fetch(`/api/pinned-notes?entity_type=conference&entity_id=${id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: PinnedNote[]) => setConfPinnedNotes(data))
+      .catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -1239,6 +1260,22 @@ export default function ConferenceDetailPage() {
 
       {/* Notes Tab */}
       {activeTab === 'notes' && (
+        <>
+        <PinnedNotesSection pinnedNotes={confPinnedNotes} onUnpin={async (pinId: number) => {
+          if (!confirm('Unpin this note?')) return;
+          try {
+            const res = await fetch('/api/pinned-notes', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: pinId }),
+            });
+            if (!res.ok) throw new Error();
+            toast.success('Note unpinned.');
+            setConfPinnedNotes(prev => prev.filter(p => p.id !== pinId));
+          } catch {
+            toast.error('Failed to unpin note.');
+          }
+        }} />
         <NotesSection
           entityType="conference"
           entityId={Number(id)}
@@ -1246,7 +1283,10 @@ export default function ConferenceDetailPage() {
           companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name }))}
           attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: a.company_id, company_name: a.company_name }))}
           currentConferenceName={conference?.name}
+          showPinnedIndicator
+          pinnedNoteIds={confPinnedNoteIds}
         />
+        </>
       )}
 
       {/* Follow Ups Tab */}
