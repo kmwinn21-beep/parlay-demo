@@ -18,6 +18,7 @@ import { effectiveSeniority, classifyICP } from '@/lib/parsers';
 import { type UserOption, parseRepIds, resolveRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { useUser } from '@/components/UserContext';
+import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -138,9 +139,20 @@ export default function CompanyDetailPage() {
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<number>>(new Set());
   const { user } = useUser();
 
+  // Internal relationships state
+  const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
+  const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
+
+  const fetchInternalRelationships = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/internal-relationships?company_id=${id}`);
+      if (res.ok) setInternalRelationships(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=company_type'),
@@ -151,6 +163,7 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=services'),
         fetch('/api/config?category=icp'),
         fetch('/api/companies'),
+        fetch('/api/config?category=rep_relationship_type'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -192,6 +205,7 @@ export default function CompanyDetailPage() {
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
       if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value));
+      if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
 
       // For parent companies, include child company IDs in meetings, follow-ups, and notes queries
@@ -233,7 +247,8 @@ export default function CompanyDetailPage() {
 
   useEffect(() => {
     fetchCompany();
-  }, [fetchCompany]);
+    fetchInternalRelationships();
+  }, [fetchCompany, fetchInternalRelationships]);
 
   // Auto-classify ICP when WSE, Company Type, or Services change in edit mode
   useEffect(() => {
@@ -1134,6 +1149,17 @@ export default function CompanyDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Internal Relationships */}
+          <InternalRelationshipsSection
+            companyId={Number(id)}
+            companyName={company.name}
+            userOptions={userOptions}
+            attendees={company.attendees?.map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title })) || []}
+            relTypeOptions={relTypeOptions}
+            relationships={internalRelationships}
+            onRefresh={fetchInternalRelationships}
+          />
 
           {/* Operator / Capital Relationships — shown when company type is Operator or Capital */}
           {company.company_type && (operatorTypeValues.has(company.company_type) || capitalTypeValues.has(company.company_type)) && (

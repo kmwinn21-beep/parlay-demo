@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
+import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { effectiveSeniority } from '@/lib/parsers';
 import { NotesPopover } from './NotesPopover';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -105,6 +106,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showRepRelModal, setShowRepRelModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('last_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -272,6 +274,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             <button onClick={handleDeleteSelected} className="btn-danger flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               Delete ({selectedIds.size})
+            </button>
+            <button onClick={() => setShowRepRelModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              + Rep Relationship
             </button>
           </>
         )}
@@ -537,6 +543,15 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedAttendees.map(a => ({ id: a.id, label: `${a.first_name} ${a.last_name}`, sublabel: [a.title, a.company_name].filter(Boolean).join(' · ') }))}
         title="Merge Attendees" description="Select the master record. All conference associations will be merged into master. Duplicates will be deleted." />
+
+      <InternalRelationshipModal
+        isOpen={showRepRelModal}
+        onClose={() => setShowRepRelModal(false)}
+        onSuccess={() => { setSelectedIds(new Set()); onRefresh(); }}
+        entityType="attendee"
+        entityIds={Array.from(selectedIds)}
+        entityNames={new Map(selectedAttendees.map(a => [a.id, `${a.first_name} ${a.last_name}`]))}
+      />
     </div>
   );
 }

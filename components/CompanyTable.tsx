@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
 import { ParentChildModal } from './ParentChildModal';
 import { OperatorCapitalModal } from './OperatorCapitalModal';
+import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
@@ -169,6 +170,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showParentChildModal, setShowParentChildModal] = useState(false);
   const [showOperatorCapitalModal, setShowOperatorCapitalModal] = useState(false);
+  const [showRepRelModal, setShowRepRelModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -356,6 +358,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             <button onClick={handleDeleteSelected} className="btn-danger flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               Delete ({selectedIds.size})
+            </button>
+            <button onClick={() => setShowRepRelModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              + Rep Relationship
             </button>
           </>
         )}
@@ -700,6 +706,15 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         onClose={() => setShowOperatorCapitalModal(false)}
         onSubmit={handleOperatorCapital}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
+      />
+
+      <InternalRelationshipModal
+        isOpen={showRepRelModal}
+        onClose={() => setShowRepRelModal(false)}
+        onSuccess={() => { setSelectedIds(new Set()); onRefresh(); }}
+        entityType="company"
+        entityIds={Array.from(selectedIds)}
+        entityNames={new Map(selectedCompanies.map(c => [c.id, c.name]))}
       />
     </div>
   );

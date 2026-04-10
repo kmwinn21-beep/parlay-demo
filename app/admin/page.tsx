@@ -26,6 +26,7 @@ const CATEGORIES = [
   { key: 'services', label: 'Services' },
   { key: 'icp', label: 'ICP' },
   { key: 'event_type', label: 'Event Type' },
+  { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'user', label: 'Users' },
 ];
 
