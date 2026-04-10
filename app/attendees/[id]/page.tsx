@@ -10,7 +10,8 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { BackButton } from '@/components/BackButton';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
-import { parseRepIds, resolveRepNames } from '@/lib/useUserOptions';
+import { parseRepIds } from '@/lib/useUserOptions';
+import { useUser } from '@/components/UserContext';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
@@ -57,11 +58,13 @@ export default function AttendeeDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const { user } = useUser();
+  const isAdminUser = user?.role === 'administrator';
+
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
-  const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [actionOptions, setActionOptions] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
   const [actionKeyMap, setActionKeyMap] = useState<Record<string, string | null>>({});
-  const [nextStepsOptions, setNextStepsOptions] = useState<string[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
@@ -81,7 +84,6 @@ export default function AttendeeDetailPage() {
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
   const [conferenceDetail, setConferenceDetail] = useState<ConferenceDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [confOtherNotes, setConfOtherNotes] = useState('');
 
   const fetchFollowUps = useCallback(async () => {
     try {
@@ -106,25 +108,23 @@ export default function AttendeeDetailPage() {
 
   const fetchAttendee = useCallback(async () => {
     try {
-      const [atRes, coRes, statusRes, actionRes, nextStepsRes, seniorityRes, userRes] = await Promise.all([
+      const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=action'),
-        fetch('/api/config?category=next_steps'),
         fetch('/api/config?category=seniority'),
         fetch('/api/config?category=user'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
-      const [atData, coData, statusData, actionData, nextStepsData, seniorityData, userData] = await Promise.all([
-        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), nextStepsRes.json(), seniorityRes.json(), userRes.json(),
+      const [atData, coData, statusData, actionData, seniorityData, userData] = await Promise.all([
+        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), seniorityRes.json(), userRes.json(),
       ]);
       setAttendee(atData);
       setCompanies(coData);
       setStatusOptions(statusData.map((o: { value: string }) => o.value));
-      setActionOptions(actionData.map((o: { value: string }) => o.value));
+      setActionOptions(actionData.map((o: { id: number; value: string; action_key: string | null }) => ({ id: Number(o.id), value: String(o.value), action_key: o.action_key ?? null })));
       setActionKeyMap(Object.fromEntries(actionData.map((o: { value: string; action_key: string | null }) => [o.value, o.action_key])));
-      setNextStepsOptions(nextStepsData.map((o: { value: string }) => o.value));
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
@@ -140,7 +140,6 @@ export default function AttendeeDetailPage() {
   useEffect(() => {
     if (!selectedConferenceId) {
       setConferenceDetail(null);
-      setConfOtherNotes('');
       return;
     }
     setIsLoadingDetail(true);
@@ -148,11 +147,9 @@ export default function AttendeeDetailPage() {
       .then(r => r.json())
       .then(data => {
         setConferenceDetail(data);
-        setConfOtherNotes(data?.next_steps_notes || '');
       })
       .catch(() => {
         setConferenceDetail(null);
-        setConfOtherNotes('');
       })
       .finally(() => setIsLoadingDetail(false));
   }, [selectedConferenceId, id]);
@@ -310,73 +307,6 @@ export default function AttendeeDetailPage() {
       const newAction = Array.from(current).join(',') || undefined;
       await upsertConferenceDetail({ action: newAction });
     } catch { toast.error('Failed to update action.'); }
-  };
-
-  // Next steps modal state
-  const [showNextStepsModal, setShowNextStepsModal] = useState(false);
-  const [pendingNextStep, setPendingNextStep] = useState('');
-  const [nextStepRep, setNextStepRep] = useState('');
-  const [nextStepNote, setNextStepNote] = useState('');
-  const [isSubmittingNextStep, setIsSubmittingNextStep] = useState(false);
-
-  const handleNextSteps = (value: string) => {
-    if (!selectedConferenceId) { toast.error('Please select a conference first.'); return; }
-    // If clicking the already-active next step, deselect it
-    if (conferenceDetail?.next_steps === value) {
-      upsertConferenceDetail({ next_steps: undefined, next_steps_notes: undefined, assigned_rep: undefined })
-        .then(() => { setConfOtherNotes(''); fetchFollowUps(); })
-        .catch(() => toast.error('Failed to update next steps.'));
-      return;
-    }
-    // Open the modal for assignment
-    setPendingNextStep(value);
-    setNextStepRep('');
-    setNextStepNote('');
-    setShowNextStepsModal(true);
-  };
-
-  const handleSubmitNextStep = async () => {
-    if (!nextStepRep) { toast.error('Please assign a rep.'); return; }
-    setIsSubmittingNextStep(true);
-    try {
-      await upsertConferenceDetail({
-        next_steps: pendingNextStep,
-        next_steps_notes: pendingNextStep === 'Other' ? confOtherNotes : undefined,
-        assigned_rep: nextStepRep,
-      });
-      // If there is a note, add it to the attendee's notes
-      if (nextStepNote.trim()) {
-        const noteContent = nextStepNote.trim();
-        const selectedConf = attendee?.conferences.find(c => String(c.id) === selectedConferenceId);
-        await fetch('/api/notes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            entity_type: 'attendee',
-            entity_id: Number(id),
-            content: noteContent,
-            conference_name: selectedConf?.name || null,
-            rep: resolveRepNames(nextStepRep, userOptions) || null,
-          }),
-        });
-        fetchNotes();
-      }
-      fetchFollowUps();
-      setShowNextStepsModal(false);
-      toast.success('Follow-up assigned.');
-    } catch {
-      toast.error('Failed to assign follow-up.');
-    } finally {
-      setIsSubmittingNextStep(false);
-    }
-  };
-
-  const handleSaveOtherNotes = async () => {
-    if (!selectedConferenceId) return;
-    try {
-      await upsertConferenceDetail({ next_steps: 'Other', next_steps_notes: confOtherNotes, assigned_rep: conferenceDetail?.assigned_rep });
-      toast.success('Saved.');
-    } catch { toast.error('Failed to save.'); }
   };
 
   const handleScheduleMeeting = async () => {
@@ -584,7 +514,7 @@ export default function AttendeeDetailPage() {
                 )}
               </h2>
             </div>
-            <MeetingsTable meetings={meetings} actionOptions={actionOptions} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
+            <MeetingsTable meetings={meetings} actionOptions={actionOptions.map(o => o.value)} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
               setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
               try {
                 const res = await fetch(`/api/meetings/${meetingId}`, {
@@ -766,51 +696,23 @@ export default function AttendeeDetailPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Actions</p>
                   <div className="flex flex-wrap gap-2">
                     {(() => {
+                      const RESTRICTED_ACTION_KEYS = new Set(['meeting_held', 'meeting_scheduled', 'pending', 'meeting_rescheduled', 'cancelled', 'no_show']);
                       const activeActions = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
-                      return actionOptions.map(opt => {
-                        const isActive = activeActions.has(opt);
-                        const pillCls = isActive ? getPillClass(opt, colorMaps.action ?? {}) : '';
-                        return (
-                          <button key={opt} onClick={() => handleAction(opt)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
-                            {isActive && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                            {opt}
-                          </button>
-                        );
-                      });
+                      return actionOptions
+                        .filter(opt => isAdminUser || !opt.action_key || !RESTRICTED_ACTION_KEYS.has(opt.action_key))
+                        .map(opt => {
+                          const isActive = activeActions.has(opt.value);
+                          const pillCls = isActive ? getPillClass(opt.value, colorMaps.action ?? {}) : '';
+                          return (
+                            <button key={opt.id} onClick={() => handleAction(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
+                              {isActive && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                              {opt.value}
+                            </button>
+                          );
+                        });
                     })()}
                   </div>
-                </div>
-
-                {/* Next Steps */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Next Steps</p>
-                  <div className="flex flex-wrap gap-2">
-                    {nextStepsOptions.map(opt => {
-                      const isActive = conferenceDetail?.next_steps === opt;
-                      const pillCls = isActive ? getPillClass(opt, colorMaps.next_steps ?? {}) : '';
-                      return (
-                        <button key={opt} onClick={() => handleNextSteps(opt)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-procare-dark-blue hover:text-procare-dark-blue'}`}>
-                          {opt}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {conferenceDetail?.next_steps === 'Other' && (
-                    <div className="mt-2">
-                      <textarea value={confOtherNotes} onChange={e => setConfOtherNotes(e.target.value)} placeholder="Describe the next step..." className="input-field resize-none w-full text-sm" rows={2} />
-                      <button onClick={handleSaveOtherNotes} className="btn-primary mt-2 text-xs">Save</button>
-                    </div>
-                  )}
-                  {conferenceDetail?.assigned_rep && (
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-blue-600">
-                        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-                      </svg>
-                      <span className="text-xs text-blue-700 font-medium" title={conferenceDetail.assigned_rep}>Assigned to {(() => { const parts = conferenceDetail.assigned_rep!.trim().split(/\s+/); return parts.length >= 2 ? (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase() : parts[0].charAt(0).toUpperCase(); })()}</span>
-                    </div>
-                  )}
                 </div>
 
 
@@ -819,77 +721,6 @@ export default function AttendeeDetailPage() {
           </div>
         </div>
       </div>
-
-      {/* Next Steps Assignment Modal */}
-      {showNextStepsModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-lg font-semibold text-procare-dark-blue font-serif">Assign Follow Up</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Next Step: <span className="font-medium text-gray-700">{pendingNextStep}</span>
-              </p>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                  Assign To *
-                </label>
-                <RepMultiSelect
-                  options={userOptions}
-                  selectedIds={parseRepIds(nextStepRep)}
-                  onChange={(ids) => setNextStepRep(ids.join(','))}
-                  triggerClass="input-field w-full text-sm flex items-center justify-between gap-2"
-                  placeholder="Select reps..."
-                />
-              </div>
-              {pendingNextStep === 'Other' && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                    Next Step Description
-                  </label>
-                  <textarea
-                    value={confOtherNotes}
-                    onChange={e => setConfOtherNotes(e.target.value)}
-                    placeholder="Describe the next step..."
-                    className="input-field resize-none w-full text-sm"
-                    rows={2}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                  Notes <span className="text-gray-400 font-normal normal-case">(optional — will be added to Attendee Notes)</span>
-                </label>
-                <textarea
-                  value={nextStepNote}
-                  onChange={e => setNextStepNote(e.target.value)}
-                  placeholder="Enter any notes..."
-                  className="input-field resize-none w-full text-sm"
-                  rows={3}
-                />
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowNextStepsModal(false)}
-                className="btn-secondary text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitNextStep}
-                disabled={isSubmittingNextStep}
-                className="btn-primary text-sm"
-              >
-                {isSubmittingNextStep ? 'Submitting...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <AssignFollowUpModal
         isOpen={showAssignFollowUp}
