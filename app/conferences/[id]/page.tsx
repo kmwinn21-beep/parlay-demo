@@ -16,6 +16,7 @@ import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption } from '@/lib/useUserOptions';
 
 interface Attendee {
@@ -102,6 +103,113 @@ function formatDate(dateStr: string) {
   });
 }
 
+function getConferenceDates(start: string, end: string): string[] {
+  if (!start || !end) return [];
+  const dates: string[] = [];
+  const cur = new Date(start + 'T00:00:00');
+  const endDate = new Date(end + 'T00:00:00');
+  while (cur <= endDate) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+function formatDayLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const month = d.toLocaleDateString('en-US', { month: 'long' });
+  const day = d.getDate();
+  const sfx = (n: number) => {
+    if (n >= 11 && n <= 13) return 'th';
+    switch (n % 10) { case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
+  };
+  return `${dayName} - ${month} ${day}${sfx(day)}`;
+}
+
+function MeetingMultiSelect({
+  placeholder,
+  options,
+  selected,
+  onChange,
+}: {
+  placeholder: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = (v: string) =>
+    onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+
+  const displayLabel = selected.length === 0
+    ? placeholder
+    : selected.length === 1
+      ? (options.find(o => o.value === selected[0])?.label ?? selected[0])
+      : `${selected.length} selected`;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+      >
+        <span className={`truncate ${selected.length === 0 ? 'text-gray-400' : 'text-gray-800'}`}>{displayLabel}</span>
+        <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full mt-1 left-0 w-full min-w-[200px] bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-b border-gray-100"
+          >
+            — Clear —
+          </button>
+          {options.map(opt => (
+            <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt.value)}
+                onChange={() => toggle(opt.value)}
+                className="accent-procare-bright-blue flex-shrink-0"
+              />
+              <span>{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {selected.map(v => (
+            <span key={v} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              {options.find(o => o.value === v)?.label ?? v}
+              <button type="button" onClick={() => toggle(v)} className="hover:text-red-500 leading-none ml-0.5">
+                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -128,6 +236,16 @@ export default function ConferenceDetailPage() {
   const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
+  const [meetingCompanyTypeOpts, setMeetingCompanyTypeOpts] = useState<string[]>([]);
+  const [meetingSeniorityOpts, setMeetingSeniorityOpts] = useState<string[]>([]);
+
+  // Meeting filter state
+  const [meetingFiltersOpen, setMeetingFiltersOpen] = useState(false);
+  const [meetingFilterReps, setMeetingFilterReps] = useState<number[]>([]);
+  const [meetingFilterDates, setMeetingFilterDates] = useState<string[]>([]);
+  const [meetingFilterCompanyTypes, setMeetingFilterCompanyTypes] = useState<string[]>([]);
+  const [meetingFilterSeniorities, setMeetingFilterSeniorities] = useState<string[]>([]);
+
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
@@ -172,7 +290,7 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
@@ -182,6 +300,8 @@ export default function ConferenceDetailPage() {
         fetch('/api/config?category=user'),
         fetch(`/api/social-events?conference_id=${id}`),
         fetch('/api/config?category=event_type'),
+        fetch('/api/config?category=company_type'),
+        fetch('/api/config?category=seniority'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -193,6 +313,8 @@ export default function ConferenceDetailPage() {
       const eventTypeData = eventTypeRes.ok ? await eventTypeRes.json() : [];
       const actionData = actionRes.ok ? await actionRes.json() : [];
       const userData = userRes.ok ? await userRes.json() : [];
+      const companyTypeData = companyTypeRes.ok ? await companyTypeRes.json() : [];
+      const seniorityData = seniorityRes.ok ? await seniorityRes.json() : [];
       setConference(data);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
@@ -207,6 +329,8 @@ export default function ConferenceDetailPage() {
       })));
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
       setEventTypeOptions(eventTypeData.map((o: { value: string }) => o.value));
+      setMeetingCompanyTypeOpts(companyTypeData.map((o: { value: string }) => o.value));
+      setMeetingSeniorityOpts(seniorityData.map((o: { value: string }) => o.value));
       setEditData({
         name: data.name,
         start_date: data.start_date,
@@ -1074,67 +1198,170 @@ export default function ConferenceDetailPage() {
       )}
 
       {/* Follow Ups Tab */}
-      {activeTab === 'meetings' && (
-        <div className="card p-0 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
-              Meetings
-              {confMeetings.length > 0 && (
-                <span className="ml-2 text-sm font-normal text-gray-500">
-                  ({confMeetings.length})
-                </span>
-              )}
-            </h2>
+      {activeTab === 'meetings' && (() => {
+        const attendeeMap = new Map((conference?.attendees || []).map(a => [a.id, a]));
+        const conferenceDates = conference ? getConferenceDates(conference.start_date, conference.end_date) : [];
+        const anyFilters = meetingFilterReps.length > 0 || meetingFilterDates.length > 0 || meetingFilterCompanyTypes.length > 0 || meetingFilterSeniorities.length > 0;
+        const activeFilterCount = [meetingFilterReps, meetingFilterDates, meetingFilterCompanyTypes, meetingFilterSeniorities].filter(f => f.length > 0).length;
+        const filteredMeetings = confMeetings.filter(m => {
+          if (meetingFilterReps.length > 0) {
+            const ids = (m.scheduled_by || '').split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            if (!meetingFilterReps.some(id => ids.includes(id))) return false;
+          }
+          if (meetingFilterDates.length > 0 && !meetingFilterDates.includes(m.meeting_date)) return false;
+          if (meetingFilterCompanyTypes.length > 0) {
+            const att = attendeeMap.get(m.attendee_id);
+            if (!att?.company_type || !meetingFilterCompanyTypes.includes(att.company_type)) return false;
+          }
+          if (meetingFilterSeniorities.length > 0) {
+            const att = attendeeMap.get(m.attendee_id);
+            if (!att) return false;
+            if (!meetingFilterSeniorities.includes(effectiveSeniority(att.seniority, att.title))) return false;
+          }
+          return true;
+        });
+        return (
+          <div className="card p-0 overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+                Meetings
+                {confMeetings.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({filteredMeetings.length}{filteredMeetings.length !== confMeetings.length && ` of ${confMeetings.length}`})
+                  </span>
+                )}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMeetingFiltersOpen(o => !o)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                  anyFilters
+                    ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filters
+                {anyFilters && (
+                  <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+                <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Collapsible filter pane */}
+            {meetingFiltersOpen && (
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Rep(s)</p>
+                    <RepMultiSelect
+                      options={userOptions}
+                      selectedIds={meetingFilterReps}
+                      onChange={setMeetingFilterReps}
+                      triggerClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                      placeholder="All reps..."
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Date</p>
+                    <MeetingMultiSelect
+                      placeholder="All dates..."
+                      options={conferenceDates.map(d => ({ value: d, label: formatDayLabel(d) }))}
+                      selected={meetingFilterDates}
+                      onChange={setMeetingFilterDates}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Type</p>
+                    <MeetingMultiSelect
+                      placeholder="All types..."
+                      options={meetingCompanyTypeOpts.map(v => ({ value: v, label: v }))}
+                      selected={meetingFilterCompanyTypes}
+                      onChange={setMeetingFilterCompanyTypes}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Seniority</p>
+                    <MeetingMultiSelect
+                      placeholder="All levels..."
+                      options={meetingSeniorityOpts.map(v => ({ value: v, label: v }))}
+                      selected={meetingFilterSeniorities}
+                      onChange={setMeetingFilterSeniorities}
+                    />
+                  </div>
+                </div>
+                {anyFilters && (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setMeetingFilterReps([]); setMeetingFilterDates([]); setMeetingFilterCompanyTypes([]); setMeetingFilterSeniorities([]); }}
+                      className="text-xs text-gray-500 hover:text-red-500 transition-colors"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <MeetingsTable
+              meetings={filteredMeetings}
+              actionOptions={actionOptions}
+              colorMap={colorMaps.action || {}}
+              userOptions={userOptions}
+              onOutcomeChange={async (meetingId, outcome) => {
+                setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
+                try {
+                  const res = await fetch('/api/meetings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: meetingId, outcome }),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Outcome updated.');
+                } catch {
+                  fetchConference();
+                  toast.error('Failed to update outcome.');
+                }
+              }}
+              onDelete={async (meetingId) => {
+                if (!confirm('Delete this meeting? This cannot be undone.')) return;
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting deleted.');
+                  fetchConference();
+                } catch {
+                  toast.error('Failed to delete meeting.');
+                }
+              }}
+              onEdit={async (meetingId, data) => {
+                setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting updated.');
+                } catch {
+                  fetchConference();
+                  toast.error('Failed to update meeting.');
+                }
+              }}
+            />
           </div>
-          <MeetingsTable
-            meetings={confMeetings}
-            actionOptions={actionOptions}
-            colorMap={colorMaps.action || {}}
-            userOptions={userOptions}
-            onOutcomeChange={async (meetingId, outcome) => {
-              setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
-              try {
-                const res = await fetch('/api/meetings', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: meetingId, outcome }),
-                });
-                if (!res.ok) throw new Error();
-                toast.success('Outcome updated.');
-              } catch {
-                fetchConference();
-                toast.error('Failed to update outcome.');
-              }
-            }}
-            onDelete={async (meetingId) => {
-              if (!confirm('Delete this meeting? This cannot be undone.')) return;
-              try {
-                const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error();
-                toast.success('Meeting deleted.');
-                fetchConference();
-              } catch {
-                toast.error('Failed to delete meeting.');
-              }
-            }}
-            onEdit={async (meetingId, data) => {
-              setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
-              try {
-                const res = await fetch(`/api/meetings/${meetingId}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(data),
-                });
-                if (!res.ok) throw new Error();
-                toast.success('Meeting updated.');
-              } catch {
-                fetchConference();
-                toast.error('Failed to update meeting.');
-              }
-            }}
-          />
-        </div>
-      )}
+        );
+      })()}
 
       {activeTab === 'follow-ups' && (
         <div className="card p-0 overflow-hidden">
