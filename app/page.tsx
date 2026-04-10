@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
 import { PriorityLeads, PriorityLead } from '@/components/PriorityLeads';
 import AttendeesTooltip from '@/components/AttendeesTooltip';
+import AwaitingUploadModal from '@/components/AwaitingUploadModal';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -40,6 +41,7 @@ async function getRecentConferences(): Promise<RecentConference[]> {
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
+          WHERE (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) > 0
           ORDER BY c.start_date DESC
           LIMIT 5`,
     args: [],
@@ -62,7 +64,31 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
-          WHERE c.end_date >= ?
+          WHERE c.start_date >= ?
+            AND (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) > 0
+          ORDER BY c.end_date ASC`,
+    args: [today],
+  });
+  return result.rows.map((r) => ({
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+    start_date: String(r.start_date ?? ''),
+    end_date: String(r.end_date ?? ''),
+    location: String(r.location ?? ''),
+    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+    attendee_count: Number(r.attendee_count ?? 0),
+  }));
+}
+
+async function getAwaitingUploadConferences(): Promise<RecentConference[]> {
+  await dbReady;
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute({
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
+            (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
+          FROM conferences c
+          WHERE c.start_date >= ?
+            AND (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) = 0
           ORDER BY c.start_date ASC`,
     args: [today],
   });
@@ -119,7 +145,7 @@ function formatDate(dateStr: string) {
 }
 
 export default async function DashboardPage() {
-  const [stats, recentConferences, upcomingConferences, priorityLeads] = await Promise.all([getStats(), getRecentConferences(), getUpcomingConferences(), getPriorityLeads()]);
+  const [stats, recentConferences, upcomingConferences, awaitingUploadConferences, priorityLeads] = await Promise.all([getStats(), getRecentConferences(), getUpcomingConferences(), getAwaitingUploadConferences(), getPriorityLeads()]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -196,7 +222,7 @@ export default async function DashboardPage() {
             Current &amp; Upcoming
             <span className="text-sm font-normal text-gray-500">({upcomingConferences.length})</span>
           </h2>
-          <Link href="/conferences" className="text-sm text-procare-bright-blue hover:underline">View all →</Link>
+          <AwaitingUploadModal conferences={awaitingUploadConferences} />
         </div>
         {upcomingConferences.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">No current or upcoming conferences. <Link href="/conferences/new" className="text-procare-bright-blue hover:underline">Add one →</Link></p>
