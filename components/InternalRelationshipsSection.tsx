@@ -258,39 +258,39 @@ function RelationshipCard({
       {/* Collapsed header — always visible */}
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-start justify-between p-3 hover:bg-gray-50 transition-colors text-left"
+        className="w-full p-3 hover:bg-gray-50 transition-colors text-left"
       >
-        {/* Left: Contact initials + name/title */}
-        <div className="min-w-0 flex-1">
-          {contacts.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              {contacts.map(att => (
-                <ContactInitialsDisplay
-                  key={att.id}
-                  firstName={att.first_name}
-                  lastName={att.last_name}
-                  title={att.title}
-                />
-              ))}
-            </div>
-          ) : (
-            <span className="text-sm text-gray-400">No contact</span>
-          )}
-        </div>
-
-        {/* Right: User pills (bottom-right, fixed) + expand chevron */}
-        <div className="flex flex-col items-end justify-between ml-2 flex-shrink-0 self-stretch">
-          <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {/* Top row: Contact name/title + expand chevron */}
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            {contacts.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {contacts.map(att => (
+                  <ContactInitialsDisplay
+                    key={att.id}
+                    firstName={att.first_name}
+                    lastName={att.last_name}
+                    title={att.title}
+                  />
+                ))}
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">No contact</span>
+            )}
+          </div>
+          <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          {reps.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1 mt-1 justify-end">
-              {reps.map((name, i) => (
-                <RepPill key={i} name={name} />
-              ))}
-            </div>
-          )}
         </div>
+
+        {/* Bottom row: User pills */}
+        {reps.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 mt-2">
+            {reps.map((name, i) => (
+              <RepPill key={i} name={name} />
+            ))}
+          </div>
+        )}
       </button>
 
       {/* Expanded content — relationship status pills + notes */}
