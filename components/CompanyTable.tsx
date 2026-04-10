@@ -178,9 +178,26 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [isApplying, setIsApplying] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
+  const [wseMin, setWseMin] = useState<number | null>(null);
+  const [wseMax, setWseMax] = useState<number | null>(null);
+
+  const wseValues = useMemo(() => companies.map(c => c.wse).filter((w): w is number => w != null), [companies]);
+  const wseGlobalMin = useMemo(() => wseValues.length > 0 ? Math.min(...wseValues) : 0, [wseValues]);
+  const wseGlobalMax = useMemo(() => wseValues.length > 0 ? Math.max(...wseValues) : 10000, [wseValues]);
+  const wseGlobalRange = wseGlobalMax - wseGlobalMin;
+  const effectiveWseMin = wseMin ?? wseGlobalMin;
+  const effectiveWseMax = wseMax ?? wseGlobalMax;
+  const wseFilterActive = wseValues.length > 0 && (effectiveWseMin > wseGlobalMin || effectiveWseMax < wseGlobalMax);
+  const wseStep = Math.max(1, Math.ceil(wseGlobalRange / 500));
+
+  useEffect(() => {
+    setWseMin(prev => prev === null ? wseGlobalMin : prev);
+    setWseMax(prev => prev === null ? wseGlobalMax : prev);
+  }, [wseGlobalMin, wseGlobalMax]);
+
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, wseMin, wseMax]);
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
@@ -228,7 +245,8 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
       const matchConf = confCountMatches(Number(c.conference_count));
       const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
       const matchICP = !filterICP || (c.icp || 'False') === filterICP;
-      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP;
+      const matchWSE = !wseFilterActive || (c.wse != null && c.wse >= effectiveWseMin && c.wse <= effectiveWseMax);
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -240,7 +258,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, sortKey, sortDir]);
+  }, [companies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -300,7 +318,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0);
+  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0);
 
   return (
     <div>
@@ -423,11 +441,69 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               </select>
             </div>
           </div>
+
+          {/* WSE Range Slider */}
+          {wseValues.length > 0 && (
+            <>
+              <style>{`
+                .wse-range-thumb::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: white; border: 2px solid #1B76BC; box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer; pointer-events: all; }
+                .wse-range-thumb::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: white; border: 2px solid #1B76BC; box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer; pointer-events: all; border: none; }
+                .wse-range-thumb::-webkit-slider-runnable-track { background: transparent; }
+                .wse-range-thumb::-moz-range-track { background: transparent; }
+              `}</style>
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">WSE Range</p>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span className="px-2 py-0.5 bg-white border border-gray-200 rounded font-medium">{effectiveWseMin.toLocaleString()}</span>
+                    <span className="text-gray-400">–</span>
+                    <span className="px-2 py-0.5 bg-white border border-gray-200 rounded font-medium">{effectiveWseMax.toLocaleString()}</span>
+                    {wseFilterActive && (
+                      <button type="button" onClick={() => { setWseMin(wseGlobalMin); setWseMax(wseGlobalMax); }} className="ml-1 text-gray-400 hover:text-red-500 transition-colors">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="relative h-5 flex items-center">
+                  <div className="absolute inset-x-0 h-1.5 bg-gray-200 rounded-full" />
+                  <div
+                    className="absolute h-1.5 bg-procare-bright-blue rounded-full pointer-events-none"
+                    style={{
+                      left: `${wseGlobalRange === 0 ? 0 : ((effectiveWseMin - wseGlobalMin) / wseGlobalRange) * 100}%`,
+                      right: `${wseGlobalRange === 0 ? 0 : ((wseGlobalMax - effectiveWseMax) / wseGlobalRange) * 100}%`,
+                    }}
+                  />
+                  <input
+                    type="range"
+                    min={wseGlobalMin} max={wseGlobalMax} step={wseStep}
+                    value={effectiveWseMin}
+                    onChange={e => setWseMin(Math.min(Number(e.target.value), effectiveWseMax))}
+                    className="wse-range-thumb absolute inset-0 w-full appearance-none bg-transparent cursor-pointer pointer-events-none"
+                    style={{ zIndex: effectiveWseMin >= effectiveWseMax - wseStep ? 5 : 3 }}
+                  />
+                  <input
+                    type="range"
+                    min={wseGlobalMin} max={wseGlobalMax} step={wseStep}
+                    value={effectiveWseMax}
+                    onChange={e => setWseMax(Math.max(Number(e.target.value), effectiveWseMin))}
+                    className="wse-range-thumb absolute inset-0 w-full appearance-none bg-transparent cursor-pointer pointer-events-none"
+                    style={{ zIndex: 4 }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                  <span>{wseGlobalMin.toLocaleString()}</span>
+                  <span>{wseGlobalMax.toLocaleString()}</span>
+                </div>
+              </div>
+            </>
+          )}
+
           {activeFilterCount > 0 && (
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => { setFilterSFOwner(''); setFilterType(''); setFilterStatus(''); setFilterICP(''); setFilterConfCounts(new Set()); setFilterConference(''); }}
+                onClick={() => { setFilterSFOwner(''); setFilterType(''); setFilterStatus(''); setFilterICP(''); setFilterConfCounts(new Set()); setFilterConference(''); setWseMin(wseGlobalMin); setWseMax(wseGlobalMax); }}
                 className="text-xs text-gray-500 hover:text-red-500 transition-colors"
               >
                 Clear all filters
