@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -69,6 +69,19 @@ export default function AttendeeDetailPage() {
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
+  const [showEmailTooltip, setShowEmailTooltip] = useState(false);
+  const emailTooltipRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!showEmailTooltip) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (emailTooltipRef.current && !emailTooltipRef.current.contains(e.target as Node)) {
+        setShowEmailTooltip(false);
+      }
+    }
+    document.addEventListener('click', handleClickOutside, true);
+    return () => document.removeEventListener('click', handleClickOutside, true);
+  }, [showEmailTooltip]);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -465,33 +478,58 @@ export default function AttendeeDetailPage() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Company</p>
-                      {attendee.company_assigned_user && resolveRepInitials(attendee.company_assigned_user, userOptionsFull).map((ini, i) => (
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
+                    {attendee.company_name ? (
+                      attendee.company_id ? (
+                        <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                      ) : (
+                        <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
+                      )
+                    ) : <p className="text-sm text-gray-400">—</p>}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Assigned Rep(s)</p>
+                    <div className="flex flex-wrap gap-1">
+                      {attendee.company_assigned_user ? resolveRepInitials(attendee.company_assigned_user, userOptionsFull).map((ini, i) => (
                         <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
                             <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
                           </svg>
                           {ini}
                         </span>
-                      ))}
+                      )) : <p className="text-sm text-gray-400">—</p>}
                     </div>
-                    {attendee.company_name ? (
-                      <div>
-                        {attendee.company_id ? (
-                          <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
-                        ) : (
-                          <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
-                        )}
-
-                      </div>
-                    ) : <p className="text-sm text-gray-400">—</p>}
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
-                    {attendee.email ? <a href={`mailto:${attendee.email}`} className="text-sm text-procare-bright-blue hover:underline">{attendee.email}</a> : <p className="text-sm text-gray-400">—</p>}
+                    {attendee.email ? (
+                      <span
+                        ref={emailTooltipRef}
+                        className="relative group/email inline-block"
+                        onClick={() => setShowEmailTooltip(v => !v)}
+                      >
+                        <button type="button" className="p-1 rounded-lg hover:bg-gray-100 transition-colors text-procare-bright-blue">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                        <span className={`pointer-events-auto absolute bottom-full left-0 mb-2 z-20 flex-col items-start ${showEmailTooltip ? 'flex' : 'hidden group-hover/email:flex'}`}>
+                          <span className="rounded-lg bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl whitespace-nowrap">
+                            <span className="block font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Email</span>
+                            <a
+                              href={`mailto:${attendee.email}`}
+                              className="text-procare-bright-blue hover:underline"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {attendee.email}
+                            </a>
+                          </span>
+                          <span className="w-2 h-2 bg-gray-900 rotate-45 -mt-1 ml-3" />
+                        </span>
+                      </span>
+                    ) : <p className="text-sm text-gray-400">—</p>}
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Added</p>
