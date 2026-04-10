@@ -17,7 +17,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
-import { type UserOption } from '@/lib/useUserOptions';
+import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
 
 interface Attendee {
   id: number;
@@ -195,7 +195,7 @@ function MeetingMultiSelect({
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
           {selected.map(v => (
-            <span key={v} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+            <span key={v} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
               {options.find(o => o.value === v)?.label ?? v}
               <button type="button" onClick={() => toggle(v)} className="hover:text-red-500 leading-none ml-0.5">
                 <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1220,40 +1220,72 @@ export default function ConferenceDetailPage() {
           }
           return true;
         });
+        const activePills: { label: string; onRemove: () => void }[] = [
+          ...meetingFilterReps.map(rid => {
+            const u = userOptions.find(o => o.id === rid);
+            return { label: u ? getRepInitials(u.value) : String(rid), onRemove: () => setMeetingFilterReps(meetingFilterReps.filter(x => x !== rid)) };
+          }),
+          ...meetingFilterDates.map(d => ({ label: formatDayLabel(d), onRemove: () => setMeetingFilterDates(meetingFilterDates.filter(x => x !== d)) })),
+          ...meetingFilterCompanyTypes.map(t => ({ label: t, onRemove: () => setMeetingFilterCompanyTypes(meetingFilterCompanyTypes.filter(x => x !== t)) })),
+          ...meetingFilterSeniorities.map(s => ({ label: s, onRemove: () => setMeetingFilterSeniorities(meetingFilterSeniorities.filter(x => x !== s)) })),
+        ];
+        const PillList = ({ className }: { className?: string }) => (
+          <div className={`flex flex-wrap gap-1.5 ${className ?? ''}`}>
+            {activePills.map((pill, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                {pill.label}
+                <button type="button" onClick={pill.onRemove} className="hover:text-red-500 leading-none ml-0.5">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            ))}
+          </div>
+        );
         return (
           <div className="card p-0 overflow-hidden">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
-                Meetings
-                {confMeetings.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-gray-500">
-                    ({filteredMeetings.length}{filteredMeetings.length !== confMeetings.length && ` of ${confMeetings.length}`})
-                  </span>
-                )}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setMeetingFiltersOpen(o => !o)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                  anyFilters
-                    ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Filters
-                {anyFilters && (
-                  <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                    {activeFilterCount}
-                  </span>
-                )}
-                <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+            <div className="px-6 py-4 border-b border-gray-100">
+              {/* Top row: title + desktop pills + filters button */}
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex-shrink-0">
+                  Meetings
+                  {confMeetings.length > 0 && (
+                    <span className="ml-2 text-sm font-normal text-gray-500">
+                      ({filteredMeetings.length}{filteredMeetings.length !== confMeetings.length && ` of ${confMeetings.length}`})
+                    </span>
+                  )}
+                </h2>
+                {/* Desktop: pills inline between count and Filters button */}
+                {anyFilters && <div className="hidden lg:block flex-1 min-w-0"><PillList /></div>}
+                <div className="ml-auto flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setMeetingFiltersOpen(o => !o)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                      anyFilters
+                        ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    Filters
+                    {anyFilters && (
+                      <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                    <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {/* Mobile: pills below the header row */}
+              {anyFilters && <div className="lg:hidden mt-3"><PillList /></div>}
             </div>
 
             {/* Collapsible filter pane */}
