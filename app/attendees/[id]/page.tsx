@@ -18,6 +18,7 @@ import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
+import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -101,6 +102,17 @@ export default function AttendeeDetailPage() {
   const [pinnedNotes, setPinnedNotes] = useState<PinnedNote[]>([]);
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<number>>(new Set());
 
+  // Internal relationships state
+  const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
+  const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
+
+  const fetchInternalRelationships = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/internal-relationships?attendee_id=${id}`);
+      if (res.ok) setInternalRelationships(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
   // Conference-specific state
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
   const [conferenceDetail, setConferenceDetail] = useState<ConferenceDetail | null>(null);
@@ -140,17 +152,18 @@ export default function AttendeeDetailPage() {
 
   const fetchAttendee = useCallback(async () => {
     try {
-      const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes] = await Promise.all([
+      const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes, relTypeRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
         fetch('/api/config?category=status'),
         fetch('/api/config?category=action'),
         fetch('/api/config?category=seniority'),
         fetch('/api/config?category=user'),
+        fetch('/api/config?category=rep_relationship_type'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
-      const [atData, coData, statusData, actionData, seniorityData, userData] = await Promise.all([
-        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), seniorityRes.json(), userRes.json(),
+      const [atData, coData, statusData, actionData, seniorityData, userData, relTypeData] = await Promise.all([
+        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), seniorityRes.json(), userRes.json(), relTypeRes.json(),
       ]);
       setAttendee(atData);
       setCompanies(coData);
@@ -159,6 +172,7 @@ export default function AttendeeDetailPage() {
       setActionKeyMap(Object.fromEntries(actionData.map((o: { value: string; action_key: string | null }) => [o.value, o.action_key])));
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      setRelTypeOptions(relTypeData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
     } catch {
       toast.error('Failed to load attendee');
@@ -166,7 +180,7 @@ export default function AttendeeDetailPage() {
     } finally { setIsLoading(false); }
   }, [id, router]);
 
-  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes]);
+  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); fetchInternalRelationships(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes, fetchInternalRelationships]);
 
   // Load conference detail when a conference is selected
   useEffect(() => {
@@ -736,6 +750,18 @@ export default function AttendeeDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* Internal Relationships */}
+          {attendee.company_id && (
+            <InternalRelationshipsSection
+              companyId={attendee.company_id}
+              attendeeId={attendee.id}
+              userOptions={userOptions}
+              relTypeOptions={relTypeOptions}
+              relationships={internalRelationships}
+              onRefresh={fetchInternalRelationships}
+            />
+          )}
 
           {/* Conference selector */}
           <div className="card">

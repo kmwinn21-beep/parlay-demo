@@ -219,6 +219,16 @@ export async function initDb(): Promise<void> {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (note_id) REFERENCES entity_notes(id) ON DELETE CASCADE
     )`,
+    `CREATE TABLE IF NOT EXISTS internal_relationships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER NOT NULL,
+      rep_ids TEXT,
+      contact_ids TEXT,
+      relationship_status TEXT NOT NULL,
+      description TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    )`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -296,6 +306,9 @@ export async function initDb(): Promise<void> {
     { category: 'event_type', value: 'Procare Hosted', sort_order: 4 },
     { category: 'event_type', value: 'Partner', sort_order: 5 },
     { category: 'event_type', value: 'Conference Event', sort_order: 6 },
+    { category: 'rep_relationship_type', value: 'Strong', sort_order: 1 },
+    { category: 'rep_relationship_type', value: 'Former Client', sort_order: 2 },
+    { category: 'rep_relationship_type', value: 'Other', sort_order: 3 },
   ];
   for (const seed of newCategorySeeds) {
     try {
