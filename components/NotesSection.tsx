@@ -467,77 +467,66 @@ export function NotesSection({
       {notes.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No notes yet. Click &quot;Add Note&quot; to get started.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-44">
-                  Date / Time
-                </th>
-                <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">
-                  Conference
-                </th>
-                <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap w-12">
-                  Rep
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Note
-                </th>
-                <th className="px-4 py-3 w-10" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {notes.map(note => {
-                const expanded = expandedIds.has(note.id);
-                const long = isLongNote(note.content);
-                return (
-                  <tr key={note.id} className="hover:bg-gray-50 align-top">
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap w-44">
-                      {formatDateTime(note.created_at)}
-                    </td>
-                    <td className="px-2 py-3 text-xs text-gray-600 w-24 break-words">
-                      {note.conference_name || '—'}
-                    </td>
-                    <td className="px-2 py-3 text-xs text-gray-600 whitespace-nowrap w-12 text-center" title={note.rep || undefined}>
-                      {note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-800">
-                      {parentEntityId && note.entity_id !== parentEntityId && note.company_name && (
-                        <span className="inline-block text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 mb-1">
-                          {note.company_name}
-                        </span>
-                      )}
-                      <p className={`whitespace-pre-wrap leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
-                        <NoteContent content={note.content} />
-                      </p>
-                      {long && (
-                        <button
-                          type="button"
-                          onClick={() => toggleExpand(note.id)}
-                          className="mt-1 text-xs text-procare-bright-blue hover:underline font-medium"
-                        >
-                          {expanded ? 'Show Less' : 'Show Full Note'}
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(note.id)}
-                        className="text-gray-300 hover:text-red-500 transition-colors"
-                        title="Delete note"
+        <div className="space-y-3">
+          {notes.map(note => {
+            const expanded = expandedIds.has(note.id);
+            const long = isLongNote(note.content);
+            const repInitials = note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : null;
+            return (
+              <div key={note.id} className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-all">
+                {/* Meta row: date · conference badge on left; rep pill + delete on right */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
+                    {note.conference_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-procare-bright-blue text-xs font-medium border border-blue-100 whitespace-nowrap">
+                        {note.conference_name}
+                      </span>
+                    )}
+                    {parentEntityId && note.entity_id !== parentEntityId && note.company_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-medium border border-teal-200 whitespace-nowrap">
+                        {note.company_name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {repInitials && (
+                      <span
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold flex-shrink-0"
+                        title={note.rep || undefined}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        {repInitials}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(note.id)}
+                      className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      title="Delete note"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                {/* Note body */}
+                <p className={`text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
+                  <NoteContent content={note.content} />
+                </p>
+                {long && (
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(note.id)}
+                    className="mt-2 text-xs text-procare-bright-blue hover:underline font-medium"
+                  >
+                    {expanded ? 'Show Less' : 'Show Full Note'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
