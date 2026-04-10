@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { parseBreadcrumbs, withTrail, type BreadcrumbItem } from '@/lib/breadcrumb';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -213,7 +214,9 @@ function MeetingMultiSelect({
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const trail = parseBreadcrumbs(searchParams.get('trail'));
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
 
@@ -587,13 +590,21 @@ export default function ConferenceDetailPage() {
 
   if (!conference) return null;
 
+  const confTrailBase = trail.length > 0 ? trail : [{ label: 'Conferences', href: '/conferences' }];
+  const confChildTrail: BreadcrumbItem[] = [...confTrailBase, { label: conference.name, href: `/conferences/${id}` }];
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center justify-between">
-        <nav className="flex items-center gap-2 text-sm text-gray-500">
-          <Link href="/conferences" className="hover:text-procare-bright-blue">Conferences</Link>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <nav className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
+          {(trail.length > 0 ? trail : [{ label: 'Conferences', href: '/conferences' }]).map((item, i) => (
+            <span key={i} className="flex items-center gap-2">
+              {i > 0 && <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
+              <Link href={item.href} className="hover:text-procare-bright-blue">{item.label}</Link>
+            </span>
+          ))}
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           <span className="text-gray-800 truncate max-w-xs">{conference.name}</span>
@@ -1061,7 +1072,7 @@ export default function ConferenceDetailPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-procare-bright-blue flex-shrink-0" />
-                          <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
+                          <Link href={withTrail(`/attendees/${attendee.id}`, confChildTrail)} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
                             {attendee.first_name} {attendee.last_name}
                           </Link>
                         </div>
@@ -1070,7 +1081,7 @@ export default function ConferenceDetailPage() {
                       {attendee.company_name && (
                         <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
                           {attendee.company_id ? (
-                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                            <Link href={withTrail(`/companies/${attendee.company_id}`, confChildTrail)} className="text-xs text-gray-700 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
                           ) : (
                             <span className="text-xs text-gray-700">{attendee.company_name}</span>
                           )}
@@ -1143,7 +1154,7 @@ export default function ConferenceDetailPage() {
                         />
                       </td>
                       <td className="px-4 py-3 font-medium overflow-hidden">
-                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                        <Link href={withTrail(`/attendees/${attendee.id}`, confChildTrail)} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>
@@ -1154,7 +1165,7 @@ export default function ConferenceDetailPage() {
                         {attendee.company_name ? (
                           <div>
                             {attendee.company_id ? (
-                              <Link href={`/companies/${attendee.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                              <Link href={withTrail(`/companies/${attendee.company_id}`, confChildTrail)} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
                             ) : (
                               <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                             )}

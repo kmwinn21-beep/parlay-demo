@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { parseBreadcrumbs, withTrail, type BreadcrumbItem } from '@/lib/breadcrumb';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -46,7 +47,9 @@ function formatDate(d: string) {
 export default function AttendeeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const trail = parseBreadcrumbs(searchParams.get('trail'));
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
 
@@ -406,13 +409,20 @@ export default function AttendeeDetailPage() {
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
   const currentStatus = attendee.status || 'Unknown';
   const currentStatuses = new Set(currentStatus.split(',').map(s => s.trim()).filter(Boolean));
+  const attendeeTrailBase = trail.length > 0 ? trail : [{ label: 'Attendees', href: '/attendees' }];
+  const attendeeChildTrail: BreadcrumbItem[] = [...attendeeTrailBase, { label: `${attendee.first_name} ${attendee.last_name}`, href: `/attendees/${id}` }];
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <nav className="flex items-center gap-2 text-sm text-gray-500">
-          <Link href="/attendees" className="hover:text-procare-bright-blue">Attendees</Link>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        <nav className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
+          {attendeeTrailBase.map((item, i) => (
+            <span key={i} className="flex items-center gap-2">
+              {i > 0 && <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
+              <Link href={item.href} className="hover:text-procare-bright-blue">{item.label}</Link>
+            </span>
+          ))}
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           <span className="text-gray-800">{attendee.first_name} {attendee.last_name}</span>
         </nav>
         <BackButton />
@@ -482,7 +492,7 @@ export default function AttendeeDetailPage() {
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
                     {attendee.company_name ? (
                       attendee.company_id ? (
-                        <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                        <Link href={withTrail(`/companies/${attendee.company_id}`, attendeeChildTrail)} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
                       ) : (
                         <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
                       )
@@ -616,7 +626,7 @@ export default function AttendeeDetailPage() {
             ) : (
               <div className="space-y-2">
                 {attendee.conferences.map(conf => (
-                  <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all">
+                  <Link key={conf.id} href={withTrail(`/conferences/${conf.id}`, attendeeChildTrail)} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
                       <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
