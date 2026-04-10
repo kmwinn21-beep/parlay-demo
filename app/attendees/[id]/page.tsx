@@ -589,9 +589,9 @@ export default function AttendeeDetailPage() {
                 <svg className="w-5 h-5 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
+            </button>
             <span className="text-sm 
                 <span className="text-sm font-medium text-procare-bright-blue">Add Follow Up</span>
-              </button>
             </div>
             <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
           </div>
