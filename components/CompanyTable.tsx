@@ -11,6 +11,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
+import { RepMultiSelect } from './RepMultiSelect';
 
 interface Company {
   id: number;
@@ -153,7 +154,6 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const searchParams = useSearchParams();
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
-  const profitTypeOptions = configOptions.profit_type ?? [];
   const [search, setSearch] = useState('');
   // filterSFOwner stores a user ID (as string) for filtering, or '' for all
   const [filterSFOwner, setFilterSFOwner] = useState('');
@@ -174,7 +174,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
-  const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; profit_type?: string }>({});
+  const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; assigned_user?: string }>({});
   const [isApplying, setIsApplying] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
@@ -301,7 +301,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     const fields: Record<string, string | null> = {};
     if (massEditFields.status) fields.status = massEditFields.status;
     if (massEditFields.company_type) fields.company_type = massEditFields.company_type;
-    if (massEditFields.profit_type) fields.profit_type = massEditFields.profit_type;
+    if (massEditFields.assigned_user !== undefined) fields.assigned_user = massEditFields.assigned_user || null;
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
     try {
@@ -533,11 +533,14 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               </select>
             </div>
             <div>
-              <label className="label text-xs">Profit Type</label>
-              <select value={massEditFields.profit_type || ''} onChange={e => setMassEditFields(p => ({ ...p, profit_type: e.target.value }))} className="input-field w-36 text-sm">
-                <option value="">— no change —</option>
-                {profitTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <label className="label text-xs">SF Owner(s)</label>
+              <RepMultiSelect
+                options={userOptionsFull}
+                selectedIds={parseRepIds(massEditFields.assigned_user)}
+                onChange={(ids) => setMassEditFields(p => ({ ...p, assigned_user: ids.join(',') }))}
+                triggerClass="input-field w-48 text-sm flex items-center justify-between gap-2"
+                placeholder="— no change —"
+              />
             </div>
             <button onClick={handleMassEdit} disabled={isApplying} className="btn-primary text-sm">{isApplying ? 'Applying...' : `Apply to ${selectedIds.size}`}</button>
             <button onClick={() => setShowMassEdit(false)} className="btn-secondary text-sm">Cancel</button>

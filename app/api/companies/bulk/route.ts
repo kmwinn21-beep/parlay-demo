@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { ids, fields } = body as {
       ids: number[];
-      fields: { status?: string; company_type?: string; profit_type?: string; notes?: string };
+      fields: { status?: string; company_type?: string; profit_type?: string; notes?: string; assigned_user?: string | null };
     };
 
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -27,6 +27,7 @@ export async function PATCH(request: NextRequest) {
     if ('company_type' in fields) { setClauses.push('company_type = ?'); baseArgs.push(fields.company_type || null); }
     if ('profit_type' in fields) { setClauses.push('profit_type = ?'); baseArgs.push(fields.profit_type || null); }
     if ('notes' in fields) { setClauses.push('notes = ?'); baseArgs.push(fields.notes || null); }
+    if ('assigned_user' in fields) { setClauses.push('assigned_user = ?'); baseArgs.push(fields.assigned_user || null); }
 
     if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
