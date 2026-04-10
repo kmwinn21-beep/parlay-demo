@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { useUser } from '@/components/UserContext';
 
 function formatNoteDate(dt: string) {
   const d = new Date(dt);
@@ -86,7 +87,9 @@ export function FollowUpNotesPopover({
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedConference, setSelectedConference] = useState(conferenceName || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pinOnSubmit, setPinOnSubmit] = useState(false);
   const [userOptions, setUserOptions] = useState<string[]>([]);
+  const { user } = useUser();
   const [conferences, setConferences] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
@@ -163,9 +166,29 @@ export function FollowUpNotesPopover({
       const newNote: PopoverNote = await res.json();
       setNotes(prev => [newNote, ...prev]);
       setTotalCount(prev => prev + 1);
+
+      // If user opted to pin, create pinned note record
+      if (pinOnSubmit && user?.email) {
+        try {
+          const pinConfName = selectedConference && selectedConference !== 'General Note' ? selectedConference : null;
+          await fetch('/api/pinned-notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              note_id: newNote.id,
+              entity_type: 'attendee',
+              entity_id: attendeeId,
+              pinned_by: user.email,
+              conference_name: pinConfName,
+            }),
+          });
+        } catch { /* non-fatal */ }
+      }
+
       setNoteText('');
       setSelectedUser('');
       setSelectedConference(conferenceName || '');
+      setPinOnSubmit(false);
       setIsAdding(false);
       toast.success('Note saved.');
     } catch {
@@ -267,6 +290,18 @@ export function FollowUpNotesPopover({
                   rows={3}
                   autoFocus
                 />
+                <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={pinOnSubmit}
+                    onChange={e => setPinOnSubmit(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-procare-gold focus:ring-procare-gold"
+                  />
+                  <svg className="w-3.5 h-3.5 text-procare-gold" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                  </svg>
+                  <span className="text-xs font-medium text-gray-700">Pin Note?</span>
+                </label>
                 <div className="flex gap-2 mt-2">
                   <button
                     type="button"
@@ -278,7 +313,7 @@ export function FollowUpNotesPopover({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(conferenceName || ''); }}
+                    onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(conferenceName || ''); setPinOnSubmit(false); }}
                     className="px-3 py-1 bg-white text-gray-600 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 transition-colors"
                   >
                     Cancel

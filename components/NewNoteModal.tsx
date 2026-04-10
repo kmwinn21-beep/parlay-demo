@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useHideBottomNav } from './BottomNavContext';
+import { useUser } from '@/components/UserContext';
 
 interface ConferenceOption {
   id: number;
@@ -43,7 +44,9 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
   const [noteText, setNoteText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pinOnSubmit, setPinOnSubmit] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
+  const { user } = useUser();
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
   const companyDropdownRef = useRef<HTMLDivElement>(null);
@@ -147,6 +150,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     setSelectedCompanyId('');
     setSelectedAttendeeId('');
     setNoteText('');
+    setPinOnSubmit(false);
     setCompanySearch('');
     setShowCompanyDropdown(false);
   }
@@ -241,6 +245,33 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       const results = await Promise.all(notePromises);
       const allOk = results.every(r => (r as Response).ok);
       if (!allOk) throw new Error('Failed to save note');
+
+      // If user opted to pin the note, pin it to the company or attendee
+      if (pinOnSubmit && user?.email) {
+        try {
+          // Get the note IDs from the created notes
+          const noteResponses = await Promise.all(
+            results.map(r => (r as Response).clone().json())
+          );
+          for (const noteData of noteResponses) {
+            if (noteData.entity_type === 'company' || noteData.entity_type === 'attendee') {
+              await fetch('/api/pinned-notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  note_id: noteData.id,
+                  entity_type: noteData.entity_type,
+                  entity_id: noteData.entity_id,
+                  pinned_by: user.email,
+                  conference_name: conferenceName !== 'General Note' ? conferenceName : null,
+                  attendee_name: noteData.entity_type === 'company' && selAttendee ? attendeeLabel : null,
+                  attendee_id: noteData.entity_type === 'company' && selAttendee ? selAttendee.id : null,
+                }),
+              });
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
 
       toast.success('Note saved.');
       handleClose();
@@ -383,6 +414,20 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               autoFocus
             />
           </div>
+
+          {/* Pin Note */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={pinOnSubmit}
+              onChange={e => setPinOnSubmit(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-procare-gold focus:ring-procare-gold"
+            />
+            <svg className="w-4 h-4 text-procare-gold" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+            </svg>
+            <span className="text-sm font-medium text-gray-700">Pin Note?</span>
+          </label>
         </form>
 
         {/* Footer */}

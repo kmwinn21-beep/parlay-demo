@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -16,6 +17,7 @@ import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { effectiveSeniority, classifyICP } from '@/lib/parsers';
 import { type UserOption, parseRepIds, resolveRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
+import { useUser } from '@/components/UserContext';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -131,6 +133,11 @@ export default function CompanyDetailPage() {
   const [relateResults, setRelateResults] = useState<{ id: number; name: string; company_type: string | null }[]>([]);
   const [relateSaving, setRelateSaving] = useState(false);
 
+  // Pinned notes state
+  const [pinnedNotes, setPinnedNotes] = useState<PinnedNote[]>([]);
+  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<number>>(new Set());
+  const { user } = useUser();
+
   const fetchCompany = useCallback(async () => {
     try {
       const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes] = await Promise.all([
@@ -206,6 +213,16 @@ export default function CompanyDetailPage() {
       if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
       if (notesRes.ok) setCompanyNotes(await notesRes.json());
       if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
+
+      // Fetch pinned notes for this company
+      try {
+        const pinnedRes = await fetch(`/api/pinned-notes?entity_type=company&entity_id=${id}`);
+        if (pinnedRes.ok) {
+          const pinData = await pinnedRes.json();
+          setPinnedNotes(pinData);
+          setPinnedNoteIds(new Set(pinData.map((p: PinnedNote) => p.note_id)));
+        }
+      } catch { /* non-fatal */ }
     } catch {
       toast.error('Failed to load company');
       router.push('/companies');
@@ -359,6 +376,52 @@ export default function CompanyDetailPage() {
       fetchCompany();
     } catch {
       toast.error('Failed to remove relationship.');
+    }
+  };
+
+  const handlePinNote = async (noteId: number, conferenceName: string | null, attendeeName: string | null, attendeeId: number | null) => {
+    if (!user?.email) { toast.error('You must be logged in to pin notes.'); return; }
+    try {
+      const res = await fetch('/api/pinned-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note_id: noteId,
+          entity_type: 'company',
+          entity_id: Number(id),
+          pinned_by: user.email,
+          conference_name: conferenceName,
+          attendee_name: attendeeName,
+          attendee_id: attendeeId,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Note pinned!');
+      fetchCompany();
+    } catch {
+      toast.error('Failed to pin note.');
+    }
+  };
+
+  const handleUnpinNote = async (pinId: number) => {
+    if (!confirm('Unpin this note?')) return;
+    try {
+      const res = await fetch('/api/pinned-notes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pinId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Note unpinned.');
+      setPinnedNotes(prev => prev.filter(p => p.id !== pinId));
+      setPinnedNoteIds(prev => {
+        const next = new Set(prev);
+        const pin = pinnedNotes.find(p => p.id === pinId);
+        if (pin) next.delete(pin.note_id);
+        return next;
+      });
+    } catch {
+      toast.error('Failed to unpin note.');
     }
   };
 
@@ -736,6 +799,9 @@ export default function CompanyDetailPage() {
         )}
       </div>
 
+          {/* Pinned Notes */}
+          <PinnedNotesSection pinnedNotes={pinnedNotes} onUnpin={handleUnpinNote} />
+
       {/* Attendees */}
       <div className="card">
         <div className="mb-4 flex items-center justify-between">
@@ -983,6 +1049,8 @@ export default function CompanyDetailPage() {
             attendees={(company.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: Number(id), company_name: company.name }))}
             currentCompanyName={company.name}
             currentCompanyId={Number(id)}
+            onPin={handlePinNote}
+            pinnedNoteIds={pinnedNoteIds}
           />
 
         </div>{/* end left column */}
