@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const result = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, a.email,
                    a.notes, a.action, a.next_steps, a.next_steps_notes,
-                   COALESCE(a.status, 'Unknown') as status,
+                   a.status,
                    a.seniority,
                    a.created_at,
                    co.name as company_name, co.company_type, co.wse as company_wse,
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, notes) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
+      sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, notes, status) VALUES (?, ?, ?, ?, ?, ?, NULL) RETURNING *',
       args: [first_name, last_name, title || null, company_id || null, email || null, notes || null],
     });
 

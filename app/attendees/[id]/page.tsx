@@ -503,8 +503,7 @@ export default function AttendeeDetailPage() {
   if (!attendee) return null;
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
-  const currentStatus = attendee.status || 'Unknown';
-  const currentStatuses = new Set(currentStatus.split(',').map(s => s.trim()).filter(Boolean));
+  const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(Boolean));
   const attendeeTrailBase = trail.length > 0 ? trail : [{ label: 'Attendees', href: '/attendees' }];
   const attendeeChildTrail: BreadcrumbItem[] = [...attendeeTrailBase, { label: `${attendee.first_name} ${attendee.last_name}`, href: `/attendees/${id}` }];
 
@@ -571,7 +570,7 @@ export default function AttendeeDetailPage() {
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
                         {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
                           <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{s}</span>
-                        )) : <span className={`badge ${getPillClass('Unknown', colorMaps.status || {})}`}>Unknown</span>}
+                        )) : <span className="text-sm text-gray-400">—</span>}
                         {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
                       </div>
                     </div>

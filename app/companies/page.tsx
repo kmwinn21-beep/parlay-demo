@@ -28,7 +28,7 @@ interface AddCompanyForm {
   profit_type: string;
   company_type: string;
   services: string[];
-  icp: string;
+  icp: string | null;
   notes: string;
   assigned_user: string;
 }
@@ -40,7 +40,7 @@ export default function CompaniesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AddCompanyForm>({
-    defaultValues: { services: [], icp: 'False' },
+    defaultValues: { services: [], icp: null },
   });
   const configOptions = useConfigOptions();
   const companyTypeOptions = configOptions.company_type ?? [];
@@ -49,7 +49,7 @@ export default function CompaniesPage() {
   const icpOptions = configOptions.icp ?? ['True', 'False'];
   const userOptionsFull = useUserOptions();
   const selectedServices = watch('services') ?? [];
-  const icp = watch('icp') || 'False';
+  const icp = watch('icp');
 
   useEffect(() => {
     register('services');
@@ -84,7 +84,7 @@ export default function CompaniesPage() {
         throw new Error(err.error || 'Failed to create');
       }
       toast.success('Company added!');
-      reset({ services: [], icp: 'False' });
+      reset({ services: [], icp: null });
       setShowAddForm(false);
       fetchCompanies();
     } catch (err) {
@@ -233,7 +233,7 @@ export default function CompaniesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowAddForm(false); reset({ services: [], icp: 'False' }); }}
+                onClick={() => { setShowAddForm(false); reset({ services: [], icp: null }); }}
                 className="btn-secondary"
               >
                 Cancel

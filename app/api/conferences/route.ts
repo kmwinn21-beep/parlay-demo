@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db, dbReady, getConfigOptionValues } from '@/lib/db';
 import { parseFile, classifyCompanyType } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
@@ -86,6 +86,8 @@ export async function POST(request: NextRequest) {
     let parsedCount = 0;
 
     if (file && file.size > 0) {
+      const companyTypeOptions = await getConfigOptionValues('company_type');
+
       const buffer = Buffer.from(await file.arrayBuffer());
       const parsed = await parseFile(buffer, file.name);
       const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
@@ -188,7 +190,7 @@ export async function POST(request: NextRequest) {
         const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
         if (newCoNames.length > 0) {
           const results = await batchInsert(newCoNames, (n) => {
-            const detectedType = companyTypeMap.get(n) || classifyCompanyType(n);
+            const detectedType = companyTypeMap.get(n) || classifyCompanyType(n, companyTypeOptions);
             const assignedUser = companyAssignedUserMap.get(n) || null;
             const website = companyWebsiteMap.get(n) || null;
             const wse = companyWseMap.get(n) ?? null;

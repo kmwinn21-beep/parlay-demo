@@ -178,7 +178,7 @@ export default function CompanyDetailPage() {
         assigned_user: data.assigned_user || '',
         entity_structure: data.entity_structure || '',
         services: Array.isArray(data.services) ? data.services : [],
-        icp: data.icp || 'False',
+        icp: data.icp || null,
       });
       if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
       if (compTypeRes.ok) {
@@ -255,7 +255,7 @@ export default function CompanyDetailPage() {
     if (!isEditing) return;
     const services = Array.isArray(editData.services) ? editData.services.join(',') : '';
     const wse = editData.wse != null ? Number(editData.wse) : null;
-    const icp = classifyICP(wse, editData.company_type || null, services || null);
+    const icp = classifyICP(wse, editData.company_type || null, services || null, icpOptions, operatorTypeValues);
     setEditData((p) => ({ ...p, icp }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, editData.wse, editData.company_type, editData.services]);
@@ -563,7 +563,7 @@ export default function CompanyDetailPage() {
                       key={option}
                       type="button"
                       onClick={() => setEditData((p) => ({ ...p, icp: option }))}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${String(editData.icp || 'False') === option ? 'bg-procare-bright-blue text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${editData.icp === option ? 'bg-procare-bright-blue text-white' : 'text-gray-600 hover:text-gray-800'}`}
                     >
                       {option}
                     </button>
@@ -686,7 +686,7 @@ export default function CompanyDetailPage() {
                   <div>
                     <h1 className="text-2xl font-bold text-procare-dark-blue font-serif flex items-center gap-2">
                       {company.name}
-                      {company.icp === 'True' && (
+                      {company.icp != null && icpOptions.length > 0 && company.icp === icpOptions[0] && (
                         <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-green-100 flex-shrink-0">
                           <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -771,10 +771,10 @@ export default function CompanyDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
                 <span className="flex flex-wrap gap-1">
-                  {(company.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => (
+                  {(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => (
                     <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
                   ))}
-                  {!(company.status || '').trim() && <span className={getBadgeClass('Unknown', colorMaps.status || {})}>Unknown</span>}
+                  {!(company.status || '').trim() && <span className="text-sm text-gray-400">—</span>}
                 </span>
               </div>
               <div>
@@ -798,15 +798,15 @@ export default function CompanyDetailPage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">ICP</p>
-                {company.icp === 'True' ? (
+                {company.icp != null && icpOptions.length > 0 && company.icp === icpOptions[0] ? (
                   <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                    True
+                    {company.icp}
                   </span>
                 ) : (
-                  <span className="text-sm text-gray-500">False</span>
+                  <span className="text-sm text-gray-500">{company.icp || '—'}</span>
                 )}
               </div>
             </div>

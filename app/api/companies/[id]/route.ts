@@ -114,7 +114,7 @@ export async function GET(
     return NextResponse.json({
       ...company,
       services: parseServices(company.services),
-      icp: company.icp ? String(company.icp) : 'False',
+      icp: company.icp ? String(company.icp) : null,
       attendees,
       conferences,
       child_companies,
@@ -152,13 +152,13 @@ export async function PUT(
 
     const updatedResult = await db.execute({
       sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ? WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp === 'True' ? 'True' : 'False', params.id],
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, params.id],
     });
 
     return NextResponse.json({
       ...updatedResult.rows[0],
       services: parseServices(updatedResult.rows[0].services),
-      icp: updatedResult.rows[0].icp ? String(updatedResult.rows[0].icp) : 'False',
+      icp: updatedResult.rows[0].icp ? String(updatedResult.rows[0].icp) : null,
     });
   } catch (error) {
     console.error('PUT /api/companies/[id] error:', error);

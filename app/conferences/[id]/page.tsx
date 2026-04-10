@@ -1110,7 +1110,7 @@ export default function ConferenceDetailPage() {
                         </div>
                       )}
                       <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                        <span className="flex flex-wrap gap-1">{(attendee.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
+                        <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
                         <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1`}>
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                           {seniority}

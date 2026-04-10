@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db, dbReady, getConfigOptionValues } from '@/lib/db';
 import { parseFile, classifyCompanyType, parseServicesValue, classifyICP } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
@@ -48,6 +48,17 @@ export async function POST(
     if (!file || file.size === 0) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
+
+    // Fetch live admin config options for classifiers
+    const [companyTypeOptions, icpOptions] = await Promise.all([
+      getConfigOptionValues('company_type'),
+      getConfigOptionValues('icp'),
+    ]);
+    // Identify which company_type values represent "Operator" for ICP classification
+    const operatorTypeValues = new Set(
+      companyTypeOptions.filter((v) => v.toLowerCase().includes('operator') || v.toLowerCase() === 'opco' || v.toLowerCase() === 'own/op')
+    );
+    if (operatorTypeValues.size === 0) operatorTypeValues.add('Operator'); // safe fallback
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const parsed = await parseFile(buffer, file.name);
@@ -218,7 +229,7 @@ export async function POST(
     if (newCoNames.length > 0) {
       const results = await batchInsert(newCoNames, (n) => {
         const entry = companyEntries.get(n)!;
-        const detectedType = entry.company_type || classifyCompanyType(n);
+        const detectedType = entry.company_type || classifyCompanyType(n, companyTypeOptions);
         const website = entry.website || null;
         const assignedUser = entry.assigned_user || null;
         const wse = entry.wse ?? null;
@@ -253,7 +264,9 @@ export async function POST(
         const icp = classifyICP(
           row.wse ? Number(row.wse) : null,
           row.company_type ? String(row.company_type) : null,
-          row.services ? String(row.services) : null
+          row.services ? String(row.services) : null,
+          icpOptions,
+          operatorTypeValues
         );
         icpUpdates.push({ id: Number(row.id), icp });
       }

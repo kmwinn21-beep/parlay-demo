@@ -200,8 +200,10 @@ export function effectiveSeniority(storedSeniority?: string, title?: string): st
 /**
  * Auto-detect company type based on company name.
  * Uses a known-company lookup (from training data) first, then falls back to keyword heuristics.
+ * Pass validOptions (from getConfigOptionValues('company_type')) to ensure the returned value
+ * exists in the admin-configured list; if it doesn't, null is returned instead of a stale value.
  */
-export function classifyCompanyType(companyName?: string): string | null {
+export function classifyCompanyType(companyName?: string, validOptions?: string[]): string | null {
   if (!companyName) return null;
 
   const name = companyName.trim();
@@ -269,14 +271,20 @@ export function classifyCompanyType(companyName?: string): string | null {
   if (maxScore === 0) return null;
 
   // If there's a clear winner, return it
-  if (capitalScore > operatorScore && capitalScore > vendorScore) return 'Capital';
-  if (operatorScore > capitalScore && operatorScore > vendorScore) return 'Operator';
-  if (vendorScore > capitalScore && vendorScore > operatorScore) return 'Vendor';
-
+  let classified: string | null = null;
+  if (capitalScore > operatorScore && capitalScore > vendorScore) classified = 'Capital';
+  else if (operatorScore > capitalScore && operatorScore > vendorScore) classified = 'Operator';
+  else if (vendorScore > capitalScore && vendorScore > operatorScore) classified = 'Vendor';
   // Tie-breaking: prioritize Operator > Capital > Vendor
-  if (operatorScore === maxScore) return 'Operator';
-  if (capitalScore === maxScore) return 'Capital';
-  return 'Vendor';
+  else if (operatorScore === maxScore) classified = 'Operator';
+  else if (capitalScore === maxScore) classified = 'Capital';
+  else classified = 'Vendor';
+
+  // Validate against live admin options if provided — prevents writing stale values
+  if (validOptions && validOptions.length > 0 && classified && !validOptions.includes(classified)) {
+    return null;
+  }
+  return classified;
 }
 
 /**
@@ -318,20 +326,30 @@ export function parseServicesValue(raw: string): string {
  * Determine if a company meets the Ideal Customer Profile (ICP) criteria.
  * Requirements:
  *   - WSE between 250 and 6,000 (inclusive)
- *   - Company Type is "Operator"
+ *   - Company Type matches one of the operator-type values
  *   - Services include at least one of: AL, MC, SNF, CCRC
+ *
+ * @param icpOptions  Live ICP option values from admin panel (index 0 = "true" value, index 1 = "false" value).
+ *                    Defaults to ['True', 'False'] for backward compatibility.
+ * @param operatorTypeValues  Set of company_type values that represent operators.
+ *                            Defaults to a Set containing 'Operator'.
  */
 export function classifyICP(
   wse: number | null | undefined,
   companyType: string | null | undefined,
-  services: string | null | undefined
+  services: string | null | undefined,
+  icpOptions: string[] = ['True', 'False'],
+  operatorTypeValues: Set<string> = new Set(['Operator'])
 ): string {
-  if (!wse || wse < 250 || wse > 6000) return 'False';
-  if (!companyType || companyType !== 'Operator') return 'False';
-  if (!services) return 'False';
+  const trueValue = icpOptions[0] ?? 'True';
+  const falseValue = icpOptions[1] ?? 'False';
+
+  if (!wse || wse < 250 || wse > 6000) return falseValue;
+  if (!companyType || !operatorTypeValues.has(companyType)) return falseValue;
+  if (!services) return falseValue;
 
   const serviceList = services.split(',').map((s) => s.trim());
   const icpServices = ['AL', 'MC', 'SNF', 'CCRC'];
   const hasIcpService = serviceList.some((s) => icpServices.includes(s));
-  return hasIcpService ? 'True' : 'False';
+  return hasIcpService ? trueValue : falseValue;
 }

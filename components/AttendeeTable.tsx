@@ -170,7 +170,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
       const matchSearch = !search || fullName.includes(search.toLowerCase()) || a.company_name?.toLowerCase().includes(search.toLowerCase()) || a.email?.toLowerCase().includes(search.toLowerCase()) || a.title?.toLowerCase().includes(search.toLowerCase());
       const matchType = !filterCompanyType || a.company_type === filterCompanyType;
-      const matchStatus = !filterStatus || (a.status || 'Unknown').split(',').map(s => s.trim()).some(s => s === filterStatus);
+      const matchStatus = !filterStatus || (a.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus);
       const matchSeniority = !filterSeniority || effectiveSeniority(a.seniority, a.title) === filterSeniority;
       const matchConf = confCountMatches(Number(a.conference_count));
       return matchSearch && matchType && matchStatus && matchSeniority && matchConf;
@@ -179,7 +179,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       let aVal: string | number, bVal: string | number;
       if (sortKey === 'last_name') { aVal = `${a.last_name} ${a.first_name}`.toLowerCase(); bVal = `${b.last_name} ${b.first_name}`.toLowerCase(); }
       else if (sortKey === 'first_name') { aVal = `${a.first_name} ${a.last_name}`.toLowerCase(); bVal = `${b.first_name} ${b.last_name}`.toLowerCase(); }
-      else if (sortKey === 'status') { aVal = (a.status || 'Unknown').toLowerCase(); bVal = (b.status || 'Unknown').toLowerCase(); }
+      else if (sortKey === 'status') { aVal = (a.status || '').toLowerCase(); bVal = (b.status || '').toLowerCase(); }
       else { aVal = (a[sortKey] ?? ''); bVal = (b[sortKey] ?? ''); if (typeof aVal === 'string') aVal = aVal.toLowerCase(); if (typeof bVal === 'string') bVal = bVal.toLowerCase(); }
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
@@ -422,7 +422,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   </div>
                 )}
                 <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                  <span className="flex flex-wrap gap-1">{(attendee.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
+                  <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
                   <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1`}>
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                     {seniority}
@@ -501,7 +501,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         <span className="text-gray-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3"><span className="flex flex-wrap gap-1">{(attendee.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span></td>
+                    <td className="px-3 py-3"><span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(attendee.status || '').trim() && <span className="text-gray-300">—</span>}</span></td>
                     <td className="px-3 py-3"><span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span></td>
                     <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>
                     <td className="px-3 py-3">

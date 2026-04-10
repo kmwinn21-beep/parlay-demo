@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { classifyCompanyType } from '@/lib/parsers';
+import { getConfigOptionValues } from '@/lib/db';
 
 function parseServices(value: unknown): string[] {
   if (!value) return [];
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     await dbReady;
     const result = await db.execute({
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
-              COALESCE(co.status, 'Unknown') as status, COALESCE(co.icp, 'False') as icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at,
+              co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at,
               COALESCE(att_agg.attendee_count, 0) as attendee_count,
               COALESCE(conf_agg.conference_count, 0) as conference_count,
               conf_agg.conference_names,
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
     const companies = result.rows.map((r) => ({
       ...r,
       services: parseServices(r.services),
-      icp: r.icp ? String(r.icp) : 'False',
+      icp: r.icp ? String(r.icp) : null,
     }));
     return NextResponse.json(companies, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
@@ -82,18 +83,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
     }
 
-    // Auto-detect company type if not explicitly provided
-    const resolvedType = company_type || classifyCompanyType(name) || null;
+    // Auto-detect company type if not explicitly provided; validate against live admin options
+    const companyTypeOptions = await getConfigOptionValues('company_type');
+    const resolvedType = company_type || classifyCompanyType(name, companyTypeOptions) || null;
 
     const result = await db.execute({
-      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
-      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp === 'True' ? 'True' : 'False'],
+      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) RETURNING *',
+      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null],
     });
 
     return NextResponse.json({
       ...result.rows[0],
       services: parseServices(result.rows[0].services),
-      icp: result.rows[0].icp ? String(result.rows[0].icp) : 'False',
+      icp: result.rows[0].icp ? String(result.rows[0].icp) : null,
     }, { status: 201 });
   } catch (error) {
     console.error('POST /api/companies error:', error);
