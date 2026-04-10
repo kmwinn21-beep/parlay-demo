@@ -306,8 +306,6 @@ export async function initDb(): Promise<void> {
     { category: 'services', value: 'CCRC', sort_order: 5 },
     { category: 'services', value: 'Other', sort_order: 6 },
     { category: 'services', value: 'N/A', sort_order: 7 },
-    { category: 'icp', value: 'True', sort_order: 1 },
-    { category: 'icp', value: 'False', sort_order: 2 },
     { category: 'event_type', value: 'Sponsored Event', sort_order: 1 },
     { category: 'event_type', value: 'Lunch', sort_order: 2 },
     { category: 'event_type', value: 'Dinner', sort_order: 3 },
