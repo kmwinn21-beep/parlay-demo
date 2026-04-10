@@ -417,7 +417,6 @@ export default function AttendeeDetailPage() {
         </nav>
         <BackButton />
       </div>
-    </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column (2/3 width) — profile + follow ups */}
         <div className="lg:col-span-2 space-y-6">
@@ -590,7 +589,6 @@ export default function AttendeeDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             </button>
-            <span className="text-sm 
                 <span className="text-sm font-medium text-procare-bright-blue">Add Follow Up</span>
             </div>
             <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
