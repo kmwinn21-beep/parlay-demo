@@ -50,6 +50,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'category and value are required' }, { status: 400 });
     }
 
+    // Prevent re-adding legacy "True"/"False" ICP option values
+    if (category === 'icp' && (value === 'True' || value === 'False')) {
+      return NextResponse.json({ error: '"True" and "False" are reserved and cannot be used as ICP options' }, { status: 400 });
+    }
+
     const result = await db.execute({
       sql: 'INSERT INTO config_options (category, value, sort_order, color) VALUES (?, ?, ?, ?) RETURNING *',
       args: [category, value, sort_order ?? 0, color ?? null],

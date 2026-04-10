@@ -46,7 +46,7 @@ export default function CompaniesPage() {
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
   const servicesOptions = configOptions.services ?? [];
-  const icpOptions = configOptions.icp ?? ['True', 'False'];
+  const icpOptions = (configOptions.icp ?? []).filter(v => v !== 'True' && v !== 'False');
   const userOptionsFull = useUserOptions();
   const selectedServices = watch('services') ?? [];
   const icp = watch('icp');

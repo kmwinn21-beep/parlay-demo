@@ -373,7 +373,14 @@ export default function AdminPage() {
         )
       );
       const map: Record<string, ConfigOption[]> = {};
-      for (const r of results) map[r.key] = r.options;
+      for (const r of results) {
+        // Strip legacy "True"/"False" entries from ICP category
+        if (r.key === 'icp') {
+          map[r.key] = r.options.filter((o: ConfigOption) => o.value !== 'True' && o.value !== 'False');
+        } else {
+          map[r.key] = r.options;
+        }
+      }
       setOptionsByCategory(map);
     } catch {
       toast.error('Failed to load config options.');

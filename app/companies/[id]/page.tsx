@@ -206,7 +206,7 @@ export default function CompanyDetailPage() {
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
-      if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value));
+      if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value).filter((v: string) => v !== 'True' && v !== 'False'));
       if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
 
@@ -560,7 +560,7 @@ export default function CompanyDetailPage() {
               <div>
                 <label className="label">ICP</label>
                 <div className="inline-flex items-center rounded-lg border border-gray-200 p-1 bg-gray-50">
-                  {(icpOptions.length > 0 ? icpOptions : ['True', 'False']).map((option) => (
+                  {icpOptions.map((option) => (
                     <button
                       key={option}
                       type="button"

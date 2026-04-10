@@ -330,7 +330,7 @@ export function parseServicesValue(raw: string): string {
  *   - Services include at least one of: AL, MC, SNF, CCRC
  *
  * @param icpOptions  Live ICP option values from admin panel (index 0 = "true" value, index 1 = "false" value).
- *                    Defaults to ['True', 'False'] for backward compatibility.
+ *                    Defaults to ['Yes', 'No'] when no options are configured.
  * @param operatorTypeValues  Set of company_type values that represent operators.
  *                            Defaults to a Set containing 'Operator'.
  */
@@ -338,11 +338,11 @@ export function classifyICP(
   wse: number | null | undefined,
   companyType: string | null | undefined,
   services: string | null | undefined,
-  icpOptions: string[] = ['True', 'False'],
+  icpOptions: string[] = ['Yes', 'No'],
   operatorTypeValues: Set<string> = new Set(['Operator'])
 ): string {
-  const trueValue = icpOptions[0] ?? 'True';
-  const falseValue = icpOptions[1] ?? 'False';
+  const trueValue = icpOptions[0] ?? 'Yes';
+  const falseValue = icpOptions[1] ?? 'No';
 
   if (!wse || wse < 250 || wse > 6000) return falseValue;
   if (!companyType || !operatorTypeValues.has(companyType)) return falseValue;

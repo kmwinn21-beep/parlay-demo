@@ -325,6 +325,14 @@ export async function initDb(): Promise<void> {
     } catch { /* ignore */ }
   }
 
+  // Remove legacy "True"/"False" ICP config options if they exist
+  try {
+    await db.execute({
+      sql: "DELETE FROM config_options WHERE category = 'icp' AND value IN ('True', 'False')",
+      args: [],
+    });
+  } catch { /* ignore */ }
+
   // Always ensure action_key is set for meeting-related actions (runs every startup)
   const actionKeySeeds: Array<{ key: string; value: string }> = [
     { key: 'meeting_scheduled', value: 'Meeting Scheduled' },
@@ -431,5 +439,10 @@ export async function getConfigOptionValues(category: string): Promise<string[]>
     sql: 'SELECT value FROM config_options WHERE category = ? ORDER BY sort_order, value',
     args: [category],
   });
-  return result.rows.map((r) => String(r.value));
+  const values = result.rows.map((r) => String(r.value));
+  // Strip legacy "True"/"False" literals from ICP options
+  if (category === 'icp') {
+    return values.filter((v) => v !== 'True' && v !== 'False');
+  }
+  return values;
 }
