@@ -55,16 +55,15 @@ export function Header() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
 
+  // Pre-fetch on mount so the dropdown opens instantly
   useEffect(() => {
-    if (showConferences && conferences.length === 0) {
-      setIsLoadingConfs(true);
-      fetch('/api/conferences')
-        .then(res => res.json())
-        .then((data: ConferenceOption[]) => setConferences(data))
-        .catch(() => {})
-        .finally(() => setIsLoadingConfs(false));
-    }
-  }, [showConferences, conferences.length]);
+    setIsLoadingConfs(true);
+    fetch('/api/conferences?nav=1')
+      .then(res => res.json())
+      .then((data: ConferenceOption[]) => setConferences(data))
+      .catch(() => {})
+      .finally(() => setIsLoadingConfs(false));
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

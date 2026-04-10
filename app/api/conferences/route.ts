@@ -16,6 +16,16 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
+    // ?nav=1 — lightweight query for the header navigation dropdown (no JOIN/COUNT)
+    if (request.nextUrl.searchParams.get('nav') === '1') {
+      const result = await db.execute({
+        sql: `SELECT id, name, start_date, end_date FROM conferences ORDER BY start_date DESC`,
+        args: [],
+      });
+      return NextResponse.json(result.rows.map((r) => ({ ...r })), {
+        headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+      });
+    }
     const result = await db.execute({
       sql: `SELECT c.*, COUNT(ca.attendee_id) as attendee_count
             FROM conferences c
@@ -24,7 +34,9 @@ export async function GET(request: NextRequest) {
             ORDER BY c.start_date DESC`,
       args: [],
     });
-    return NextResponse.json(result.rows.map((r) => ({ ...r })));
+    return NextResponse.json(result.rows.map((r) => ({ ...r })), {
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+    });
   } catch (error) {
     console.error('GET /api/conferences error:', error);
     return NextResponse.json({ error: 'Failed to fetch conferences' }, { status: 500 });

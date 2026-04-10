@@ -229,6 +229,14 @@ export async function initDb(): Promise<void> {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     )`,
+    // Performance indexes
+    `CREATE INDEX IF NOT EXISTS idx_attendees_company_id ON attendees(company_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_conference_attendees_attendee_id ON conference_attendees(attendee_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_conference_attendees_conference_id ON conference_attendees(conference_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_entity_notes_type_entity_id ON entity_notes(entity_type, entity_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_conference_attendee_details_attendee_id ON conference_attendee_details(attendee_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_meetings_attendee_id ON meetings(attendee_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_meetings_conference_id ON meetings(conference_id)`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }

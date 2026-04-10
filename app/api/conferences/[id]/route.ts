@@ -23,12 +23,26 @@ export async function GET(
 
     const attendeesResult = await db.execute({
       sql: `SELECT a.*, c.name as company_name, c.company_type, c.wse as company_wse,
-                   (SELECT COUNT(*) FROM conference_attendees ca2 WHERE ca2.attendee_id = a.id) as conference_count,
-                   (SELECT GROUP_CONCAT(c2.name) FROM conference_attendees ca2 JOIN conferences c2 ON ca2.conference_id = c2.id WHERE ca2.attendee_id = a.id) as conference_names,
-                   (SELECT COUNT(*) FROM entity_notes n WHERE n.entity_type = 'attendee' AND n.entity_id = a.id) as entity_notes_count
+                   COALESCE(conf_agg.conference_count, 0) as conference_count,
+                   conf_agg.conference_names,
+                   COALESCE(notes_agg.notes_count, 0) as entity_notes_count
             FROM attendees a
             JOIN conference_attendees ca ON a.id = ca.attendee_id
             LEFT JOIN companies c ON a.company_id = c.id
+            LEFT JOIN (
+              SELECT ca2.attendee_id,
+                     COUNT(DISTINCT ca2.conference_id) as conference_count,
+                     GROUP_CONCAT(DISTINCT c2.name) as conference_names
+              FROM conference_attendees ca2
+              JOIN conferences c2 ON ca2.conference_id = c2.id
+              GROUP BY ca2.attendee_id
+            ) conf_agg ON a.id = conf_agg.attendee_id
+            LEFT JOIN (
+              SELECT entity_id, COUNT(*) as notes_count
+              FROM entity_notes
+              WHERE entity_type = 'attendee'
+              GROUP BY entity_id
+            ) notes_agg ON a.id = notes_agg.entity_id
             WHERE ca.conference_id = ?
             ORDER BY a.last_name, a.first_name`,
       args: [params.id],
@@ -36,7 +50,9 @@ export async function GET(
 
     const attendees = attendeesResult.rows.map((r) => ({ ...r }));
 
-    return NextResponse.json({ ...conference, attendees });
+    return NextResponse.json({ ...conference, attendees }, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
+    });
   } catch (error) {
     console.error('GET /api/conferences/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch conference' }, { status: 500 });

@@ -17,8 +17,7 @@ export async function GET(request: NextRequest) {
                    COALESCE(conf_agg.conference_count, 0) as conference_count,
                    conf_agg.conference_names,
                    COALESCE(fu.has_pending, 0) as has_pending_follow_ups,
-                   COALESCE(nc.notes_count, 0) as notes_count,
-                   rn.recent_notes_concat
+                   COALESCE(nc.notes_count, 0) as notes_count
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
             LEFT JOIN (
@@ -42,16 +41,6 @@ export async function GET(request: NextRequest) {
               WHERE entity_type = 'attendee'
               GROUP BY entity_id
             ) nc ON a.id = nc.entity_id
-            LEFT JOIN (
-              SELECT entity_id, GROUP_CONCAT(content, '|||') as recent_notes_concat
-              FROM (
-                SELECT entity_id, content
-                FROM entity_notes
-                WHERE entity_type = 'attendee'
-                ORDER BY created_at DESC
-              )
-              GROUP BY entity_id
-            ) rn ON a.id = rn.entity_id
             ORDER BY a.last_name, a.first_name`,
       args: [],
     });

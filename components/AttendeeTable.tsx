@@ -30,7 +30,6 @@ interface Attendee {
   conference_names?: string;
   has_pending_follow_ups?: boolean;
   notes_count?: number;
-  recent_notes_concat?: string;
 }
 
 interface Company { id: number; name: string; }
