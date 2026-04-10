@@ -490,9 +490,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     </span>
                   )}
                 </div>
-                <button onClick={() => handleDeleteOne(company.id, company.name)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
+                {company.wse != null && (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {Number(company.wse).toLocaleString()}
+                  </span>
+                )}
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className="flex flex-wrap gap-1">{(company.status || 'Unknown').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
@@ -540,7 +543,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>
                 <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE's</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -582,10 +585,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>
                   <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-3">
-                      <Link href={`/companies/${company.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>
-                      <button onClick={() => handleDeleteOne(company.id, company.name)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-                    </div>
+                    {company.wse != null ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                        <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                        {Number(company.wse).toLocaleString()}
+                      </span>
+                    ) : <span className="text-gray-300">—</span>}
                   </td>
                 </tr>
               ))}
