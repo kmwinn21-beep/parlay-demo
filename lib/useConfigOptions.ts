@@ -17,6 +17,9 @@ interface ConfigOption {
 let globalCache: { options: Record<string, string[]>; ts: number } | null = null;
 const CACHE_TTL = 30_000; // 30 seconds
 
+// Legacy "True"/"False" values should never appear in ICP options
+const BLOCKED_ICP_VALUES = new Set(['True', 'False']);
+
 export function useConfigOptions(): Record<string, string[]> {
   const [options, setOptions] = useState<Record<string, string[]>>(globalCache?.options ?? {});
 
@@ -35,9 +38,13 @@ export function useConfigOptions(): Record<string, string[]> {
         }
         const result: Record<string, string[]> = {};
         for (const [cat, opts] of Object.entries(byCategory)) {
-          result[cat] = opts
+          let values = opts
             .sort((a, b) => a.sort_order - b.sort_order)
             .map(o => o.value);
+          if (cat === 'icp') {
+            values = values.filter(v => !BLOCKED_ICP_VALUES.has(v));
+          }
+          result[cat] = values;
         }
         globalCache = { options: result, ts: Date.now() };
         setOptions(result);
