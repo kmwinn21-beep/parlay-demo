@@ -64,7 +64,7 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
-          WHERE c.start_date >= ?
+          WHERE c.end_date >= ?
             AND (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) > 0
           ORDER BY c.end_date ASC`,
     args: [today],
