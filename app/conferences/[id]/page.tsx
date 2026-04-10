@@ -1220,20 +1220,20 @@ export default function ConferenceDetailPage() {
           }
           return true;
         });
-        const activePills: { label: string; onRemove: () => void }[] = [
+        const activePills: { label: string; shortLabel: string; onRemove: () => void }[] = [
           ...meetingFilterReps.map(rid => {
             const u = userOptions.find(o => o.id === rid);
-            return { label: u ? getRepInitials(u.value) : String(rid), onRemove: () => setMeetingFilterReps(meetingFilterReps.filter(x => x !== rid)) };
+            return { label: u ? u.value : String(rid), shortLabel: u ? getRepInitials(u.value) : String(rid), onRemove: () => setMeetingFilterReps(meetingFilterReps.filter(x => x !== rid)) };
           }),
-          ...meetingFilterDates.map(d => ({ label: formatDayLabel(d), onRemove: () => setMeetingFilterDates(meetingFilterDates.filter(x => x !== d)) })),
-          ...meetingFilterCompanyTypes.map(t => ({ label: t, onRemove: () => setMeetingFilterCompanyTypes(meetingFilterCompanyTypes.filter(x => x !== t)) })),
-          ...meetingFilterSeniorities.map(s => ({ label: s, onRemove: () => setMeetingFilterSeniorities(meetingFilterSeniorities.filter(x => x !== s)) })),
+          ...meetingFilterDates.map(d => ({ label: formatDayLabel(d), shortLabel: formatDayLabel(d), onRemove: () => setMeetingFilterDates(meetingFilterDates.filter(x => x !== d)) })),
+          ...meetingFilterCompanyTypes.map(t => ({ label: t, shortLabel: t, onRemove: () => setMeetingFilterCompanyTypes(meetingFilterCompanyTypes.filter(x => x !== t)) })),
+          ...meetingFilterSeniorities.map(s => ({ label: s, shortLabel: s, onRemove: () => setMeetingFilterSeniorities(meetingFilterSeniorities.filter(x => x !== s)) })),
         ];
-        const PillList = ({ className }: { className?: string }) => (
+        const PillList = ({ useShortLabel, className }: { useShortLabel?: boolean; className?: string }) => (
           <div className={`flex flex-wrap gap-1.5 ${className ?? ''}`}>
             {activePills.map((pill, i) => (
               <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
-                {pill.label}
+                {useShortLabel ? pill.shortLabel : pill.label}
                 <button type="button" onClick={pill.onRemove} className="hover:text-red-500 leading-none ml-0.5">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1257,8 +1257,8 @@ export default function ConferenceDetailPage() {
                     </span>
                   )}
                 </h2>
-                {/* Desktop: pills inline between count and Filters button */}
-                {anyFilters && <div className="hidden lg:block flex-1 min-w-0"><PillList /></div>}
+                {/* Desktop: pills inline between count and Filters button — full rep names */}
+                {anyFilters && <div className="hidden lg:block flex-1 min-w-0"><PillList useShortLabel={false} /></div>}
                 <div className="ml-auto flex-shrink-0">
                   <button
                     type="button"
@@ -1285,7 +1285,8 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
               {/* Mobile: pills below the header row */}
-              {anyFilters && <div className="lg:hidden mt-3"><PillList /></div>}
+              {/* Mobile: pills below header row — rep initials only */}
+              {anyFilters && <div className="lg:hidden mt-3"><PillList useShortLabel={true} /></div>}
             </div>
 
             {/* Collapsible filter pane */}
