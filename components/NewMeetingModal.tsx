@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption } from '@/lib/useUserOptions';
+import { useHideBottomNav } from './BottomNavContext';
 
 interface ConferenceOption {
   id: number;
@@ -31,6 +32,7 @@ interface NewMeetingModalProps {
 }
 
 export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
+  useHideBottomNav(isOpen);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [attendees, setAttendees] = useState<AttendeeOption[]>([]);

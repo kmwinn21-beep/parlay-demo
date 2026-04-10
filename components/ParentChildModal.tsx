@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useHideBottomNav } from './BottomNavContext';
 
 interface ParentChildItem {
   id: number;
@@ -21,6 +22,7 @@ export function ParentChildModal({
   onSubmit,
   items,
 }: ParentChildModalProps) {
+  useHideBottomNav(isOpen);
   const [parentId, setParentId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 

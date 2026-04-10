@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useBottomNav } from './BottomNavContext';
 
 const navItems = [
   {
@@ -53,11 +54,14 @@ const navItems = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { hidden } = useBottomNav();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
   };
+
+  if (hidden) return null;
 
   return (
     <nav

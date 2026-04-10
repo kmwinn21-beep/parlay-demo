@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useHideBottomNav } from './BottomNavContext';
 
 interface MergeItem {
   id: number;
@@ -25,6 +26,7 @@ export function MergeModal({
   title,
   description,
 }: MergeModalProps) {
+  useHideBottomNav(isOpen);
   const [masterId, setMasterId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
