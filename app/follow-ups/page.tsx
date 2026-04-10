@@ -17,7 +17,7 @@ function FilterSelect({ value, onChange, label, children }: { value: string; onC
   );
 }
 
-function FilterDropdown({ label, options, selected, onToggle, onClear }: { label: string; options: string[]; selected: Set<string>; onToggle: (v: string) => void; onClear: () => void }) {
+function FilterDropdown({ label, options, selected, onToggle, onClear, fullWidth }: { label: string; options: string[]; selected: Set<string>; onToggle: (v: string) => void; onClear: () => void; fullWidth?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,10 +35,13 @@ function FilterDropdown({ label, options, selected, onToggle, onClear }: { label
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className={`input-field w-auto flex items-center gap-2 text-sm whitespace-nowrap ${selected.size > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
+        className={fullWidth
+          ? `w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white${selected.size > 0 ? ' border-procare-bright-blue' : ''}`
+          : `input-field w-auto flex items-center gap-2 text-sm whitespace-nowrap ${selected.size > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`
+        }
       >
-        {label}{selected.size > 0 ? ` (${selected.size})` : ''}
-        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        <span className="truncate">{label}{selected.size > 0 ? ` (${selected.size})` : ''}</span>
+        <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
       </button>
       {open && (
         <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2 min-w-[180px] max-h-56 overflow-y-auto">
@@ -83,7 +86,8 @@ export default function FollowUpsPage() {
   // Follow-ups-specific filters
   const [filterNextStep, setFilterNextStep] = useState<Set<string>>(new Set());
 
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [meetingsFiltersOpen, setMeetingsFiltersOpen] = useState(false);
+  const [followUpsFiltersOpen, setFollowUpsFiltersOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -320,119 +324,200 @@ export default function FollowUpsPage() {
 
       {/* Meetings Tab Content */}
       {activeTab === 'meetings' && (
-        <div>
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3 mb-4">
+        <div className="card p-0 overflow-hidden">
+          {/* Card header */}
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+              Meetings
+              {meetings.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({filteredMeetings.length}{filteredMeetings.length !== meetings.length && ` of ${meetings.length}`})
+                </span>
+              )}
+            </h2>
             <button
-              onClick={() => setShowMobileFilters(v => !v)}
-              className={`lg:hidden input-field w-auto flex items-center gap-2 text-sm ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
+              type="button"
+              onClick={() => setMeetingsFiltersOpen(o => !o)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${meetingsFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-              <svg className={`w-3 h-3 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filters
+              {meetingsFilterCount > 0 && (
+                <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {meetingsFilterCount}
+                </span>
+              )}
+              <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingsFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-            <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
-              <FilterSelect value={filterRep} onChange={setFilterRep} label="All Reps">
-                {userOptions.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
-              </FilterSelect>
-              <FilterSelect value={filterConference} onChange={setFilterConference} label="All Conferences">
-                {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </FilterSelect>
-              <FilterDropdown
-                label="Outcome"
-                options={actionOptions}
-                selected={filterOutcome}
-                onToggle={toggleOutcome}
-                onClear={() => setFilterOutcome(new Set())}
-              />
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={filterDateFrom}
-                  onChange={e => setFilterDateFrom(e.target.value)}
-                  className="input-field w-auto text-sm"
-                  title="From date"
-                  placeholder="From"
-                />
-                <span className="text-gray-400 text-xs">to</span>
-                <input
-                  type="date"
-                  value={filterDateTo}
-                  onChange={e => setFilterDateTo(e.target.value)}
-                  className="input-field w-auto text-sm"
-                  title="To date"
-                  placeholder="To"
-                />
-              </div>
-            </div>
           </div>
 
-          <div className="card p-0 overflow-hidden">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+          {/* Collapsible filter pane */}
+          {meetingsFiltersOpen && (
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Rep</p>
+                  <select value={filterRep} onChange={e => setFilterRep(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Reps</option>
+                    {userOptions.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Conference</p>
+                  <select value={filterConference} onChange={e => setFilterConference(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Conferences</option>
+                    {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Outcome</p>
+                  <FilterDropdown
+                    label="All outcomes..."
+                    options={actionOptions}
+                    selected={filterOutcome}
+                    onToggle={toggleOutcome}
+                    onClear={() => setFilterOutcome(new Set())}
+                    fullWidth
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Date Range</p>
+                  <div className="flex items-center gap-1.5">
+                    <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="input-field text-xs flex-1 min-w-0" title="From date" />
+                    <span className="text-gray-400 text-xs flex-shrink-0">–</span>
+                    <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="input-field text-xs flex-1 min-w-0" title="To date" />
+                  </div>
+                </div>
               </div>
-            ) : (
-              <MeetingsTable
-                meetings={filteredMeetings}
-                actionOptions={actionOptions}
-                colorMap={colorMaps.action || {}}
-                userOptions={userOptions}
-                onOutcomeChange={handleOutcomeChange}
-                onDelete={handleDeleteMeeting}
-                onEdit={async (meetingId, data) => {
-                  setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
-                  try {
-                    const res = await fetch(`/api/meetings/${meetingId}`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(data),
-                    });
-                    if (!res.ok) throw new Error();
-                    toast.success('Meeting updated.');
-                  } catch {
-                    fetchData();
-                    toast.error('Failed to update meeting.');
-                  }
-                }}
-              />
-            )}
-          </div>
+              {meetingsFilterCount > 0 && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { setFilterRep(''); setFilterConference(''); setFilterOutcome(new Set()); setFilterDateFrom(''); setFilterDateTo(''); }}
+                    className="text-xs text-gray-500 hover:text-red-500 transition-colors"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <MeetingsTable
+              meetings={filteredMeetings}
+              actionOptions={actionOptions}
+              colorMap={colorMaps.action || {}}
+              userOptions={userOptions}
+              onOutcomeChange={handleOutcomeChange}
+              onDelete={handleDeleteMeeting}
+              onEdit={async (meetingId, data) => {
+                setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting updated.');
+                } catch {
+                  fetchData();
+                  toast.error('Failed to update meeting.');
+                }
+              }}
+            />
+          )}
         </div>
       )}
 
       {/* Follow Ups Tab Content */}
       {activeTab === 'followups' && (
-        <div>
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3 mb-4">
+        <div className="card p-0 overflow-hidden">
+          {/* Card header */}
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+              Follow Ups
+              {followUps.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({filtered.length}{filtered.length !== followUps.length && ` of ${followUps.length}`})
+                </span>
+              )}
+            </h2>
             <button
-              onClick={() => setShowMobileFilters(v => !v)}
-              className={`lg:hidden input-field w-auto flex items-center gap-2 text-sm ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue' : ''}`}
+              type="button"
+              onClick={() => setFollowUpsFiltersOpen(o => !o)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${followUpsFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-              <svg className={`w-3 h-3 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filters
+              {followUpsFilterCount > 0 && (
+                <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {followUpsFilterCount}
+                </span>
+              )}
+              <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${followUpsFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-            <div className={`${showMobileFilters ? 'flex' : 'hidden'} lg:flex flex-wrap gap-3 w-full lg:w-auto lg:contents`}>
-              <FilterSelect value={filterRep} onChange={setFilterRep} label="All Reps">
-                {userOptions.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
-              </FilterSelect>
-              <FilterSelect value={filterConference} onChange={setFilterConference} label="All Conferences">
-                {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </FilterSelect>
-              <FilterDropdown
-                label="Next Step"
-                options={nextStepsOptions}
-                selected={filterNextStep}
-                onToggle={toggleNextStep}
-                onClear={() => setFilterNextStep(new Set())}
-              />
-            </div>
           </div>
 
-          {/* Filter tabs */}
-          <div className="border-b border-gray-200 overflow-x-auto mb-4">
+          {/* Collapsible filter pane */}
+          {followUpsFiltersOpen && (
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Rep</p>
+                  <select value={filterRep} onChange={e => setFilterRep(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Reps</option>
+                    {userOptions.map(u => <option key={u.id} value={String(u.id)}>{u.value}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Conference</p>
+                  <select value={filterConference} onChange={e => setFilterConference(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Conferences</option>
+                    {conferenceOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Next Step</p>
+                  <FilterDropdown
+                    label="All next steps..."
+                    options={nextStepsOptions}
+                    selected={filterNextStep}
+                    onToggle={toggleNextStep}
+                    onClear={() => setFilterNextStep(new Set())}
+                    fullWidth
+                  />
+                </div>
+              </div>
+              {followUpsFilterCount > 0 && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { setFilterRep(''); setFilterConference(''); setFilterNextStep(new Set()); }}
+                    className="text-xs text-gray-500 hover:text-red-500 transition-colors"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sub-tabs: Pending / All / Completed */}
+          <div className="px-6 border-b border-gray-100 overflow-x-auto">
             <nav className="flex gap-6 whitespace-nowrap">
               {(['pending', 'all', 'completed'] as const).map((tab) => (
                 <button
@@ -455,16 +540,13 @@ export default function FollowUpsPage() {
             </nav>
           </div>
 
-          {/* Table */}
-          <div className="card p-0 overflow-hidden">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-48">
-                <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
-              </div>
-            ) : (
-              <FollowUpsTable followUps={filtered} onToggle={handleToggle} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
-            )}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <FollowUpsTable followUps={filtered} onToggle={handleToggle} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
+          )}
         </div>
       )}
     </div>

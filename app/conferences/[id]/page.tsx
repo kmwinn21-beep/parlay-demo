@@ -940,28 +940,33 @@ export default function ConferenceDetailPage() {
 
           {/* Collapsible attendee filters pane */}
           {attendeeFiltersOpen && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200 flex flex-wrap gap-3 items-end">
-              <div className="flex flex-col gap-1 min-w-[160px]">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Seniority</label>
-                <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-auto text-sm">
-                  <option value="">All Seniorities</option>
-                  {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1 min-w-[160px]">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Company Type</label>
-                <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-auto text-sm">
-                  <option value="">All Types</option>
-                  {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+            <div className="mb-4 px-6 py-4 bg-gray-50 border border-gray-200 rounded-xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Seniority</p>
+                  <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Seniorities</option>
+                    {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Type</p>
+                  <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Types</option>
+                    {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
               </div>
               {(filterSeniority || filterCompanyType) && (
-                <button
-                  onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); }}
-                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 transition-colors self-end mb-0.5"
-                >
-                  Clear all
-                </button>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); }}
+                    className="text-xs text-gray-500 hover:text-red-500 transition-colors"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
               )}
             </div>
           )}
