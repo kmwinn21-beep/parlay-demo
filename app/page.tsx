@@ -212,31 +212,34 @@ export default async function DashboardPage() {
                   className="block p-4 rounded-xl border hover:shadow-md transition-all hover:border-procare-bright-blue group"
                   style={{ borderColor: isActive ? '#1B76BC' : undefined }}
                 >
-                  {isActive && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-2">
-                      <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
-                      In Progress
-                    </span>
-                  )}
-                  <p className="font-semibold text-gray-800 group-hover:text-procare-bright-blue transition-colors leading-tight">{conf.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formatDate(conf.start_date)}
-                    {conf.end_date && conf.end_date !== conf.start_date ? ` – ${formatDate(conf.end_date)}` : ''}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {isActive && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-2">
+                          <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                          In Progress
+                        </span>
+                      )}
+                      <p className="font-semibold text-gray-800 group-hover:text-procare-bright-blue transition-colors leading-tight">{conf.name}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatDate(conf.start_date)}
+                        {conf.end_date && conf.end_date !== conf.start_date ? ` – ${formatDate(conf.end_date)}` : ''}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
+                    </div>
+                    {conf.attendee_count > 0 && conf.internal_attendees.length > 0 && (
+                      <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
+                    )}
+                  </div>
                   <div className="mt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {conf.attendee_count === 0 ? (
+                    <div>
+                      {conf.attendee_count === 0 && (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
                           <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
                           </svg>
                           Awaiting Upload
                         </span>
-                      ) : (
-                        conf.internal_attendees.length > 0 && (
-                          <AttendeesTooltip attendees={conf.internal_attendees} />
-                        )
                       )}
                     </div>
                     <svg className="w-4 h-4 text-gray-300 group-hover:text-procare-bright-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">

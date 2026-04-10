@@ -32,6 +32,7 @@ interface ConferenceOption {
   id: number;
   name: string;
   start_date: string;
+  end_date: string;
 }
 
 function formatDateShort(d: string) {
@@ -191,17 +192,33 @@ export function Header() {
                 ) : conferences.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">No conferences found.</p>
                 ) : (
-                  conferences.map(conf => (
-                    <button
-                      key={conf.id}
-                      type="button"
-                      onClick={() => { setShowConferences(false); router.push(`/conferences/${conf.id}`); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0"
-                    >
-                      <span className="text-sm font-medium text-gray-800">{conf.name}</span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
-                    </button>
-                  ))
+                  (() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const sorted = [...conferences].sort((a, b) => {
+                      const aActive = a.start_date <= today && a.end_date >= today;
+                      const bActive = b.start_date <= today && b.end_date >= today;
+                      if (aActive && !bActive) return -1;
+                      if (!aActive && bActive) return 1;
+                      return 0;
+                    });
+                    return sorted.map(conf => {
+                      const isActive = conf.start_date <= today && conf.end_date >= today;
+                      return (
+                        <button
+                          key={conf.id}
+                          type="button"
+                          onClick={() => { setShowConferences(false); router.push(`/conferences/${conf.id}`); }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            {isActive && <span className="w-2 h-2 rounded-full bg-procare-bright-blue flex-shrink-0" />}
+                            <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
+                          </span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
+                        </button>
+                      );
+                    });
+                  })()
                 )}
               </div>
             </div>
