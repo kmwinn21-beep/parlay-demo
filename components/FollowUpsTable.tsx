@@ -50,8 +50,8 @@ function RepPills({
 
   const pillClass =
     size === 'xs'
-      ? 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200'
-      : 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200';
+      ? 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200'
+      : 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200';
 
   return (
     <span className="inline-flex flex-wrap gap-1">
