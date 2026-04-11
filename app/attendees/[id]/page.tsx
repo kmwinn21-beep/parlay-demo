@@ -608,7 +608,7 @@ export default function AttendeeDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
+                    <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
                     {attendee.email ? (
                       <span
                         ref={emailTooltipRef}
