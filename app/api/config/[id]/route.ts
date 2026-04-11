@@ -82,6 +82,10 @@ export async function PUT(
             sql: 'UPDATE conference_attendee_details SET next_steps = ? WHERE next_steps = ?',
             args: [value, oldValue],
           });
+          await db.execute({
+            sql: 'UPDATE follow_ups SET next_steps = ? WHERE next_steps = ?',
+            args: [value, oldValue],
+          });
         } else if (category === 'action') {
           // Actions are comma-separated — use padded REPLACE to match exact entries
           await db.execute({

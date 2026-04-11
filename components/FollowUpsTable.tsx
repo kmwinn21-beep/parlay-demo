@@ -13,6 +13,7 @@ import {
 } from '@/lib/useUserOptions';
 
 export interface FollowUp {
+  id: number;
   attendee_id: number;
   conference_id: number;
   next_steps: string;
@@ -75,26 +76,25 @@ export function FollowUpsTable({
   onRepChange,
 }: {
   followUps: FollowUp[];
-  onToggle: (attendeeId: number, conferenceId: number, completed: boolean) => void;
-  onDelete?: (attendeeId: number, conferenceId: number) => void;
+  onToggle: (id: number, completed: boolean) => void;
+  onDelete?: (id: number) => void;
   userOptions?: UserOption[];
-  onRepChange?: (attendeeId: number, conferenceId: number, rep: string | null) => void;
+  onRepChange?: (id: number, rep: string | null) => void;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
-  const [editingRepKey, setEditingRepKey] = useState<string | null>(null);
+  const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
 
   const canEditRep = !!onRepChange && userOptions.length > 0;
 
   const startEditRep = (fu: FollowUp) => {
-    const key = `${fu.attendee_id}-${fu.conference_id}`;
-    setEditingRepKey(key);
+    setEditingRepKey(fu.id);
     setEditingRepIds(parseRepIds(fu.assigned_rep));
   };
 
-  const finishEditRep = (attendeeId: number, conferenceId: number, ids: number[]) => {
+  const finishEditRep = (followUpId: number, ids: number[]) => {
     const rep = ids.length > 0 ? ids.join(',') : null;
-    onRepChange!(attendeeId, conferenceId, rep);
+    onRepChange!(followUpId, rep);
     setEditingRepKey(null);
     setEditingRepIds([]);
   };
@@ -115,11 +115,10 @@ export function FollowUpsTable({
       {/* Mobile card layout */}
       <div className="block lg:hidden divide-y divide-gray-100">
         {followUps.map((fu) => {
-          const rowKey = `${fu.attendee_id}-${fu.conference_id}`;
-          const isEditingRep = editingRepKey === rowKey;
+          const isEditingRep = editingRepKey === fu.id;
 
           return (
-            <div key={rowKey} className={`p-4 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
+            <div key={fu.id} className={`p-4 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -138,7 +137,7 @@ export function FollowUpsTable({
                             options={userOptions}
                             selectedIds={editingRepIds}
                             onChange={setEditingRepIds}
-                            onClose={(ids) => finishEditRep(fu.attendee_id, fu.conference_id, ids)}
+                            onClose={(ids) => finishEditRep(fu.id, ids)}
                             placeholder="Select reps..."
                           />
                         </div>
@@ -170,7 +169,7 @@ export function FollowUpsTable({
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     type="button"
-                    onClick={() => onToggle(fu.attendee_id, fu.conference_id, !fu.completed)}
+                    onClick={() => onToggle(fu.id, !fu.completed)}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${
                       fu.completed
                         ? 'bg-green-500 text-white border-green-600'
@@ -189,7 +188,7 @@ export function FollowUpsTable({
                   {onDelete && (
                     <button
                       type="button"
-                      onClick={() => onDelete(fu.attendee_id, fu.conference_id)}
+                      onClick={() => onDelete(fu.id)}
                       className="text-red-400 hover:text-red-600 p-1 rounded transition-colors"
                       title="Delete follow-up"
                     >
@@ -242,12 +241,11 @@ export function FollowUpsTable({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {followUps.map((fu) => {
-              const rowKey = `${fu.attendee_id}-${fu.conference_id}`;
-              const isEditingRep = editingRepKey === rowKey;
+              const isEditingRep = editingRepKey === fu.id;
 
               return (
                 <tr
-                  key={rowKey}
+                  key={fu.id}
                   className={`transition-colors align-top ${fu.completed ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}
                 >
                   <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
@@ -284,7 +282,7 @@ export function FollowUpsTable({
                           options={userOptions}
                           selectedIds={editingRepIds}
                           onChange={setEditingRepIds}
-                          onClose={(ids) => finishEditRep(fu.attendee_id, fu.conference_id, ids)}
+                          onClose={(ids) => finishEditRep(fu.id, ids)}
                           placeholder="Select reps..."
                         />
                       </div>
@@ -319,7 +317,7 @@ export function FollowUpsTable({
                   <td className="px-3 py-2">
                     <button
                       type="button"
-                      onClick={() => onToggle(fu.attendee_id, fu.conference_id, !fu.completed)}
+                      onClick={() => onToggle(fu.id, !fu.completed)}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${
                         fu.completed
                           ? 'bg-green-500 text-white border-green-600 hover:bg-green-600'
@@ -340,7 +338,7 @@ export function FollowUpsTable({
                     <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => onDelete(fu.attendee_id, fu.conference_id)}
+                        onClick={() => onDelete(fu.id)}
                         className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors"
                       >
                         Delete

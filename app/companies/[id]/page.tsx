@@ -442,39 +442,39 @@ export default function CompanyDetailPage() {
     }
   };
 
-  const handleToggleFollowUp = async (attendeeId: number, conferenceId: number, completed: boolean) => {
+  const handleToggleFollowUp = async (id: number, completed: boolean) => {
     setCompanyFollowUps(prev =>
       prev.map(fu =>
-        fu.attendee_id === attendeeId && fu.conference_id === conferenceId ? { ...fu, completed } : fu
+        fu.id === id ? { ...fu, completed } : fu
       )
     );
     try {
       const res = await fetch('/api/follow-ups', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+        body: JSON.stringify({ id, completed }),
       });
       if (!res.ok) throw new Error();
       toast.success(completed ? 'Marked as completed!' : 'Marked as pending.');
     } catch {
       setCompanyFollowUps(prev =>
         prev.map(fu =>
-          fu.attendee_id === attendeeId && fu.conference_id === conferenceId ? { ...fu, completed: !completed } : fu
+          fu.id === id ? { ...fu, completed: !completed } : fu
         )
       );
       toast.error('Failed to update.');
     }
   };
 
-  const handleDeleteFollowUp = async (attendeeId: number, conferenceId: number) => {
+  const handleDeleteFollowUp = async (id: number) => {
     if (!confirm('Are you sure you want to delete this follow-up?')) return;
     const prev = companyFollowUps;
-    setCompanyFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
+    setCompanyFollowUps(fus => fus.filter(fu => fu.id !== id));
     try {
       const res = await fetch('/api/follow-ups', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
+        body: JSON.stringify({ id }),
       });
       if (!res.ok) throw new Error();
       toast.success('Follow-up deleted.');
@@ -484,10 +484,10 @@ export default function CompanyDetailPage() {
     }
   };
 
-  const handleRepChange = async (attendeeId: number, conferenceId: number, rep: string | null) => {
+  const handleRepChange = async (id: number, rep: string | null) => {
     setCompanyFollowUps((prev) =>
       prev.map((fu) =>
-        fu.attendee_id === attendeeId && fu.conference_id === conferenceId
+        fu.id === id
           ? { ...fu, assigned_rep: rep }
           : fu
       )
@@ -496,7 +496,7 @@ export default function CompanyDetailPage() {
       const res = await fetch('/api/follow-ups', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, assigned_rep: rep }),
+        body: JSON.stringify({ id, assigned_rep: rep }),
       });
       if (!res.ok) throw new Error();
       toast.success('Rep updated.');

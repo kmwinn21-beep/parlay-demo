@@ -241,10 +241,43 @@ export async function initDb(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_meetings_attendee_conference ON meetings(attendee_id, conference_id)`,
     `ALTER TABLE entity_notes ADD COLUMN attendee_name TEXT`,
     `ALTER TABLE entity_notes ADD COLUMN company_name TEXT`,
+    // New dedicated follow_ups table to support multiple follow-ups per attendee/conference
+    `CREATE TABLE IF NOT EXISTS follow_ups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attendee_id INTEGER NOT NULL,
+      conference_id INTEGER NOT NULL,
+      next_steps TEXT,
+      next_steps_notes TEXT,
+      assigned_rep TEXT,
+      completed INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_follow_ups_attendee_id ON follow_ups(attendee_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_follow_ups_conference_id ON follow_ups(conference_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_follow_ups_attendee_conference ON follow_ups(attendee_id, conference_id)`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
   }
+
+  // Migrate existing follow-up data from conference_attendee_details to follow_ups table
+  try {
+    const existing = await db.execute({
+      sql: `SELECT COUNT(*) as cnt FROM follow_ups`,
+      args: [],
+    });
+    if (Number(existing.rows[0].cnt) === 0) {
+      await db.execute({
+        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+              SELECT attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, COALESCE(completed, 0)
+              FROM conference_attendee_details
+              WHERE next_steps IS NOT NULL AND next_steps != ''`,
+        args: [],
+      });
+    }
+  } catch { /* table may not exist yet or migration already done */ }
 
   // Seed config_options if empty
   const configCount = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM config_options', args: [] });

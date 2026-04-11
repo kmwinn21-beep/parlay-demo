@@ -49,20 +49,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
     }
 
-    const result = await db.execute({
-      sql: `INSERT INTO conference_attendee_details
-              (attendee_id, conference_id, action, next_steps, next_steps_notes, assigned_rep)
-            VALUES (?, ?, ?, ?, ?, ?)
+    // Ensure a conference_attendee_details row exists (for action tracking / analytics)
+    await db.execute({
+      sql: `INSERT INTO conference_attendee_details (attendee_id, conference_id, action)
+            VALUES (?, ?, ?)
             ON CONFLICT(attendee_id, conference_id) DO UPDATE SET
-              action = excluded.action,
-              next_steps = excluded.next_steps,
-              next_steps_notes = excluded.next_steps_notes,
-              assigned_rep = excluded.assigned_rep
+              action = COALESCE(excluded.action, action)`,
+      args: [attendee_id, conference_id, action ?? null],
+    });
+
+    // Create a new follow-up in the dedicated follow_ups table
+    const result = await db.execute({
+      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep)
+            VALUES (?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
         conference_id,
-        action ?? null,
         next_steps ?? null,
         next_steps_notes ?? null,
         assigned_rep ?? null,
@@ -72,6 +75,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result.rows[0]);
   } catch (error) {
     console.error('POST /api/conference-details error:', error);
-    return NextResponse.json({ error: 'Failed to upsert conference details' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create follow-up' }, { status: 500 });
   }
 }

@@ -1,13 +1,12 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/';
 
@@ -27,13 +26,15 @@ function LoginForm() {
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || 'Login failed.');
+        setLoading(false);
         return;
       }
-      router.push(next);
-      router.refresh();
+      // Full page navigation ensures clean server state with the new auth cookie.
+      // Using router.push() + router.refresh() together can cause client-side
+      // navigation race conditions that surface as "Application error".
+      window.location.href = next;
     } catch {
       toast.error('Network error. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
