@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { NewMeetingModal } from './NewMeetingModal';
 import { NewNoteModal } from './NewNoteModal';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
+import { NewRelationshipModal } from './NewRelationshipModal';
 import { useUser } from './UserContext';
 
 const pageTitles: Record<string, string> = {
@@ -74,6 +75,7 @@ export function Header() {
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
@@ -173,6 +175,16 @@ export function Header() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                   <span className="text-sm font-medium text-gray-800">Meeting</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddNew(false); setShowRelationshipModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
+                >
+                  <svg className="w-[18px] h-[18px] text-procare-dark-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-800">Relationship</span>
                 </button>
                 <Link
                   href="/conferences/new"
@@ -297,6 +309,7 @@ export function Header() {
       <NewMeetingModal isOpen={showMeetingModal} onClose={() => setShowMeetingModal(false)} />
       <NewNoteModal isOpen={showNoteModal} onClose={() => setShowNoteModal(false)} />
       <AssignFollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onSuccess={() => {}} />
+      <NewRelationshipModal isOpen={showRelationshipModal} onClose={() => setShowRelationshipModal(false)} />
     </header>
   );
 }
