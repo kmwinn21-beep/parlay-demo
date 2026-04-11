@@ -39,6 +39,14 @@ export async function PATCH(request: NextRequest) {
       args: [...baseArgs, ...ids],
     });
 
+    // Cascade assigned_user to all child companies of the updated parents
+    if ('assigned_user' in fields) {
+      await db.execute({
+        sql: `UPDATE companies SET assigned_user = ? WHERE parent_company_id IN (${placeholders})`,
+        args: [fields.assigned_user || null, ...ids],
+      });
+    }
+
     return NextResponse.json({ success: true, updated: ids.length });
   } catch (error) {
     console.error('PATCH /api/companies/bulk error:', error);

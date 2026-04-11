@@ -155,6 +155,14 @@ export async function PUT(
       args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, params.id],
     });
 
+    // Cascade assigned_user to all child companies
+    if ('assigned_user' in body) {
+      await db.execute({
+        sql: 'UPDATE companies SET assigned_user = ? WHERE parent_company_id = ?',
+        args: [assigned_user || null, params.id],
+      });
+    }
+
     return NextResponse.json({
       ...updatedResult.rows[0],
       services: parseServices(updatedResult.rows[0].services),
