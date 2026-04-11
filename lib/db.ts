@@ -239,6 +239,8 @@ export async function initDb(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_meetings_attendee_id ON meetings(attendee_id)`,
     `CREATE INDEX IF NOT EXISTS idx_meetings_conference_id ON meetings(conference_id)`,
     `CREATE INDEX IF NOT EXISTS idx_meetings_attendee_conference ON meetings(attendee_id, conference_id)`,
+    `ALTER TABLE entity_notes ADD COLUMN attendee_name TEXT`,
+    `ALTER TABLE entity_notes ADD COLUMN company_name TEXT`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }

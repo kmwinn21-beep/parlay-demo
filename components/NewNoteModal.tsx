@@ -183,12 +183,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
 
       // Post to conference if selected
       if (selConf) {
-        let confContent = content;
-        if (selAttendee && companyLabel) {
-          confContent = `[${attendeeLabel} / ${companyLabel}] ${content}`;
-        } else if (selAttendee) {
-          confContent = `[${attendeeLabel}] ${content}`;
-        }
         notePromises.push(
           fetch('/api/notes', {
             method: 'POST',
@@ -196,9 +190,11 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
             body: JSON.stringify({
               entity_type: 'conference',
               entity_id: selConf.id,
-              content: confContent,
+              content,
               conference_name: conferenceName,
               rep: repValue,
+              attendee_name: attendeeLabel || null,
+              company_name: companyLabel || null,
             }),
           })
         );
@@ -206,10 +202,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
 
       // Post to company if selected
       if (selCompany) {
-        let compContent = content;
-        if (selAttendee) {
-          compContent = `[${attendeeLabel}] ${content}`;
-        }
         notePromises.push(
           fetch('/api/notes', {
             method: 'POST',
@@ -217,9 +209,11 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
             body: JSON.stringify({
               entity_type: 'company',
               entity_id: selCompany.id,
-              content: compContent,
+              content,
               conference_name: conferenceName,
               rep: repValue,
+              attendee_name: attendeeLabel || null,
+              company_name: companyLabel || null,
             }),
           })
         );
@@ -237,6 +231,8 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               content,
               conference_name: conferenceName,
               rep: repValue,
+              attendee_name: attendeeLabel || null,
+              company_name: companyLabel || null,
             }),
           })
         );
