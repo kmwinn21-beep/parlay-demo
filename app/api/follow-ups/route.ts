@@ -50,11 +50,17 @@ export async function GET(request: NextRequest) {
           co.name AS company_name,
           c.name AS conference_name,
           c.start_date,
-          (SELECT COUNT(*) FROM entity_notes en WHERE en.entity_type = 'attendee' AND en.entity_id = a.id) AS entity_notes_count
+          COALESCE(nc.notes_count, 0) AS entity_notes_count
         FROM conference_attendee_details cad
         JOIN attendees a ON cad.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
         JOIN conferences c ON cad.conference_id = c.id
+        LEFT JOIN (
+          SELECT entity_id, COUNT(*) as notes_count
+          FROM entity_notes
+          WHERE entity_type = 'attendee'
+          GROUP BY entity_id
+        ) nc ON a.id = nc.entity_id
         WHERE ${conditions.join(' AND ')}
         ORDER BY c.start_date DESC, a.last_name, a.first_name
       `,
@@ -76,7 +82,8 @@ export async function GET(request: NextRequest) {
         start_date: String(r.start_date ?? ''),
         entity_notes_count: Number(r.entity_notes_count ?? 0),
         assigned_rep: r.assigned_rep != null ? String(r.assigned_rep) : null,
-      }))
+      })),
+      { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } }
     );
   } catch (error) {
     console.error('GET /api/follow-ups error:', error);

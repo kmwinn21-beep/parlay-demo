@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       sort_order: Number(r.sort_order ?? 0),
       color: r.color ? String(r.color) : null,
       action_key: r.action_key ? String(r.action_key) : null,
-    })));
+    })), { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } });
   } catch (error) {
     console.error('GET /api/config error:', error);
     return NextResponse.json({ error: 'Failed to fetch config options' }, { status: 500 });

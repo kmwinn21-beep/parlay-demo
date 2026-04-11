@@ -83,7 +83,8 @@ export async function GET(request: NextRequest) {
         company_name: r.company_name != null ? String(r.company_name) : null,
         company_wse: r.company_wse != null ? Number(r.company_wse) : null,
         conference_name: String(r.conference_name ?? ''),
-      }))
+      })),
+      { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } }
     );
   } catch (error) {
     console.error('GET /api/meetings error:', error);
@@ -188,29 +189,21 @@ export async function PATCH(request: NextRequest) {
         if (outcome) {
           actions.add(outcome);
 
-          // When outcome is Cancelled or No Show, remove conflicting actions (Held, Pending)
-          const outcomeKeyResult = await db.execute({
-            sql: "SELECT action_key FROM config_options WHERE category = 'action' AND value = ? LIMIT 1",
-            args: [outcome],
+          // Fetch all action configs once to resolve keys and conflicting values
+          const actionConfigs = await db.execute({
+            sql: "SELECT value, action_key FROM config_options WHERE category = 'action'",
+            args: [],
           });
-          const outcomeKey = outcomeKeyResult.rows[0]?.action_key as string | undefined;
+          const byValue = new Map(actionConfigs.rows.map(r => [String(r.value), r.action_key ? String(r.action_key) : null]));
+          const byKey = new Map(actionConfigs.rows.filter(r => r.action_key).map(r => [String(r.action_key), String(r.value)]));
+
+          const outcomeKey = byValue.get(outcome) ?? null;
           if (outcomeKey === 'cancelled' || outcomeKey === 'no_show') {
-            const conflicting = await db.execute({
-              sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key IN ('meeting_held', 'pending')",
-              args: [],
-            });
-            for (const row of conflicting.rows) {
-              actions.delete(String(row.value));
-            }
+            const held = byKey.get('meeting_held'); if (held) actions.delete(held);
+            const pending = byKey.get('pending'); if (pending) actions.delete(pending);
           }
           if (outcomeKey === 'meeting_scheduled') {
-            const cancelledResult = await db.execute({
-              sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'cancelled' LIMIT 1",
-              args: [],
-            });
-            for (const row of cancelledResult.rows) {
-              actions.delete(String(row.value));
-            }
+            const cancelled = byKey.get('cancelled'); if (cancelled) actions.delete(cancelled);
           }
         }
         await db.execute({

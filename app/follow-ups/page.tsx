@@ -91,36 +91,35 @@ export default function FollowUpsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [fuRes, mtgRes, cfgRes, confRes] = await Promise.all([
+      const [fuRes, mtgRes, actionRes, userRes, nsRes, confRes] = await Promise.all([
         fetch('/api/follow-ups'),
         fetch('/api/meetings'),
-        fetch('/api/config'),
-        fetch('/api/conferences'),
+        fetch('/api/config?category=action'),
+        fetch('/api/config?category=user'),
+        fetch('/api/config?category=next_steps'),
+        fetch('/api/conferences?nav=1'),
       ]);
       if (!fuRes.ok) throw new Error();
       if (!mtgRes.ok) throw new Error();
-      const fuData = await fuRes.json();
-      const mtgData = await mtgRes.json();
+      const [fuData, mtgData] = await Promise.all([fuRes.json(), mtgRes.json()]);
       setFollowUps(fuData);
       setMeetings(mtgData);
 
-      if (cfgRes.ok) {
-        const cfgData = await cfgRes.json();
-        if (Array.isArray(cfgData)) {
-          const actionOpts = cfgData.filter((o: { category: string }) => o.category === 'action');
-          setActionOptions(actionOpts.map((o: { value: string }) => o.value));
-          const userOpts = cfgData.filter((o: { category: string }) => o.category === 'user');
-          setUserOptions(userOpts.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-          const nsOpts = cfgData.filter((o: { category: string }) => o.category === 'next_steps');
-          setNextStepsOptions(nsOpts.map((o: { value: string }) => o.value));
-        }
+      if (actionRes.ok) {
+        const data = await actionRes.json();
+        if (Array.isArray(data)) setActionOptions(data.map((o: { value: string }) => o.value));
       }
-
+      if (userRes.ok) {
+        const data = await userRes.json();
+        if (Array.isArray(data)) setUserOptions(data.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      }
+      if (nsRes.ok) {
+        const data = await nsRes.json();
+        if (Array.isArray(data)) setNextStepsOptions(data.map((o: { value: string }) => o.value));
+      }
       if (confRes.ok) {
         const confData = await confRes.json();
-        if (Array.isArray(confData)) {
-          setConferenceOptions(confData.map((c: { name: string }) => c.name).filter(Boolean));
-        }
+        if (Array.isArray(confData)) setConferenceOptions(confData.map((c: { name: string }) => c.name).filter(Boolean));
       }
     } catch {
       toast.error('Failed to load data');

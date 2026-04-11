@@ -16,7 +16,7 @@ interface ConfigOption {
  * Caches in-memory so multiple components on the same page share data.
  */
 let globalCache: { maps: Record<string, ColorMap>; ts: number } | null = null;
-const CACHE_TTL = 30_000; // 30 seconds
+const CACHE_TTL = 5 * 60_000; // 5 minutes
 
 export function useConfigColors(): Record<string, ColorMap> {
   const [maps, setMaps] = useState<Record<string, ColorMap>>(globalCache?.maps ?? {});

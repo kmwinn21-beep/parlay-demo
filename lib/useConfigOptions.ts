@@ -15,7 +15,7 @@ interface ConfigOption {
  * Caches in-memory so multiple components on the same page share data.
  */
 let globalCache: { options: Record<string, string[]>; ts: number } | null = null;
-const CACHE_TTL = 30_000; // 30 seconds
+const CACHE_TTL = 5 * 60_000; // 5 minutes
 
 // Legacy "True"/"False" values should never appear in ICP options
 const BLOCKED_ICP_VALUES = new Set(['True', 'False']);

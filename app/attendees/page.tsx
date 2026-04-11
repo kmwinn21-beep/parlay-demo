@@ -55,14 +55,12 @@ export default function AttendeesPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [atRes, coRes, confRes] = await Promise.all([
+      const [atRes, confRes] = await Promise.all([
         fetch('/api/attendees'),
-        fetch('/api/companies'),
-        fetch('/api/conferences'),
+        fetch('/api/conferences?nav=1'),
       ]);
-      const [atData, coData, confData] = await Promise.all([atRes.json(), coRes.json(), confRes.json()]);
+      const [atData, confData] = await Promise.all([atRes.json(), confRes.json()]);
       setAttendees(atData);
-      setCompanies(coData);
       setConferences(Array.isArray(confData) ? confData.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : []);
     } catch {
       toast.error('Failed to load data');
@@ -70,6 +68,16 @@ export default function AttendeesPage() {
       setIsLoading(false);
     }
   }, []);
+
+  // Lazy-load companies only when the Add form is opened (the full list is only needed there)
+  useEffect(() => {
+    if (showAddForm && companies.length === 0) {
+      fetch('/api/companies')
+        .then(r => r.json())
+        .then(data => setCompanies(data))
+        .catch(() => {});
+    }
+  }, [showAddForm, companies.length]);
 
   useEffect(() => {
     fetchData();
