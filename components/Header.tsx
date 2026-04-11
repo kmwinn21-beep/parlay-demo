@@ -40,14 +40,37 @@ function formatDateShort(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
+// ─── Module-level conference pre-fetcher ────────────────────────────────────
+// Starts the network request the instant this module is imported — before React
+// mounts the Header component and before any useEffect can fire. The result is
+// cached so every render and re-mount reads from memory.
+let _confsCache: ConferenceOption[] | null = null;
+let _confsPromise: Promise<ConferenceOption[]> | null = null;
+
+function loadConferences(): Promise<ConferenceOption[]> {
+  if (_confsCache) return Promise.resolve(_confsCache);
+  if (_confsPromise) return _confsPromise;
+  _confsPromise = fetch('/api/conferences?nav=1')
+    .then(r => (r.ok ? r.json() : []))
+    .then((data: ConferenceOption[]) => { _confsCache = data; return data; })
+    .catch((): ConferenceOption[] => []);
+  return _confsPromise;
+}
+
+// Kick off the request immediately at module evaluation time.
+loadConferences();
+// ────────────────────────────────────────────────────────────────────────────
+
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, refresh } = useUser();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
-  const [conferences, setConferences] = useState<ConferenceOption[]>([]);
-  const [isLoadingConfs, setIsLoadingConfs] = useState(false);
+  // Initialise directly from cache — if the fetch already completed the
+  // dropdown renders with data on the very first paint with no loading state.
+  const [conferences, setConferences] = useState<ConferenceOption[]>(_confsCache ?? []);
+  const [isLoadingConfs, setIsLoadingConfs] = useState(_confsCache === null);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
@@ -55,14 +78,17 @@ export function Header() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
 
-  // Pre-fetch on mount so the dropdown opens instantly
+  // Resolve the in-flight promise (or return instantly if already cached).
   useEffect(() => {
-    setIsLoadingConfs(true);
-    fetch('/api/conferences?nav=1')
-      .then(res => res.json())
-      .then((data: ConferenceOption[]) => setConferences(data))
-      .catch(() => {})
-      .finally(() => setIsLoadingConfs(false));
+    if (_confsCache) {
+      setConferences(_confsCache);
+      setIsLoadingConfs(false);
+      return;
+    }
+    loadConferences().then(data => {
+      setConferences(data);
+      setIsLoadingConfs(false);
+    });
   }, []);
 
   useEffect(() => {
