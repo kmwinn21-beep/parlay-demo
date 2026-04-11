@@ -178,6 +178,8 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [showMassEdit, setShowMassEdit] = useState(false);
   const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; assigned_user?: string }>({});
   const [isApplying, setIsApplying] = useState(false);
+  const [editingRepCompanyId, setEditingRepCompanyId] = useState<number | null>(null);
+  const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   const [wseMin, setWseMin] = useState<number | null>(null);
@@ -312,6 +314,27 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
       toast.success(`Updated ${selectedIds.size} company/companies.`);
       setShowMassEdit(false); setMassEditFields({}); onRefresh();
     } catch { toast.error('Failed to apply changes.'); } finally { setIsApplying(false); }
+  };
+
+  const handleRepSave = async (companyId: number, ids: number[]) => {
+    setEditingRepCompanyId(null);
+    const assigned_user = ids.length > 0 ? ids.join(',') : null;
+    try {
+      const res = await fetch('/api/companies/bulk', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [companyId], fields: { assigned_user } }),
+      });
+      if (!res.ok) throw new Error();
+      onRefresh();
+    } catch {
+      toast.error('Failed to update rep.');
+    }
+  };
+
+  const startEditRep = (company: Company) => {
+    setEditingRepCompanyId(company.id);
+    setEditingRepIds(parseRepIds(company.assigned_user));
   };
 
   const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap relative';
@@ -585,14 +608,35 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
-                {company.assigned_user && resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
-                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {ini}
-                  </span>
-                ))}
+                {editingRepCompanyId === company.id ? (
+                  <div className="w-40">
+                    <RepMultiSelect
+                      options={userOptionsFull}
+                      selectedIds={editingRepIds}
+                      onChange={setEditingRepIds}
+                      onClose={(ids) => handleRepSave(company.id, ids)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEditRep(company)}
+                    title="Click to assign rep"
+                    className="inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
+                  >
+                    {resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                        <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {ini}
+                      </span>
+                    ))}
+                    {!company.assigned_user && (
+                      <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>
+                    )}
+                  </button>
+                )}
               </div>
               <div className="mt-2 ml-6 flex items-center gap-4">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -645,8 +689,20 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   </td>
                   <td className="px-3 py-3">{company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
-                    {company.assigned_user ? (
-                      <span className="inline-flex flex-wrap gap-1">
+                    {editingRepCompanyId === company.id ? (
+                      <RepMultiSelect
+                        options={userOptionsFull}
+                        selectedIds={editingRepIds}
+                        onChange={setEditingRepIds}
+                        onClose={(ids) => handleRepSave(company.id, ids)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEditRep(company)}
+                        title="Click to assign rep"
+                        className="inline-flex flex-wrap gap-1 hover:opacity-70 transition-opacity text-left w-full"
+                      >
                         {resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
                             <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -655,9 +711,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                             {ini}
                           </span>
                         ))}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
+                        {!company.assigned_user && (
+                          <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>
+                        )}
+                      </button>
                     )}
                   </td>
                   <td className="px-3 py-3"><span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(company.status || '').trim() && <span className="text-gray-300">—</span>}</span></td>
