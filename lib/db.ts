@@ -338,19 +338,20 @@ export async function initDb(): Promise<void> {
   } catch { /* ignore */ }
 
   // Always ensure action_key is set for meeting-related actions (runs every startup)
-  const actionKeySeeds: Array<{ key: string; value: string }> = [
-    { key: 'meeting_scheduled', value: 'Meeting Scheduled' },
-    { key: 'meeting_held', value: 'Meeting Held' },
-    { key: 'rescheduled', value: 'Rescheduled' },
-    { key: 'cancelled', value: 'Cancelled' },
-    { key: 'no_show', value: 'Meeting No-Show' },
-    { key: 'pending', value: 'Pending' },
+  // Uses LIKE pattern matching so renamed values (e.g. "No-Show" vs "Meeting No-Show") are still identified
+  const actionKeySeeds: Array<{ key: string; pattern: string }> = [
+    { key: 'meeting_scheduled', pattern: '%scheduled%' },
+    { key: 'meeting_held', pattern: '%held%' },
+    { key: 'rescheduled', pattern: '%reschedul%' },
+    { key: 'cancelled', pattern: '%cancel%' },
+    { key: 'no_show', pattern: '%no%show%' },
+    { key: 'pending', pattern: '%pending%' },
   ];
-  for (const { key, value } of actionKeySeeds) {
+  for (const { key, pattern } of actionKeySeeds) {
     try {
       await db.execute({
-        sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND value = ? AND (action_key IS NULL OR action_key = '')",
-        args: [key, value],
+        sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ? AND (action_key IS NULL OR action_key = '')",
+        args: [key, pattern],
       });
     } catch { /* ignore */ }
   }
