@@ -23,6 +23,18 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
+
+    // ?minimal=1 — lightweight query returning only id+name (for dropdowns/selects)
+    if (request.nextUrl.searchParams.get('minimal') === '1') {
+      const result = await db.execute({
+        sql: 'SELECT id, name FROM companies ORDER BY name',
+        args: [],
+      });
+      return NextResponse.json(result.rows.map(r => ({ id: r.id, name: r.name })), {
+        headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+      });
+    }
+
     const result = await db.execute({
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
               co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at,
