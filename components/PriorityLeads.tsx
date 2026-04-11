@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
+import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
 
@@ -56,6 +57,8 @@ export interface PriorityLead {
 }
 
 export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
+  const userOptions = useUserOptions();
+
   if (leads.length === 0) {
     return (
       <p className="text-sm text-gray-400 text-center py-6">No priority leads found.</p>
@@ -65,9 +68,7 @@ export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
   return (
     <div className="space-y-2">
       {leads.map((lead) => {
-        const initials = lead.assigned_user
-          ? lead.assigned_user.split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase()).filter((_, i, arr) => i === 0 || i === arr.length - 1).join('')
-          : null;
+        const repInitials = resolveRepInitials(lead.assigned_user, userOptions);
         return (
           <div
             key={lead.id}
@@ -82,12 +83,16 @@ export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
               </p>
             </Link>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {initials && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
-                  <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  {initials}
+              {repInitials.length > 0 && (
+                <span className="inline-flex flex-wrap gap-1">
+                  {repInitials.map((ini, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {ini}
+                    </span>
+                  ))}
                 </span>
               )}
               {lead.wse != null && (
