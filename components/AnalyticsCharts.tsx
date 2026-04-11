@@ -219,21 +219,22 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
   }
 
   const meetingsScheduledTotal = meetingCounts['meeting_scheduled'] || 0;
-  const outcomeKeys = MEETING_KEYS.filter(k => k !== 'meeting_scheduled' && keyToConfig[k]);
-  const meetingSummaryData: Record<string, string | number>[] = meetingsScheduledTotal > 0
+  const allMeetingKeys = MEETING_KEYS.filter(k => keyToConfig[k]);
+  const totalMeetingActions = allMeetingKeys.reduce((sum, k) => sum + (meetingCounts[k] || 0), 0);
+  // For the bar chart, "Meetings Scheduled" = total scheduled minus all outcome counts
+  const outcomeKeys = ['meeting_held', 'rescheduled', 'cancelled', 'no_show'] as const;
+  const outcomeSum = outcomeKeys.reduce((sum, k) => sum + (meetingCounts[k] || 0), 0);
+  const scheduledBarValue = Math.max(0, meetingsScheduledTotal - outcomeSum);
+  const meetingSummaryData: Record<string, string | number>[] = totalMeetingActions > 0
     ? [{
         name: 'Meetings',
-        ...Object.fromEntries(outcomeKeys.map(key => [
+        ...Object.fromEntries(allMeetingKeys.map(key => [
           keyToConfig[key].displayName,
-          Math.round((meetingCounts[key] / meetingsScheduledTotal) * 100),
-        ])),
-        ...Object.fromEntries(outcomeKeys.map(key => [
-          keyToConfig[key].displayName + '_count',
-          meetingCounts[key],
+          key === 'meeting_scheduled' ? scheduledBarValue : (meetingCounts[key] || 0),
         ])),
       }]
     : [];
-  const meetingOutcomeKeys = outcomeKeys.map(k => keyToConfig[k].displayName);
+  const meetingOutcomeKeys = allMeetingKeys.map(k => keyToConfig[k].displayName);
 
   const meetingsChartTitle = conferenceName
     ? `${conferenceName} Meetings Summary`
@@ -245,7 +246,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
       const entry = meetingSummaryData[index];
       const segmentValue = entry ? (entry[dataKey] as number) : 0;
       if (!segmentValue || segmentValue < 1) return <text />;
-      const text = `${segmentValue}%`;
+      const text = `${segmentValue}`;
       const textWidth = text.length * 7;
       if (width < textWidth + 4 || height < 14) return <text />;
       return (
@@ -423,7 +424,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
               barSize={36}
             >
               <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+              <XAxis type="number" tick={{ fontSize: 12 }} allowDecimals={false} />
               <YAxis
                 type="category"
                 dataKey="name"
@@ -431,9 +432,8 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                 width={80}
               />
               <Tooltip
-                formatter={(value: any, name: any, props: any) => {
-                  const count = props.payload[name + '_count'] || 0;
-                  return [`${value}% (${count})`, meetingActionDisplayNames[name] || name];
+                formatter={(value: any, name: any) => {
+                  return [value, meetingActionDisplayNames[name] || name];
                 }}
                 contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
               />
