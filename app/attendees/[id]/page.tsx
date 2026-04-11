@@ -901,7 +901,7 @@ export default function AttendeeDetailPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Actions</p>
                   <div className="flex flex-wrap gap-2">
                     {(() => {
-                      const RESTRICTED_ACTION_KEYS = new Set(['meeting_held', 'meeting_scheduled', 'pending', 'meeting_rescheduled', 'cancelled', 'no_show']);
+                      const RESTRICTED_ACTION_KEYS = new Set(['meeting_held', 'meeting_scheduled', 'pending', 'rescheduled', 'cancelled', 'no_show']);
                       const activeActions = new Set((conferenceDetail?.action || '').split(',').map(a => a.trim()).filter(Boolean));
                       return actionOptions
                         .filter(opt => isAdminUser || !opt.action_key || !RESTRICTED_ACTION_KEYS.has(opt.action_key))
