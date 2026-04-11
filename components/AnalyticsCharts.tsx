@@ -158,8 +158,8 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
   // Each action_key stably identifies a meeting action regardless of display name changes
   const MEETING_KEYS = ['meeting_scheduled', 'meeting_held', 'rescheduled', 'cancelled', 'no_show'] as const;
   const MEETING_CHART_LABELS: Record<string, string> = {
-    meeting_scheduled: 'Meetings Scheduled',
-    meeting_held: 'Meetings Held',
+    meeting_scheduled: 'Scheduled/Pending',
+    meeting_held: 'Held',
     rescheduled: 'Rescheduled',
     cancelled: 'Cancelled',
     no_show: 'No-Show',
