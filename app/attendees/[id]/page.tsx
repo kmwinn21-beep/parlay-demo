@@ -622,7 +622,7 @@ export default function AttendeeDetailPage() {
                         </button>
                         <span className={`pointer-events-auto absolute bottom-full left-0 mb-2 z-20 flex-col items-start ${showEmailTooltip ? 'flex' : 'hidden group-hover/email:flex'}`}>
                           <span className="rounded-lg bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl whitespace-nowrap">
-                            <span className="block font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Email</span>
+                            <span className="block font-semibold mb-1 text-gray-300 uppercase tracking-wide text-sm">Email</span>
                             <a
                               href={`mailto:${attendee.email}`}
                               className="text-procare-bright-blue hover:underline"
