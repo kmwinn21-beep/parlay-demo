@@ -6,7 +6,7 @@ import { verifyToken, COOKIE_NAME } from '@/lib/auth';
 const PUBLIC_PREFIXES = ['/auth/', '/api/auth/'];
 
 // Paths that require administrator role
-const ADMIN_PREFIXES = ['/admin', '/api/config'];
+const ADMIN_PREFIXES = ['/admin'];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));

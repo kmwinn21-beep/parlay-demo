@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
-import { requireAdmin } from '@/lib/auth';
+import { requireAuth, requireAdmin } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
