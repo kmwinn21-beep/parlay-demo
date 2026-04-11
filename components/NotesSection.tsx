@@ -14,6 +14,7 @@ export interface EntityNote {
   company_name?: string;
   conference_name?: string | null;
   rep?: string | null;
+  attendee_name?: string | null;
 }
 
 function formatDateTime(dt: string) {
@@ -32,36 +33,6 @@ function formatDateTime(dt: string) {
 // A note is "long" if it exceeds ~300 chars or 4 newlines
 function isLongNote(content: string) {
   return content.length > 300 || content.split('\n').length > 4;
-}
-
-// Render note content with hyperlinked bracketed names
-function NoteContent({ content }: { content: string }) {
-  // Match patterns like [Name] or [Name / Company]
-  const parts = content.split(/(\[[^\]]+\])/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        const bracketMatch = part.match(/^\[([^\]]+)\]$/);
-        if (!bracketMatch) return <span key={i}>{part}</span>;
-        const inner = bracketMatch[1];
-        // Check if it's [Attendee Name / Company Name] format
-        const slashParts = inner.split(' / ');
-        if (slashParts.length === 2) {
-          return (
-            <span key={i} className="text-procare-bright-blue font-medium">
-              [{slashParts[0]} / {slashParts[1]}]
-            </span>
-          );
-        }
-        // Single name in brackets
-        return (
-          <span key={i} className="text-procare-bright-blue font-medium">
-            [{inner}]
-          </span>
-        );
-      })}
-    </>
-  );
 }
 
 export function NotesSection({
@@ -168,21 +139,10 @@ export function NotesSection({
         companyLabel = currentCompanyName || '';
       }
 
-      // Determine primary note content based on where it's being saved:
-      // Conference page: [Attendee Name / Company] Note Body
-      // Company page: [Attendee Name] Note Body
-      // Attendee page: Note Body (plain)
-      let primaryContent = content;
-      if (entityType === 'conference' && selAttendee) {
-        primaryContent = companyLabel
-          ? `[${attendeeLabel} / ${companyLabel}] ${content}`
-          : `[${attendeeLabel}] ${content}`;
-      } else if (entityType === 'company' && selAttendee) {
-        primaryContent = `[${attendeeLabel}] ${content}`;
-      }
-      // entityType === 'attendee': plain content (no prefix)
+      // Determine primary note content — plain content, no bracket prefixes
+      const primaryContent = content;
 
-      // 1. Create the primary note with the correct content
+      // 1. Create the primary note with metadata fields
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,6 +152,8 @@ export function NotesSection({
           content: primaryContent,
           conference_name: conferenceName,
           rep: repValue,
+          attendee_name: attendeeLabel || null,
+          company_name: companyLabel || null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -199,18 +161,12 @@ export function NotesSection({
       setNotes(prev => [newNote, ...prev]);
 
       // 2. Cross-post based on entity type and selections
-      // Rules for cross-posted notes:
-      //   Conference notes: [Attendee Name / Company] Note Body
-      //   Company notes: [Attendee Name] Note Body
-      //   Attendee notes: Note Body (plain)
+      // All cross-posted notes use plain content with metadata fields
       const crossPostPromises: Promise<unknown>[] = [];
 
       if (entityType === 'company') {
-        // Cross-post to conference: [Attendee / Company] format
+        // Cross-post to conference
         if (selConf) {
-          const confContent = selAttendee
-            ? (companyLabel ? `[${attendeeLabel} / ${companyLabel}] ${content}` : `[${attendeeLabel}] ${content}`)
-            : content;
           crossPostPromises.push(
             fetch('/api/notes', {
               method: 'POST',
@@ -218,15 +174,17 @@ export function NotesSection({
               body: JSON.stringify({
                 entity_type: 'conference',
                 entity_id: selConf.id,
-                content: confContent,
+                content,
                 conference_name: conferenceName,
                 rep: repValue,
+                attendee_name: attendeeLabel || null,
+                company_name: companyLabel || null,
               }),
             })
           );
         }
 
-        // Cross-post to attendee: plain content
+        // Cross-post to attendee
         if (selAttendee) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -238,14 +196,15 @@ export function NotesSection({
                 content,
                 conference_name: conferenceName,
                 rep: repValue,
+                attendee_name: attendeeLabel || null,
+                company_name: companyLabel || null,
               }),
             })
           );
         }
       } else if (entityType === 'conference') {
-        // Cross-post to company: [Attendee Name] format
+        // Cross-post to company
         if (selCompany) {
-          const companyContent = selAttendee ? `[${attendeeLabel}] ${content}` : content;
           crossPostPromises.push(
             fetch('/api/notes', {
               method: 'POST',
@@ -253,15 +212,17 @@ export function NotesSection({
               body: JSON.stringify({
                 entity_type: 'company',
                 entity_id: selCompany.id,
-                content: companyContent,
+                content,
                 conference_name: conferenceName,
                 rep: repValue,
+                attendee_name: attendeeLabel || null,
+                company_name: companyLabel || null,
               }),
             })
           );
         }
 
-        // Cross-post to attendee: plain content
+        // Cross-post to attendee
         if (selAttendee) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -273,12 +234,14 @@ export function NotesSection({
                 content,
                 conference_name: conferenceName,
                 rep: repValue,
+                attendee_name: attendeeLabel || null,
+                company_name: companyLabel || null,
               }),
             })
           );
         }
       } else if (entityType === 'attendee') {
-        // Cross-post to company: [Attendee Name] format
+        // Cross-post to company
         const companyId = currentCompanyId;
         if (companyId) {
           crossPostPromises.push(
@@ -288,19 +251,18 @@ export function NotesSection({
               body: JSON.stringify({
                 entity_type: 'company',
                 entity_id: companyId,
-                content: `[${attendeeLabel}] ${content}`,
+                content,
                 conference_name: conferenceName,
                 rep: repValue,
+                attendee_name: attendeeLabel || null,
+                company_name: companyLabel || null,
               }),
             })
           );
         }
 
-        // Cross-post to conference: [Attendee Name / Company] format
+        // Cross-post to conference
         if (selConf) {
-          const confPrefix = companyLabel
-            ? `[${attendeeLabel} / ${companyLabel}]`
-            : `[${attendeeLabel}]`;
           crossPostPromises.push(
             fetch('/api/notes', {
               method: 'POST',
@@ -308,9 +270,11 @@ export function NotesSection({
               body: JSON.stringify({
                 entity_type: 'conference',
                 entity_id: selConf.id,
-                content: `${confPrefix} ${content}`,
+                content,
                 conference_name: conferenceName,
                 rep: repValue,
+                attendee_name: attendeeLabel || null,
+                company_name: companyLabel || null,
               }),
             })
           );
@@ -567,7 +531,12 @@ export function NotesSection({
                         {note.conference_name}
                       </span>
                     )}
-                    {parentEntityId && note.entity_id !== parentEntityId && note.company_name && (
+                    {note.attendee_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 whitespace-nowrap">
+                        {note.attendee_name}
+                      </span>
+                    )}
+                    {note.company_name && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-medium border border-teal-200 whitespace-nowrap">
                         {note.company_name}
                       </span>
@@ -608,7 +577,7 @@ export function NotesSection({
                 </div>
                 {/* Note body */}
                 <p className={`text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
-                  <NoteContent content={note.content} />
+                  {note.content}
                 </p>
                 {long && (
                   <button

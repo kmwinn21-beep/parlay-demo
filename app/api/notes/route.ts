@@ -23,12 +23,12 @@ export async function GET(request: NextRequest) {
       const joinCompany = entityType === 'company';
       result = await db.execute({
         sql: joinCompany
-          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, co.name AS company_name
+          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, co.name AS joined_company_name
                 FROM entity_notes en
                 LEFT JOIN companies co ON en.entity_id = co.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
                 ORDER BY en.created_at DESC`
-          : `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep
+          : `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name
                 FROM entity_notes
                 WHERE entity_type = ? AND entity_id IN (${ids.map(() => '?').join(',')})
                 ORDER BY created_at DESC`,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       });
     } else {
       result = await db.execute({
-        sql: `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep
+        sql: `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name
               FROM entity_notes
               WHERE entity_type = ? AND entity_id = ?
               ORDER BY created_at DESC`,
@@ -51,9 +51,12 @@ export async function GET(request: NextRequest) {
         entity_id: Number(r.entity_id),
         content: String(r.content),
         created_at: String(r.created_at),
-        ...(r.company_name != null ? { company_name: String(r.company_name) } : {}),
         conference_name: r.conference_name != null ? String(r.conference_name) : null,
         rep: r.rep != null ? String(r.rep) : null,
+        attendee_name: r.attendee_name != null ? String(r.attendee_name) : null,
+        company_name: r.joined_company_name != null
+          ? String(r.joined_company_name)
+          : (r.company_name != null ? String(r.company_name) : null),
       }))
     );
   } catch (error) {
@@ -67,17 +70,17 @@ export async function POST(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
-    const { entity_type, entity_id, content, conference_name, rep } = await request.json();
+    const { entity_type, entity_id, content, conference_name, rep, attendee_name, company_name } = await request.json();
 
     if (!entity_type || !entity_id || !content?.trim()) {
       return NextResponse.json({ error: 'entity_type, entity_id, and content are required' }, { status: 400 });
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep)
-            VALUES (?, ?, ?, ?, ?)
-            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep`,
-      args: [entity_type, entity_id, content.trim(), conference_name || null, rep || null],
+      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name`,
+      args: [entity_type, entity_id, content.trim(), conference_name || null, rep || null, attendee_name || null, company_name || null],
     });
 
     const row = result.rows[0];
@@ -89,6 +92,8 @@ export async function POST(request: NextRequest) {
       created_at: String(row.created_at),
       conference_name: row.conference_name != null ? String(row.conference_name) : null,
       rep: row.rep != null ? String(row.rep) : null,
+      attendee_name: row.attendee_name != null ? String(row.attendee_name) : null,
+      company_name: row.company_name != null ? String(row.company_name) : null,
     }, { status: 201 });
   } catch (error) {
     console.error('POST /api/notes error:', error);

@@ -42,22 +42,9 @@ function getUserInitials(email: string): string {
   return prefix.slice(0, 2).toUpperCase();
 }
 
-// Render note content with hyperlinked bracketed names
+// Render note content as plain text
 function NoteContent({ content }: { content: string }) {
-  const parts = content.split(/(\[[^\]]+\])/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        const bracketMatch = part.match(/^\[([^\]]+)\]$/);
-        if (!bracketMatch) return <span key={i}>{part}</span>;
-        return (
-          <span key={i} className="text-procare-bright-blue font-medium">
-            {part}
-          </span>
-        );
-      })}
-    </>
-  );
+  return <>{content}</>;
 }
 
 export function PinnedNotesSection({
