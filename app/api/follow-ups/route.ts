@@ -13,15 +13,15 @@ export async function GET(request: NextRequest) {
     const companyId = searchParams.get('company_id');
     const companyIds = searchParams.get('company_ids'); // comma-separated list
 
-    const conditions = ["cad.next_steps IS NOT NULL AND cad.next_steps != ''"];
+    const conditions = ["fu.next_steps IS NOT NULL AND fu.next_steps != ''"];
     const args: (string | number)[] = [];
 
     if (attendeeId) {
-      conditions.push('cad.attendee_id = ?');
+      conditions.push('fu.attendee_id = ?');
       args.push(attendeeId);
     }
     if (conferenceId) {
-      conditions.push('cad.conference_id = ?');
+      conditions.push('fu.conference_id = ?');
       args.push(conferenceId);
     }
     if (companyIds) {
@@ -38,12 +38,13 @@ export async function GET(request: NextRequest) {
     const result = await db.execute({
       sql: `
         SELECT
-          cad.attendee_id,
-          cad.conference_id,
-          cad.next_steps,
-          cad.next_steps_notes,
-          cad.completed,
-          cad.assigned_rep,
+          fu.id,
+          fu.attendee_id,
+          fu.conference_id,
+          fu.next_steps,
+          fu.next_steps_notes,
+          fu.completed,
+          fu.assigned_rep,
           a.first_name,
           a.last_name,
           a.title,
@@ -51,10 +52,10 @@ export async function GET(request: NextRequest) {
           c.name AS conference_name,
           c.start_date,
           COALESCE(nc.notes_count, 0) AS entity_notes_count
-        FROM conference_attendee_details cad
-        JOIN attendees a ON cad.attendee_id = a.id
+        FROM follow_ups fu
+        JOIN attendees a ON fu.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
-        JOIN conferences c ON cad.conference_id = c.id
+        JOIN conferences c ON fu.conference_id = c.id
         LEFT JOIN (
           SELECT entity_id, COUNT(*) as notes_count
           FROM entity_notes
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       result.rows.map((r) => ({
+        id: Number(r.id),
         attendee_id: Number(r.attendee_id),
         conference_id: Number(r.conference_id),
         next_steps: String(r.next_steps ?? ''),
@@ -83,7 +85,7 @@ export async function GET(request: NextRequest) {
         entity_notes_count: Number(r.entity_notes_count ?? 0),
         assigned_rep: r.assigned_rep != null ? String(r.assigned_rep) : null,
       })),
-      { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } }
+      { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
     console.error('GET /api/follow-ups error:', error);
@@ -96,15 +98,15 @@ export async function DELETE(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
-    const { attendee_id, conference_id } = await request.json();
+    const { id } = await request.json();
 
-    if (attendee_id == null || conference_id == null) {
-      return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
+    if (id == null) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
     await db.execute({
-      sql: 'UPDATE conference_attendee_details SET next_steps = NULL, next_steps_notes = NULL, completed = 0, assigned_rep = NULL WHERE attendee_id = ? AND conference_id = ?',
-      args: [attendee_id, conference_id],
+      sql: 'DELETE FROM follow_ups WHERE id = ?',
+      args: [id],
     });
 
     return NextResponse.json({ success: true });
@@ -120,10 +122,10 @@ export async function PATCH(request: NextRequest) {
   try {
     await dbReady;
     const body = await request.json();
-    const { attendee_id, conference_id, completed, assigned_rep } = body;
+    const { id, completed, assigned_rep } = body;
 
-    if (attendee_id == null || conference_id == null) {
-      return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
+    if (id == null) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
     const setClauses: string[] = [];
@@ -143,10 +145,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
-    args.push(attendee_id, conference_id);
+    args.push(id);
 
     await db.execute({
-      sql: `UPDATE conference_attendee_details SET ${setClauses.join(', ')} WHERE attendee_id = ? AND conference_id = ?`,
+      sql: `UPDATE follow_ups SET ${setClauses.join(', ')} WHERE id = ?`,
       args,
     });
 

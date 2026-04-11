@@ -65,7 +65,7 @@ loadConferences();
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, refresh } = useUser();
+  const { user } = useUser();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -109,9 +109,7 @@ export function Header() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      refresh();
-      router.push('/auth/login');
-      router.refresh();
+      window.location.href = '/auth/login';
     } catch {
       toast.error('Logout failed.');
     }

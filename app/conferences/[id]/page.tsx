@@ -1502,41 +1502,37 @@ export default function ConferenceDetailPage() {
           </div>
           <FollowUpsTable
             followUps={confFollowUps}
-            onToggle={async (attendeeId, conferenceId, completed) => {
+            onToggle={async (id, completed) => {
               setConfFollowUps(prev =>
                 prev.map(fu =>
-                  fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                    ? { ...fu, completed }
-                    : fu
+                  fu.id === id ? { ...fu, completed } : fu
                 )
               );
               try {
                 const res = await fetch('/api/follow-ups', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, completed }),
+                  body: JSON.stringify({ id, completed }),
                 });
                 if (!res.ok) throw new Error();
               } catch {
                 setConfFollowUps(prev =>
                   prev.map(fu =>
-                    fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                      ? { ...fu, completed: !completed }
-                      : fu
+                    fu.id === id ? { ...fu, completed: !completed } : fu
                   )
                 );
                 toast.error('Failed to update.');
               }
             }}
-            onDelete={async (attendeeId, conferenceId) => {
+            onDelete={async (id) => {
               if (!confirm('Are you sure you want to delete this follow-up?')) return;
               const prev = confFollowUps;
-              setConfFollowUps(fus => fus.filter(fu => !(fu.attendee_id === attendeeId && fu.conference_id === conferenceId)));
+              setConfFollowUps(fus => fus.filter(fu => fu.id !== id));
               try {
                 const res = await fetch('/api/follow-ups', {
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
+                  body: JSON.stringify({ id }),
                 });
                 if (!res.ok) throw new Error();
                 toast.success('Follow-up deleted.');
@@ -1546,19 +1542,17 @@ export default function ConferenceDetailPage() {
               }
             }}
             userOptions={userOptions}
-            onRepChange={async (attendeeId, conferenceId, rep) => {
+            onRepChange={async (id, rep) => {
               setConfFollowUps(prev =>
                 prev.map(fu =>
-                  fu.attendee_id === attendeeId && fu.conference_id === conferenceId
-                    ? { ...fu, assigned_rep: rep }
-                    : fu
+                  fu.id === id ? { ...fu, assigned_rep: rep } : fu
                 )
               );
               try {
                 const res = await fetch('/api/follow-ups', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId, assigned_rep: rep }),
+                  body: JSON.stringify({ id, assigned_rep: rep }),
                 });
                 if (!res.ok) throw new Error();
                 toast.success('Rep updated.');

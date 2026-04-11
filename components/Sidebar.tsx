@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useUser } from './UserContext';
 
@@ -56,8 +56,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, refresh } = useUser();
+  const { user } = useUser();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -67,9 +66,7 @@ export function Sidebar() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      refresh();
-      router.push('/auth/login');
-      router.refresh();
+      window.location.href = '/auth/login';
     } catch {
       toast.error('Logout failed.');
     }

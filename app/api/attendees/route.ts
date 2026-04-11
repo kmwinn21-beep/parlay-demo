@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
             ) conf_agg ON a.id = conf_agg.attendee_id
             LEFT JOIN (
               SELECT cad.attendee_id, 1 as has_pending
-              FROM conference_attendee_details cad
+              FROM follow_ups cad
               WHERE cad.next_steps IS NOT NULL AND cad.next_steps != ''
                 AND (cad.completed IS NULL OR cad.completed = 0)
               GROUP BY cad.attendee_id

@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { BackButton } from '@/components/BackButton';
 
 export default function AccountPage() {
   const { user, refresh } = useUser();
-  const router = useRouter();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -49,12 +47,9 @@ export default function AccountPage() {
     setLoggingOut(true);
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      refresh();
-      router.push('/auth/login');
-      router.refresh();
+      window.location.href = '/auth/login';
     } catch {
       toast.error('Logout failed.');
-    } finally {
       setLoggingOut(false);
     }
   };
