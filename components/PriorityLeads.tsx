@@ -72,17 +72,16 @@ export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
         return (
           <div
             key={lead.id}
-            className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:bg-blue-50 transition-all group"
+            className="flex flex-col gap-1.5 p-4 rounded-lg border border-gray-200 hover:bg-blue-50 transition-all group"
           >
-            <Link
-              href={`/companies/${lead.id}`}
-              className="flex-1 min-w-0"
-            >
+            {/* Row 1: company name */}
+            <Link href={`/companies/${lead.id}`} className="min-w-0">
               <p className="font-medium text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
                 {lead.name}
               </p>
             </Link>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Row 2: reps + WSE + conference count */}
+            <div className="flex items-center gap-2 flex-wrap">
               {repInitials.length > 0 && (
                 <span className="inline-flex flex-wrap gap-1">
                   {repInitials.map((ini, i) => (
