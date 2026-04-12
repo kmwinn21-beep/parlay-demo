@@ -42,7 +42,8 @@ export async function GET(request: NextRequest) {
               COALESCE(conf_agg.conference_count, 0) as conference_count,
               conf_agg.conference_names,
               parent.name as parent_company_name,
-              att_summary.attendee_summary
+              att_summary.attendee_summary,
+              COALESCE(pn.pinned_count, 0) as pinned_notes_count
             FROM companies co
             LEFT JOIN (
               SELECT company_id, COUNT(*) as attendee_count
@@ -65,6 +66,12 @@ export async function GET(request: NextRequest) {
               FROM (SELECT DISTINCT company_id, first_name, last_name, title FROM attendees)
               GROUP BY company_id
             ) att_summary ON co.id = att_summary.company_id
+            LEFT JOIN (
+              SELECT entity_id, COUNT(*) as pinned_count
+              FROM pinned_notes
+              WHERE entity_type = 'company'
+              GROUP BY entity_id
+            ) pn ON co.id = pn.entity_id
             ORDER BY co.name`,
       args: [],
     });

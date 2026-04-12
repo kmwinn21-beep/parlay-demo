@@ -32,6 +32,7 @@ interface Company {
   conference_count: number;
   conference_names?: string;
   attendee_summary?: string;
+  pinned_notes_count?: number;
 }
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
@@ -595,6 +596,13 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   {company.parent_company_name && (
                     <span className="text-[10px] text-gray-400 ml-1">
                       (<Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">{company.parent_company_name}</Link>)
+                    </span>
+                  )}
+                  {Number(company.pinned_notes_count) > 0 && (
+                    <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16 3a1 1 0 00-1.447-.894L8 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-2.268l5.553 2.776A1 1 0 0017 16.5V3.5A1 1 0 0016 3z"/>
+                      </svg>
                     </span>
                   )}
                 </div>

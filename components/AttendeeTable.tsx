@@ -30,6 +30,7 @@ interface Attendee {
   conference_names?: string;
   has_pending_follow_ups?: boolean;
   notes_count?: number;
+  pinned_notes_count?: number;
 }
 
 interface Company { id: number; name: string; }
@@ -403,6 +404,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     </Link>
                     {Number(attendee.notes_count) > 0 && (
                       <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.notes_count)} />
+                    )}
+                    {Number(attendee.pinned_notes_count) > 0 && (
+                      <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M16 3a1 1 0 00-1.447-.894L8 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-2.268l5.553 2.776A1 1 0 0017 16.5V3.5A1 1 0 0016 3z"/>
+                        </svg>
+                      </span>
                     )}
                   </div>
                   <button onClick={() => handleDeleteOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)} className="flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded" title="Delete">
