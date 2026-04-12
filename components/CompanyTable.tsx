@@ -154,6 +154,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const configOptions = useConfigOptions();
   const userOptionsFull = useUserOptions();
   const searchParams = useSearchParams();
+
+  // Local copy for optimistic updates — syncs whenever the parent re-fetches
+  const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
+  useEffect(() => { setLocalCompanies(companies); }, [companies]);
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
   const [search, setSearch] = useState('');
@@ -187,7 +191,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [wseMin, setWseMin] = useState<number | null>(null);
   const [wseMax, setWseMax] = useState<number | null>(null);
 
-  const wseValues = useMemo(() => companies.map(c => c.wse).filter((w): w is number => w != null), [companies]);
+  const wseValues = useMemo(() => localCompanies.map(c => c.wse).filter((w): w is number => w != null), [localCompanies]);
   const wseGlobalMin = useMemo(() => wseValues.length > 0 ? Math.min(...wseValues) : 0, [wseValues]);
   const wseGlobalMax = useMemo(() => wseValues.length > 0 ? Math.max(...wseValues) : 10000, [wseValues]);
   const wseGlobalRange = wseGlobalMax - wseGlobalMin;
@@ -207,11 +211,11 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
-    companies.forEach(c => {
+    localCompanies.forEach(c => {
       (c.conference_names || '').split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.add(n));
     });
     return Array.from(names).sort();
-  }, [companies]);
+  }, [localCompanies]);
 
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -243,7 +247,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   };
 
   const filtered = useMemo(() => {
-    const list = companies.filter(c => {
+    const list = localCompanies.filter(c => {
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
       const matchSFOwner = !filterSFOwner || parseRepIds(c.assigned_user).map(String).includes(filterSFOwner);
       const matchType = !filterType || c.company_type === filterType;
@@ -264,12 +268,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selectedCompanies = companies.filter(c => selectedIds.has(c.id));
+  const selectedCompanies = localCompanies.filter(c => selectedIds.has(c.id));
 
   const handleDeleteOne = async (id: number, name: string) => {
     if (!confirm(`Delete "${name}"? Attendees will be unlinked. Cannot be undone.`)) return;
@@ -321,6 +325,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const handleRepSave = async (companyId: number, ids: number[]) => {
     setEditingRepCompanyId(null);
     const assigned_user = ids.length > 0 ? ids.join(',') : null;
+    // Optimistic update — reflect change immediately without waiting for the API
+    setLocalCompanies(prev => prev.map(c =>
+      c.id === companyId ? { ...c, assigned_user } : c
+    ));
     try {
       const res = await fetch('/api/companies/bulk', {
         method: 'PATCH',
@@ -328,9 +336,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         body: JSON.stringify({ ids: [companyId], fields: { assigned_user } }),
       });
       if (!res.ok) throw new Error();
-      onRefresh();
     } catch {
       toast.error('Failed to update rep.');
+      // Revert to server state on failure
+      onRefresh();
     }
   };
 
@@ -594,7 +603,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         </div>
       )}
 
-      <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {companies.length} companies{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
+      <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {localCompanies.length} companies{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
 
       <div className="rounded-xl border border-gray-200 overflow-hidden">
         {/* Mobile card layout */}
