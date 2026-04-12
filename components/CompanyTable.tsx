@@ -770,7 +770,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   </td>
                   <td className="px-3 py-3">{company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
-                    {editingRepCompanyId === company.id ? (
+                    {editingRepCompanyId === company.id && !showRepModal ? (
                       <div className="flex items-start gap-1">
                         <div className="flex-1 min-w-0">
                           <RepMultiSelect
