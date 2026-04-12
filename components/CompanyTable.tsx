@@ -629,13 +629,25 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   </div>
                 </div>
                 {editingRepCompanyId === company.id ? (
-                  <div className="w-40">
-                    <RepMultiSelect
-                      options={userOptionsFull}
-                      selectedIds={editingRepIds}
-                      onChange={setEditingRepIds}
-                      onClose={(ids) => handleRepSave(company.id, ids)}
-                    />
+                  <div className="flex items-start gap-1">
+                    <div className="w-36">
+                      <RepMultiSelect
+                        options={userOptionsFull}
+                        selectedIds={editingRepIds}
+                        onChange={setEditingRepIds}
+                        onClose={(ids) => handleRepSave(company.id, ids)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingRepCompanyId(null)}
+                      className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                      title="Cancel"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                 ) : (
                   <button
@@ -700,12 +712,26 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   <td className="px-3 py-3">{company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-3">
                     {editingRepCompanyId === company.id ? (
-                      <RepMultiSelect
-                        options={userOptionsFull}
-                        selectedIds={editingRepIds}
-                        onChange={setEditingRepIds}
-                        onClose={(ids) => handleRepSave(company.id, ids)}
-                      />
+                      <div className="flex items-start gap-1">
+                        <div className="flex-1 min-w-0">
+                          <RepMultiSelect
+                            options={userOptionsFull}
+                            selectedIds={editingRepIds}
+                            onChange={setEditingRepIds}
+                            onClose={(ids) => handleRepSave(company.id, ids)}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingRepCompanyId(null)}
+                          className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                          title="Cancel"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
