@@ -181,6 +181,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [isApplying, setIsApplying] = useState(false);
   const [editingRepCompanyId, setEditingRepCompanyId] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
+  const [showRepModal, setShowRepModal] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   const [wseMin, setWseMin] = useState<number | null>(null);
@@ -336,6 +337,21 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const startEditRep = (company: Company) => {
     setEditingRepCompanyId(company.id);
     setEditingRepIds(parseRepIds(company.assigned_user));
+  };
+
+  const startEditRepModal = (company: Company) => {
+    setEditingRepCompanyId(company.id);
+    setEditingRepIds(parseRepIds(company.assigned_user));
+    setShowRepModal(true);
+  };
+
+  const closeRepModal = (save: boolean) => {
+    setShowRepModal(false);
+    if (save && editingRepCompanyId !== null) {
+      handleRepSave(editingRepCompanyId, editingRepIds);
+    } else {
+      setEditingRepCompanyId(null);
+    }
   };
 
   const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap relative';
@@ -587,6 +603,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
           ) : paginated.map(company => (
             <div key={company.id} className={`p-4 ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'}`}>
+              {/* Top row: name (left) | rep pills (upper-right) */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue flex-shrink-0" />
@@ -606,17 +623,31 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     </span>
                   )}
                 </div>
-                {company.wse != null && (
-                  <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                    {Number(company.wse).toLocaleString()}
-                  </span>
-                )}
+                {/* Rep pills — upper right, tap to edit */}
+                <button
+                  type="button"
+                  onClick={() => startEditRepModal(company)}
+                  title="Tap to assign rep"
+                  className="flex-shrink-0 inline-flex flex-wrap justify-end gap-1 hover:opacity-70 transition-opacity"
+                >
+                  {resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
+                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {ini}
+                    </span>
+                  ))}
+                  {!company.assigned_user && (
+                    <span className="text-[10px] text-gray-300">+ Rep</span>
+                  )}
+                </button>
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
               </div>
+              {/* Bottom row: stats (left) | WSE (bottom-right) */}
               <div className="mt-2 ml-6 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -628,51 +659,79 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
                   </div>
                 </div>
-                {editingRepCompanyId === company.id ? (
-                  <div className="flex items-start gap-1">
-                    <div className="w-36">
-                      <RepMultiSelect
-                        options={userOptionsFull}
-                        selectedIds={editingRepIds}
-                        onChange={setEditingRepIds}
-                        onClose={(ids) => handleRepSave(company.id, ids)}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEditingRepCompanyId(null)}
-                      className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
-                      title="Cancel"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startEditRep(company)}
-                    title="Click to assign rep"
-                    className="inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
-                  >
-                    {resolveRepInitials(company.assigned_user, userOptionsFull).map((ini, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
-                        <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {ini}
-                      </span>
-                    ))}
-                    {!company.assigned_user && (
-                      <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>
-                    )}
-                  </button>
+                {/* WSE — bottom right */}
+                {company.wse != null && (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {Number(company.wse).toLocaleString()}
+                  </span>
                 )}
               </div>
             </div>
           ))}
         </div>
+
+        {/* Mobile rep selection bottom sheet */}
+        {showRepModal && editingRepCompanyId !== null && (
+          <div
+            className="fixed inset-0 z-50 flex items-end lg:hidden"
+            style={{ background: 'rgba(0,0,0,0.4)' }}
+            onClick={() => closeRepModal(true)}
+          >
+            <div
+              className="bg-white rounded-t-2xl shadow-2xl w-full flex flex-col"
+              style={{ maxHeight: '70vh' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Sheet header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                <h3 className="font-semibold text-sm text-procare-dark-blue">Assign Reps</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => closeRepModal(false)}
+                    className="text-xs text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => closeRepModal(true)}
+                    className="text-xs font-semibold text-white bg-procare-bright-blue px-3 py-1.5 rounded-lg"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+              {/* Options list */}
+              <div className="overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={() => setEditingRepIds([])}
+                  className="w-full text-left px-4 py-3 text-sm text-gray-400 border-b border-gray-100 hover:bg-gray-50"
+                >
+                  — Clear all —
+                </button>
+                {userOptionsFull.map(u => (
+                  <label
+                    key={u.id}
+                    className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={editingRepIds.includes(u.id)}
+                      onChange={() => setEditingRepIds(prev =>
+                        prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id]
+                      )}
+                      className="w-5 h-5 accent-procare-bright-blue flex-shrink-0"
+                    />
+                    <span className="text-sm text-gray-700">{u.value}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Desktop table layout */}
         <div className="hidden lg:block overflow-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
