@@ -30,11 +30,10 @@ export function RepMultiSelect({
   // snapshot the IDs when the dropdown opens so we can detect changes on close
   const openIdsRef = useRef<number[]>([]);
 
-  // Close on outside click
+  // Close on outside click — call onClose regardless of whether the options list was open
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
-      // Check both the trigger container and the fixed-position dropdown (by data attr)
       const dropdown = document.querySelector('[data-rep-dropdown]');
       if (
         containerRef.current && !containerRef.current.contains(target) &&
@@ -43,12 +42,24 @@ export function RepMultiSelect({
         if (open) {
           setOpen(false);
           setPos(null);
-          onClose?.(selectedIds);
         }
+        onClose?.(selectedIds);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [open, onClose, selectedIds]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (open) { setOpen(false); setPos(null); }
+        onClose?.(selectedIds);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, [open, onClose, selectedIds]);
 
   // Recalculate position on scroll/resize while open
