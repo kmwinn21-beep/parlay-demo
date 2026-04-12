@@ -327,7 +327,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     const assigned_user = ids.length > 0 ? ids.join(',') : null;
     // Optimistic update — reflect change immediately without waiting for the API
     setLocalCompanies(prev => prev.map(c =>
-      c.id === companyId ? { ...c, assigned_user } : c
+      c.id === companyId ? { ...c, assigned_user: assigned_user ?? undefined } : c
     ));
     try {
       const res = await fetch('/api/companies/bulk', {
