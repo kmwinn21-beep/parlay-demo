@@ -601,7 +601,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                   {Number(company.pinned_notes_count) > 0 && (
                     <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
                       <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 3a1 1 0 00-1.447-.894L8 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-2.268l5.553 2.776A1 1 0 0017 16.5V3.5A1 1 0 0016 3z"/>
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
                       </svg>
                     </span>
                   )}
