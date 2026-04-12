@@ -367,7 +367,7 @@ export default function AdminPage() {
     try {
       const results = await Promise.all(
         CATEGORIES.map((cat) =>
-          fetch(`/api/config?category=${cat.key}`)
+          fetch(`/api/config?category=${cat.key}`, { cache: 'no-store' })
             .then((r) => r.json())
             .then((data) => ({ key: cat.key, options: data }))
         )

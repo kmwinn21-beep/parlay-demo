@@ -31,8 +31,12 @@ export async function PUT(
     const category = String(existing.rows[0].category);
 
     const result = await db.execute({
-      sql: 'UPDATE config_options SET value = ?, sort_order = ?, color = ? WHERE id = ? RETURNING *',
-      args: [value, sort_order ?? 0, color !== undefined ? color : null, params.id],
+      sql: sort_order !== undefined
+        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ? WHERE id = ? RETURNING *'
+        : 'UPDATE config_options SET value = ?, color = ? WHERE id = ? RETURNING *',
+      args: sort_order !== undefined
+        ? [value, sort_order, color !== undefined ? color : null, params.id]
+        : [value, color !== undefined ? color : null, params.id],
     });
 
     if (result.rows.length === 0) {
