@@ -478,12 +478,12 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
                     <td className="px-3 py-3 overflow-hidden">
-                      <Link href={`/attendees/${attendee.id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug" title={`${attendee.first_name} ${attendee.last_name}`}>
+                      <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>
                     <td className="px-3 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
-                      <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                      <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
                     </td>
                     <td className="px-3 py-3">
                       {attendee.company_name ? (
