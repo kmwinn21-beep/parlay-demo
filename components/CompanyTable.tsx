@@ -766,7 +766,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
                   <td className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
-                    <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
+                    <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
                       {company.name}
                     </Link>
                     {company.parent_company_name && (
