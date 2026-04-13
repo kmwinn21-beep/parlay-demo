@@ -4,12 +4,14 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPreset, type ColorMap } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import {
   type UserOption,
   parseRepIds,
   resolveRepNames,
   resolveRepInitials,
+  getRepInitials,
 } from '@/lib/useUserOptions';
 
 export interface Meeting {
@@ -57,19 +59,20 @@ function RepPills({
   userOptions: UserOption[];
   size?: 'sm' | 'xs';
 }) {
-  const initials = resolveRepInitials(scheduledBy, userOptions);
-  if (initials.length === 0) return <span className="text-gray-300">—</span>;
+  const colorMaps = useConfigColors();
+  const users = parseRepIds(scheduledBy).map(id => userOptions.find(u => u.id === id)).filter(Boolean);
+  if (users.length === 0) return <span className="text-gray-300">—</span>;
 
-  const pillClass =
+  const baseClass =
     size === 'xs'
-      ? 'inline-flex items-center px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap'
-      : 'inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap';
+      ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap'
+      : 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap';
 
   return (
     <span className="inline-flex flex-wrap gap-1">
-      {initials.map((ini, i) => (
-        <span key={i} className={pillClass}>
-          {ini}
+      {users.map((user, i) => (
+        <span key={i} className={`${baseClass} ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+          {getRepInitials(user!.value)}
         </span>
       ))}
     </span>

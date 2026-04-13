@@ -2,7 +2,9 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
+import { getPreset } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
 
@@ -58,6 +60,7 @@ export interface PriorityLead {
 
 export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
   const userOptions = useUserOptions();
+  const colorMaps = useConfigColors();
 
   if (leads.length === 0) {
     return (
@@ -68,7 +71,7 @@ export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
   return (
     <div className="space-y-2">
       {leads.map((lead) => {
-        const repInitials = resolveRepInitials(lead.assigned_user, userOptions);
+        const repUsers = parseRepIds(lead.assigned_user).map(id => userOptions.find(u => u.id === id)).filter(Boolean);
         return (
           <div
             key={lead.id}
@@ -82,14 +85,14 @@ export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
             </Link>
             {/* Row 2: reps + WSE + conference count */}
             <div className="flex items-center gap-2 flex-wrap">
-              {repInitials.length > 0 && (
+              {repUsers.length > 0 && (
                 <span className="inline-flex flex-wrap gap-1">
-                  {repInitials.map((ini, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium whitespace-nowrap">
-                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {repUsers.map((user, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {ini}
+                      {getRepInitials(user!.value)}
                     </span>
                   ))}
                 </span>

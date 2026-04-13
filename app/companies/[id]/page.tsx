@@ -13,9 +13,9 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { getPillClass, getBadgeClass } from '@/lib/colors';
+import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
 import { effectiveSeniority, classifyICP } from '@/lib/parsers';
-import { type UserOption, parseRepIds, resolveRepInitials } from '@/lib/useUserOptions';
+import { type UserOption, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
@@ -738,12 +738,12 @@ export default function CompanyDetailPage() {
                     </span>
                   )}
                   <span className="badge-gray">{company.attendees.length} attendees</span>
-                  {company.assigned_user && resolveRepInitials(company.assigned_user, userOptions).map((ini, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                  {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
                       <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {ini}
+                      {getRepInitials(user!.value)}
                     </span>
                   ))}
                 </div>

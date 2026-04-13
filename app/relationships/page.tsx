@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { getBadgeClass } from '@/lib/colors';
+import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
-import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions } from '@/lib/useUserOptions';
+import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions, parseRepIds } from '@/lib/useUserOptions';
 
 interface CompanyOption {
   id: number;
@@ -88,9 +88,11 @@ function repInitials(name: string): string {
 }
 
 function RepPill({ name }: { name: string }) {
+  const colorMaps = useConfigColors();
   const initials = getRepInitials(name);
+  const colorClass = getPreset(colorMaps.user?.[name]).badgeClass;
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
         <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
       </svg>
@@ -572,14 +574,17 @@ export default function RelationshipsPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      {companyAssignedRepInitials.length > 0 ? companyAssignedRepInitials.map((ini, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
-                          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          {ini}
-                        </span>
-                      )) : <span className="text-sm text-gray-400">—</span>}
+                      {(() => {
+                        const repUsers = parseRepIds(companyDetails?.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean);
+                        return repUsers.length > 0 ? repUsers.map((user, i) => (
+                          <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                            <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {getRepInitials(user!.value)}
+                          </span>
+                        )) : <span className="text-sm text-gray-400">—</span>;
+                      })()}
                     </div>
 
                     <div>
