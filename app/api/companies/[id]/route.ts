@@ -151,7 +151,7 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ? WHERE id = ? RETURNING *',
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, params.id],
     });
 
@@ -192,7 +192,7 @@ export async function PATCH(
     // Update company status and propagate to all associated attendees
     await db.batch(
       [
-        { sql: 'UPDATE companies SET status = ? WHERE id = ?', args: [status, params.id] },
+        { sql: 'UPDATE companies SET status = ?, updated_at = datetime(\'now\') WHERE id = ?', args: [status, params.id] },
         { sql: 'UPDATE attendees SET status = ? WHERE company_id = ?', args: [status, params.id] },
       ],
       'write'

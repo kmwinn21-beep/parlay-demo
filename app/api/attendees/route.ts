@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
                    a.status,
                    a.seniority,
                    a.created_at,
+                   a.updated_at,
                    co.name as company_name, co.company_type, co.wse as company_wse,
                    COALESCE(conf_agg.conference_count, 0) as conference_count,
                    conf_agg.conference_names,

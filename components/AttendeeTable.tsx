@@ -31,6 +31,7 @@ interface Attendee {
   has_pending_follow_ups?: boolean;
   notes_count?: number;
   pinned_notes_count?: number;
+  updated_at?: string;
 }
 
 interface Company { id: number; name: string; }
@@ -90,7 +91,15 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70, updated_on: 110 };
+
+function fmtDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return '—'; }
+}
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const colorMaps = useConfigColors();
@@ -103,6 +112,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
+  const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -125,7 +135,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts]);
+  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin]);
 
   const seniorityFilterOptions = useMemo(() => {
     if (seniorityConfigOptions.length > 0) return seniorityConfigOptions;
@@ -173,7 +183,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       const matchStatus = !filterStatus || (a.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus);
       const matchSeniority = !filterSeniority || effectiveSeniority(a.seniority, a.title) === filterSeniority;
       const matchConf = confCountMatches(Number(a.conference_count));
-      return matchSearch && matchType && matchStatus && matchSeniority && matchConf;
+      const matchUpdatedWithin = (() => {
+        if (!filterUpdatedWithin) return true;
+        if (!a.updated_at) return false;
+        const days = filterUpdatedWithin === '1day' ? 1 : filterUpdatedWithin === '1week' ? 7 : filterUpdatedWithin === '2weeks' ? 14 : 30;
+        return new Date(a.updated_at).getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+      })();
+      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchUpdatedWithin;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -187,7 +203,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, sortKey, sortDir]);
+  }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -236,7 +252,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0);
+  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0);
 
   return (
     <div>
@@ -292,7 +308,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       {/* Collapsible filter pane */}
       {filtersOpen && (
         <div className="mb-4 px-6 py-4 bg-gray-50 border border-gray-200 rounded-xl">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Type</p>
               <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-full text-sm">
@@ -338,12 +354,22 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 )}
               </div>
             </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Updated On</p>
+              <select value={filterUpdatedWithin} onChange={e => setFilterUpdatedWithin(e.target.value)} className="input-field w-full text-sm">
+                <option value="">Updated within the...</option>
+                <option value="1day">Last Day</option>
+                <option value="1week">Last Week</option>
+                <option value="2weeks">Last 2 Weeks</option>
+                <option value="30days">Last 30 Days</option>
+              </select>
+            </div>
           </div>
           {activeFilterCount > 0 && (
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => { setFilterCompanyType(''); setFilterStatus(''); setFilterSeniority(''); setFilterConfCounts(new Set()); }}
+                onClick={() => { setFilterCompanyType(''); setFilterStatus(''); setFilterSeniority(''); setFilterConfCounts(new Set()); setFilterUpdatedWithin(''); }}
                 className="text-xs text-gray-500 hover:text-red-500 transition-colors"
               >
                 Clear all filters
@@ -466,11 +492,12 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
@@ -520,6 +547,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         <span className="text-gray-300">—</span>
                       )}
                     </td>
+                    <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.updated_at)}</td>
                   </tr>
                 );
               })}

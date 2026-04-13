@@ -33,6 +33,7 @@ interface Company {
   conference_names?: string;
   attendee_summary?: string;
   pinned_notes_count?: number;
+  updated_at?: string;
 }
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
@@ -147,7 +148,15 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110 };
+
+function fmtDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return '—'; }
+}
 
 export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const colorMaps = useConfigColors();
@@ -170,6 +179,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [filterConference, setFilterConference] = useState('');
   const [filterICP, setFilterICP] = useState('');
   const icpOptions = configOptions.icp ?? [];
+  const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -207,7 +217,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, wseMin, wseMax]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax]);
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
@@ -256,7 +266,13 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
       const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
       const matchICP = !filterICP || c.icp === filterICP;
       const matchWSE = !wseFilterActive || (c.wse != null && c.wse >= effectiveWseMin && c.wse <= effectiveWseMax);
-      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE;
+      const matchUpdatedWithin = (() => {
+        if (!filterUpdatedWithin) return true;
+        if (!c.updated_at) return false;
+        const days = filterUpdatedWithin === '1day' ? 1 : filterUpdatedWithin === '1week' ? 7 : filterUpdatedWithin === '2weeks' ? 14 : 30;
+        return new Date(c.updated_at).getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+      })();
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -268,7 +284,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -369,7 +385,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0);
+  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0);
 
   return (
     <div>
@@ -495,6 +511,16 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 {allConferenceNames.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Updated On</p>
+              <select value={filterUpdatedWithin} onChange={e => setFilterUpdatedWithin(e.target.value)} className="input-field w-full text-sm">
+                <option value="">Updated within the...</option>
+                <option value="1day">Last Day</option>
+                <option value="1week">Last Week</option>
+                <option value="2weeks">Last 2 Weeks</option>
+                <option value="30days">Last 30 Days</option>
+              </select>
+            </div>
           </div>
 
           {/* WSE Range Slider */}
@@ -558,7 +584,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => { setFilterSFOwner(''); setFilterType(''); setFilterStatus(''); setFilterICP(''); setFilterConfCounts(new Set()); setFilterConference(''); setWseMin(wseGlobalMin); setWseMax(wseGlobalMax); }}
+                onClick={() => { setFilterSFOwner(''); setFilterType(''); setFilterStatus(''); setFilterICP(''); setFilterConfCounts(new Set()); setFilterConference(''); setFilterUpdatedWithin(''); setWseMin(wseGlobalMin); setWseMax(wseGlobalMax); }}
                 className="text-xs text-gray-500 hover:text-red-500 transition-colors"
               >
                 Clear all filters
@@ -757,11 +783,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
@@ -832,6 +859,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                       </span>
                     ) : <span className="text-gray-300">—</span>}
                   </td>
+                  <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>
                 </tr>
               ))}
             </tbody>
