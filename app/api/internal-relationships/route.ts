@@ -48,7 +48,19 @@ export async function GET(request: NextRequest) {
       })));
     }
 
-    return NextResponse.json({ error: 'company_id or attendee_id is required' }, { status: 400 });
+    const result = await db.execute({
+      sql: 'SELECT * FROM internal_relationships ORDER BY created_at DESC',
+      args: [],
+    });
+    return NextResponse.json(result.rows.map(r => ({
+      id: Number(r.id),
+      company_id: Number(r.company_id),
+      rep_ids: r.rep_ids ? String(r.rep_ids) : null,
+      contact_ids: r.contact_ids ? String(r.contact_ids) : null,
+      relationship_status: String(r.relationship_status),
+      description: String(r.description),
+      created_at: String(r.created_at),
+    })));
   } catch (error) {
     console.error('GET /api/internal-relationships error:', error);
     return NextResponse.json({ error: 'Failed to fetch internal relationships' }, { status: 500 });

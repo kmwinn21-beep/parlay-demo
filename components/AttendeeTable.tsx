@@ -90,7 +90,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70, actions: 100 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70 };
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const colorMaps = useConfigColors();
@@ -466,12 +466,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
@@ -520,12 +519,6 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-3">
-                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline text-xs font-medium">View</Link>
-                        <button onClick={() => handleDeleteOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-                      </div>
                     </td>
                   </tr>
                 );
