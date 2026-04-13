@@ -15,6 +15,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { parseRepIds } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
@@ -95,6 +96,7 @@ export default function AttendeeDetailPage() {
 
   // Meetings
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [showScheduleMeeting, setShowScheduleMeeting] = useState(false);
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [meetingForm, setMeetingForm] = useState({ meeting_date: '', meeting_time: '', location: '', scheduled_by: '', additional_attendees: '' });
   const [isSchedulingMeeting, setIsSchedulingMeeting] = useState(false);
@@ -648,7 +650,7 @@ export default function AttendeeDetailPage() {
 
           {/* Meetings */}
           <div className="card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
                 Meetings
                 {meetings.length > 0 && (
@@ -657,6 +659,17 @@ export default function AttendeeDetailPage() {
                   </span>
                 )}
               </h2>
+              <button
+                type="button"
+                onClick={() => setShowScheduleMeeting(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Schedule Meeting"
+              >
+                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm font-medium text-procare-dark-blue">Schedule Meeting</span>
+              </button>
             </div>
             <MeetingsTable meetings={meetings} actionOptions={actionOptions.map(o => o.value)} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
               setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
@@ -924,6 +937,14 @@ export default function AttendeeDetailPage() {
           </div>
         </div>
       </div>
+
+      <NewMeetingModal
+        isOpen={showScheduleMeeting}
+        onClose={() => setShowScheduleMeeting(false)}
+        prefillCompanyId={attendee?.company_id ?? undefined}
+        prefillAttendeeId={attendee ? Number(id) : undefined}
+        onSuccess={(meeting) => setMeetings(prev => [meeting, ...prev])}
+      />
 
       <AssignFollowUpModal
         isOpen={showAssignFollowUp}

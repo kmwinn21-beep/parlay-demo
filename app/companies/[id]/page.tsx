@@ -17,6 +17,7 @@ import { getPillClass, getBadgeClass } from '@/lib/colors';
 import { effectiveSeniority, classifyICP } from '@/lib/parsers';
 import { type UserOption, parseRepIds, resolveRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 
@@ -132,6 +133,7 @@ export default function CompanyDetailPage() {
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
   const [opCapRelExpanded, setOpCapRelExpanded] = useState(false);
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
+  const [showScheduleMeeting, setShowScheduleMeeting] = useState(false);
   const [relateSearch, setRelateSearch] = useState('');
   const [relateResults, setRelateResults] = useState<{ id: number; name: string; company_type: string | null }[]>([]);
   const [relateSaving, setRelateSaving] = useState(false);
@@ -965,7 +967,7 @@ export default function CompanyDetailPage() {
 
           {/* Meetings */}
           <div className="card p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
                 Meetings
                 {companyMeetings.length > 0 && (
@@ -974,6 +976,17 @@ export default function CompanyDetailPage() {
                   </span>
                 )}
               </h2>
+              <button
+                type="button"
+                onClick={() => setShowScheduleMeeting(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Schedule Meeting"
+              >
+                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm font-medium text-procare-dark-blue">Schedule Meeting</span>
+              </button>
             </div>
             <MeetingsTable
               meetings={companyMeetings}
@@ -1330,6 +1343,13 @@ export default function CompanyDetailPage() {
         </div>
 
       </div>{/* end grid */}
+
+      <NewMeetingModal
+        isOpen={showScheduleMeeting}
+        onClose={() => setShowScheduleMeeting(false)}
+        prefillCompanyId={company ? Number(id) : undefined}
+        onSuccess={(meeting) => setCompanyMeetings(prev => [meeting, ...prev])}
+      />
 
       <AssignFollowUpModal
         isOpen={showAssignFollowUp}
