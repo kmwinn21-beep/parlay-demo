@@ -67,6 +67,12 @@ function repInitials(name: string): string {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
+function isCSuiteTitle(title?: string): boolean {
+  if (!title) return false;
+  const t = title.toLowerCase();
+  return t.includes('c-suite') || t.includes('chief') || t.includes('ceo') || t.includes('cfo') || t.includes('coo') || t.includes('president') || t.includes('founder');
+}
+
 export default function RelationshipsPage() {
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
@@ -74,6 +80,7 @@ export default function RelationshipsPage() {
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const companyDropdownRef = useRef<HTMLDivElement>(null);
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
+  const [companyIdsWithRelationships, setCompanyIdsWithRelationships] = useState<Set<number>>(new Set());
   const [relationships, setRelationships] = useState<InternalRelationship[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [loadingRelationships, setLoadingRelationships] = useState(false);
@@ -104,6 +111,21 @@ export default function RelationshipsPage() {
       })
       .finally(() => {
         if (mounted) setLoadingCompanies(false);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/internal-relationships')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: Array<{ company_id: number }>) => {
+        if (!mounted) return;
+        setCompanyIdsWithRelationships(new Set(rows.map(r => Number(r.company_id)).filter(Boolean)));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCompanyIdsWithRelationships(new Set());
       });
     return () => { mounted = false; };
   }, []);
@@ -225,19 +247,13 @@ export default function RelationshipsPage() {
   );
   const icpTrueValue = (configOptions.icp ?? [])[0] ?? '';
   const sortedCompanies = useMemo(() => {
-    const rank = (company: CompanyOption) => {
-      const isIcpYes = !!icpTrueValue && company.icp === icpTrueValue;
-      if (isIcpYes) return 0;
-      const ct = (company.company_type || '').toLowerCase();
-      const isOperator = ct.includes('operator') || ct === 'opco' || ct === 'own/op';
-      return isOperator ? 1 : 2;
-    };
     return [...companies].sort((a, b) => {
-      const rankDiff = rank(a) - rank(b);
-      if (rankDiff !== 0) return rankDiff;
+      const aHas = companyIdsWithRelationships.has(a.id);
+      const bHas = companyIdsWithRelationships.has(b.id);
+      if (aHas !== bHas) return aHas ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  }, [companies, icpTrueValue]);
+  }, [companies, companyIdsWithRelationships]);
   const filteredCompanies = useMemo(() => {
     const q = companySearch.trim().toLowerCase();
     if (!q) return sortedCompanies;
@@ -276,6 +292,13 @@ export default function RelationshipsPage() {
                   {entry.contacts.map((att) => (
                     <div key={att.id} className="min-w-0">
                       <span className="text-sm font-medium text-gray-800 leading-tight block">{att.first_name} {att.last_name}</span>
+                      {isCSuiteTitle(att.title) && (
+                        <span title="C-Suite" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-procare-bright-blue/10 text-procare-bright-blue mt-1">
+                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      )}
                       {att.title && <span className="text-xs text-gray-500 leading-tight block">{att.title}</span>}
                     </div>
                   ))}
@@ -348,10 +371,13 @@ export default function RelationshipsPage() {
                     setCompanyDropdownOpen(false);
                   }}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                    selectedCompanyId === company.id ? 'bg-blue-50 text-procare-dark-blue font-medium' : 'text-gray-700'
+                    selectedCompanyId === company.id ? 'bg-blue-100 text-procare-dark-blue font-medium' : companyIdsWithRelationships.has(company.id) ? 'bg-blue-50 text-gray-800' : 'text-gray-700'
                   }`}
                 >
-                  {company.name}
+                  <span className="inline-flex items-center gap-2">
+                    {companyIdsWithRelationships.has(company.id) && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                    {company.name}
+                  </span>
                 </button>
               ))}
             </div>
@@ -376,54 +402,55 @@ export default function RelationshipsPage() {
         ) : (
           <div className="relative p-6 bg-gradient-to-b from-white to-gray-50/60" style={{ minHeight: `${mapBodyHeight}px` }}>
             <div className="relative flex">
-              <div className="w-[clamp(320px,34vw,460px)] flex items-stretch justify-center py-4">
-                <div className="w-full rounded-xl border border-gray-200 bg-white shadow-sm p-5" style={{ minHeight: `${Math.max(520, mapBodyHeight - 32)}px` }}>
+              <div className="w-[280px] flex items-stretch justify-center py-4 flex-shrink-0">
+                <div className="w-full rounded-xl border border-gray-200 bg-white shadow-sm p-5" style={{ minHeight: `${Math.max(420, Math.floor((mapBodyHeight - 32) * 0.75))}px` }}>
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-xl bg-procare-gold flex items-center justify-center text-procare-dark-blue text-xl font-bold font-serif flex-shrink-0">
                       {companyDetails.name?.[0] || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-xl leading-[1.1] font-bold text-procare-dark-blue font-serif break-words flex items-center gap-2">
+                      <h2 className="text-[clamp(2rem,2.6vw,2.25rem)] leading-[1.08] font-bold text-procare-dark-blue font-serif break-words whitespace-normal overflow-hidden">
                         {companyDetails.name}
-                        {companyDetails.icp != null && icpTrueValue && companyDetails.icp === icpTrueValue && (
-                          <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 flex-shrink-0">
-                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          </span>
-                        )}
                       </h2>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {companyDetails.company_type && (
-                      <span className={`${getBadgeClass(companyDetails.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
-                        {companyDetails.entity_structure === 'Parent' && (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                        )}
-                        {companyDetails.entity_structure === 'Child' && (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
-                          </svg>
-                        )}
-                        {companyDetails.company_type}
-                      </span>
-                    )}
-                    <span className="badge-gray">{companyDetails.attendees?.length ?? 0} attendees</span>
-                    {companyAssignedRepInitials.map((ini, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
-                        <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {ini}
-                      </span>
-                    ))}
-                  </div>
+                  <div className="space-y-4 mt-4 pt-4 border-t border-gray-100">
+                    <div>
+                      {companyDetails.company_type ? (
+                        <span className={`${getBadgeClass(companyDetails.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+                          {companyDetails.entity_structure === 'Parent' && (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                          )}
+                          {companyDetails.entity_structure === 'Child' && (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+                            </svg>
+                          )}
+                          {companyDetails.company_type}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
+                      )}
+                    </div>
 
-                  <div className="grid grid-cols-1 gap-4 mt-6 pt-5 border-t border-gray-100">
+                    <div>
+                      <span className="badge-gray">{companyDetails.attendees?.length ?? 0} attendees</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {companyAssignedRepInitials.length > 0 ? companyAssignedRepInitials.map((ini, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          {ini}
+                        </span>
+                      )) : <span className="text-sm text-gray-400">—</span>}
+                    </div>
+
                     <div>
                       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">WSE</p>
                       {companyDetails.wse != null ? (
