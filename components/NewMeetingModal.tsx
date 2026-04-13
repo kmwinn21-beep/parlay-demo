@@ -36,6 +36,8 @@ interface NewMeetingModalProps {
   prefillAttendeeId?: number;
   /** Called with the newly created Meeting object for optimistic UI updates */
   onSuccess?: (meeting: Meeting) => void;
+  /** When provided, restrict the conference dropdown to only these conferences (skips global fetch) */
+  availableConferences?: Array<{ id: number; name: string; start_date: string }>;
 }
 
 export function NewMeetingModal({
@@ -44,6 +46,7 @@ export function NewMeetingModal({
   prefillCompanyId,
   prefillAttendeeId,
   onSuccess,
+  availableConferences,
 }: NewMeetingModalProps) {
   useHideBottomNav(isOpen);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
@@ -77,10 +80,15 @@ export function NewMeetingModal({
         setUserOptions(data.map(d => ({ id: Number(d.id), value: String(d.value) })))
       )
       .catch(() => {});
-    fetch('/api/conferences')
-      .then(r => r.json())
-      .then((data: ConferenceOption[]) => setConferences(data))
-      .catch(() => {});
+    if (availableConferences) {
+      setConferences(availableConferences);
+    } else {
+      fetch('/api/conferences')
+        .then(r => r.json())
+        .then((data: ConferenceOption[]) => setConferences(data))
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Fetch conference attendees when conference changes; auto-populate company/contact if prefills are set

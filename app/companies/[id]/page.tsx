@@ -1349,6 +1349,7 @@ export default function CompanyDetailPage() {
         onClose={() => setShowScheduleMeeting(false)}
         prefillCompanyId={company ? Number(id) : undefined}
         onSuccess={(meeting) => setCompanyMeetings(prev => [meeting, ...prev])}
+        availableConferences={company?.conferences}
       />
 
       <AssignFollowUpModal
@@ -1356,6 +1357,7 @@ export default function CompanyDetailPage() {
         onClose={() => setShowAssignFollowUp(false)}
         onSuccess={fetchCompany}
         defaultCompanyId={Number(id)}
+        availableConferences={company?.conferences}
       />
     </div>
   );

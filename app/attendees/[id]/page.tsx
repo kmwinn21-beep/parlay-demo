@@ -944,6 +944,7 @@ export default function AttendeeDetailPage() {
         prefillCompanyId={attendee?.company_id ?? undefined}
         prefillAttendeeId={attendee ? Number(id) : undefined}
         onSuccess={(meeting) => setMeetings(prev => [meeting, ...prev])}
+        availableConferences={attendee?.conferences}
       />
 
       <AssignFollowUpModal
@@ -953,6 +954,7 @@ export default function AttendeeDetailPage() {
         defaultAttendeeId={Number(id)}
         defaultConferenceId={selectedConferenceId ? Number(selectedConferenceId) : undefined}
         defaultCompanyId={attendee?.company_id}
+        availableConferences={attendee?.conferences}
       />
     </div>
   );

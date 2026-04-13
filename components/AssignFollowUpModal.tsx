@@ -37,6 +37,8 @@ export interface AssignFollowUpModalProps {
   defaultCompanyId?: number;
   /** Pre-selects the attendee */
   defaultAttendeeId?: number;
+  /** When provided, restrict the conference dropdown to only these conferences (skips global fetch) */
+  availableConferences?: Array<{ id: number; name: string; start_date: string }>;
 }
 
 function SearchableSelect({
@@ -149,6 +151,7 @@ export function AssignFollowUpModal({
   defaultConferenceId,
   defaultCompanyId,
   defaultAttendeeId,
+  availableConferences,
 }: AssignFollowUpModalProps) {
   useHideBottomNav(isOpen);
   const userOptions = useUserOptions();
@@ -298,26 +301,36 @@ export function AssignFollowUpModal({
     setConfCompanies([]);
     setCompanyAttendeesInConf([]);
 
-    setIsLoadingConferences(true);
-    fetch('/api/conferences')
-      .then(r => r.json())
-      .then(async (data: ConferenceOption[]) => {
-        const sorted = [...data].sort((a, b) =>
-          b.start_date.localeCompare(a.start_date)
-        );
+    const initConferences = async () => {
+      setIsLoadingConferences(true);
+      try {
+        let sorted: ConferenceOption[];
+        if (availableConferences) {
+          sorted = [...availableConferences].sort((a, b) =>
+            b.start_date.localeCompare(a.start_date)
+          );
+        } else {
+          const data: ConferenceOption[] = await fetch('/api/conferences').then(r => r.json());
+          sorted = [...data].sort((a, b) =>
+            b.start_date.localeCompare(a.start_date)
+          );
+        }
         setAllConferences(sorted);
 
         if (defaultConferenceId) {
           setConferenceId(String(defaultConferenceId));
-          // Pass defaultCompanyId so companies cascade auto-selects it
           await loadConferenceCompanies(
             String(defaultConferenceId),
             defaultCompanyId
           );
         }
-      })
-      .catch(() => toast.error('Failed to load conferences'))
-      .finally(() => setIsLoadingConferences(false));
+      } catch {
+        toast.error('Failed to load conferences');
+      } finally {
+        setIsLoadingConferences(false);
+      }
+    };
+    initConferences();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
