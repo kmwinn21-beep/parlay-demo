@@ -488,7 +488,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                       {attendee.company_name ? (
                         <div>
                           {attendee.company_id ? (
-                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-800 hover:text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                            <Link href={`/companies/${attendee.company_id}`} className="text-sm text-gray-800 hover:text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
                               {attendee.company_name}
                             </Link>
                           ) : (
