@@ -79,7 +79,7 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ? WHERE id = ? RETURNING *',
+      sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [name, start_date, end_date, location, notes || null, internal_attendees || null, params.id],
     });
 
