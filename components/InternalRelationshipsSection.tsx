@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import { RepMultiSelect } from './RepMultiSelect';
 import type { UserOption } from '@/lib/useUserOptions';
 import { getRepInitials } from '@/lib/useUserOptions';
+import { getBadgeClass } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
 
 interface InternalRelationship {
   id: number;
@@ -232,6 +234,7 @@ function RelationshipCard({
   onDelete: (id: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const colorMaps = useConfigColors();
 
   const reps = rel.rep_ids
     ? rel.rep_ids.split(',').map(id => {
@@ -299,7 +302,7 @@ function RelationshipCard({
           {statusNames.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {statusNames.map((s, i) => (
-                <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                <span key={i} className={getBadgeClass(s, colorMaps.rep_relationship_type || {})}>
                   {s}
                 </span>
               ))}

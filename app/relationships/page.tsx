@@ -378,7 +378,7 @@ export default function RelationshipsPage() {
               {entry.statuses.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {entry.statuses.map((status) => (
-                    <span key={status} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                    <span key={status} className={getBadgeClass(status, colorMaps.rep_relationship_type || {})}>
                       {status}
                     </span>
                   ))}
@@ -648,7 +648,7 @@ export default function RelationshipsPage() {
                         </div>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {node.statuses.map((status) => (
-                            <span key={status} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                            <span key={status} className={getBadgeClass(status, colorMaps.rep_relationship_type || {})}>
                               {status}
                             </span>
                           ))}
