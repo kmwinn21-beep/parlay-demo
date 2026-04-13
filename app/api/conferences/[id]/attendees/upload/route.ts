@@ -104,12 +104,12 @@ export async function POST(
 
     // Load all existing companies and attendees for matching
     const [existingCoRes, existingAtRes] = await Promise.all([
-      db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, wse, services FROM companies', args: [] }),
+      db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, wse, services, assigned_user FROM companies', args: [] }),
       db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
     ]);
 
     // Build company lookup (exact + normalised + domain + fuzzy)
-    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; wse?: number | null; services?: string | null };
+    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; wse?: number | null; services?: string | null; assigned_user?: string | null };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
@@ -118,6 +118,7 @@ export async function POST(
       company_type: r.company_type ? String(r.company_type) : null,
       wse: r.wse ? Number(r.wse) : null,
       services: r.services ? String(r.services) : null,
+      assigned_user: r.assigned_user ? String(r.assigned_user) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
@@ -213,16 +214,25 @@ export async function POST(
       return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services);
     });
     if (existingToUpdate.length > 0) {
-      await batchInsert(existingToUpdate, ([n, entry]) => ({
-        sql: `UPDATE companies SET
-          company_type = COALESCE(?, company_type),
-          assigned_user = COALESCE(?, assigned_user),
-          website = COALESCE(?, website),
-          wse = COALESCE(?, wse),
-          services = COALESCE(?, services)
-          WHERE id = ?`,
-        args: [entry.company_type || null, entry.assigned_user || null, entry.website || null, entry.wse ?? null, entry.services || null, companyIdCache.get(n)!],
-      }));
+      await batchInsert(existingToUpdate, ([n, entry]) => {
+        const coId = companyIdCache.get(n)!;
+        const existingCompany = existingCompanies.find((c) => c.id === coId);
+        // If the company already has 2 or more assigned users in the DB, do not overwrite from the uploaded list
+        const existingAssignedCount = existingCompany?.assigned_user
+          ? existingCompany.assigned_user.split(',').filter((s) => s.trim()).length
+          : 0;
+        const assignedUserArg = existingAssignedCount >= 2 ? null : (entry.assigned_user || null);
+        return {
+          sql: `UPDATE companies SET
+            company_type = COALESCE(?, company_type),
+            assigned_user = COALESCE(?, assigned_user),
+            website = COALESCE(?, website),
+            wse = COALESCE(?, wse),
+            services = COALESCE(?, services)
+            WHERE id = ?`,
+          args: [entry.company_type || null, assignedUserArg, entry.website || null, entry.wse ?? null, entry.services || null, coId],
+        };
+      });
     }
 
     // Batch-insert new companies (with auto-detected company type, website, assigned_user, wse, and services)

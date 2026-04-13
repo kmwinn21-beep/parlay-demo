@@ -107,17 +107,18 @@ export async function POST(request: NextRequest) {
       if (valid.length > 0) {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes] = await Promise.all([
-          db.execute({ sql: 'SELECT id, name, website, parent_company_id FROM companies', args: [] }),
+          db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user FROM companies', args: [] }),
           db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
         ]);
 
         // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
-        type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null };
+        type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; assigned_user?: string | null };
         const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
           id: Number(r.id),
           name: String(r.name ?? ''),
           website: r.website ? String(r.website) : null,
           parent_company_id: r.parent_company_id ? Number(r.parent_company_id) : null,
+          assigned_user: r.assigned_user ? String(r.assigned_user) : null,
         }));
         const companyMatcher = buildCompanyMatcher(existingCompanies);
 
@@ -127,6 +128,7 @@ export async function POST(request: NextRequest) {
         const companyAssignedUserMap = new Map<string, string>(); // company name -> assigned_user from file
         const companyWebsiteMap = new Map<string, string>(); // company name -> website from file
         const companyWseMap = new Map<string, number>(); // company name -> wse from file
+        const companyServicesMap = new Map<string, string>(); // company name -> services from file
         const companyNameSet = new Set<string>();
         valid.forEach((p) => {
           if (p.company?.trim()) {
@@ -143,6 +145,9 @@ export async function POST(request: NextRequest) {
             if (p.wse?.trim() && !companyWseMap.has(p.company.trim())) {
               const wseVal = parseInt(p.wse.trim(), 10);
               if (!isNaN(wseVal) && wseVal > 0) companyWseMap.set(p.company.trim(), wseVal);
+            }
+            if (p.services?.trim() && !companyServicesMap.has(p.company.trim())) {
+              companyServicesMap.set(p.company.trim(), p.services.trim());
             }
           }
         });
@@ -184,18 +189,28 @@ export async function POST(request: NextRequest) {
         // ── Step 3a: Update existing companies with CSV-provided fields ──
         const existingToUpdate = uniqueCompanyNames.filter((n) => {
           const id = companyIdCache.get(n);
-          return id !== undefined && id > 0 && (companyTypeMap.has(n) || companyAssignedUserMap.has(n) || companyWebsiteMap.has(n) || companyWseMap.has(n));
+          return id !== undefined && id > 0 && (companyTypeMap.has(n) || companyAssignedUserMap.has(n) || companyWebsiteMap.has(n) || companyWseMap.has(n) || companyServicesMap.has(n));
         });
         if (existingToUpdate.length > 0) {
-          await batchInsert(existingToUpdate, (n) => ({
-            sql: `UPDATE companies SET
-              company_type = COALESCE(?, company_type),
-              assigned_user = COALESCE(?, assigned_user),
-              website = COALESCE(?, website),
-              wse = COALESCE(?, wse)
-              WHERE id = ?`,
-            args: [companyTypeMap.get(n) || null, companyAssignedUserMap.get(n) || null, companyWebsiteMap.get(n) || null, companyWseMap.get(n) ?? null, companyIdCache.get(n)!],
-          }));
+          await batchInsert(existingToUpdate, (n) => {
+            const coId = companyIdCache.get(n)!;
+            const existingCompany = existingCompanies.find((c) => c.id === coId);
+            // If the company already has 2 or more assigned users in the DB, do not overwrite from the uploaded list
+            const existingAssignedCount = existingCompany?.assigned_user
+              ? existingCompany.assigned_user.split(',').filter((s) => s.trim()).length
+              : 0;
+            const assignedUserArg = existingAssignedCount >= 2 ? null : (companyAssignedUserMap.get(n) || null);
+            return {
+              sql: `UPDATE companies SET
+                company_type = COALESCE(?, company_type),
+                assigned_user = COALESCE(?, assigned_user),
+                website = COALESCE(?, website),
+                wse = COALESCE(?, wse),
+                services = COALESCE(?, services)
+                WHERE id = ?`,
+              args: [companyTypeMap.get(n) || null, assignedUserArg, companyWebsiteMap.get(n) || null, companyWseMap.get(n) ?? null, companyServicesMap.get(n) || null, coId],
+            };
+          });
         }
 
         // ── Step 3b: Batch-insert new companies ──
@@ -206,9 +221,10 @@ export async function POST(request: NextRequest) {
             const assignedUser = companyAssignedUserMap.get(n) || null;
             const website = companyWebsiteMap.get(n) || null;
             const wse = companyWseMap.get(n) ?? null;
+            const services = companyServicesMap.get(n) || null;
             return {
-              sql: 'INSERT INTO companies (name, company_type, assigned_user, website, wse) VALUES (?, ?, ?, ?, ?) RETURNING id',
-              args: [n, detectedType || null, assignedUser, website, wse],
+              sql: 'INSERT INTO companies (name, company_type, assigned_user, website, wse, services) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
+              args: [n, detectedType || null, assignedUser, website, wse, services],
             };
           });
           for (let i = 0; i < newCoNames.length; i++) {
