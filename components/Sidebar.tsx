@@ -52,6 +52,15 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    href: '/relationships',
+    label: 'Relationships',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2 2m0 0l2-2m-2 2V9m-7 3l3-3 3 3m4-3l3 3-3 3m-8-3H5m14 0h-2M7 21h10a2 2 0 002-2V9.5a2 2 0 00-.586-1.414l-2.5-2.5A2 2 0 0014.5 5h-5a2 2 0 00-1.414.586l-2.5 2.5A2 2 0 005 9.5V19a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
 ];
 
 export function Sidebar() {

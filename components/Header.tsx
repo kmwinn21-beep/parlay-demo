@@ -18,6 +18,7 @@ const pageTitles: Record<string, string> = {
   '/companies': 'Companies',
   '/admin': 'Admin Panel',
   '/follow-ups': 'Meetings & Follow Ups',
+  '/relationships': 'Relationships',
   '/auth/account': 'My Account',
 };
 
