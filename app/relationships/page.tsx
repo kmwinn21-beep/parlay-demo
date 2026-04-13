@@ -1,16 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
-import { resolveRepInitials, useConfigWithIds, useUserOptions } from '@/lib/useUserOptions';
+import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions } from '@/lib/useUserOptions';
 
 interface CompanyOption {
   id: number;
   name: string;
-  company_type?: string | null;
-  icp?: string | null;
 }
 
 interface InternalRelationship {
@@ -67,10 +66,16 @@ function repInitials(name: string): string {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-function isCSuiteTitle(title?: string): boolean {
-  if (!title) return false;
-  const t = title.toLowerCase();
-  return t.includes('c-suite') || t.includes('chief') || t.includes('ceo') || t.includes('cfo') || t.includes('coo') || t.includes('president') || t.includes('founder');
+function RepPill({ name }: { name: string }) {
+  const initials = getRepInitials(name);
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+      </svg>
+      {initials}
+    </span>
+  );
 }
 
 export default function RelationshipsPage() {
@@ -80,11 +85,11 @@ export default function RelationshipsPage() {
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const companyDropdownRef = useRef<HTMLDivElement>(null);
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
-  const [companyIdsWithRelationships, setCompanyIdsWithRelationships] = useState<Set<number>>(new Set());
   const [relationships, setRelationships] = useState<InternalRelationship[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [loadingRelationships, setLoadingRelationships] = useState(false);
   const [loadingCompanyDetails, setLoadingCompanyDetails] = useState(false);
+  const [relationshipRefreshKey, setRelationshipRefreshKey] = useState(0);
 
   const userOptions = useUserOptions();
   const relTypeOptions = useConfigWithIds('rep_relationship_type');
@@ -93,15 +98,13 @@ export default function RelationshipsPage() {
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/companies')
+    fetch('/api/companies?minimal=1&has_relationships=1')
       .then(r => (r.ok ? r.json() : []))
-      .then((rows: Array<{ id: number; name: string; company_type?: string | null; icp?: string | null }>) => {
+      .then((rows: Array<{ id: number; name: string }>) => {
         if (!mounted) return;
         const normalized = rows.map(r => ({
           id: Number(r.id),
           name: String(r.name),
-          company_type: r.company_type ? String(r.company_type) : null,
-          icp: r.icp ? String(r.icp) : null,
         }));
         setCompanies(normalized);
       })
@@ -111,21 +114,6 @@ export default function RelationshipsPage() {
       })
       .finally(() => {
         if (mounted) setLoadingCompanies(false);
-      });
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    fetch('/api/internal-relationships')
-      .then(r => (r.ok ? r.json() : []))
-      .then((rows: Array<{ company_id: number }>) => {
-        if (!mounted) return;
-        setCompanyIdsWithRelationships(new Set(rows.map(r => Number(r.company_id)).filter(Boolean)));
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setCompanyIdsWithRelationships(new Set());
       });
     return () => { mounted = false; };
   }, []);
@@ -167,7 +155,7 @@ export default function RelationshipsPage() {
         if (mounted) setLoadingCompanyDetails(false);
       });
     return () => { mounted = false; };
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, relationshipRefreshKey]);
 
   useEffect(() => {
     if (!companyDropdownOpen) return;
@@ -247,13 +235,8 @@ export default function RelationshipsPage() {
   );
   const icpTrueValue = (configOptions.icp ?? [])[0] ?? '';
   const sortedCompanies = useMemo(() => {
-    return [...companies].sort((a, b) => {
-      const aHas = companyIdsWithRelationships.has(a.id);
-      const bHas = companyIdsWithRelationships.has(b.id);
-      if (aHas !== bHas) return aHas ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [companies, companyIdsWithRelationships]);
+    return [...companies].sort((a, b) => a.name.localeCompare(b.name));
+  }, [companies]);
   const filteredCompanies = useMemo(() => {
     const q = companySearch.trim().toLowerCase();
     if (!q) return sortedCompanies;
@@ -275,15 +258,28 @@ export default function RelationshipsPage() {
   );
   const mapBodyHeight = Math.max(560, mapNodes.length * 220);
 
-  function MiniRelationshipCard({ entry, repInitialsValue }: { entry: RelationshipEntry; repInitialsValue: string }) {
-    const [expanded, setExpanded] = useState(true);
+  const handleDeleteRelationship = async (id: number) => {
+    try {
+      const res = await fetch(`/api/internal-relationships?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('Internal relationship removed.');
+      setRelationshipRefreshKey(k => k + 1);
+    } catch {
+      toast.error('Failed to remove relationship.');
+    }
+  };
+
+  function MiniRelationshipCard({ entry, repName, onDelete }: { entry: RelationshipEntry; repName: string; onDelete: (id: number) => void | Promise<void> }) {
+    const [expanded, setExpanded] = useState(false);
 
     return (
       <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+        {/* Collapsed header — always visible */}
         <button
           onClick={() => setExpanded(v => !v)}
           className="w-full p-3 hover:bg-gray-50 transition-colors text-left"
         >
+          {/* Top row: Contact name/title + expand chevron */}
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               {entry.contacts.length > 0 ? (
@@ -291,13 +287,6 @@ export default function RelationshipsPage() {
                   {entry.contacts.map((att) => (
                     <div key={att.id} className="min-w-0">
                       <span className="text-sm font-medium text-gray-800 leading-tight block">{att.first_name} {att.last_name}</span>
-                      {isCSuiteTitle(att.title) && (
-                        <span title="C-Suite" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-procare-bright-blue/10 text-procare-bright-blue mt-1">
-                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </span>
-                      )}
                       {att.title && <span className="text-xs text-gray-500 leading-tight block">{att.title}</span>}
                     </div>
                   ))}
@@ -311,16 +300,13 @@ export default function RelationshipsPage() {
             </svg>
           </div>
 
+          {/* Bottom row: Rep pill */}
           <div className="flex flex-wrap items-center gap-1 mt-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
-                <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-              </svg>
-              {repInitialsValue}
-            </span>
+            <RepPill name={repName} />
           </div>
         </button>
 
+        {/* Expanded content — relationship status pills + notes + remove */}
         {expanded && (
           <div className="px-3 pb-3 border-t border-gray-100">
             {entry.statuses.length > 0 && (
@@ -333,6 +319,14 @@ export default function RelationshipsPage() {
               </div>
             )}
             <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{entry.description}</p>
+            <div className="mt-2 flex justify-end">
+              <button
+                onClick={() => { if (confirm('Remove this internal relationship?')) onDelete(entry.id); }}
+                className="text-xs text-red-500 hover:underline"
+              >
+                Remove
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -379,13 +373,10 @@ export default function RelationshipsPage() {
                     setCompanyDropdownOpen(false);
                   }}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                    selectedCompanyId === company.id ? 'bg-blue-100 text-procare-dark-blue font-medium' : companyIdsWithRelationships.has(company.id) ? 'bg-blue-50 text-gray-800' : 'text-gray-700'
+                    selectedCompanyId === company.id ? 'bg-blue-100 text-procare-dark-blue font-medium' : 'text-gray-700'
                   }`}
                 >
-                  <span className="inline-flex items-center gap-2">
-                    {companyIdsWithRelationships.has(company.id) && <span className="w-2 h-2 rounded-full bg-blue-500" />}
-                    {company.name}
-                  </span>
+                  {company.name}
                 </button>
               ))}
             </div>
@@ -535,7 +526,7 @@ export default function RelationshipsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
                       {node.entries.map((entry) => (
-                        <MiniRelationshipCard key={entry.id} entry={entry} repInitialsValue={node.initials} />
+                        <MiniRelationshipCard key={entry.id} entry={entry} repName={node.repName} onDelete={handleDeleteRelationship} />
                       ))}
                     </div>
                   </div>
