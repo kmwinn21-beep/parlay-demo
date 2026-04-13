@@ -383,7 +383,7 @@ export default function RelationshipsPage() {
                       {companyDetails.name?.[0] || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-[28px] leading-[1.1] font-bold text-procare-dark-blue font-serif break-words flex items-center gap-2">
+                      <h2 className="text-xl leading-[1.1] font-bold text-procare-dark-blue font-serif break-words flex items-center gap-2">
                         {companyDetails.name}
                         {companyDetails.icp != null && icpTrueValue && companyDetails.icp === icpTrueValue && (
                           <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 flex-shrink-0">
