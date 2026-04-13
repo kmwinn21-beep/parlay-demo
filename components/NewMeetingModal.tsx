@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
+import { type Meeting } from '@/components/MeetingsTable';
 
 interface ConferenceOption {
   id: number;
@@ -29,9 +30,21 @@ interface CompanyOption {
 interface NewMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Pre-select this company after a conference is chosen (auto-populates Company field) */
+  prefillCompanyId?: number;
+  /** Pre-select this attendee after a conference is chosen (auto-populates Contact field) */
+  prefillAttendeeId?: number;
+  /** Called with the newly created Meeting object for optimistic UI updates */
+  onSuccess?: (meeting: Meeting) => void;
 }
 
-export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
+export function NewMeetingModal({
+  isOpen,
+  onClose,
+  prefillCompanyId,
+  prefillAttendeeId,
+  onSuccess,
+}: NewMeetingModalProps) {
   useHideBottomNav(isOpen);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
@@ -51,6 +64,9 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
   const [submitting, setSubmitting] = useState(false);
 
   const companyDropdownRef = useRef<HTMLDivElement>(null);
+  // Used to skip the "reset attendee on company change" effect when we set
+  // the company programmatically from the prefill logic.
+  const isPrefilling = useRef(false);
 
   // Fetch users and conferences on open
   useEffect(() => {
@@ -67,7 +83,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
       .catch(() => {});
   }, [isOpen]);
 
-  // Fetch conference attendees when conference changes
+  // Fetch conference attendees when conference changes; auto-populate company/contact if prefills are set
   useEffect(() => {
     if (!selectedConferenceId) {
       setAttendees([]);
@@ -83,14 +99,38 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
     fetch(`/api/conferences/${selectedConferenceId}`)
       .then(r => r.json())
       .then((data: { attendees: AttendeeOption[] }) => {
-        setAttendees(data.attendees || []);
+        const fetched = data.attendees || [];
+        setAttendees(fetched);
+
+        if (prefillCompanyId) {
+          const hasCompany = fetched.some(a => a.company_id === prefillCompanyId);
+          if (hasCompany) {
+            // Signal the company-change effect to skip its reset so the attendee
+            // we set here is preserved.
+            isPrefilling.current = true;
+            setSelectedCompanyId(String(prefillCompanyId));
+
+            if (prefillAttendeeId) {
+              const hasAttendee = fetched.some(
+                a => a.id === prefillAttendeeId && a.company_id === prefillCompanyId
+              );
+              if (hasAttendee) {
+                setSelectedAttendeeId(String(prefillAttendeeId));
+              }
+            }
+          }
+        }
       })
       .catch(() => setAttendees([]))
       .finally(() => setLoadingConference(false));
-  }, [selectedConferenceId]);
+  }, [selectedConferenceId, prefillCompanyId, prefillAttendeeId]);
 
-  // Reset contact when company changes
+  // Reset contact when company changes — but skip if the change came from a prefill
   useEffect(() => {
+    if (isPrefilling.current) {
+      isPrefilling.current = false;
+      return;
+    }
     setSelectedAttendeeId('');
   }, [selectedCompanyId]);
 
@@ -147,6 +187,7 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
     setAdditionalAttendees('');
     setCompanySearch('');
     setShowCompanyDropdown(false);
+    isPrefilling.current = false;
   }
 
   function handleClose() {
@@ -179,7 +220,35 @@ export function NewMeetingModal({ isOpen, onClose }: NewMeetingModalProps) {
         const err = await res.json();
         throw new Error(err.error || 'Failed to schedule meeting');
       }
+      const created = await res.json();
       toast.success('Meeting scheduled successfully!');
+
+      // Build a full Meeting object for optimistic UI updates in the parent
+      if (onSuccess) {
+        const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
+        const conf = conferences.find(c => c.id === Number(selectedConferenceId));
+        const company = companies.find(c => c.id === Number(selectedCompanyId));
+        onSuccess({
+          id: Number(created.id),
+          attendee_id: Number(selectedAttendeeId),
+          conference_id: Number(selectedConferenceId),
+          meeting_date: meetingDate,
+          meeting_time: meetingTime,
+          location: location || null,
+          scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
+          additional_attendees: additionalAttendees || null,
+          outcome: created.outcome || 'Meeting Scheduled',
+          created_at: created.created_at || new Date().toISOString(),
+          first_name: contact?.first_name || '',
+          last_name: contact?.last_name || '',
+          title: contact?.title || null,
+          company_id: contact?.company_id || null,
+          company_name: company?.name || null,
+          company_wse: null,
+          conference_name: conf?.name || '',
+        });
+      }
+
       handleClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to schedule meeting');
