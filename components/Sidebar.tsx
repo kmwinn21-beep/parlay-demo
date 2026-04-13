@@ -57,7 +57,7 @@ const navItems = [
     label: 'Relationships',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2 2m0 0l2-2m-2 2V9m-7 3l3-3 3 3m4-3l3 3-3 3m-8-3H5m14 0h-2M7 21h10a2 2 0 002-2V9.5a2 2 0 00-.586-1.414l-2.5-2.5A2 2 0 0014.5 5h-5a2 2 0 00-1.414.586l-2.5 2.5A2 2 0 005 9.5V19a2 2 0 002 2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.5 14A3.5 3.5 0 1112 10.5L16 6.5a3.5 3.5 0 115 2.5 3.5 3.5 0 01-6.28 2.14l-3.86 3.22a3.5 3.5 0 010 3.28l3.86 3.22A3.5 3.5 0 1121 19a3.5 3.5 0 01-5-2.5L12 13.5A3.5 3.5 0 118.5 14z" />
       </svg>
     ),
   },
