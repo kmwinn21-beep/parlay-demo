@@ -408,7 +408,7 @@ export default function RelationshipsPage() {
                       {companyDetails.name?.[0] || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-[clamp(2rem,2.6vw,2.25rem)] leading-[1.08] font-bold text-procare-dark-blue font-serif break-words whitespace-normal overflow-hidden">
+                      <h2 className="text-2xl font-bold text-procare-dark-blue font-serif break-words whitespace-normal overflow-hidden">
                         {companyDetails.name}
                       </h2>
                     </div>
