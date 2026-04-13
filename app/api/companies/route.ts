@@ -25,9 +25,16 @@ export async function GET(request: NextRequest) {
     await dbReady;
 
     // ?minimal=1 — lightweight query returning only id+name (for dropdowns/selects)
+    // optional: &has_relationships=1 — restrict to companies that have at least one internal relationship
     if (request.nextUrl.searchParams.get('minimal') === '1') {
+      const hasRelationships = request.nextUrl.searchParams.get('has_relationships') === '1';
       const result = await db.execute({
-        sql: 'SELECT id, name FROM companies ORDER BY name',
+        sql: hasRelationships
+          ? `SELECT DISTINCT co.id, co.name
+             FROM companies co
+             INNER JOIN internal_relationships ir ON co.id = ir.company_id
+             ORDER BY co.name`
+          : 'SELECT id, name FROM companies ORDER BY name',
         args: [],
       });
       return NextResponse.json(result.rows.map(r => ({ id: r.id, name: r.name })), {
