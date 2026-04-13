@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -40,6 +41,26 @@ interface RelationshipEntry {
   contacts: Array<{ id: number; first_name: string; last_name: string; title?: string }>;
   statuses: string[];
   description: string;
+}
+
+interface Conference {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  location: string;
+}
+
+function fmtConfDate(d: string): string {
+  try {
+    const [y, m, day] = d.split('-').map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return d; }
+}
+
+function isInProgress(conf: Conference): boolean {
+  const today = new Date().toISOString().split('T')[0];
+  return conf.start_date <= today && conf.end_date >= today;
 }
 
 interface RepMapNode {
@@ -271,65 +292,174 @@ export default function RelationshipsPage() {
 
   function MiniRelationshipCard({ entry, repName, onDelete }: { entry: RelationshipEntry; repName: string; onDelete: (id: number) => void | Promise<void> }) {
     const [expanded, setExpanded] = useState(false);
+    const [showConferences, setShowConferences] = useState(false);
+    const [conferencesData, setConferencesData] = useState<Conference[] | null>(null);
+    const [loadingConfs, setLoadingConfs] = useState(false);
+
+    async function handleConferenceClick(e: React.MouseEvent) {
+      e.stopPropagation();
+      if (entry.contacts.length === 0) return;
+      if (conferencesData) { setShowConferences(true); return; }
+      setLoadingConfs(true);
+      try {
+        const allConfs: Conference[] = [];
+        const seen = new Set<number>();
+        for (const contact of entry.contacts) {
+          const res = await fetch(`/api/attendees/${contact.id}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          for (const conf of (data.conferences || [])) {
+            const cid = Number(conf.id);
+            if (!seen.has(cid)) {
+              seen.add(cid);
+              allConfs.push({ id: cid, name: String(conf.name), start_date: String(conf.start_date), end_date: String(conf.end_date), location: String(conf.location) });
+            }
+          }
+        }
+        allConfs.sort((a, b) => {
+          const aIP = isInProgress(a), bIP = isInProgress(b);
+          if (aIP && !bIP) return -1;
+          if (!aIP && bIP) return 1;
+          return b.start_date.localeCompare(a.start_date);
+        });
+        setConferencesData(allConfs);
+        setShowConferences(true);
+      } catch {
+        toast.error('Failed to load conferences.');
+      } finally {
+        setLoadingConfs(false);
+      }
+    }
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-        {/* Collapsed header — always visible */}
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="w-full p-3 hover:bg-gray-50 transition-colors text-left"
-        >
-          {/* Top row: Contact name/title + expand chevron */}
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              {entry.contacts.length > 0 ? (
-                <div className="flex flex-col gap-1.5">
-                  {entry.contacts.map((att) => (
-                    <div key={att.id} className="min-w-0">
-                      <span className="text-sm font-medium text-gray-800 leading-tight block">{att.first_name} {att.last_name}</span>
-                      {att.title && <span className="text-xs text-gray-500 leading-tight block">{att.title}</span>}
-                    </div>
+      <>
+        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+          {/* Collapsed header — always visible */}
+          {/* Using div+onClick instead of button to allow Link children without nesting interactive elements */}
+          <div
+            onClick={() => setExpanded(v => !v)}
+            className="w-full p-3 hover:bg-gray-50 transition-colors cursor-pointer"
+          >
+            {/* Top row: Contact name/title + expand chevron */}
+            <div className="flex items-start justify-between">
+              <div className="min-w-0 flex-1" onClick={e => e.stopPropagation()}>
+                {entry.contacts.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {entry.contacts.map((att) => (
+                      <div key={att.id} className="min-w-0">
+                        <Link
+                          href={`/attendees/${att.id}`}
+                          className="text-sm font-medium text-procare-bright-blue hover:underline leading-tight block"
+                        >
+                          {att.first_name} {att.last_name}
+                        </Link>
+                        {att.title && <span className="text-xs text-gray-500 leading-tight block">{att.title}</span>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-400">No contact</span>
+                )}
+              </div>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+
+            {/* Bottom row: Rep pill */}
+            <div className="flex flex-wrap items-center gap-1 mt-2">
+              <RepPill name={repName} />
+            </div>
+          </div>
+
+          {/* Expanded content — relationship status pills + notes + actions */}
+          {expanded && (
+            <div className="px-3 pb-3 border-t border-gray-100">
+              {entry.statuses.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {entry.statuses.map((status) => (
+                    <span key={status} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                      {status}
+                    </span>
                   ))}
                 </div>
-              ) : (
-                <span className="text-sm text-gray-400">No contact</span>
               )}
-            </div>
-            <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-
-          {/* Bottom row: Rep pill */}
-          <div className="flex flex-wrap items-center gap-1 mt-2">
-            <RepPill name={repName} />
-          </div>
-        </button>
-
-        {/* Expanded content — relationship status pills + notes + remove */}
-        {expanded && (
-          <div className="px-3 pb-3 border-t border-gray-100">
-            {entry.statuses.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {entry.statuses.map((status) => (
-                  <span key={status} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                    {status}
-                  </span>
-                ))}
+              <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{entry.description}</p>
+              <div className="mt-2 flex items-center justify-between">
+                {/* Conference history icon — bottom left */}
+                <button
+                  type="button"
+                  onClick={handleConferenceClick}
+                  disabled={loadingConfs || entry.contacts.length === 0}
+                  title="View conference history"
+                  className="text-gray-400 hover:text-procare-bright-blue transition-colors disabled:opacity-40"
+                >
+                  {loadingConfs ? (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  onClick={() => { if (confirm('Remove this internal relationship?')) onDelete(entry.id); }}
+                  className="text-xs text-red-500 hover:underline"
+                >
+                  Remove
+                </button>
               </div>
-            )}
-            <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{entry.description}</p>
-            <div className="mt-2 flex justify-end">
-              <button
-                onClick={() => { if (confirm('Remove this internal relationship?')) onDelete(entry.id); }}
-                className="text-xs text-red-500 hover:underline"
-              >
-                Remove
-              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Conference history modal */}
+        {showConferences && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowConferences(false)}>
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
+                <div>
+                  <h3 className="text-sm font-semibold text-procare-dark-blue font-serif">Conference History</h3>
+                  {entry.contacts.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {entry.contacts.map(c => `${c.first_name} ${c.last_name}`).join(', ')}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => setShowConferences(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-4 space-y-2">
+                {conferencesData?.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">No conferences found.</p>
+                ) : conferencesData?.map(conf => {
+                  const inProgress = isInProgress(conf);
+                  return (
+                    <div key={conf.id} className={`p-3 rounded-lg border ${inProgress ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
+                      {inProgress && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 uppercase tracking-wide mb-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                          In Progress
+                        </span>
+                      )}
+                      <p className="text-sm font-medium text-gray-800 leading-snug">{conf.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{fmtConfDate(conf.start_date)} – {fmtConfDate(conf.end_date)}</p>
+                      {conf.location && <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 
@@ -408,9 +538,11 @@ export default function RelationshipsPage() {
                       {companyDetails.name?.[0] || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-2xl font-bold text-procare-dark-blue font-serif break-words whitespace-normal overflow-hidden">
-                        {companyDetails.name}
-                      </h2>
+                      <Link href={`/companies/${companyDetails.id}`}>
+                        <h2 className="text-2xl font-bold text-procare-dark-blue font-serif break-words whitespace-normal overflow-hidden hover:underline cursor-pointer">
+                          {companyDetails.name}
+                        </h2>
+                      </Link>
                     </div>
                   </div>
 
