@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { getPreset } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
 import { useUser } from '@/components/UserContext';
 
 export interface EntityNote {
@@ -82,6 +84,7 @@ export function NotesSection({
   const [pinConference, setPinConference] = useState('');
   const [pinAttendeeId, setPinAttendeeId] = useState('');
   const { user } = useUser();
+  const colorMaps = useConfigColors();
 
   // Sync notes when initialNotes prop changes (e.g. after parent fetch completes)
   useEffect(() => {
@@ -545,7 +548,7 @@ export function NotesSection({
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {repInitials && (
                       <span
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold flex-shrink-0"
+                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold flex-shrink-0 ${getPreset(colorMaps.user?.[note.rep ?? '']).badgeClass}`}
                         title={note.rep || undefined}
                       >
                         {repInitials}

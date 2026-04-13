@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { getPreset } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import {
@@ -10,6 +12,7 @@ import {
   resolveRepInitials,
   useConfigWithIds,
   resolveConfigValue,
+  getRepInitials,
 } from '@/lib/useUserOptions';
 
 export interface FollowUp {
@@ -46,22 +49,23 @@ function RepPills({
   userOptions: UserOption[];
   size?: 'sm' | 'xs';
 }) {
-  const initials = resolveRepInitials(assignedRep, userOptions);
-  if (initials.length === 0) return null;
+  const colorMaps = useConfigColors();
+  const users = parseRepIds(assignedRep).map(id => userOptions.find(u => u.id === id)).filter(Boolean);
+  if (users.length === 0) return null;
 
-  const pillClass =
+  const baseClass =
     size === 'xs'
-      ? 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200'
-      : 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200';
+      ? 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-[10px] font-medium'
+      : 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-xs font-medium';
 
   return (
     <span className="inline-flex flex-wrap gap-1">
-      {initials.map((ini, i) => (
-        <span key={i} className={pillClass}>
+      {users.map((user, i) => (
+        <span key={i} className={`${baseClass} ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5 flex-shrink-0">
             <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
           </svg>
-          {ini}
+          {getRepInitials(user!.value)}
         </span>
       ))}
     </span>

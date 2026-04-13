@@ -17,8 +17,8 @@ import { useUser } from '@/components/UserContext';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { getPillClass, getBadgeClass } from '@/lib/colors';
-import { useUserOptions, resolveRepInitials } from '@/lib/useUserOptions';
+import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
+import { useUserOptions, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
@@ -597,14 +597,17 @@ export default function AttendeeDetailPage() {
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Assigned Rep(s)</p>
                     <div className="flex flex-wrap gap-1">
-                      {attendee.company_assigned_user ? resolveRepInitials(attendee.company_assigned_user, userOptionsFull).map((ini, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
-                            <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-                          </svg>
-                          {ini}
-                        </span>
-                      )) : <p className="text-sm text-gray-400">—</p>}
+                      {(() => {
+                        const repUsers = parseRepIds(attendee.company_assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean);
+                        return repUsers.length > 0 ? repUsers.map((user, i) => (
+                          <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                              <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                            </svg>
+                            {getRepInitials(user!.value)}
+                          </span>
+                        )) : <p className="text-sm text-gray-400">—</p>;
+                      })()}
                     </div>
                   </div>
                   <div>
