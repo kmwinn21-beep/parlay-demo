@@ -259,17 +259,16 @@ export default function RelationshipsPage() {
     if (!q) return sortedCompanies;
     return sortedCompanies.filter(c => c.name.toLowerCase().includes(q));
   }, [companySearch, sortedCompanies]);
+  const selectedCompanyLabel = useMemo(
+    () => companies.find(c => c.id === selectedCompanyId)?.name ?? '',
+    [companies, selectedCompanyId]
+  );
   useEffect(() => {
     if (selectedCompanyId == null && sortedCompanies.length > 0) {
       setSelectedCompanyId(sortedCompanies[0].id);
-      setCompanySearch(sortedCompanies[0].name);
       return;
     }
-    if (selectedCompanyId != null) {
-      const selected = companies.find(c => c.id === selectedCompanyId);
-      if (selected && !companyDropdownOpen) setCompanySearch(selected.name);
-    }
-  }, [companies, companyDropdownOpen, selectedCompanyId, sortedCompanies]);
+  }, [selectedCompanyId, sortedCompanies]);
   const companyAssignedRepInitials = useMemo(
     () => resolveRepInitials(companyDetails?.assigned_user ?? '', userOptions),
     [companyDetails?.assigned_user, userOptions]
@@ -345,19 +344,29 @@ export default function RelationshipsPage() {
       <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
         <div ref={companyDropdownRef} className="max-w-md w-full relative">
           <label className="label">Company</label>
-          <input
-            value={companySearch}
-            onFocus={() => setCompanyDropdownOpen(true)}
-            onChange={(e) => {
-              setCompanySearch(e.target.value);
-              setCompanyDropdownOpen(true);
-            }}
-            className="input-field w-full"
-            placeholder={loadingCompanies ? 'Loading companies...' : 'Search companies...'}
+          <button
+            type="button"
+            onClick={() => !loadingCompanies && companies.length > 0 && setCompanyDropdownOpen(v => !v)}
+            className="input-field w-full text-left flex items-center justify-between"
             disabled={loadingCompanies || companies.length === 0}
-          />
+          >
+            <span className={selectedCompanyLabel ? 'text-gray-800' : 'text-gray-400'}>
+              {selectedCompanyLabel || (loadingCompanies ? 'Loading companies...' : 'Select a company')}
+            </span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${companyDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
           {companyDropdownOpen && !loadingCompanies && companies.length > 0 && (
             <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-100 p-2">
+                <input
+                  value={companySearch}
+                  onChange={(e) => setCompanySearch(e.target.value)}
+                  className="input-field w-full"
+                  placeholder="Search companies..."
+                />
+              </div>
               {filteredCompanies.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-gray-500">No matching companies.</div>
               ) : filteredCompanies.map(company => (
@@ -367,7 +376,6 @@ export default function RelationshipsPage() {
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setSelectedCompanyId(company.id);
-                    setCompanySearch(company.name);
                     setCompanyDropdownOpen(false);
                   }}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
