@@ -66,7 +66,7 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ? WHERE id = ? RETURNING *',
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [
         first_name,
         last_name,
@@ -154,7 +154,7 @@ export async function PATCH(
 
     args.push(params.id);
     const updatedResult = await db.execute({
-      sql: `UPDATE attendees SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`,
+      sql: `UPDATE attendees SET ${setClauses.join(', ')}, updated_at = datetime('now') WHERE id = ? RETURNING *`,
       args,
     });
 

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const result = await db.execute({
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
-              co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at,
+              co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at, co.updated_at,
               COALESCE(att_agg.attendee_count, 0) as attendee_count,
               COALESCE(conf_agg.conference_count, 0) as conference_count,
               conf_agg.conference_names,

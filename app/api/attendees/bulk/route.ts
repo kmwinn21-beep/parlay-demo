@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
 
     const placeholders = ids.map(() => '?').join(', ');
     await db.execute({
-      sql: `UPDATE attendees SET ${setClauses.join(', ')} WHERE id IN (${placeholders})`,
+      sql: `UPDATE attendees SET ${setClauses.join(', ')}, updated_at = datetime('now') WHERE id IN (${placeholders})`,
       args: [...baseArgs, ...ids],
     });
 
