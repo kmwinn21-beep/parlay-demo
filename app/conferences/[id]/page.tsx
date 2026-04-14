@@ -447,6 +447,7 @@ export default function ConferenceDetailPage() {
       setConference((prev) => prev ? { ...prev, ...updated } : prev);
       setIsEditing(false);
       toast.success('Conference updated!');
+      router.refresh();
     } catch {
       toast.error('Failed to update conference');
     } finally {
