@@ -455,7 +455,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose }: {
                     <td className="px-3 py-2 align-middle">
                       <div className="flex items-center gap-1.5">
                         {op && (
-                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-procare-dark-blue text-white text-[9px] font-bold flex-shrink-0">O</span>
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 text-green-700 border border-green-300 text-[9px] font-bold flex-shrink-0">O</span>
                         )}
                         <span className="font-medium text-gray-900">{att.first_name} {att.last_name}</span>
                       </div>
