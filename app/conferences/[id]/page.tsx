@@ -36,6 +36,15 @@ interface Attendee {
   conference_count?: number;
   conference_names?: string;
   entity_notes_count?: number;
+  created_at?: string;
+}
+
+function fmtDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return '—'; }
 }
 
 const ATTENDEE_PAGE_SIZE = 100;
@@ -1129,6 +1138,9 @@ export default function ConferenceDetailPage() {
                           <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
                         )}
                       </div>
+                      {attendee.created_at && (
+                        <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
+                      )}
                     </div>
                   );
                 })}
@@ -1161,6 +1173,7 @@ export default function ConferenceDetailPage() {
                       <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date Added</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1219,6 +1232,7 @@ export default function ConferenceDetailPage() {
                           : <span className="text-gray-300">—</span>
                         }
                       </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
