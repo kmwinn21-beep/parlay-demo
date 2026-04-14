@@ -14,8 +14,10 @@ export async function PUT(
     if (!attendee_id || !rsvp_status) {
       return NextResponse.json({ error: 'attendee_id and rsvp_status are required' }, { status: 400 });
     }
-    if (!['yes', 'no', 'maybe', 'attended'].includes(rsvp_status)) {
-      return NextResponse.json({ error: 'rsvp_status must be yes, no, maybe, or attended' }, { status: 400 });
+    const validValues = ['yes', 'no', 'maybe', 'attended'];
+    const parts = String(rsvp_status).split(',').map((s: string) => s.trim());
+    if (!parts.every((p: string) => validValues.includes(p))) {
+      return NextResponse.json({ error: 'rsvp_status must be comma-separated values of: yes, no, maybe, attended' }, { status: 400 });
     }
 
     await db.execute({
