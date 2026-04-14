@@ -397,7 +397,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, colorMaps }: 
     if (allVisibleChecked) {
       setDraft(prev => prev.filter(id => !visibleIds.includes(id)));
     } else {
-      setDraft(prev => [...new Set([...prev, ...visibleIds])]);
+      setDraft(prev => Array.from(new Set([...prev, ...visibleIds])));
     }
   };
 
