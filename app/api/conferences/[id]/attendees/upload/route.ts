@@ -62,7 +62,7 @@ export async function POST(
 
     // Resolve a name/ID string from the file to the stored numeric ID string.
     // Returns null if the value is blank or doesn't match any known user.
-    function resolveUserId(raw: string | undefined): string | null {
+    const resolveUserId = (raw: string | undefined): string | null => {
       if (!raw?.trim()) return null;
       const trimmed = raw.trim();
       // Already a numeric ID that exists in the user list → keep as-is
@@ -72,7 +72,7 @@ export async function POST(
       const lower = trimmed.toLowerCase();
       const match = userOptions.find(u => u.value.toLowerCase() === lower);
       return match ? String(match.id) : null;
-    }
+    };
     // Identify which company_type values represent "Operator" for ICP classification
     const operatorTypeValues = new Set(
       companyTypeOptions.filter((v) => v.toLowerCase().includes('operator') || v.toLowerCase() === 'opco' || v.toLowerCase() === 'own/op')
