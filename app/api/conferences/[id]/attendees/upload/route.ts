@@ -50,10 +50,29 @@ export async function POST(
     }
 
     // Fetch live admin config options for classifiers
-    const [companyTypeOptions, icpOptions] = await Promise.all([
+    const [companyTypeOptions, icpOptions, userRows] = await Promise.all([
       getConfigOptionValues('company_type'),
       getConfigOptionValues('icp'),
+      db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
     ]);
+    const userOptions: Array<{ id: number; value: string }> = userRows.rows.map(r => ({
+      id: Number(r.id),
+      value: String(r.value),
+    }));
+
+    // Resolve a name/ID string from the file to the stored numeric ID string.
+    // Returns null if the value is blank or doesn't match any known user.
+    function resolveUserId(raw: string | undefined): string | null {
+      if (!raw?.trim()) return null;
+      const trimmed = raw.trim();
+      // Already a numeric ID that exists in the user list → keep as-is
+      const num = parseInt(trimmed, 10);
+      if (!isNaN(num) && userOptions.some(u => u.id === num)) return String(num);
+      // Case-insensitive name match
+      const lower = trimmed.toLowerCase();
+      const match = userOptions.find(u => u.value.toLowerCase() === lower);
+      return match ? String(match.id) : null;
+    }
     // Identify which company_type values represent "Operator" for ICP classification
     const operatorTypeValues = new Set(
       companyTypeOptions.filter((v) => v.toLowerCase().includes('operator') || v.toLowerCase() === 'opco' || v.toLowerCase() === 'own/op')
@@ -130,14 +149,14 @@ export async function POST(
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: p.assigned_user?.trim(), wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined, services: p.services?.trim() || undefined, icp: p.icp?.trim() || undefined });
+          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: resolveUserId(p.assigned_user) ?? undefined, wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined, services: p.services?.trim() || undefined, icp: p.icp?.trim() || undefined });
         } else {
           // If we don't have an email/website/company_type/assigned_user/services yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
-          if (!existing.assigned_user && p.assigned_user?.trim()) existing.assigned_user = p.assigned_user.trim();
+          if (!existing.assigned_user) { const uid = resolveUserId(p.assigned_user); if (uid) existing.assigned_user = uid; }
           if (!existing.icp && p.icp?.trim()) existing.icp = p.icp.trim();
           if (!existing.wse && p.wse?.trim()) {
             const wseVal = parseInt(p.wse.trim(), 10);
