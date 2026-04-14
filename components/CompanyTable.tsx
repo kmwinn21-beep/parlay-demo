@@ -180,6 +180,9 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
   const [filterICP, setFilterICP] = useState('');
   const icpOptions = configOptions.icp ?? [];
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
+  // 'parent' = no parent_company_id (standalone or explicit parent)
+  // 'child'  = has parent_company_id set
+  const [filterHierarchy, setFilterHierarchy] = useState('');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -272,7 +275,10 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         const days = filterUpdatedWithin === '1day' ? 1 : filterUpdatedWithin === '1week' ? 7 : filterUpdatedWithin === '2weeks' ? 14 : 30;
         return new Date(c.updated_at).getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
       })();
-      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin;
+      const matchHierarchy = !filterHierarchy
+        || (filterHierarchy === 'parent' && !c.parent_company_id)
+        || (filterHierarchy === 'child' && !!c.parent_company_id);
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -284,7 +290,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -385,7 +391,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0);
+  const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterHierarchy ? 1 : 0);
 
   return (
     <div>
@@ -478,6 +484,14 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
               <select value={filterICP} onChange={e => setFilterICP(e.target.value)} className="input-field w-full text-sm">
                 <option value="">All ICP</option>
                 {icpOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Parent / Child</p>
+              <select value={filterHierarchy} onChange={e => setFilterHierarchy(e.target.value)} className="input-field w-full text-sm">
+                <option value="">All Companies</option>
+                <option value="parent">Parent / Standalone</option>
+                <option value="child">Child</option>
               </select>
             </div>
             <div>
@@ -584,7 +598,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => { setFilterSFOwner(''); setFilterType(''); setFilterStatus(''); setFilterICP(''); setFilterConfCounts(new Set()); setFilterConference(''); setFilterUpdatedWithin(''); setWseMin(wseGlobalMin); setWseMax(wseGlobalMax); }}
+                onClick={() => { setFilterSFOwner(''); setFilterType(''); setFilterStatus(''); setFilterICP(''); setFilterConfCounts(new Set()); setFilterConference(''); setFilterUpdatedWithin(''); setFilterHierarchy(''); setWseMin(wseGlobalMin); setWseMax(wseGlobalMax); }}
                 className="text-xs text-gray-500 hover:text-red-500 transition-colors"
               >
                 Clear all filters
