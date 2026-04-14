@@ -59,6 +59,13 @@ function loadConferences(): Promise<ConferenceOption[]> {
   return _confsPromise;
 }
 
+/** Call this after any action that creates or deletes a conference so the
+ *  nav dropdown reflects the change on the next render. */
+export function invalidateConfsCache() {
+  _confsCache = null;
+  _confsPromise = null;
+}
+
 // Kick off the request immediately at module evaluation time.
 loadConferences();
 // ────────────────────────────────────────────────────────────────────────────
@@ -81,18 +88,14 @@ export function Header() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
 
-  // Resolve the in-flight promise (or return instantly if already cached).
+  // Re-fetch the conference list on every route change so that after a
+  // conference is created or deleted the nav dropdown stays accurate.
   useEffect(() => {
-    if (_confsCache) {
-      setConferences(_confsCache);
-      setIsLoadingConfs(false);
-      return;
-    }
     loadConferences().then(data => {
       setConferences(data);
       setIsLoadingConfs(false);
     });
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

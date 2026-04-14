@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         args: [],
       });
       return NextResponse.json(result.rows.map((r) => ({ ...r })), {
-        headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+        headers: { 'Cache-Control': 'private, no-cache' },
       });
     }
     const result = await db.execute({
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       args: [],
     });
     return NextResponse.json(result.rows.map((r) => ({ ...r })), {
-      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+      headers: { 'Cache-Control': 'private, no-cache' },
     });
   } catch (error) {
     console.error('GET /api/conferences error:', error);
