@@ -6,7 +6,7 @@ import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { parseRepIds } from '@/lib/useUserOptions';
 
-type RsvpStatus = 'yes' | 'no' | 'maybe';
+type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
 export interface SocialEvent {
   id: number;
@@ -78,6 +78,13 @@ function RSVPIcon({ status }: { status: RsvpStatus | null }) {
       </svg>
     </span>
   );
+  if (status === 'attended') return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 flex-shrink-0">
+      <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+      </svg>
+    </span>
+  );
   if (status === 'no') return (
     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-50 flex-shrink-0">
       <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,11 +92,14 @@ function RSVPIcon({ status }: { status: RsvpStatus | null }) {
       </svg>
     </span>
   );
+  if (status === 'maybe') return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0 text-gray-400 font-bold text-sm leading-none">
+      ?
+    </span>
+  );
   return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0">
-      <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0 text-gray-300 font-bold text-sm leading-none">
+      ?
     </span>
   );
 }
@@ -157,34 +167,49 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
   );
 }
 
+type StatusFilter = RsvpStatus | 'maybe' | null;
+
 /* ─── RSVP summary totals + Operators toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators }: {
+function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilter, onSetFilter }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus | null>;
   operatorsOnly: boolean;
   attendees: Attendee[];
   onToggleOperators: () => void;
+  activeFilter: StatusFilter;
+  onSetFilter: (f: StatusFilter) => void;
 }) {
   const filtered = operatorsOnly
     ? invitedIds.filter(id => isOperator(attendees.find(a => a.id === id)?.company_type))
     : invitedIds;
   const yes = filtered.filter(id => rsvpMap[id] === 'yes').length;
+  const attended = filtered.filter(id => rsvpMap[id] === 'attended').length;
   const no = filtered.filter(id => rsvpMap[id] === 'no').length;
   const maybe = filtered.filter(id => !rsvpMap[id] || rsvpMap[id] === 'maybe').length;
+  const cards: { label: string; value: number; cls: string; activeCls: string; filter: StatusFilter }[] = [
+    { label: 'Invited',  value: filtered.length, filter: null,       cls: 'bg-gray-50 border-gray-200 text-gray-800',    activeCls: 'ring-2 ring-gray-400' },
+    { label: 'Yes',      value: yes,              filter: 'yes',      cls: 'bg-green-50 border-green-100 text-green-700', activeCls: 'ring-2 ring-green-400' },
+    { label: 'Attended', value: attended,          filter: 'attended', cls: 'bg-purple-50 border-purple-100 text-purple-700', activeCls: 'ring-2 ring-purple-400' },
+    { label: 'No',       value: no,               filter: 'no',       cls: 'bg-red-50 border-red-100 text-red-600',      activeCls: 'ring-2 ring-red-300' },
+    { label: 'Maybe',    value: maybe,            filter: 'maybe',    cls: 'bg-gray-50 border-gray-200 text-gray-500',   activeCls: 'ring-2 ring-gray-300' },
+  ];
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex gap-2 flex-1 min-w-0">
-        {[
-          { label: 'Invited', value: filtered.length, cls: 'bg-gray-50 border-gray-200 text-gray-800' },
-          { label: 'Yes', value: yes, cls: 'bg-green-50 border-green-100 text-green-700' },
-          { label: 'No', value: no, cls: 'bg-red-50 border-red-100 text-red-600' },
-          { label: 'Maybe', value: maybe, cls: 'bg-gray-50 border-gray-200 text-gray-500' },
-        ].map(({ label, value, cls }) => (
-          <div key={label} className={`flex-1 rounded-lg p-2 text-center border ${cls}`}>
-            <p className="text-base font-bold leading-none">{value}</p>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{label}</p>
-          </div>
-        ))}
+      <div className="flex gap-1.5 flex-1 min-w-0">
+        {cards.map(({ label, value, cls, activeCls, filter }) => {
+          const isActive = activeFilter === filter;
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onSetFilter(isActive ? null : filter)}
+              className={`flex-1 rounded-lg p-2 text-center border transition-all ${cls} ${isActive ? activeCls : 'hover:opacity-80'}`}
+            >
+              <p className="text-base font-bold leading-none">{value}</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{label}</p>
+            </button>
+          );
+        })}
       </div>
       <button
         type="button"
@@ -228,18 +253,19 @@ function AttendeeRSVPCard({ attendee, status, onSetRsvp, colorMaps, companies, u
       </button>
       {open && (
         <div className="px-3 pb-3 pt-0 border-t border-gray-100">
-          <div className="flex gap-2 pt-2">
-            {(['yes', 'no', 'maybe'] as RsvpStatus[]).map(s => (
+          <div className="flex gap-1.5 pt-2">
+            {(['yes', 'attended', 'no', 'maybe'] as RsvpStatus[]).map(s => (
               <button key={s} type="button"
                 onClick={() => { onSetRsvp(s); setOpen(false); }}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
                   status === s
-                    ? s === 'yes' ? 'bg-green-100 text-green-700' : s === 'no' ? 'bg-red-50 text-red-600' : 'bg-gray-200 text-gray-700'
+                    ? s === 'yes' ? 'bg-green-100 text-green-700' : s === 'attended' ? 'bg-purple-100 text-purple-700' : s === 'no' ? 'bg-red-50 text-red-600' : 'bg-gray-200 text-gray-700'
                     : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                 }`}>
                 {s === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                {s === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
                 {s === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
-                {s === 'maybe' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01" /></svg>}
+                {s === 'maybe' && <span className="font-bold leading-none">?</span>}
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </button>
             ))}
@@ -262,7 +288,12 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
   const [operatorsOnly, setOperatorsOnly] = useState(false);
-  const visible = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(null);
+  const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
+  const visible = statusFilter === null ? byOperator : byOperator.filter(a => {
+    const s = rsvpMap[a.id];
+    return statusFilter === 'maybe' ? (!s || s === 'maybe') : s === statusFilter;
+  });
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
@@ -277,7 +308,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilter={statusFilter} onSetFilter={setStatusFilter} />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -302,11 +333,16 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
   const [operatorsOnly, setOperatorsOnly] = useState(false);
-  const visible = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(null);
+  const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
+  const visible = statusFilter === null ? byOperator : byOperator.filter(a => {
+    const s = rsvpMap[a.id];
+    return statusFilter === 'maybe' ? (!s || s === 'maybe') : s === statusFilter;
+  });
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
       <div className="mb-4">
-        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} />
+        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilter={statusFilter} onSetFilter={setStatusFilter} />
       </div>
       {visible.length === 0
         ? <p className="text-sm text-gray-400 text-center py-4">No attendees to show.</p>
@@ -336,16 +372,17 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
                     <td className="py-2 pr-3"><AssignedUserPill assignedUser={co?.assigned_user} userOptionsFull={userOptionsFull} /></td>
                     <td className="py-2">
                       <div className="flex gap-1">
-                        {(['yes','no','maybe'] as RsvpStatus[]).map(opt => (
-                          <button key={opt} type="button" title={opt} onClick={() => onSetRsvp(att.id, opt)}
+                        {(['yes','attended','no','maybe'] as RsvpStatus[]).map(opt => (
+                          <button key={opt} type="button" title={opt.charAt(0).toUpperCase() + opt.slice(1)} onClick={() => onSetRsvp(att.id, opt)}
                             className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
                               s === opt
-                                ? opt === 'yes' ? 'bg-green-100 text-green-600' : opt === 'no' ? 'bg-red-50 text-red-500' : 'bg-gray-200 text-gray-600'
+                                ? opt === 'yes' ? 'bg-green-100 text-green-600' : opt === 'attended' ? 'bg-purple-100 text-purple-600' : opt === 'no' ? 'bg-red-50 text-red-500' : 'bg-gray-200 text-gray-600'
                                 : 'bg-gray-50 text-gray-300 hover:text-gray-500 hover:bg-gray-100'
                             }`}>
                             {opt === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                            {opt === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
                             {opt === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
-                            {opt === 'maybe' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01" /></svg>}
+                            {opt === 'maybe' && <span className="font-bold text-[10px] leading-none">?</span>}
                           </button>
                         ))}
                       </div>
