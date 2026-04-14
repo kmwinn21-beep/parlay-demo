@@ -360,6 +360,133 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
   );
 }
 
+/* ─── Build Guest List modal ─── */
+function GuestListModal({ attendees, selected, onConfirm, onClose }: {
+  attendees: Attendee[];
+  selected: string[];
+  onConfirm: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<string[]>(selected);
+  const [search, setSearch] = useState('');
+
+  const sorted = [...attendees].sort((a, b) => {
+    const aOp = isOperator(a.company_type) ? 0 : 1;
+    const bOp = isOperator(b.company_type) ? 0 : 1;
+    if (aOp !== bOp) return aOp - bOp;
+    return (a.company_name || '').localeCompare(b.company_name || '');
+  });
+
+  const q = search.toLowerCase().trim();
+  const visible = q
+    ? sorted.filter(a =>
+        `${a.first_name} ${a.last_name}`.toLowerCase().includes(q) ||
+        (a.company_name || '').toLowerCase().includes(q) ||
+        (a.title || '').toLowerCase().includes(q)
+      )
+    : sorted;
+
+  const toggle = (id: string) =>
+    setDraft(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const visibleIds = visible.map(a => String(a.id));
+  const allVisibleChecked = visibleIds.length > 0 && visibleIds.every(id => draft.includes(id));
+
+  const toggleAll = () => {
+    if (allVisibleChecked) {
+      setDraft(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setDraft(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div className="relative bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-2xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-base font-semibold text-procare-dark-blue">Build Guest List</h3>
+              <p className="text-xs text-gray-500 mt-0.5">{draft.length} selected</p>
+            </div>
+            <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, company, or title..."
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-procare-bright-blue"
+            autoFocus
+          />
+        </div>
+
+        {/* Table */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white border-b border-gray-100 z-10">
+              <tr>
+                <th className="pl-4 pr-2 py-2.5 w-8">
+                  <button type="button" onClick={toggleAll} className={`w-4 h-4 rounded border flex items-center justify-center ${allVisibleChecked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300 hover:border-gray-400'}`}>
+                    {allVisibleChecked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                  </button>
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Attendee</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {visible.length === 0 ? (
+                <tr><td colSpan={2} className="px-4 py-8 text-sm text-gray-400 text-center">No matching attendees.</td></tr>
+              ) : visible.map(att => {
+                const id = String(att.id);
+                const checked = draft.includes(id);
+                const op = isOperator(att.company_type);
+                return (
+                  <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
+                    <td className="pl-4 pr-2 py-2.5 align-middle">
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                        {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 align-middle">
+                      <div className="flex items-center gap-1.5">
+                        {op && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 text-green-700 border border-green-300 text-[9px] font-bold flex-shrink-0">O</span>
+                        )}
+                        <span className="font-medium text-gray-900">{att.first_name} {att.last_name}</span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5 pl-0.5">
+                        {att.title && <span>{att.title}</span>}
+                        {att.title && att.company_name && <span className="mx-1">·</span>}
+                        {att.company_name && <span>{att.company_name}</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between flex-shrink-0 gap-3">
+          <span className="text-sm text-gray-500">{draft.length} attendee{draft.length !== 1 ? 's' : ''} selected</span>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+            <button type="button" onClick={() => { onConfirm(draft); onClose(); }} className="btn-primary text-sm">
+              Confirm Guest List
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main component ─── */
 export function SocialEventsTable({
   conferenceId, conferenceName, events, onRefresh,
@@ -377,10 +504,8 @@ export function SocialEventsTable({
     invite_only: 'No', prospect_attendees: [] as string[], notes: '',
   });
   const [internalOpen, setInternalOpen] = useState(false);
-  const [invitedOpen, setInvitedOpen] = useState(false);
-  const [invitedSearch, setInvitedSearch] = useState('');
+  const [showGuestListModal, setShowGuestListModal] = useState(false);
   const internalRef = useRef<HTMLDivElement>(null);
-  const invitedRef = useRef<HTMLDivElement>(null);
 
   /* RSVP state */
   const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus | null>>({});
@@ -391,7 +516,6 @@ export function SocialEventsTable({
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (internalRef.current && !internalRef.current.contains(e.target as Node)) setInternalOpen(false);
-      if (invitedRef.current && !invitedRef.current.contains(e.target as Node)) { setInvitedOpen(false); setInvitedSearch(''); }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -623,40 +747,22 @@ export function SocialEventsTable({
               </select>
             </div>
 
-            {/* Invited Attendees */}
-            <div ref={invitedRef} className="sm:col-span-2 lg:col-span-1">
+            {/* Invited Attendees — Build Guest List */}
+            <div className="sm:col-span-2 lg:col-span-1">
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Invited</label>
-              <div className="relative">
-                <button type="button" onClick={() => { setInvitedOpen(v => !v); if (invitedOpen) setInvitedSearch(''); }} className="input-field w-full text-left flex items-center justify-between text-sm">
-                  <span className={formData.prospect_attendees.length === 0 ? 'text-gray-400' : 'text-gray-800'}>{formData.prospect_attendees.length === 0 ? 'Select attendees...' : `${formData.prospect_attendees.length} selected`}</span>
-                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${invitedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-                {invitedOpen && (
-                  <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
-                    <div className="p-2 border-b border-gray-100">
-                      <input type="text" value={invitedSearch} onChange={e => setInvitedSearch(e.target.value)} placeholder="Search attendees..." className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-procare-bright-blue" autoFocus />
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      {(() => {
-                        const q = invitedSearch.toLowerCase().trim();
-                        const filtered = q ? attendees.filter(a => `${a.first_name} ${a.last_name}`.toLowerCase().includes(q) || (a.company_name || '').toLowerCase().includes(q)) : attendees;
-                        if (filtered.length === 0) return <div className="px-3 py-2 text-sm text-gray-500">No matching attendees.</div>;
-                        return filtered.map(att => {
-                          const id = String(att.id);
-                          const checked = formData.prospect_attendees.includes(id);
-                          return (
-                            <button key={att.id} type="button" onClick={() => setFormData(p => ({ ...p, prospect_attendees: checked ? p.prospect_attendees.filter(v => v !== id) : [...p.prospect_attendees, id] }))} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
-                              <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>{checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}</span>
-                              <span>{att.first_name} {att.last_name}</span>
-                              {att.company_name && <span className="text-gray-400 text-xs">({att.company_name})</span>}
-                            </button>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
+              <button
+                type="button"
+                onClick={() => setShowGuestListModal(true)}
+                className="input-field w-full text-left flex items-center gap-2 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                Build Guest List
+                {formData.prospect_attendees.length > 0 && (
+                  <span className="ml-auto px-2 py-0.5 rounded-full bg-procare-bright-blue text-white text-xs font-semibold">
+                    {formData.prospect_attendees.length}
+                  </span>
                 )}
-              </div>
+              </button>
               {formData.prospect_attendees.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {formData.prospect_attendees.map(id => {
@@ -683,6 +789,16 @@ export function SocialEventsTable({
             <button type="button" onClick={resetForm} className="btn-secondary text-sm">Cancel</button>
           </div>
         </div>
+      )}
+
+      {/* Guest List Modal */}
+      {showGuestListModal && (
+        <GuestListModal
+          attendees={attendees}
+          selected={formData.prospect_attendees}
+          onConfirm={ids => setFormData(p => ({ ...p, prospect_attendees: ids }))}
+          onClose={() => setShowGuestListModal(false)}
+        />
       )}
 
       {events.length === 0 ? (
