@@ -20,6 +20,20 @@ export async function GET(request: NextRequest) {
       args: [conferenceId],
     });
 
+    const eventIds = result.rows.map(r => Number(r.id));
+    const rsvpsByEventId: Record<number, Array<{ attendee_id: number; rsvp_status: string }>> = {};
+    if (eventIds.length > 0) {
+      const rsvpResult = await db.execute({
+        sql: `SELECT social_event_id, attendee_id, rsvp_status FROM social_event_rsvps WHERE social_event_id IN (${eventIds.map(() => '?').join(',')})`,
+        args: eventIds,
+      });
+      for (const r of rsvpResult.rows) {
+        const eid = Number(r.social_event_id);
+        if (!rsvpsByEventId[eid]) rsvpsByEventId[eid] = [];
+        rsvpsByEventId[eid].push({ attendee_id: Number(r.attendee_id), rsvp_status: String(r.rsvp_status) });
+      }
+    }
+
     return NextResponse.json(
       result.rows.map((r) => ({
         id: Number(r.id),
@@ -35,6 +49,7 @@ export async function GET(request: NextRequest) {
         prospect_attendees: r.prospect_attendees ? String(r.prospect_attendees) : null,
         notes: r.notes ? String(r.notes) : null,
         created_at: String(r.created_at),
+        rsvps: rsvpsByEventId[Number(r.id)] || [],
       }))
     );
   } catch (error) {

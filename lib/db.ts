@@ -260,6 +260,15 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE companies ADD COLUMN updated_at TEXT`,
     `ALTER TABLE attendees ADD COLUMN updated_at TEXT`,
     `ALTER TABLE conferences ADD COLUMN updated_at TEXT`,
+    `CREATE TABLE IF NOT EXISTS social_event_rsvps (
+      social_event_id INTEGER NOT NULL,
+      attendee_id INTEGER NOT NULL,
+      rsvp_status TEXT NOT NULL DEFAULT 'maybe',
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (social_event_id, attendee_id),
+      FOREIGN KEY (social_event_id) REFERENCES social_events(id) ON DELETE CASCADE,
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE
+    )`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
