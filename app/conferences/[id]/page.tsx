@@ -6,6 +6,7 @@ import { parseBreadcrumbs, withTrail, type BreadcrumbItem } from '@/lib/breadcru
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
+import { invalidateConfsCache } from '@/components/Header';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
@@ -460,6 +461,7 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Conference deleted.');
+      invalidateConfsCache();
       router.refresh();
       router.push('/conferences');
     } catch {
