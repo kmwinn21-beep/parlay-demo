@@ -447,7 +447,6 @@ export default function ConferenceDetailPage() {
       setConference((prev) => prev ? { ...prev, ...updated } : prev);
       setIsEditing(false);
       toast.success('Conference updated!');
-      router.refresh();
     } catch {
       toast.error('Failed to update conference');
     } finally {
@@ -463,8 +462,10 @@ export default function ConferenceDetailPage() {
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Conference deleted.');
       invalidateConfsCache();
-      router.refresh();
-      router.push('/conferences');
+      // Use a full-page navigation instead of router.push() + router.refresh() —
+      // combining the two causes a race condition that corrupts the router state
+      // and silently breaks all subsequent Link navigations until a page reload.
+      window.location.href = '/conferences';
     } catch {
       toast.error('Failed to delete conference');
       setIsDeleting(false);
