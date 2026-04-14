@@ -167,17 +167,15 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
   );
 }
 
-type StatusFilter = RsvpStatus | 'maybe' | null;
-
 /* ─── RSVP summary totals + Operators toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilter, onSetFilter }: {
+function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilters, onToggleFilter }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus | null>;
   operatorsOnly: boolean;
   attendees: Attendee[];
   onToggleOperators: () => void;
-  activeFilter: StatusFilter;
-  onSetFilter: (f: StatusFilter) => void;
+  activeFilters: RsvpStatus[];
+  onToggleFilter: (f: RsvpStatus | null) => void;
 }) {
   const filtered = operatorsOnly
     ? invitedIds.filter(id => isOperator(attendees.find(a => a.id === id)?.company_type))
@@ -186,24 +184,25 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
   const attended = filtered.filter(id => rsvpMap[id] === 'attended').length;
   const no = filtered.filter(id => rsvpMap[id] === 'no').length;
   const maybe = filtered.filter(id => !rsvpMap[id] || rsvpMap[id] === 'maybe').length;
-  const cards: { label: string; value: number; cls: string; activeCls: string; filter: StatusFilter }[] = [
-    { label: 'Invited',  value: filtered.length, filter: null,       cls: 'bg-gray-50 border-gray-200 text-gray-800',    activeCls: 'ring-2 ring-gray-400' },
-    { label: 'Yes',      value: yes,              filter: 'yes',      cls: 'bg-green-50 border-green-100 text-green-700', activeCls: 'ring-2 ring-green-400' },
-    { label: 'Attended', value: attended,          filter: 'attended', cls: 'bg-purple-50 border-purple-100 text-purple-700', activeCls: 'ring-2 ring-purple-400' },
-    { label: 'No',       value: no,               filter: 'no',       cls: 'bg-red-50 border-red-100 text-red-600',      activeCls: 'ring-2 ring-red-300' },
-    { label: 'Maybe',    value: maybe,            filter: 'maybe',    cls: 'bg-gray-50 border-gray-200 text-gray-500',   activeCls: 'ring-2 ring-gray-300' },
+  const cards: { label: string; value: number; cls: string; activeCls: string; filter: RsvpStatus | null }[] = [
+    { label: 'Invited',  value: filtered.length, filter: null,       cls: 'bg-gray-50 border-gray-200 text-gray-800',         activeCls: 'ring-2 ring-gray-400' },
+    { label: 'Yes',      value: yes,              filter: 'yes',      cls: 'bg-green-50 border-green-100 text-green-700',      activeCls: 'ring-2 ring-green-400' },
+    { label: 'Attended', value: attended,         filter: 'attended', cls: 'bg-purple-50 border-purple-100 text-purple-700',  activeCls: 'ring-2 ring-purple-400' },
+    { label: 'No',       value: no,               filter: 'no',       cls: 'bg-red-50 border-red-100 text-red-600',           activeCls: 'ring-2 ring-red-300' },
+    { label: 'Maybe',    value: maybe,            filter: 'maybe',    cls: 'bg-gray-50 border-gray-200 text-gray-500',        activeCls: 'ring-2 ring-gray-300' },
   ];
+  const noneActive = activeFilters.length === 0;
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <div className="flex gap-1.5 flex-1 min-w-0">
         {cards.map(({ label, value, cls, activeCls, filter }) => {
-          const isActive = activeFilter === filter;
+          const isActive = filter === null ? noneActive : activeFilters.includes(filter);
           return (
             <button
               key={label}
               type="button"
-              onClick={() => onSetFilter(isActive ? null : filter)}
-              className={`flex-1 rounded-lg p-2 text-center border transition-all ${cls} ${isActive ? activeCls : 'hover:opacity-80'}`}
+              onClick={() => onToggleFilter(filter)}
+              className={`flex-1 rounded-lg p-2 text-center border transition-all ${cls} ${isActive ? activeCls : 'opacity-60 hover:opacity-90'}`}
             >
               <p className="text-base font-bold leading-none">{value}</p>
               <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{label}</p>
@@ -288,11 +287,15 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
   const [operatorsOnly, setOperatorsOnly] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(null);
+  const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
+  const handleToggleFilter = (f: RsvpStatus | null) => {
+    if (f === null) { setActiveFilters([]); return; }
+    setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+  };
   const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
-  const visible = statusFilter === null ? byOperator : byOperator.filter(a => {
-    const s = rsvpMap[a.id];
-    return statusFilter === 'maybe' ? (!s || s === 'maybe') : s === statusFilter;
+  const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
+    const s: RsvpStatus = rsvpMap[a.id] || 'maybe';
+    return activeFilters.includes(s);
   });
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
@@ -308,7 +311,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilter={statusFilter} onSetFilter={setStatusFilter} />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -333,16 +336,20 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
   const [operatorsOnly, setOperatorsOnly] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(null);
+  const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
+  const handleToggleFilter = (f: RsvpStatus | null) => {
+    if (f === null) { setActiveFilters([]); return; }
+    setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+  };
   const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
-  const visible = statusFilter === null ? byOperator : byOperator.filter(a => {
-    const s = rsvpMap[a.id];
-    return statusFilter === 'maybe' ? (!s || s === 'maybe') : s === statusFilter;
+  const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
+    const s: RsvpStatus = rsvpMap[a.id] || 'maybe';
+    return activeFilters.includes(s);
   });
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
       <div className="mb-4">
-        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilter={statusFilter} onSetFilter={setStatusFilter} />
+        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
       </div>
       {visible.length === 0
         ? <p className="text-sm text-gray-400 text-center py-4">No attendees to show.</p>
