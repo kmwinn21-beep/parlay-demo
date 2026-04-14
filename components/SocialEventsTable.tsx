@@ -264,7 +264,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
   const [operatorsOnly, setOperatorsOnly] = useState(false);
   const visible = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div className="relative bg-white rounded-t-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -279,7 +279,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
           </div>
           <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} />
         </div>
-        <div className="overflow-y-auto flex-1 p-3 space-y-2">
+        <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
             ? <p className="text-sm text-gray-400 text-center py-8">No attendees to show.</p>
             : visible.map(att => (
