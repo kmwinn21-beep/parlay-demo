@@ -236,11 +236,12 @@ export async function POST(
       await batchInsert(existingToUpdate, ([n, entry]) => {
         const coId = companyIdCache.get(n)!;
         const existingCompany = existingCompanies.find((c) => c.id === coId);
-        // If the company already has 2 or more assigned users in the DB, do not overwrite from the uploaded list
-        const existingAssignedCount = existingCompany?.assigned_user
-          ? existingCompany.assigned_user.split(',').filter((s) => s.trim()).length
-          : 0;
-        const assignedUserArg = existingAssignedCount >= 2 ? null : (entry.assigned_user || null);
+        // Count only valid numeric user IDs — raw name strings (legacy data) should not block the upload from fixing them
+        const existingValidUserIds = existingCompany?.assigned_user
+          ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+          : [];
+        // Preserve assigned_user if the company already has at least one valid assigned user; only set from upload if none exist
+        const assignedUserArg = existingValidUserIds.length >= 1 ? null : (entry.assigned_user || null);
         return {
           sql: `UPDATE companies SET
             company_type = COALESCE(?, company_type),
