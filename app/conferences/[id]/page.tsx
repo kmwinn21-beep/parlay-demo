@@ -1572,9 +1572,10 @@ export default function ConferenceDetailPage() {
           events={confSocialEvents}
           onRefresh={fetchConference}
           userOptions={userOptions.map(u => u.value)}
+          userOptionsFull={userOptions}
           eventTypeOptions={eventTypeOptions}
-          companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name }))}
-          attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: a.company_id, company_name: a.company_name, company_type: a.company_type }))}
+          companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name, assigned_user: c.assigned_user }))}
+          attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, company_id: a.company_id, company_name: a.company_name, company_type: a.company_type }))}
         />
       )}
     </div>
