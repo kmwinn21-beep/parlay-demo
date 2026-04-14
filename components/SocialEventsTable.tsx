@@ -68,39 +68,62 @@ function isOperator(ct: string | null | undefined) {
   const l = (ct || '').toLowerCase();
   return l.includes('operator') || l.includes('own/op') || l.includes('opco');
 }
+function parseStatuses(stored: string | null | undefined): RsvpStatus[] {
+  if (!stored) return [];
+  return stored.split(',').map(s => s.trim()).filter(s => ['yes','no','maybe','attended'].includes(s)) as RsvpStatus[];
+}
 
 /* ─── RSVP icon ─── */
-function RSVPIcon({ status }: { status: RsvpStatus | null }) {
-  if (status === 'yes') return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 flex-shrink-0">
-      <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-      </svg>
+const StarSvg = ({ cls }: { cls: string }) => (
+  <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+  </svg>
+);
+const CheckSvg = ({ cls }: { cls: string }) => (
+  <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+function RSVPIcon({ statuses }: { statuses: RsvpStatus[] }) {
+  const has = (s: RsvpStatus) => statuses.includes(s);
+  // Dual icon: yes + attended together
+  if (has('yes') && has('attended')) return (
+    <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100"><CheckSvg cls="w-3 h-3 text-green-600" /></span>
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-100"><StarSvg cls="w-3 h-3 text-purple-600" /></span>
     </span>
   );
-  if (status === 'attended') return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 flex-shrink-0">
-      <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-      </svg>
+  if (has('no') && has('attended')) return (
+    <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-50">
+        <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+      </span>
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-100"><StarSvg cls="w-3 h-3 text-purple-600" /></span>
     </span>
   );
-  if (status === 'no') return (
+  if (has('maybe') && has('attended')) return (
+    <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-400 font-bold text-xs leading-none">?</span>
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-100"><StarSvg cls="w-3 h-3 text-purple-600" /></span>
+    </span>
+  );
+  if (has('attended')) return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 flex-shrink-0"><StarSvg cls="w-3.5 h-3.5 text-purple-600" /></span>
+  );
+  if (has('yes')) return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 flex-shrink-0"><CheckSvg cls="w-3.5 h-3.5 text-green-600" /></span>
+  );
+  if (has('no')) return (
     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-50 flex-shrink-0">
-      <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-      </svg>
+      <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
     </span>
   );
-  if (status === 'maybe') return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0 text-gray-400 font-bold text-sm leading-none">
-      ?
-    </span>
+  if (has('maybe')) return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0 text-gray-400 font-bold text-sm leading-none">?</span>
   );
   return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0 text-gray-300 font-bold text-sm leading-none">
-      ?
-    </span>
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 flex-shrink-0 text-gray-300 font-bold text-sm leading-none">?</span>
   );
 }
 
@@ -170,7 +193,7 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
 /* ─── RSVP summary totals + Operators toggle ─── */
 function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilters, onToggleFilter }: {
   invitedIds: number[];
-  rsvpMap: Record<number, RsvpStatus | null>;
+  rsvpMap: Record<number, RsvpStatus[]>;
   operatorsOnly: boolean;
   attendees: Attendee[];
   onToggleOperators: () => void;
@@ -180,10 +203,10 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
   const filtered = operatorsOnly
     ? invitedIds.filter(id => isOperator(attendees.find(a => a.id === id)?.company_type))
     : invitedIds;
-  const yes = filtered.filter(id => rsvpMap[id] === 'yes').length;
-  const attended = filtered.filter(id => rsvpMap[id] === 'attended').length;
-  const no = filtered.filter(id => rsvpMap[id] === 'no').length;
-  const maybe = filtered.filter(id => !rsvpMap[id] || rsvpMap[id] === 'maybe').length;
+  const yes = filtered.filter(id => (rsvpMap[id] || []).includes('yes')).length;
+  const attended = filtered.filter(id => (rsvpMap[id] || []).includes('attended')).length;
+  const no = filtered.filter(id => (rsvpMap[id] || []).includes('no')).length;
+  const maybe = filtered.filter(id => { const s = rsvpMap[id] || []; return s.length === 0 || s.includes('maybe'); }).length;
   const cards: { label: string; value: number; cls: string; activeCls: string; filter: RsvpStatus | null }[] = [
     { label: 'Invited',  value: filtered.length, filter: null,       cls: 'bg-gray-50 border-gray-200 text-gray-800',         activeCls: 'ring-2 ring-gray-400' },
     { label: 'Yes',      value: yes,              filter: 'yes',      cls: 'bg-green-50 border-green-100 text-green-700',      activeCls: 'ring-2 ring-green-400' },
@@ -222,16 +245,17 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
 }
 
 /* ─── Individual attendee card with RSVP picker ─── */
-function AttendeeRSVPCard({ attendee, status, onSetRsvp, colorMaps, companies, userOptionsFull }: {
+function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, colorMaps, companies, userOptionsFull }: {
   attendee: Attendee;
-  status: RsvpStatus | null;
-  onSetRsvp: (s: RsvpStatus) => void;
+  statuses: RsvpStatus[];
+  onToggleRsvp: (s: RsvpStatus) => void;
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
   const [open, setOpen] = useState(false);
   const company = companies.find(c => c.id === attendee.company_id);
+  const has = (s: RsvpStatus) => statuses.includes(s);
   return (
     <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
       <button type="button" className="w-full text-left p-3" onClick={() => setOpen(v => !v)}>
@@ -247,7 +271,7 @@ function AttendeeRSVPCard({ attendee, status, onSetRsvp, colorMaps, companies, u
               <AssignedUserPill assignedUser={company?.assigned_user} userOptionsFull={userOptionsFull} />
             </div>
           </div>
-          <RSVPIcon status={status} />
+          <RSVPIcon statuses={statuses} />
         </div>
       </button>
       {open && (
@@ -255,14 +279,14 @@ function AttendeeRSVPCard({ attendee, status, onSetRsvp, colorMaps, companies, u
           <div className="flex gap-1.5 pt-2">
             {(['yes', 'attended', 'no', 'maybe'] as RsvpStatus[]).map(s => (
               <button key={s} type="button"
-                onClick={() => { onSetRsvp(s); setOpen(false); }}
+                onClick={() => onToggleRsvp(s)}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
-                  status === s
+                  has(s)
                     ? s === 'yes' ? 'bg-green-100 text-green-700' : s === 'attended' ? 'bg-purple-100 text-purple-700' : s === 'no' ? 'bg-red-50 text-red-600' : 'bg-gray-200 text-gray-700'
                     : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                 }`}>
                 {s === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                {s === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
+                {s === 'attended' && <StarSvg cls="w-3 h-3" />}
                 {s === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
                 {s === 'maybe' && <span className="font-bold leading-none">?</span>}
                 {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -276,11 +300,11 @@ function AttendeeRSVPCard({ attendee, status, onSetRsvp, colorMaps, companies, u
 }
 
 /* ─── Mobile: full-screen guest list bottom sheet ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, colorMaps, companies, userOptionsFull }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onClose, colorMaps, companies, userOptionsFull }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
-  rsvpMap: Record<number, RsvpStatus | null>;
-  onSetRsvp: (attendeeId: number, s: RsvpStatus) => void;
+  rsvpMap: Record<number, RsvpStatus[]>;
+  onToggleRsvp: (attendeeId: number, s: RsvpStatus) => void;
   onClose: () => void;
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
@@ -294,8 +318,8 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
   };
   const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
-    const s: RsvpStatus = rsvpMap[a.id] || 'maybe';
-    return activeFilters.includes(s);
+    const s = rsvpMap[a.id] || [];
+    return activeFilters.some(f => f === 'maybe' ? (s.length === 0 || s.includes('maybe')) : s.includes(f));
   });
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
@@ -317,7 +341,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
           {visible.length === 0
             ? <p className="text-sm text-gray-400 text-center py-8">No attendees to show.</p>
             : visible.map(att => (
-              <AttendeeRSVPCard key={att.id} attendee={att} status={rsvpMap[att.id]} onSetRsvp={s => onSetRsvp(att.id, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
             ))}
         </div>
       </div>
@@ -326,11 +350,11 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onSetRsvp, onClose, 
 }
 
 /* ─── Desktop: inline RSVP expansion below table row ─── */
-function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps, companies, userOptionsFull }: {
+function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, colorMaps, companies, userOptionsFull }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
-  rsvpMap: Record<number, RsvpStatus | null>;
-  onSetRsvp: (attendeeId: number, s: RsvpStatus) => void;
+  rsvpMap: Record<number, RsvpStatus[]>;
+  onToggleRsvp: (attendeeId: number, s: RsvpStatus) => void;
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
@@ -343,8 +367,8 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
   };
   const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
-    const s: RsvpStatus = rsvpMap[a.id] || 'maybe';
-    return activeFilters.includes(s);
+    const s = rsvpMap[a.id] || [];
+    return activeFilters.some(f => f === 'maybe' ? (s.length === 0 || s.includes('maybe')) : s.includes(f));
   });
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
@@ -357,7 +381,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200">
-                {['Name','Title','Company','Type','Rep','RSVP'].map(h => (
+                {['Name','Title','Company','Type','Rep','RSVP (multi-select)'].map(h => (
                   <th key={h} className="pb-2 pr-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -365,7 +389,8 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
             <tbody className="divide-y divide-gray-100">
               {visible.map(att => {
                 const co = companies.find(c => c.id === att.company_id);
-                const s = rsvpMap[att.id];
+                const statuses = rsvpMap[att.id] || [];
+                const has = (opt: RsvpStatus) => statuses.includes(opt);
                 return (
                   <tr key={att.id} className="hover:bg-white">
                     <td className="py-2 pr-3 font-medium text-gray-900 whitespace-nowrap">{att.first_name} {att.last_name}</td>
@@ -380,14 +405,14 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
                     <td className="py-2">
                       <div className="flex gap-1">
                         {(['yes','attended','no','maybe'] as RsvpStatus[]).map(opt => (
-                          <button key={opt} type="button" title={opt.charAt(0).toUpperCase() + opt.slice(1)} onClick={() => onSetRsvp(att.id, opt)}
+                          <button key={opt} type="button" title={opt.charAt(0).toUpperCase() + opt.slice(1)} onClick={() => onToggleRsvp(att.id, opt)}
                             className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
-                              s === opt
+                              has(opt)
                                 ? opt === 'yes' ? 'bg-green-100 text-green-600' : opt === 'attended' ? 'bg-purple-100 text-purple-600' : opt === 'no' ? 'bg-red-50 text-red-500' : 'bg-gray-200 text-gray-600'
                                 : 'bg-gray-50 text-gray-300 hover:text-gray-500 hover:bg-gray-100'
                             }`}>
-                            {opt === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                            {opt === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
+                            {opt === 'yes' && <CheckSvg cls="w-3 h-3" />}
+                            {opt === 'attended' && <StarSvg cls="w-3 h-3" />}
                             {opt === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
                             {opt === 'maybe' && <span className="font-bold text-[10px] leading-none">?</span>}
                           </button>
@@ -552,7 +577,7 @@ export function SocialEventsTable({
   const internalRef = useRef<HTMLDivElement>(null);
 
   /* RSVP state */
-  const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus | null>>({});
+  const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus[]>>({});
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
 
@@ -566,29 +591,35 @@ export function SocialEventsTable({
   }, []);
 
   /* RSVP helpers */
-  const getEffectiveRsvp = useCallback((eventId: number, attendeeId: number): RsvpStatus | null => {
+  const getEffectiveRsvp = useCallback((eventId: number, attendeeId: number): RsvpStatus[] => {
     const key = `${eventId}:${attendeeId}`;
     if (key in localRsvps) return localRsvps[key];
     const ev = events.find(e => e.id === eventId);
     const r = ev?.rsvps?.find(r => r.attendee_id === attendeeId);
-    return (r?.rsvp_status as RsvpStatus) || null;
+    return r ? parseStatuses(r.rsvp_status) : [];
   }, [localRsvps, events]);
 
-  const handleSetRsvp = useCallback(async (eventId: number, attendeeId: number, status: RsvpStatus) => {
+  const handleToggleRsvp = useCallback(async (eventId: number, attendeeId: number, status: RsvpStatus) => {
     const key = `${eventId}:${attendeeId}`;
-    setLocalRsvps(prev => ({ ...prev, [key]: status }));
+    const current = localRsvps[key] ?? ((): RsvpStatus[] => {
+      const ev = events.find(e => e.id === eventId);
+      const r = ev?.rsvps?.find(r => r.attendee_id === attendeeId);
+      return r ? parseStatuses(r.rsvp_status) : [];
+    })();
+    const next = current.includes(status) ? current.filter(s => s !== status) : [...current, status];
+    setLocalRsvps(prev => ({ ...prev, [key]: next }));
     try {
       const res = await fetch(`/api/social-events/${eventId}/rsvp`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_id: attendeeId, rsvp_status: status }),
+        body: JSON.stringify({ attendee_id: attendeeId, rsvp_status: next.length > 0 ? next.join(',') : 'maybe' }),
       });
       if (!res.ok) throw new Error();
     } catch {
       setLocalRsvps(prev => { const n = { ...prev }; delete n[key]; return n; });
       toast.error('Failed to save RSVP');
     }
-  }, []);
+  }, [localRsvps, events]);
 
   /* form helpers */
   const resetForm = () => {
@@ -679,7 +710,7 @@ export function SocialEventsTable({
   const getEventData = (ev: SocialEvent) => {
     const ids = parseRepIds(ev.prospect_attendees);
     const invited = ids.map(id => attendees.find(a => a.id === id)).filter(Boolean) as Attendee[];
-    const rsvpMap: Record<number, RsvpStatus | null> = {};
+    const rsvpMap: Record<number, RsvpStatus[]> = {};
     for (const a of invited) rsvpMap[a.id] = getEffectiveRsvp(ev.id, a.id);
     return { invited, rsvpMap };
   };
@@ -925,7 +956,7 @@ export function SocialEventsTable({
                       {isExpanded && (
                         <tr>
                           <td colSpan={10} className="p-0 border-b border-gray-200">
-                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onSetRsvp={(aid, s) => handleSetRsvp(ev.id, aid, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
                           </td>
                         </tr>
                       )}
@@ -944,7 +975,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onSetRsvp={(aid, s) => handleSetRsvp(ev.id, aid, s)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
         );
       })()}
     </div>
