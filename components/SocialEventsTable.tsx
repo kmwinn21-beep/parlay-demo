@@ -763,19 +763,6 @@ export function SocialEventsTable({
                   </span>
                 )}
               </button>
-              {formData.prospect_attendees.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {formData.prospect_attendees.map(id => {
-                    const att = attendees.find(a => a.id === parseInt(id, 10));
-                    return (
-                      <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200">
-                        {att ? `${att.first_name} ${att.last_name}` : id}
-                        <button type="button" onClick={() => setFormData(p => ({ ...p, prospect_attendees: p.prospect_attendees.filter(x => x !== id) }))} className="hover:text-red-500"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           </div>
 
