@@ -32,6 +32,7 @@ interface Attendee {
   notes_count?: number;
   pinned_notes_count?: number;
   updated_at?: string;
+  created_at?: string;
 }
 
 interface Company { id: number; name: string; }
@@ -91,7 +92,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70, updated_on: 110 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70, updated_on: 110, date_added: 110 };
 
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -471,6 +472,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     </span>
                   )}
                 </div>
+                {attendee.created_at && (
+                  <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
+                )}
               </div>
             );
           })}
@@ -493,16 +497,18 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.date_added }}>Date Added<ResizeHandle col="date_added" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
+
                     <td className="px-3 py-3 overflow-hidden">
                       <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
@@ -548,6 +554,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                       )}
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.updated_at)}</td>
+                    <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
                   </tr>
                 );
               })}
