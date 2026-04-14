@@ -361,12 +361,11 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onSetRsvp, colorMaps,
 }
 
 /* ─── Build Guest List modal ─── */
-function GuestListModal({ attendees, selected, onConfirm, onClose, colorMaps }: {
+function GuestListModal({ attendees, selected, onConfirm, onClose }: {
   attendees: Attendee[];
   selected: string[];
   onConfirm: (ids: string[]) => void;
   onClose: () => void;
-  colorMaps: Record<string, Record<string, string | null>>;
 }) {
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
@@ -436,31 +435,35 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, colorMaps }: 
                     {allVisibleChecked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </button>
                 </th>
-                {['Name','Title','Company','Type'].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                ))}
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Attendee</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {visible.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-sm text-gray-400 text-center">No matching attendees.</td></tr>
+                <tr><td colSpan={2} className="px-4 py-8 text-sm text-gray-400 text-center">No matching attendees.</td></tr>
               ) : visible.map(att => {
                 const id = String(att.id);
                 const checked = draft.includes(id);
+                const op = isOperator(att.company_type);
                 return (
                   <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
-                    <td className="pl-4 pr-2 py-2.5">
+                    <td className="pl-4 pr-2 py-2.5 align-middle">
                       <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
                         {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 font-medium text-gray-900 whitespace-nowrap">{att.first_name} {att.last_name}</td>
-                    <td className="px-3 py-2.5 text-gray-500 text-xs whitespace-nowrap">{att.title || <span className="text-gray-300">—</span>}</td>
-                    <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{att.company_name || <span className="text-gray-300">—</span>}</td>
-                    <td className="px-3 py-2.5">
-                      {att.company_type
-                        ? <span className={`${getBadgeClass(att.company_type, colorMaps.company_type || {})} text-[10px] whitespace-nowrap`}>{att.company_type}</span>
-                        : <span className="text-gray-300">—</span>}
+                    <td className="px-3 py-2 align-middle">
+                      <div className="flex items-center gap-1.5">
+                        {op && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-procare-dark-blue text-white text-[9px] font-bold flex-shrink-0">O</span>
+                        )}
+                        <span className="font-medium text-gray-900">{att.first_name} {att.last_name}</span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5 pl-0.5">
+                        {att.title && <span>{att.title}</span>}
+                        {att.title && att.company_name && <span className="mx-1">·</span>}
+                        {att.company_name && <span>{att.company_name}</span>}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -795,7 +798,6 @@ export function SocialEventsTable({
           selected={formData.prospect_attendees}
           onConfirm={ids => setFormData(p => ({ ...p, prospect_attendees: ids }))}
           onClose={() => setShowGuestListModal(false)}
-          colorMaps={colorMaps}
         />
       )}
 
