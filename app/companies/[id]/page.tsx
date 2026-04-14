@@ -57,6 +57,15 @@ interface Company {
   related_companies?: { id: number; name: string; company_type: string | null }[];
 }
 
+/** Normalize legacy boolean ICP strings ("true"/"false") to the configured option values. */
+function normalizeIcpValue(raw: string | null | undefined, options: string[]): string | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower === 'true' || lower === 'yes' || lower === 'y' || lower === '1') return options[0] ?? raw;
+  if (lower === 'false' || lower === 'no' || lower === 'n' || lower === '0') return options[1] ?? raw;
+  return raw;
+}
+
 function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -690,7 +699,7 @@ export default function CompanyDetailPage() {
                   <div>
                     <h1 className="text-2xl font-bold text-procare-dark-blue font-serif flex items-center gap-2">
                       {company.name}
-                      {company.icp != null && icpOptions.length > 0 && company.icp === icpOptions[0] && (
+                      {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
                         <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-green-100 flex-shrink-0">
                           <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -802,16 +811,19 @@ export default function CompanyDetailPage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">ICP</p>
-                {company.icp != null && icpOptions.length > 0 && company.icp === icpOptions[0] ? (
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    {company.icp}
-                  </span>
-                ) : (
-                  <span className="text-sm text-gray-500">{company.icp || '—'}</span>
-                )}
+                {(() => {
+                  const displayIcp = normalizeIcpValue(company.icp, icpOptions);
+                  return icpOptions.length > 0 && displayIcp === icpOptions[0] ? (
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {displayIcp}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-500">{displayIcp || '—'}</span>
+                  );
+                })()}
               </div>
             </div>
           </div>
