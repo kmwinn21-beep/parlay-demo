@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { BottomNav } from './BottomNav';
+import { FloatingNav } from './FloatingNav';
 import { BottomNavProvider } from './BottomNavContext';
 import { UserProvider } from './UserContext';
 
@@ -32,8 +32,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </main>
           </div>
 
-          {/* Bottom navigation — mobile only */}
-          <BottomNav />
+          {/* Floating nav — mobile only */}
+          <div className="lg:hidden">
+            <FloatingNav />
+          </div>
         </div>
       </BottomNavProvider>
     </UserProvider>
