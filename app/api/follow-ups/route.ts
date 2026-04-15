@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -119,6 +120,7 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -126,6 +128,13 @@ export async function PATCH(request: NextRequest) {
 
     if (id == null) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    // Fetch current state before update (for notification diff)
+    let prevAssignedRep: string | null = null;
+    if ('assigned_rep' in body) {
+      const currentRow = await db.execute({ sql: 'SELECT assigned_rep FROM follow_ups WHERE id = ?', args: [id] });
+      if (currentRow.rows.length > 0) prevAssignedRep = currentRow.rows[0].assigned_rep as string | null;
     }
 
     const setClauses: string[] = [];
@@ -151,6 +160,36 @@ export async function PATCH(request: NextRequest) {
       sql: `UPDATE follow_ups SET ${setClauses.join(', ')} WHERE id = ?`,
       args,
     });
+
+    // Notify newly assigned reps (best-effort)
+    if ('assigned_rep' in body && assigned_rep) {
+      const prevIds = new Set(parseNotifIds(prevAssignedRep));
+      const newIds = parseNotifIds(assigned_rep);
+      const addedIds = newIds.filter(repId => !prevIds.has(repId));
+      if (addedIds.length > 0) {
+        const fuRow = await db.execute({
+          sql: `SELECT a.first_name, a.last_name FROM follow_ups fu JOIN attendees a ON fu.attendee_id = a.id WHERE fu.id = ?`,
+          args: [id],
+        });
+        if (fuRow.rows.length > 0) {
+          const a = fuRow.rows[0];
+          const attendeeName = `${a.first_name} ${a.last_name}`.trim();
+          const changedByConfigId = await getConfigIdByEmail(user.email);
+          const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
+          createNotifications({
+            userIds,
+            type: 'attendee',
+            recordId: id,
+            recordName: attendeeName,
+            message: `You've been assigned to a follow-up for ${attendeeName}`,
+            changedByEmail: user.email,
+            changedByConfigId,
+            entityType: 'attendee',
+            entityId: id,
+          });
+        }
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

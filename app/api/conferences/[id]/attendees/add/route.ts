@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, notifyCompanyAssignees } from '@/lib/notifications';
 
 export async function POST(
   request: NextRequest,
@@ -8,6 +9,7 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -94,6 +96,26 @@ export async function POST(
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [params.id, attendeeId],
     });
+
+    // Notify company assignees (best-effort)
+    const companyId = attendeeRow.company_id as number | null;
+    const companyName = attendeeRow.company_name as string | null;
+    if (companyId && companyName) {
+      const confRow = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [params.id] });
+      const confName = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${params.id}`;
+      const attendeeName = `${first_name} ${last_name}`.trim();
+      const changedByConfigId = await getConfigIdByEmail(user.email);
+      notifyCompanyAssignees({
+        companyId,
+        companyName,
+        message: `${attendeeName} added to ${confName}`,
+        changedByEmail: user.email,
+        changedByConfigId,
+        type: 'attendee',
+        entityType: 'attendee',
+        entityId: attendeeId,
+      });
+    }
 
     return NextResponse.json(attendeeRow, { status: 201 });
   } catch (error) {

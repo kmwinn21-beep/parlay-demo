@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -71,6 +73,26 @@ export async function POST(request: NextRequest) {
         assigned_rep ?? null,
       ],
     });
+
+    // Fire notification (best-effort)
+    if (next_steps) {
+      const attendeeRow = await db.execute({
+        sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
+        args: [attendee_id],
+      });
+      if (attendeeRow.rows.length > 0) {
+        const a = attendeeRow.rows[0];
+        const attendeeName = `${a.first_name} ${a.last_name}`.trim();
+        const changedByConfigId = await getConfigIdByEmail(user.email);
+        notifyForAttendee({
+          attendeeId: Number(attendee_id),
+          attendeeName,
+          message: `Follow-up created: "${next_steps}"`,
+          changedByEmail: user.email,
+          changedByConfigId,
+        });
+      }
+    }
 
     return NextResponse.json(result.rows[0]);
   } catch (error) {

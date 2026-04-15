@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   try {
@@ -93,6 +95,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -145,6 +150,24 @@ export async function POST(request: NextRequest) {
       await db.execute({
         sql: 'INSERT OR REPLACE INTO conference_attendee_details (attendee_id, conference_id, action) VALUES (?, ?, ?)',
         args: [attendee_id, conference_id, meetingScheduledName],
+      });
+    }
+
+    // Fire notification (best-effort)
+    const attendeeRow = await db.execute({
+      sql: `SELECT a.first_name, a.last_name FROM attendees a WHERE a.id = ?`,
+      args: [attendee_id],
+    });
+    if (attendeeRow.rows.length > 0) {
+      const a = attendeeRow.rows[0];
+      const attendeeName = `${a.first_name} ${a.last_name}`.trim();
+      const changedByConfigId = await getConfigIdByEmail(user.email);
+      notifyForAttendee({
+        attendeeId: Number(attendee_id),
+        attendeeName,
+        message: `Meeting scheduled on ${meeting_date}`,
+        changedByEmail: user.email,
+        changedByConfigId,
       });
     }
 
