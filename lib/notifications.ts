@@ -129,9 +129,41 @@ export async function notifyCompanyAssignees(opts: {
 }
 
 /**
- * Notify users assigned to an attendee's company (excluding the actor).
- * The notification links to the attendee record.
+ * Notify users listed as internal attendees on a conference (excluding the actor).
+ * The notification links to the conference record.
  */
+export async function notifyConferenceInternalAttendees(opts: {
+  conferenceId: number;
+  conferenceName: string;
+  message: string;
+  changedByEmail: string;
+  changedByConfigId: number | null;
+}): Promise<void> {
+  try {
+    const r = await db.execute({
+      sql: 'SELECT internal_attendees FROM conferences WHERE id = ?',
+      args: [opts.conferenceId],
+    });
+    if (!r.rows.length) return;
+    const userIds = await resolveUserIds(
+      r.rows[0].internal_attendees as string | null,
+      opts.changedByConfigId,
+    );
+    await createNotifications({
+      userIds,
+      type: 'conference',
+      recordId: opts.conferenceId,
+      recordName: opts.conferenceName,
+      message: opts.message,
+      changedByEmail: opts.changedByEmail,
+      changedByConfigId: opts.changedByConfigId,
+      entityType: 'conference',
+      entityId: opts.conferenceId,
+    });
+  } catch (err) {
+    console.error('[notifications] notifyConferenceInternalAttendees error:', err);
+  }
+}
 export async function notifyForAttendee(opts: {
   attendeeId: number;
   attendeeName: string;

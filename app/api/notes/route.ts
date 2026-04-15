@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
-import { getConfigIdByEmail, notifyCompanyAssignees, notifyForAttendee } from '@/lib/notifications';
+import { getConfigIdByEmail, notifyCompanyAssignees, notifyForAttendee, notifyConferenceInternalAttendees } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -127,6 +127,19 @@ export async function POST(request: NextRequest) {
         notifyCompanyAssignees({
           companyId: Number(entity_id),
           companyName: nameStr,
+          message: `New note added: "${snippet}"`,
+          changedByEmail: user.email,
+          changedByConfigId,
+        });
+      } else if (entity_type === 'conference') {
+        const confRow = await db.execute({
+          sql: 'SELECT name FROM conferences WHERE id = ?',
+          args: [entity_id],
+        });
+        const nameStr = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${entity_id}`;
+        notifyConferenceInternalAttendees({
+          conferenceId: Number(entity_id),
+          conferenceName: nameStr,
           message: `New note added: "${snippet}"`,
           changedByEmail: user.email,
           changedByConfigId,
