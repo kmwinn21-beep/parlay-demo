@@ -246,10 +246,11 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
 }
 
 /* ─── Individual attendee card with RSVP picker ─── */
-function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, colorMaps, companies, userOptionsFull }: {
+function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull }: {
   attendee: Attendee;
   statuses: RsvpStatus[];
   onToggleRsvp: (s: RsvpStatus) => void;
+  onRemove?: () => void;
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
@@ -272,7 +273,21 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, colorMaps, compani
               <AssignedUserPill assignedUser={company?.assigned_user} userOptionsFull={userOptionsFull} />
             </div>
           </div>
-          <RSVPIcon statuses={statuses} />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <RSVPIcon statuses={statuses} />
+            {onRemove && (
+              <button
+                type="button"
+                title="Remove from guest list"
+                onClick={e => { e.stopPropagation(); onRemove(); }}
+                className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
       </button>
       {open && (
@@ -301,11 +316,12 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, colorMaps, compani
 }
 
 /* ─── Mobile: full-screen guest list bottom sheet ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onClose, colorMaps, companies, userOptionsFull }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
   onToggleRsvp: (attendeeId: number, s: RsvpStatus) => void;
+  onRemoveGuest: (attendeeId: number) => void;
   onClose: () => void;
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
@@ -342,7 +358,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onClos
           {visible.length === 0
             ? <p className="text-sm text-gray-400 text-center py-8">No attendees to show.</p>
             : visible.map(att => (
-              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
             ))}
         </div>
       </div>
@@ -351,11 +367,12 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onClos
 }
 
 /* ─── Desktop: inline RSVP expansion below table row ─── */
-function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, colorMaps, companies, userOptionsFull }: {
+function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
   onToggleRsvp: (attendeeId: number, s: RsvpStatus) => void;
+  onRemoveGuest: (attendeeId: number) => void;
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
@@ -382,7 +399,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, colorMa
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200">
-                {['Name','Title','Company','Type','Rep','RSVP (multi-select)'].map(h => (
+                {['Name','Title','Company','Type','Rep','RSVP (multi-select)',''].map(h => (
                   <th key={h} className="pb-2 pr-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -403,7 +420,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, colorMa
                         : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="py-2 pr-3"><AssignedUserPill assignedUser={co?.assigned_user} userOptionsFull={userOptionsFull} /></td>
-                    <td className="py-2">
+                    <td className="py-2 pr-3">
                       <div className="flex gap-1">
                         {(['yes','attended','no','maybe'] as RsvpStatus[]).map(opt => (
                           <button key={opt} type="button" title={opt.charAt(0).toUpperCase() + opt.slice(1)} onClick={() => onToggleRsvp(att.id, opt)}
@@ -419,6 +436,18 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, colorMa
                           </button>
                         ))}
                       </div>
+                    </td>
+                    <td className="py-2">
+                      <button
+                        type="button"
+                        title="Remove from guest list"
+                        onClick={() => onRemoveGuest(att.id)}
+                        className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 );
@@ -701,6 +730,22 @@ export function SocialEventsTable({
     }
   };
 
+  const handleRemoveGuest = useCallback(async (eventId: number, attendeeId: number) => {
+    if (!confirm('Remove this attendee from the guest list?')) return;
+    try {
+      const res = await fetch(`/api/social-events/${eventId}/guest`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Removed from guest list.');
+      onRefresh();
+    } catch {
+      toast.error('Failed to remove from guest list.');
+    }
+  }, [onRefresh]);
+
   const handleDelete = async (eventId: number) => {
     if (!confirm('Delete this social event? This cannot be undone.')) return;
     try {
@@ -976,7 +1021,7 @@ export function SocialEventsTable({
                       {isExpanded && (
                         <tr>
                           <td colSpan={11} className="p-0 border-b border-gray-200">
-                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
                           </td>
                         </tr>
                       )}
@@ -995,7 +1040,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
         );
       })()}
     </div>

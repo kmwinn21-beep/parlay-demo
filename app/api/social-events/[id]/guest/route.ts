@@ -57,3 +57,52 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to add guest' }, { status: 500 });
   }
 }
+
+// Remove an attendee from a social event's guest list.
+// Strips the ID from prospect_attendees and deletes their RSVP record.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await dbReady;
+    const { id } = params;
+    const body = await request.json();
+    const { attendee_id } = body;
+
+    if (!attendee_id) {
+      return NextResponse.json({ error: 'attendee_id is required' }, { status: 400 });
+    }
+
+    const aid = Number(attendee_id);
+
+    const evResult = await db.execute({
+      sql: 'SELECT prospect_attendees FROM social_events WHERE id = ?',
+      args: [id],
+    });
+
+    if (evResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Social event not found' }, { status: 404 });
+    }
+
+    const remaining = String(evResult.rows[0].prospect_attendees || '')
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n > 0 && n !== aid);
+
+    await db.execute({
+      sql: 'UPDATE social_events SET prospect_attendees = ? WHERE id = ?',
+      args: [remaining.length > 0 ? remaining.join(',') : null, id],
+    });
+
+    await db.execute({
+      sql: 'DELETE FROM social_event_rsvps WHERE social_event_id = ? AND attendee_id = ?',
+      args: [id, aid],
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/social-events/[id]/guest error:', error);
+    return NextResponse.json({ error: 'Failed to remove guest' }, { status: 500 });
+  }
+}
