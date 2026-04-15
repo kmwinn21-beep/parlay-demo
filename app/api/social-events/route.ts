@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `SELECT id, conference_id, entered_by, internal_attendees, event_type, host,
+      sql: `SELECT id, conference_id, entered_by, internal_attendees, event_name, event_type, host,
                    location, event_date, event_time, invite_only, prospect_attendees, notes, created_at
             FROM social_events
             WHERE conference_id = ?
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         conference_id: Number(r.conference_id),
         entered_by: r.entered_by ? String(r.entered_by) : null,
         internal_attendees: r.internal_attendees ? String(r.internal_attendees) : null,
+        event_name: r.event_name ? String(r.event_name) : null,
         event_type: r.event_type ? String(r.event_type) : null,
         host: r.host ? String(r.host) : null,
         location: r.location ? String(r.location) : null,
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       conference_id,
       entered_by,
       internal_attendees,
+      event_name,
       event_type,
       host,
       location,
@@ -81,13 +83,14 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_type, host, location, event_date, event_time, invite_only, prospect_attendees, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, conference_id, entered_by, internal_attendees, event_type, host, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
+      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, location, event_date, event_time, invite_only, prospect_attendees, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
       args: [
         conference_id,
         entered_by || null,
         internal_attendees || null,
+        event_name || null,
         event_type || null,
         host || null,
         location || null,
@@ -105,6 +108,7 @@ export async function POST(request: NextRequest) {
       conference_id: Number(r.conference_id),
       entered_by: r.entered_by ? String(r.entered_by) : null,
       internal_attendees: r.internal_attendees ? String(r.internal_attendees) : null,
+      event_name: r.event_name ? String(r.event_name) : null,
       event_type: r.event_type ? String(r.event_type) : null,
       host: r.host ? String(r.host) : null,
       location: r.location ? String(r.location) : null,

@@ -13,6 +13,7 @@ export interface SocialEvent {
   conference_id: number;
   entered_by: string | null;
   internal_attendees: string | null;
+  event_name: string | null;
   event_type: string | null;
   host: string | null;
   location: string | null;
@@ -568,7 +569,7 @@ export function SocialEventsTable({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
-    entered_by: '', internal_attendees: [] as string[], event_type: '',
+    entered_by: '', internal_attendees: [] as string[], event_name: '', event_type: '',
     host: '', location: '', event_date: '', event_time: '',
     invite_only: 'No', prospect_attendees: [] as string[], notes: '',
   });
@@ -623,7 +624,7 @@ export function SocialEventsTable({
 
   /* form helpers */
   const resetForm = () => {
-    setFormData({ entered_by: '', internal_attendees: [], event_type: '', host: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
+    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
     setEditingEventId(null);
     setShowForm(false);
   };
@@ -632,6 +633,7 @@ export function SocialEventsTable({
     setFormData({
       entered_by: ev.entered_by || '',
       internal_attendees: ev.internal_attendees ? ev.internal_attendees.split(',').map(n => n.trim()).filter(Boolean) : [],
+      event_name: ev.event_name || '',
       event_type: ev.event_type || '',
       host: ev.host || '',
       location: ev.location || '',
@@ -646,12 +648,17 @@ export function SocialEventsTable({
   };
 
   const handleSubmit = async () => {
+    if (!formData.event_name.trim()) {
+      toast.error('Event Name is required.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const payload = {
         conference_id: conferenceId,
         entered_by: formData.entered_by || null,
         internal_attendees: formData.internal_attendees.length > 0 ? formData.internal_attendees.join(',') : null,
+        event_name: formData.event_name.trim(),
         event_type: formData.event_type || null,
         host: formData.host || null,
         location: formData.location || null,
@@ -777,6 +784,18 @@ export function SocialEventsTable({
               )}
             </div>
 
+            {/* Event Name */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Event Name <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={formData.event_name}
+                onChange={e => setFormData(p => ({ ...p, event_name: e.target.value }))}
+                placeholder="Enter event name..."
+                className="input-field text-sm w-full"
+              />
+            </div>
+
             {/* Type */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Type</label>
@@ -875,8 +894,8 @@ export function SocialEventsTable({
                 <div key={ev.id} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="text-sm font-semibold text-procare-dark-blue">{ev.event_type || 'Social Event'}</p>
-                      <p className="text-xs text-gray-500">{ev.host || '—'}</p>
+                      <p className="text-sm font-semibold text-procare-dark-blue">{ev.event_name || ev.event_type || 'Social Event'}</p>
+                      <p className="text-xs text-gray-500">{ev.event_type ? `${ev.event_type} · ` : ''}{ev.host || '—'}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-procare-bright-blue transition-colors p-1" title="Edit">
@@ -911,7 +930,7 @@ export function SocialEventsTable({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  {['Entered By','Internal','Type','Host','Location','Date','Time','Invite Only','Guest List',''].map(h => (
+                  {['Entered By','Internal','Name','Type','Host','Location','Date','Time','Invite Only','Guest List',''].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -925,6 +944,7 @@ export function SocialEventsTable({
                       <tr className="hover:bg-gray-50 align-top">
                         <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>
                         <td className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>
+                        <td className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>
                         <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>
                         <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>
                         <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>
@@ -955,7 +975,7 @@ export function SocialEventsTable({
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={10} className="p-0 border-b border-gray-200">
+                          <td colSpan={11} className="p-0 border-b border-gray-200">
                             <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
                           </td>
                         </tr>
