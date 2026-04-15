@@ -1,13 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
 
 export default function SignupPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -32,8 +30,9 @@ export default function SignupPage() {
         return;
       }
       toast.success('Account created! Check your email to verify your address.');
-      router.push('/');
-      router.refresh();
+      // Full-page navigation — router.push() + router.refresh() together causes a
+      // race condition that corrupts the router and breaks Link navigation site-wide.
+      window.location.href = '/';
     } catch {
       toast.error('Network error. Please try again.');
     } finally {
