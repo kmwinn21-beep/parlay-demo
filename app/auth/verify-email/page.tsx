@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -9,7 +9,6 @@ type Status = 'loading' | 'success' | 'error';
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const token = searchParams.get('token') ?? '';
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState('');
@@ -31,7 +30,9 @@ function VerifyEmailContent() {
         if (ok) {
           setStatus('success');
           setMessage(data.message || 'Email verified!');
-          setTimeout(() => { router.push('/'); router.refresh(); }, 2000);
+          // Full-page navigation — router.push() + router.refresh() together causes a
+          // race condition that corrupts the router and breaks Link navigation site-wide.
+          setTimeout(() => { window.location.href = '/'; }, 2000);
         } else {
           setStatus('error');
           setMessage(data.error || 'Verification failed.');
@@ -41,7 +42,7 @@ function VerifyEmailContent() {
         setStatus('error');
         setMessage('Network error. Please try again.');
       });
-  }, [token, router]);
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-procare-dark-blue flex flex-col items-center justify-center p-4">
