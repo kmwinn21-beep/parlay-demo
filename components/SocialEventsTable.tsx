@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -299,9 +300,13 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
       <button type="button" className="w-full text-left p-3" onClick={() => setOpen(v => !v)}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-sm text-gray-900 leading-tight">{attendee.first_name} {attendee.last_name}</p>
+            <a href={`/attendees/${attendee.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm text-procare-dark-blue hover:underline leading-tight block">{attendee.first_name} {attendee.last_name}</a>
             {attendee.title && <p className="text-xs text-gray-500 mt-0.5">{attendee.title}</p>}
-            {attendee.company_name && <p className="text-xs text-gray-600 mt-0.5">{attendee.company_name}</p>}
+            {attendee.company_name && (
+              attendee.company_id
+                ? <a href={`/companies/${attendee.company_id}`} onClick={e => e.stopPropagation()} className="text-xs text-procare-dark-blue hover:underline mt-0.5 block">{attendee.company_name}</a>
+                : <p className="text-xs text-gray-600 mt-0.5">{attendee.company_name}</p>
+            )}
             <div className="flex flex-wrap items-center gap-1 mt-1.5">
               {attendee.company_type && (
                 <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-[10px]`}>{attendee.company_type}</span>
@@ -447,9 +452,9 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
                 const has = (opt: RsvpStatus) => statuses.includes(opt);
                 return (
                   <tr key={att.id} className="hover:bg-white">
-                    <td className="py-2 pr-3 font-medium text-gray-900 whitespace-nowrap">{att.first_name} {att.last_name}</td>
+                    <td className="py-2 pr-3 font-medium whitespace-nowrap"><Link href={`/attendees/${att.id}`} className="text-procare-dark-blue hover:underline">{att.first_name} {att.last_name}</Link></td>
                     <td className="py-2 pr-3 text-gray-700 text-sm whitespace-nowrap">{att.title || '—'}</td>
-                    <td className="py-2 pr-3 text-gray-700 whitespace-nowrap">{att.company_name || '—'}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{att.company_id ? <Link href={`/companies/${att.company_id}`} className="text-procare-dark-blue hover:underline">{att.company_name}</Link> : <span className="text-gray-700">{att.company_name || '—'}</span>}</td>
                     <td className="py-2 pr-3">
                       {att.company_type
                         ? <span className={`${getBadgeClass(att.company_type, colorMaps.company_type || {})} text-[10px]`}>{att.company_type}</span>
