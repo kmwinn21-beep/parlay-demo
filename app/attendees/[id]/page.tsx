@@ -23,6 +23,21 @@ import { InternalRelationshipsSection } from '@/components/InternalRelationships
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
+type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
+function parseRsvpStatuses(stored: string | null | undefined): RsvpStatus[] {
+  if (!stored) return [];
+  return stored.split(',').map(s => s.trim()).filter(s => ['yes','no','maybe','attended'].includes(s)) as RsvpStatus[];
+}
+
+interface AttendeeEventItem {
+  event_id: number;
+  event_name: string | null;
+  event_type: string | null;
+  conference_id: number;
+  conference_name: string;
+  rsvp_status: string | null;
+}
+
 interface Attendee {
   id: number; first_name: string; last_name: string; title?: string;
   company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
@@ -109,12 +124,46 @@ export default function AttendeeDetailPage() {
   const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
   const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
 
+  // Events / Social section
+  const [attendeeEvents, setAttendeeEvents] = useState<AttendeeEventItem[]>([]);
+  const [eventsExpanded, setEventsExpanded] = useState(true);
+  const [localEventRsvps, setLocalEventRsvps] = useState<Record<number, RsvpStatus[]>>({});
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ rep: '', conference_id: '', event_id: '' });
+  const [inviteConferenceEvents, setInviteConferenceEvents] = useState<{ id: number; event_name: string | null; event_type: string | null }[]>([]);
+  const [isLoadingInviteEvents, setIsLoadingInviteEvents] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+
   const fetchInternalRelationships = useCallback(async () => {
     try {
       const res = await fetch(`/api/internal-relationships?attendee_id=${id}`);
       if (res.ok) setInternalRelationships(await res.json());
     } catch { /* non-fatal */ }
   }, [id]);
+
+  const fetchAttendeeEvents = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/social-events/attendee?attendee_id=${id}`);
+      if (res.ok) setAttendeeEvents(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
+  const handleToggleEventRsvp = useCallback(async (eventId: number, status: RsvpStatus) => {
+    const current = localEventRsvps[eventId] ?? parseRsvpStatuses(attendeeEvents.find(e => e.event_id === eventId)?.rsvp_status);
+    const next = current.includes(status) ? current.filter(s => s !== status) : [...current, status];
+    setLocalEventRsvps(prev => ({ ...prev, [eventId]: next }));
+    try {
+      const res = await fetch(`/api/social-events/${eventId}/rsvp`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: Number(id), rsvp_status: next.length > 0 ? next.join(',') : 'maybe' }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setLocalEventRsvps(prev => { const n = { ...prev }; delete n[eventId]; return n; });
+      toast.error('Failed to save RSVP');
+    }
+  }, [localEventRsvps, attendeeEvents, id]);
 
   // Conference-specific state
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>('');
@@ -183,7 +232,7 @@ export default function AttendeeDetailPage() {
     } finally { setIsLoading(false); }
   }, [id, router]);
 
-  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); fetchInternalRelationships(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes, fetchInternalRelationships]);
+  useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); fetchInternalRelationships(); fetchAttendeeEvents(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes, fetchInternalRelationships, fetchAttendeeEvents]);
 
   // Load conference detail when a conference is selected
   useEffect(() => {
@@ -243,6 +292,39 @@ export default function AttendeeDetailPage() {
       setIsEditing(false);
       fetchAttendee();
     } catch { toast.error('Failed to update attendee'); } finally { setIsSaving(false); }
+  };
+
+  const handleInviteConferenceChange = async (conferenceId: string) => {
+    setInviteForm(p => ({ ...p, conference_id: conferenceId, event_id: '' }));
+    if (!conferenceId) { setInviteConferenceEvents([]); return; }
+    setIsLoadingInviteEvents(true);
+    try {
+      const res = await fetch(`/api/social-events?conference_id=${conferenceId}`);
+      if (res.ok) {
+        const events = await res.json();
+        setInviteConferenceEvents(events.map((e: { id: number; event_name: string | null; event_type: string | null }) => ({ id: e.id, event_name: e.event_name, event_type: e.event_type })));
+      }
+    } catch { /* non-fatal */ }
+    finally { setIsLoadingInviteEvents(false); }
+  };
+
+  const handleInviteSubmit = async () => {
+    if (!inviteForm.event_id) { toast.error('Please select an event.'); return; }
+    setIsInviting(true);
+    try {
+      const res = await fetch(`/api/social-events/${inviteForm.event_id}/guest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: Number(id) }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Added to guest list!');
+      setShowInviteModal(false);
+      setInviteForm({ rep: '', conference_id: '', event_id: '' });
+      setInviteConferenceEvents([]);
+      fetchAttendeeEvents();
+    } catch { toast.error('Failed to add to guest list.'); }
+    finally { setIsInviting(false); }
   };
 
   const handleDelete = async () => {
@@ -821,8 +903,70 @@ export default function AttendeeDetailPage() {
             />
           )}
 
-          {/* Conference selector */}
+          {/* Events / Social */}
           <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <button
+                type="button"
+                onClick={() => setEventsExpanded(v => !v)}
+                className="flex items-center gap-2 text-left flex-1"
+              >
+                <h2 className="text-base font-semibold text-procare-dark-blue font-serif">Events / Social</h2>
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${eventsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(true)}
+                className="flex items-center gap-1 text-xs font-medium text-procare-bright-blue hover:text-procare-dark-blue transition-colors flex-shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                Invite
+              </button>
+            </div>
+            {eventsExpanded && (
+              <div className="space-y-2">
+                {attendeeEvents.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-3">No events yet.</p>
+                ) : (
+                  attendeeEvents.map(ev => {
+                    const statuses = localEventRsvps[ev.event_id] ?? parseRsvpStatuses(ev.rsvp_status);
+                    const has = (s: RsvpStatus) => statuses.includes(s);
+                    return (
+                      <div key={ev.event_id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                        <div className="px-3 pt-3 pb-2">
+                          <p className="text-sm font-semibold text-gray-900 leading-tight">{ev.event_name || ev.event_type || 'Social Event'}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{ev.conference_name}</p>
+                        </div>
+                        <div className="flex gap-1 px-3 pb-3">
+                          {(['yes', 'attended', 'no', 'maybe'] as RsvpStatus[]).map(s => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => handleToggleEventRsvp(ev.event_id, s)}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                                has(s)
+                                  ? s === 'yes' ? 'bg-green-100 text-green-700' : s === 'attended' ? 'bg-purple-100 text-purple-700' : s === 'no' ? 'bg-red-50 text-red-600' : 'bg-gray-200 text-gray-700'
+                                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                              }`}
+                            >
+                              {s === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                              {s === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
+                              {s === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
+                              {s === 'maybe' && <span className="font-bold leading-none">?</span>}
+                              {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Conference selector — admin only */}
+          {isAdminUser && <div className="card">
             <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Conference Activity</h2>
             <div className="mb-4">
               <label className="label text-xs">Select a conference to log activity</label>
@@ -937,7 +1081,7 @@ export default function AttendeeDetailPage() {
 
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -959,6 +1103,78 @@ export default function AttendeeDetailPage() {
         defaultCompanyId={attendee?.company_id}
         availableConferences={attendee?.conferences}
       />
+
+      {/* Add to Guest List Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-procare-dark-blue font-serif">Add to Guest List</h3>
+              <button type="button" onClick={() => { setShowInviteModal(false); setInviteForm({ rep: '', conference_id: '', event_id: '' }); setInviteConferenceEvents([]); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {/* Rep */}
+              <div>
+                <label className="label text-xs">Rep</label>
+                <select value={inviteForm.rep} onChange={e => setInviteForm(p => ({ ...p, rep: e.target.value }))} className="input-field w-full text-sm">
+                  <option value="">Select rep...</option>
+                  {userOptions.map(u => <option key={u.id} value={u.value}>{u.value}</option>)}
+                </select>
+              </div>
+              {/* Company (read-only context) */}
+              <div>
+                <label className="label text-xs">Company</label>
+                <div className="input-field text-sm text-gray-600 bg-gray-50">{attendee.company_name || '—'}</div>
+              </div>
+              {/* Attendee (read-only context) */}
+              <div>
+                <label className="label text-xs">Attendee</label>
+                <div className="input-field text-sm text-gray-600 bg-gray-50">{attendee.first_name} {attendee.last_name}</div>
+              </div>
+              {/* Conference */}
+              <div>
+                <label className="label text-xs">Conference</label>
+                <select
+                  value={inviteForm.conference_id}
+                  onChange={e => handleInviteConferenceChange(e.target.value)}
+                  className="input-field w-full text-sm"
+                >
+                  <option value="">Select conference...</option>
+                  {attendee.conferences.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              {/* Event */}
+              <div>
+                <label className="label text-xs">Event</label>
+                <select
+                  value={inviteForm.event_id}
+                  onChange={e => setInviteForm(p => ({ ...p, event_id: e.target.value }))}
+                  className="input-field w-full text-sm"
+                  disabled={!inviteForm.conference_id || isLoadingInviteEvents}
+                >
+                  <option value="">{isLoadingInviteEvents ? 'Loading...' : 'Select event...'}</option>
+                  {inviteConferenceEvents.map(e => (
+                    <option key={e.id} value={e.id}>{e.event_name || e.event_type || `Event #${e.id}`}</option>
+                  ))}
+                </select>
+                {inviteForm.conference_id && !isLoadingInviteEvents && inviteConferenceEvents.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">No events for this conference.</p>
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
+              <button type="button" onClick={handleInviteSubmit} disabled={isInviting || !inviteForm.event_id} className="btn-primary text-sm flex-1">
+                {isInviting ? 'Adding...' : 'Add to Guest List'}
+              </button>
+              <button type="button" onClick={() => { setShowInviteModal(false); setInviteForm({ rep: '', conference_id: '', event_id: '' }); setInviteConferenceEvents([]); }} className="btn-secondary text-sm">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -269,6 +269,7 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (social_event_id) REFERENCES social_events(id) ON DELETE CASCADE,
       FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE
     )`,
+    `ALTER TABLE social_events ADD COLUMN event_name TEXT`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
