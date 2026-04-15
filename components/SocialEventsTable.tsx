@@ -192,7 +192,7 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
 }
 
 /* ─── RSVP summary totals + Operators toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilters, onToggleFilter }: {
+function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilters, onToggleFilter, stackOperators }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus[]>;
   operatorsOnly: boolean;
@@ -200,6 +200,7 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
   onToggleOperators: () => void;
   activeFilters: RsvpStatus[];
   onToggleFilter: (f: RsvpStatus | null) => void;
+  stackOperators?: boolean;
 }) {
   const filtered = operatorsOnly
     ? invitedIds.filter(id => isOperator(attendees.find(a => a.id === id)?.company_type))
@@ -207,7 +208,7 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
   const yes = filtered.filter(id => (rsvpMap[id] || []).includes('yes')).length;
   const attended = filtered.filter(id => (rsvpMap[id] || []).includes('attended')).length;
   const no = filtered.filter(id => (rsvpMap[id] || []).includes('no')).length;
-  const maybe = filtered.filter(id => { const s = rsvpMap[id] || []; return s.length === 0 || s.includes('maybe'); }).length;
+  const maybe = filtered.filter(id => (rsvpMap[id] || []).includes('maybe')).length;
   const cards: { label: string; value: number; cls: string; activeCls: string; filter: RsvpStatus | null }[] = [
     { label: 'Invited',  value: filtered.length, filter: null,       cls: 'bg-gray-50 border-gray-200 text-gray-800',         activeCls: 'ring-2 ring-gray-400' },
     { label: 'Yes',      value: yes,              filter: 'yes',      cls: 'bg-green-50 border-green-100 text-green-700',      activeCls: 'ring-2 ring-green-400' },
@@ -216,6 +217,41 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
     { label: 'Maybe',    value: maybe,            filter: 'maybe',    cls: 'bg-gray-50 border-gray-200 text-gray-500',        activeCls: 'ring-2 ring-gray-300' },
   ];
   const noneActive = activeFilters.length === 0;
+  const countRow = (
+    <div className="flex gap-1.5 flex-1 min-w-0">
+      {cards.map(({ label, value, cls, activeCls, filter }) => {
+        const isActive = filter === null ? noneActive : activeFilters.includes(filter);
+        return (
+          <button
+            key={label}
+            type="button"
+            onClick={() => onToggleFilter(filter)}
+            className={`flex-1 rounded-lg p-2 text-center border transition-all ${cls} ${isActive ? activeCls : 'opacity-60 hover:opacity-90'}`}
+          >
+            <p className="text-base font-bold leading-none">{value}</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{label}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+  const operatorsBtn = (
+    <button
+      type="button"
+      onClick={onToggleOperators}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-procare-dark-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+    >
+      Operators
+    </button>
+  );
+  if (stackOperators) {
+    return (
+      <div className="space-y-2">
+        {countRow}
+        <div>{operatorsBtn}</div>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <div className="flex gap-1.5 flex-1 min-w-0">
@@ -336,7 +372,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
     const s = rsvpMap[a.id] || [];
-    return activeFilters.some(f => f === 'maybe' ? (s.length === 0 || s.includes('maybe')) : s.includes(f));
+    return activeFilters.some(f => s.includes(f));
   });
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
@@ -352,7 +388,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -386,7 +422,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
     const s = rsvpMap[a.id] || [];
-    return activeFilters.some(f => f === 'maybe' ? (s.length === 0 || s.includes('maybe')) : s.includes(f));
+    return activeFilters.some(f => s.includes(f));
   });
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
