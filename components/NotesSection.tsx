@@ -182,6 +182,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
+                skip_notification: true,
               }),
             })
           );
@@ -201,6 +202,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
+                skip_notification: true,
               }),
             })
           );
@@ -220,6 +222,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
+                skip_notification: true,
               }),
             })
           );
@@ -239,6 +242,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
+                skip_notification: true,
               }),
             })
           );
@@ -259,6 +263,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
+                skip_notification: true,
               }),
             })
           );
@@ -278,6 +283,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
+                skip_notification: true,
               }),
             })
           );

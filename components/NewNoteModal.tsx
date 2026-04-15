@@ -179,6 +179,9 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       const companyLabel = selCompany ? selCompany.name : (selAttendee?.company_name || '');
       const conferenceName = selConf ? selConf.name : 'General Note';
 
+      // Only one entity fires a notification — most specific wins: attendee > company > conference
+      const notifyFor = selAttendee ? 'attendee' : selCompany ? 'company' : selConf ? 'conference' : null;
+
       const notePromises: Promise<unknown>[] = [];
 
       // Post to conference if selected
@@ -195,6 +198,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               rep: repValue,
               attendee_name: attendeeLabel || null,
               company_name: companyLabel || null,
+              skip_notification: notifyFor !== 'conference',
             }),
           })
         );
@@ -214,6 +218,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               rep: repValue,
               attendee_name: attendeeLabel || null,
               company_name: companyLabel || null,
+              skip_notification: notifyFor !== 'company',
             }),
           })
         );
@@ -233,6 +238,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               rep: repValue,
               attendee_name: attendeeLabel || null,
               company_name: companyLabel || null,
+              skip_notification: notifyFor !== 'attendee',
             }),
           })
         );

@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
   const user = authResult;
   try {
     await dbReady;
-    const { entity_type, entity_id, content, conference_name, rep, attendee_name, company_name } = await request.json();
+    const { entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, skip_notification } = await request.json();
 
     if (!entity_type || !entity_id || !content?.trim()) {
       return NextResponse.json({ error: 'entity_type, entity_id, and content are required' }, { status: 400 });
@@ -98,27 +98,40 @@ export async function POST(request: NextRequest) {
       company_name: row.company_name != null ? String(row.company_name) : null,
     };
 
-    // Fire notifications (best-effort)
-    const changedByConfigId = await getConfigIdByEmail(user.email);
-    const snippet = content.trim().slice(0, 80);
-    if (entity_type === 'company') {
-      const nameStr = company_name || `Company #${entity_id}`;
-      notifyCompanyAssignees({
-        companyId: Number(entity_id),
-        companyName: nameStr,
-        message: `New note added: "${snippet}"`,
-        changedByEmail: user.email,
-        changedByConfigId,
-      });
-    } else if (entity_type === 'attendee') {
-      const nameStr = attendee_name || `Attendee #${entity_id}`;
-      notifyForAttendee({
-        attendeeId: Number(entity_id),
-        attendeeName: nameStr,
-        message: `New note added: "${snippet}"`,
-        changedByEmail: user.email,
-        changedByConfigId,
-      });
+    // Fire notifications (best-effort) — skipped on cross-posts to avoid duplicates
+    if (!skip_notification) {
+      const changedByConfigId = await getConfigIdByEmail(user.email);
+      const snippet = content.trim().slice(0, 80);
+      if (entity_type === 'attendee') {
+        // Always look up the name from DB so it's never blank
+        const attRow = await db.execute({
+          sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
+          args: [entity_id],
+        });
+        const nameStr = attRow.rows.length > 0
+          ? `${attRow.rows[0].first_name} ${attRow.rows[0].last_name}`.trim()
+          : `Attendee #${entity_id}`;
+        notifyForAttendee({
+          attendeeId: Number(entity_id),
+          attendeeName: nameStr,
+          message: `New note added: "${snippet}"`,
+          changedByEmail: user.email,
+          changedByConfigId,
+        });
+      } else if (entity_type === 'company') {
+        const coRow = await db.execute({
+          sql: 'SELECT name FROM companies WHERE id = ?',
+          args: [entity_id],
+        });
+        const nameStr = coRow.rows.length > 0 ? String(coRow.rows[0].name) : `Company #${entity_id}`;
+        notifyCompanyAssignees({
+          companyId: Number(entity_id),
+          companyName: nameStr,
+          message: `New note added: "${snippet}"`,
+          changedByEmail: user.email,
+          changedByConfigId,
+        });
+      }
     }
 
     return NextResponse.json(response, { status: 201 });
