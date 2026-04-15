@@ -386,7 +386,7 @@ export function NotesSection({
           <button
             type="button"
             onClick={() => setIsAdding(true)}
-            className="flex items-center gap-1.5 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors"
+            className="flex items-center gap-1.5 text-sm text-procare-dark-blue hover:text-procare-dark-blue font-medium transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
