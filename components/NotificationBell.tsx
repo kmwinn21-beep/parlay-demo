@@ -79,16 +79,10 @@ export function NotificationBell() {
 
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications?unread_only=1&limit=1');
+      const res = await fetch('/api/notifications?unread_only=1&limit=200');
       if (!res.ok) return;
       const data = await res.json();
       setUnreadCount(Array.isArray(data) ? data.length : 0);
-      // Re-fetch full count
-      const res2 = await fetch('/api/notifications?unread_only=1&limit=200');
-      if (res2.ok) {
-        const all = await res2.json();
-        setUnreadCount(Array.isArray(all) ? all.length : 0);
-      }
     } catch { /* non-fatal */ }
   }, []);
 
@@ -105,11 +99,16 @@ export function NotificationBell() {
     }
   }, []);
 
-  // Poll unread count every 30s
+  // Poll unread count every 8s + re-fetch immediately when tab becomes visible
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30_000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchUnreadCount, 8_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchUnreadCount(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchUnreadCount]);
 
   // Fetch notifications when dropdown opens
