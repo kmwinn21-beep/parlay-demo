@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 // Returns all social events where the given attendee is on the guest list (prospect_attendees),
 // joined with conference name and RSVP status.
 export async function GET(request: NextRequest) {
