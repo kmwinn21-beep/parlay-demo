@@ -42,7 +42,7 @@ function VerifyEmailContent() {
         setStatus('error');
         setMessage('Network error. Please try again.');
       });
-  }, [token, router]);
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-procare-dark-blue flex flex-col items-center justify-center p-4">
