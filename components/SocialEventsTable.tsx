@@ -228,8 +228,8 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
               onClick={() => onToggleFilter(filter)}
               className={`flex-1 rounded-lg p-2 text-center border transition-all ${cls} ${isActive ? activeCls : 'opacity-60 hover:opacity-90'}`}
             >
-              <p className="text-base font-bold leading-none">{value}</p>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{label}</p>
+              <p className="text-xl font-bold leading-none">{value}</p>
+              <p className="text-sm text-gray-500 uppercase tracking-wide mt-0.5">{label}</p>
             </button>
           );
         })}
@@ -237,7 +237,7 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
       <button
         type="button"
         onClick={onToggleOperators}
-        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-procare-dark-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-procare-dark-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
       >
         Operators
       </button>
@@ -412,7 +412,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
                 return (
                   <tr key={att.id} className="hover:bg-white">
                     <td className="py-2 pr-3 font-medium text-gray-900 whitespace-nowrap">{att.first_name} {att.last_name}</td>
-                    <td className="py-2 pr-3 text-gray-500 text-xs whitespace-nowrap">{att.title || '—'}</td>
+                    <td className="py-2 pr-3 text-gray-700 text-sm whitespace-nowrap">{att.title || '—'}</td>
                     <td className="py-2 pr-3 text-gray-700 whitespace-nowrap">{att.company_name || '—'}</td>
                     <td className="py-2 pr-3">
                       {att.company_type
