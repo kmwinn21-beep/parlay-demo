@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
 function parseServices(value: unknown): string[] {
   if (!value) return [];
@@ -133,6 +134,7 @@ export async function PUT(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -143,12 +145,13 @@ export async function PUT(
     }
 
     const existingResult = await db.execute({
-      sql: 'SELECT id FROM companies WHERE id = ?',
+      sql: 'SELECT id, name, assigned_user FROM companies WHERE id = ?',
       args: [params.id],
     });
     if (existingResult.rows.length === 0) {
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
+    const prevAssignedUser = existingResult.rows[0].assigned_user as string | null;
 
     const updatedResult = await db.execute({
       sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
@@ -161,6 +164,28 @@ export async function PUT(
         sql: 'UPDATE companies SET assigned_user = ? WHERE parent_company_id = ?',
         args: [assigned_user || null, params.id],
       });
+    }
+
+    // Notify newly added assignees (best-effort)
+    if ('assigned_user' in body && assigned_user) {
+      const prevIds = new Set(parseNotifIds(prevAssignedUser));
+      const newIds = parseNotifIds(assigned_user);
+      const addedIds = newIds.filter(id => !prevIds.has(id));
+      if (addedIds.length > 0) {
+        const changedByConfigId = await getConfigIdByEmail(user.email);
+        const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
+        createNotifications({
+          userIds,
+          type: 'company',
+          recordId: Number(params.id),
+          recordName: name,
+          message: `You've been assigned as SF Owner for ${name}`,
+          changedByEmail: user.email,
+          changedByConfigId,
+          entityType: 'company',
+          entityId: Number(params.id),
+        });
+      }
     }
 
     return NextResponse.json({

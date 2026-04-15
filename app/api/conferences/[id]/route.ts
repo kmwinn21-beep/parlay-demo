@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
 export async function GET(
   request: NextRequest,
@@ -65,23 +66,47 @@ export async function PUT(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
     const { name, start_date, end_date, location, notes, internal_attendees } = body;
 
     const existingResult = await db.execute({
-      sql: 'SELECT id FROM conferences WHERE id = ?',
+      sql: 'SELECT id, name, internal_attendees FROM conferences WHERE id = ?',
       args: [params.id],
     });
     if (existingResult.rows.length === 0) {
       return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
     }
+    const prevInternalAttendees = existingResult.rows[0].internal_attendees as string | null;
 
     const updatedResult = await db.execute({
       sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [name, start_date, end_date, location, notes || null, internal_attendees || null, params.id],
     });
+
+    // Notify newly added internal attendees (best-effort)
+    if (internal_attendees) {
+      const prevIds = new Set(parseNotifIds(prevInternalAttendees));
+      const newIds = parseNotifIds(internal_attendees);
+      const addedIds = newIds.filter(id => !prevIds.has(id));
+      if (addedIds.length > 0) {
+        const changedByConfigId = await getConfigIdByEmail(user.email);
+        const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
+        createNotifications({
+          userIds,
+          type: 'conference',
+          recordId: Number(params.id),
+          recordName: name,
+          message: `You've been added as an internal attendee to ${name}`,
+          changedByEmail: user.email,
+          changedByConfigId,
+          entityType: 'conference',
+          entityId: Number(params.id),
+        });
+      }
+    }
 
     return NextResponse.json(updatedResult.rows[0]);
   } catch (error) {

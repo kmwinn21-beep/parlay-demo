@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
     });
 
     const row = result.rows[0];
-    return NextResponse.json({
+    const response = {
       id: Number(row.id),
       company_id: Number(row.company_id),
       rep_ids: row.rep_ids ? String(row.rep_ids) : null,
@@ -99,7 +101,29 @@ export async function POST(request: NextRequest) {
       relationship_status: String(row.relationship_status),
       description: String(row.description),
       created_at: String(row.created_at),
-    }, { status: 201 });
+    };
+
+    // Notify rep_ids users (best-effort)
+    if (rep_ids) {
+      const changedByConfigId = await getConfigIdByEmail(user.email);
+      const companyRow = await db.execute({ sql: 'SELECT name FROM companies WHERE id = ?', args: [Number(company_id)] });
+      const companyName = companyRow.rows.length > 0 ? String(companyRow.rows[0].name) : `Company #${company_id}`;
+      const repConfigIds = parseNotifIds(rep_ids);
+      const userIds = await resolveUserIds(repConfigIds.join(','), changedByConfigId);
+      createNotifications({
+        userIds,
+        type: 'company',
+        recordId: Number(company_id),
+        recordName: companyName,
+        message: `You've been added as a rep in an internal relationship for ${companyName}`,
+        changedByEmail: user.email,
+        changedByConfigId,
+        entityType: 'company',
+        entityId: Number(company_id),
+      });
+    }
+
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('POST /api/internal-relationships error:', error);
     return NextResponse.json({ error: 'Failed to create internal relationship' }, { status: 500 });

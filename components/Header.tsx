@@ -9,6 +9,7 @@ import { NewNoteModal } from './NewNoteModal';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
 import { GlobalSearchModal } from './GlobalSearch';
+import { NotificationBell } from './NotificationBell';
 import { useUser } from './UserContext';
 
 const pageTitles: Record<string, string> = {
@@ -20,6 +21,7 @@ const pageTitles: Record<string, string> = {
   '/admin': 'Admin Panel',
   '/follow-ups': 'Meetings & Follow Ups',
   '/relationships': 'Relationships',
+  '/notifications': 'Notifications',
   '/auth/account': 'My Account',
 };
 
@@ -140,6 +142,8 @@ export function Header() {
         <p className="text-xs text-gray-500 hidden sm:block">Senior Housing Conference Hub</p>
       </div>
       <div className="flex items-center gap-2">
+        {/* Notification Bell */}
+        <NotificationBell />
         {/* Global Search — desktop only; mobile uses FloatingNav */}
         <button
           type="button"

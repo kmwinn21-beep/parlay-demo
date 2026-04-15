@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 
 // Add an attendee to a social event's guest list.
 // Updates prospect_attendees and creates an RSVP record.
@@ -7,6 +9,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const { id } = params;
@@ -51,6 +56,26 @@ export async function POST(
       args: [id, aid],
     });
 
+    // Notify company assignees for this attendee (best-effort)
+    const attendeeRow = await db.execute({
+      sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
+      args: [aid],
+    });
+    if (attendeeRow.rows.length > 0) {
+      const a = attendeeRow.rows[0];
+      const attendeeName = `${a.first_name} ${a.last_name}`.trim();
+      const eventRow = await db.execute({ sql: 'SELECT name FROM social_events WHERE id = ?', args: [id] });
+      const eventName = eventRow.rows.length > 0 ? String(eventRow.rows[0].name) : `Social Event #${id}`;
+      const changedByConfigId = await getConfigIdByEmail(user.email);
+      notifyForAttendee({
+        attendeeId: aid,
+        attendeeName,
+        message: `${attendeeName} added to guest list for ${eventName}`,
+        changedByEmail: user.email,
+        changedByConfigId,
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('POST /api/social-events/[id]/guest error:', error);
@@ -64,6 +89,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
     const { id } = params;
