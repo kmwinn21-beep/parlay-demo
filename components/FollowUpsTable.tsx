@@ -204,7 +204,7 @@ export function FollowUpsTable({
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
+                <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
                   {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                 </span>
                 {fu.next_steps_notes && (
@@ -266,7 +266,7 @@ export function FollowUpsTable({
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
+                    <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
                       {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                     </span>
                     {fu.next_steps_notes && (
