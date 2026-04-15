@@ -140,11 +140,11 @@ export function Header() {
         <p className="text-xs text-gray-500 hidden sm:block">Senior Housing Conference Hub</p>
       </div>
       <div className="flex items-center gap-2">
-        {/* Global Search */}
+        {/* Global Search — desktop only; mobile uses FloatingNav */}
         <button
           type="button"
           onClick={() => setShowSearch(true)}
-          className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="hidden lg:flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
           title="Search (⌘K)"
         >
           <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
