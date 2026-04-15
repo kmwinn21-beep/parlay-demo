@@ -8,6 +8,7 @@ import { NewMeetingModal } from './NewMeetingModal';
 import { NewNoteModal } from './NewNoteModal';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
+import { GlobalSearchModal } from './GlobalSearch';
 import { useUser } from './UserContext';
 
 const pageTitles: Record<string, string> = {
@@ -85,6 +86,7 @@ export function Header() {
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +112,18 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showConferences, showAddNew]);
 
+  // Cmd+K / Ctrl+K opens global search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(v => !v);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -126,6 +140,18 @@ export function Header() {
         <p className="text-xs text-gray-500 hidden sm:block">Senior Housing Conference Hub</p>
       </div>
       <div className="flex items-center gap-2">
+        {/* Global Search */}
+        <button
+          type="button"
+          onClick={() => setShowSearch(true)}
+          className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Search (⌘K)"
+        >
+          <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span className="text-sm font-medium text-procare-dark-blue hidden lg:block">Search</span>
+        </button>
         {/* Add New Dropdown */}
         <div className="relative" ref={addNewRef}>
           <button
@@ -312,6 +338,7 @@ export function Header() {
       <NewNoteModal isOpen={showNoteModal} onClose={() => setShowNoteModal(false)} />
       <AssignFollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onSuccess={() => {}} />
       <NewRelationshipModal isOpen={showRelationshipModal} onClose={() => setShowRelationshipModal(false)} />
+      {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
     </header>
   );
 }
