@@ -76,18 +76,28 @@ export async function POST(request: NextRequest) {
 
     // Fire notification (best-effort)
     if (next_steps) {
-      const attendeeRow = await db.execute({
-        sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
-        args: [attendee_id],
-      });
+      const [attendeeRow, configRow] = await Promise.all([
+        db.execute({
+          sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
+          args: [attendee_id],
+        }),
+        // next_steps is a config option ID — look up the display label
+        db.execute({
+          sql: "SELECT value FROM config_options WHERE id = ? AND category = 'next_steps' LIMIT 1",
+          args: [next_steps],
+        }),
+      ]);
       if (attendeeRow.rows.length > 0) {
         const a = attendeeRow.rows[0];
         const attendeeName = `${a.first_name} ${a.last_name}`.trim();
+        const nextStepsLabel = configRow.rows.length > 0
+          ? String(configRow.rows[0].value)
+          : String(next_steps);
         const changedByConfigId = await getConfigIdByEmail(user.email);
         notifyForAttendee({
           attendeeId: Number(attendee_id),
           attendeeName,
-          message: `Follow-up created: "${next_steps}"`,
+          message: `Follow-up created: "${nextStepsLabel}"`,
           changedByEmail: user.email,
           changedByConfigId,
         });
