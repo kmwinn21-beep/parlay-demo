@@ -76,6 +76,15 @@ export default function NotificationsPage() {
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [markingAll, setMarkingAll] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  const toggleExpand = useCallback((id: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -244,85 +253,165 @@ export default function NotificationsPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-14">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Record</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Message</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">User</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Date &amp; Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Status</th>
-                  <th className="px-4 py-3 w-10" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map(n => (
-                  <tr
-                    key={n.id}
-                    onClick={() => handleRowClick(n)}
-                    className={`group cursor-pointer transition-colors hover:bg-blue-50 ${!n.is_read ? 'bg-blue-50/40' : ''}`}
-                  >
-                    {/* Type */}
-                    <td className="px-4 py-3">
+          <>
+            {/* Mobile collapsible cards — hidden at sm and above */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {filtered.map(n => {
+                const isExpanded = expandedIds.has(n.id);
+                return (
+                  <div key={n.id} className={!n.is_read ? 'bg-blue-50/40' : ''}>
+                    {/* Card header — always visible, tap to expand/collapse */}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(n.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                    >
                       <TypePill type={n.type} />
-                    </td>
-                    {/* Record */}
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-procare-dark-blue truncate max-w-[140px] block">
+                      {!n.is_read && (
+                        <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                      )}
+                      <span className="flex-1 font-medium text-procare-dark-blue truncate min-w-0">
                         {n.record_name}
                       </span>
-                    </td>
-                    {/* Message */}
-                    <td className="px-4 py-3">
-                      <span className="text-gray-600 line-clamp-2 max-w-xs block">{n.message}</span>
-                    </td>
-                    {/* User */}
-                    <td className="px-4 py-3">
-                      {(n.changed_by_name || n.changed_by_email) ? (
-                        <UserInitialsPill name={n.changed_by_name} email={n.changed_by_email} />
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    {/* Date & Time */}
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                      {formatDateTime(n.created_at)}
-                    </td>
-                    {/* Status */}
-                    <td className="px-4 py-3">
-                      {n.is_read ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-medium">
-                          Read
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-                          Unread
-                        </span>
-                      )}
-                    </td>
-                    {/* Mark-read action */}
-                    <td className="px-2 py-3">
-                      {!n.is_read && (
-                        <button
-                          type="button"
-                          onClick={e => { e.stopPropagation(); markRead(n.id); }}
-                          className="p-1.5 rounded hover:bg-gray-200 transition-colors opacity-0 group-hover:opacity-100"
-                          title="Mark as read"
-                        >
-                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                      )}
-                    </td>
+                      <svg
+                        className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Expanded body */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 space-y-3">
+                        {/* Message */}
+                        <p className="text-sm text-gray-700">{n.message}</p>
+
+                        {/* Meta: user pill + date + status badge */}
+                        <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                          {(n.changed_by_name || n.changed_by_email) && (
+                            <UserInitialsPill name={n.changed_by_name} email={n.changed_by_email} />
+                          )}
+                          <span>{formatDateTime(n.created_at)}</span>
+                          {n.is_read ? (
+                            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-medium">
+                              Read
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                              Unread
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Link
+                            href={entityUrl(n.entity_type, n.entity_id)}
+                            onClick={() => { if (!n.is_read) markRead(n.id); }}
+                            className="flex-1 text-center py-2 rounded-lg bg-procare-bright-blue text-white text-xs font-medium hover:bg-procare-dark-blue transition-colors"
+                          >
+                            Go to record
+                          </Link>
+                          {!n.is_read && (
+                            <button
+                              type="button"
+                              onClick={() => markRead(n.id)}
+                              className="py-2 px-3 rounded-lg border border-gray-200 text-xs text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+                            >
+                              Mark read
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop table — hidden below sm */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-14">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Record</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Message</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">User</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Date &amp; Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Status</th>
+                    <th className="px-4 py-3 w-10" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.map(n => (
+                    <tr
+                      key={n.id}
+                      onClick={() => handleRowClick(n)}
+                      className={`group cursor-pointer transition-colors hover:bg-blue-50 ${!n.is_read ? 'bg-blue-50/40' : ''}`}
+                    >
+                      {/* Type */}
+                      <td className="px-4 py-3">
+                        <TypePill type={n.type} />
+                      </td>
+                      {/* Record */}
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-procare-dark-blue truncate max-w-[140px] block">
+                          {n.record_name}
+                        </span>
+                      </td>
+                      {/* Message */}
+                      <td className="px-4 py-3">
+                        <span className="text-gray-600 line-clamp-2 max-w-xs block">{n.message}</span>
+                      </td>
+                      {/* User */}
+                      <td className="px-4 py-3">
+                        {(n.changed_by_name || n.changed_by_email) ? (
+                          <UserInitialsPill name={n.changed_by_name} email={n.changed_by_email} />
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      {/* Date & Time */}
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                        {formatDateTime(n.created_at)}
+                      </td>
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        {n.is_read ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-medium">
+                            Read
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                            Unread
+                          </span>
+                        )}
+                      </td>
+                      {/* Mark-read action */}
+                      <td className="px-2 py-3">
+                        {!n.is_read && (
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); markRead(n.id); }}
+                            className="p-1.5 rounded hover:bg-gray-200 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Mark as read"
+                          >
+                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
