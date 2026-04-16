@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBottomNav } from './BottomNavContext';
 import { GlobalSearchModal } from './GlobalSearch';
+import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 
 const STORAGE_KEY = 'floatingNavPos';
 const BTN = 56; // diameter in px (w-14)
@@ -86,6 +87,7 @@ function safeClamp(p: { x: number; y: number }): { x: number; y: number } {
 export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
+  const unreadCount = useUnreadNotificationCount();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -250,7 +252,14 @@ export function FloatingNav() {
                   onClick={() => setOpen(false)}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border min-w-[152px] transition-colors ${pillCls}`}
                 >
-                  {item.icon}
+                  {item.href === '/notifications' && unreadCount > 0 ? (
+                    <span className="relative flex-shrink-0">
+                      {item.icon}
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    </span>
+                  ) : item.icon}
                   <span className="text-sm font-medium leading-none">{item.label}</span>
                 </Link>
               ) : (
@@ -313,6 +322,15 @@ export function FloatingNav() {
             </svg>
           )}
         </div>
+        {/* Unread notification badge on FAB */}
+        {!open && unreadCount > 0 && (
+          <span
+            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none"
+            style={{ position: 'absolute', top: -4, right: -4 }}
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
       </div>
     </>
   );
