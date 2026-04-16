@@ -521,7 +521,14 @@ export function NotesSection({
           {notes.map(note => {
             const expanded = expandedIds.has(note.id);
             const long = isLongNote(note.content);
-            const repInitials = note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : null;
+            const repInitials = (() => {
+              if (!note.rep) return null;
+              if (note.rep.includes('@')) {
+                const u = note.rep.split('@')[0];
+                return ((u[0] || '') + (u[1] || '')).toUpperCase() || null;
+              }
+              return note.rep.split(/\s+/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).join('') || null;
+            })();
 
             // Resolve tagged users
             const taggedIds = note.tagged_users
