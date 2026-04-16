@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { parseRepIds } from '@/lib/useUserOptions';
+import { useUser } from '@/components/UserContext';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -633,6 +634,7 @@ export function SocialEventsTable({
   userOptions, userOptionsFull, eventTypeOptions, companies, attendees,
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
+  const { user } = useUser();
 
   /* form state */
   const [showForm, setShowForm] = useState(false);
@@ -814,7 +816,7 @@ export function SocialEventsTable({
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Social Events</h2>
         {!showForm && (
-          <button type="button" onClick={() => { setEditingEventId(null); setShowForm(true); }} className="flex items-center gap-1.5 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors">
+          <button type="button" onClick={() => { setEditingEventId(null); setFormData(p => ({ ...p, entered_by: user?.displayName || '' })); setShowForm(true); }} className="flex items-center gap-1.5 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
             Add Social Event
           </button>

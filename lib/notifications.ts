@@ -164,6 +164,41 @@ export async function notifyConferenceInternalAttendees(opts: {
     console.error('[notifications] notifyConferenceInternalAttendees error:', err);
   }
 }
+/**
+ * Notify users who were @mentioned in a note.
+ */
+export async function notifyMentionedUsers(opts: {
+  taggedConfigIds: number[];
+  mentionerName: string;
+  mentionerEmail: string;
+  mentionerConfigId: number | null;
+  entityName: string;
+  entityType: string;
+  entityId: number;
+}): Promise<void> {
+  if (opts.taggedConfigIds.length === 0) return;
+  try {
+    const userIds = await resolveUserIds(
+      opts.taggedConfigIds.join(','),
+      opts.mentionerConfigId,
+    );
+    const message = `${opts.mentionerName} mentioned you in a note related to ${opts.entityName}`;
+    await createNotifications({
+      userIds,
+      type: opts.entityType as NotifType,
+      recordId: opts.entityId,
+      recordName: opts.entityName,
+      message,
+      changedByEmail: opts.mentionerEmail,
+      changedByConfigId: opts.mentionerConfigId,
+      entityType: opts.entityType,
+      entityId: opts.entityId,
+    });
+  } catch (err) {
+    console.error('[notifications] notifyMentionedUsers error:', err);
+  }
+}
+
 export async function notifyForAttendee(opts: {
   attendeeId: number;
   attendeeName: string;

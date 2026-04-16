@@ -6,6 +6,9 @@ import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUser } from '@/components/UserContext';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { MentionTextarea } from '@/components/MentionTextarea';
+import { useUserOptions, getRepInitials } from '@/lib/useUserOptions';
 
 export interface EntityNote {
   id: number;
@@ -17,6 +20,7 @@ export interface EntityNote {
   conference_name?: string | null;
   rep?: string | null;
   attendee_name?: string | null;
+  tagged_users?: string | null;
 }
 
 function formatDateTime(dt: string) {
@@ -32,7 +36,6 @@ function formatDateTime(dt: string) {
   });
 }
 
-// A note is "long" if it exceeds ~300 chars or 4 newlines
 function isLongNote(content: string) {
   return content.length > 300 || content.split('\n').length > 4;
 }
@@ -45,13 +48,11 @@ export function NotesSection({
   conferences = [],
   companies = [],
   attendees = [],
-  // Context about the current entity for cross-posting
   currentAttendeeName,
   currentCompanyName,
   currentCompanyId,
   currentAttendeeId,
   currentConferenceName,
-  // Pin support
   onPin,
   pinnedNoteIds = new Set(),
   showPinnedIndicator = false,
@@ -79,53 +80,45 @@ export function NotesSection({
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [pinOnSubmit, setPinOnSubmit] = useState(false);
 
-  // Pin modal state
   const [pinModalNoteId, setPinModalNoteId] = useState<number | null>(null);
   const [pinConference, setPinConference] = useState('');
   const [pinAttendeeId, setPinAttendeeId] = useState('');
   const { user } = useUser();
   const colorMaps = useConfigColors();
+  const userOptionsWithIds = useUserOptions();
 
-  // Sync notes when initialNotes prop changes (e.g. after parent fetch completes)
   useEffect(() => {
     setNotes(initialNotes);
   }, [initialNotes]);
-  const [userOptions, setUserOptions] = useState<string[]>([]);
-  const [selectedUser, setSelectedUser] = useState('');
+
+  const [taggedUserIds, setTaggedUserIds] = useState<number[]>([]);
   const [selectedConference, setSelectedConference] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
 
-  useEffect(() => {
-    fetch('/api/config?category=user')
-      .then(res => res.json())
-      .then((data: { value: string }[]) => {
-        const users = data.map((d) => d.value);
-        setUserOptions(users);
-      })
-      .catch(() => {});
-  }, []);
-
-  // Filter attendees by selected company when on conference notes
   const filteredAttendees = selectedCompanyId
     ? attendees.filter(a => String(a.company_id) === selectedCompanyId)
     : attendees;
+
+  function handleMentionAdd(configId: number) {
+    setTaggedUserIds(prev => prev.includes(configId) ? prev : [...prev, configId]);
+  }
 
   const handleSubmit = async () => {
     if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
     setIsSubmitting(true);
     const content = noteText.trim();
     const conferenceName = selectedConference || (entityType === 'conference' ? currentConferenceName : '') || 'General Note';
-    const repValue = selectedUser || null;
+    // Auto-detect rep from logged-in user
+    const repValue = user?.displayName || null;
+    const taggedUsersStr = taggedUserIds.length > 0 ? taggedUserIds.join(',') : null;
 
     try {
-      // Resolve selected entities
       let selAttendee: (typeof attendees)[0] | undefined;
       let selCompany: (typeof companies)[0] | undefined;
       let selConf: (typeof conferences)[0] | undefined;
       let attendeeLabel = '';
       let companyLabel = '';
-      // For conference notes: determines which cross-post owns the single notification
       let notifyFor: 'attendee' | 'company' | 'conference' | null = null;
 
       if (entityType === 'conference') {
@@ -145,10 +138,8 @@ export function NotesSection({
         companyLabel = currentCompanyName || '';
       }
 
-      // Determine primary note content — plain content, no bracket prefixes
       const primaryContent = content;
 
-      // 1. Create the primary note with metadata fields
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,7 +151,7 @@ export function NotesSection({
           rep: repValue,
           attendee_name: attendeeLabel || null,
           company_name: companyLabel || null,
-          // For conference notes, only fire the conference notification when no company/attendee is selected
+          tagged_users: taggedUsersStr,
           ...(entityType === 'conference' && notifyFor !== 'conference' ? { skip_notification: true } : {}),
         }),
       });
@@ -168,12 +159,9 @@ export function NotesSection({
       const newNote: EntityNote = await res.json();
       setNotes(prev => [newNote, ...prev]);
 
-      // 2. Cross-post based on entity type and selections
-      // All cross-posted notes use plain content with metadata fields
       const crossPostPromises: Promise<unknown>[] = [];
 
       if (entityType === 'company') {
-        // Cross-post to conference
         if (selConf) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -192,8 +180,6 @@ export function NotesSection({
             })
           );
         }
-
-        // Cross-post to attendee
         if (selAttendee) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -213,7 +199,6 @@ export function NotesSection({
           );
         }
       } else if (entityType === 'conference') {
-        // Cross-post to company — fires notification only when company is the designated notifyFor target
         if (selCompany) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -232,8 +217,6 @@ export function NotesSection({
             })
           );
         }
-
-        // Cross-post to attendee — fires notification only when attendee is the designated notifyFor target
         if (selAttendee) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -253,7 +236,6 @@ export function NotesSection({
           );
         }
       } else if (entityType === 'attendee') {
-        // Cross-post to company
         const companyId = currentCompanyId;
         if (companyId) {
           crossPostPromises.push(
@@ -273,8 +255,6 @@ export function NotesSection({
             })
           );
         }
-
-        // Cross-post to conference
         if (selConf) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -295,12 +275,10 @@ export function NotesSection({
         }
       }
 
-      // Execute all cross-posts (fire and forget, don't block the user)
       if (crossPostPromises.length > 0) {
         await Promise.allSettled(crossPostPromises);
       }
 
-      // If user opted to pin the note, create a pinned note record
       if (pinOnSubmit && onPin && user?.email && (entityType === 'attendee' || entityType === 'company')) {
         try {
           const pinConferenceName = conferenceName !== 'General Note' ? conferenceName : null;
@@ -316,7 +294,7 @@ export function NotesSection({
       }
 
       setNoteText('');
-      setSelectedUser('');
+      setTaggedUserIds([]);
       setSelectedConference('');
       setSelectedCompanyId('');
       setSelectedAttendeeId('');
@@ -353,23 +331,18 @@ export function NotesSection({
   const handlePinClick = (noteId: number) => {
     if (!onPin) return;
     const note = notes.find(n => n.id === noteId);
-    // For attendee details: if no conference associated with this note, show modal
     if (entityType === 'attendee') {
       if (note?.conference_name && note.conference_name !== 'General Note') {
-        // Conference already associated, pin directly
         onPin(noteId, note.conference_name, null, null);
       } else {
-        // Need to prompt for conference
         setPinConference('');
         setPinModalNoteId(noteId);
       }
     } else if (entityType === 'company') {
-      // Always show modal for company - to optionally associate attendee/conference
       setPinConference(note?.conference_name && note.conference_name !== 'General Note' ? note.conference_name : '');
       setPinAttendeeId('');
       setPinModalNoteId(noteId);
     } else {
-      // Conference details - shouldn't pin from here
       return;
     }
   };
@@ -411,23 +384,28 @@ export function NotesSection({
       {isAdding && (
         <div className="mb-5 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
           <div className="flex flex-wrap gap-3 mb-3">
-            {userOptions.length > 0 && (
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                  Entered By
-                </label>
-                <select
-                  value={selectedUser}
-                  onChange={e => setSelectedUser(e.target.value)}
-                  className="input-field text-sm w-full"
-                >
-                  <option value="">Select user...</option>
-                  {userOptions.map(user => (
-                    <option key={user} value={user}>{user}</option>
-                  ))}
-                </select>
+            {/* Auto-detected entered by */}
+            {user?.displayName && (
+              <div className="w-full flex items-center gap-2 text-xs text-gray-500">
+                <span className="font-semibold text-gray-600 uppercase tracking-wide">Entered By:</span>
+                <span className="font-medium text-procare-dark-blue">{user.displayName}</span>
               </div>
             )}
+
+            {/* Tag User multiselect */}
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Tag User
+              </label>
+              <RepMultiSelect
+                options={userOptionsWithIds}
+                selectedIds={taggedUserIds}
+                onChange={setTaggedUserIds}
+                triggerClass="input-field text-sm w-full flex items-center justify-between gap-2"
+                placeholder="Tag a user to notify..."
+              />
+            </div>
+
             {conferences.length > 0 && (
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
@@ -445,7 +423,7 @@ export function NotesSection({
                 </select>
               </div>
             )}
-            {/* Company dropdown for conference notes */}
+
             {entityType === 'conference' && companies.length > 0 && (
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
@@ -463,7 +441,7 @@ export function NotesSection({
                 </select>
               </div>
             )}
-            {/* Attendee dropdown for conference and company notes */}
+
             {(entityType === 'conference' || entityType === 'company') && attendees.length > 0 && (
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
@@ -481,17 +459,19 @@ export function NotesSection({
                 </select>
               </div>
             )}
-            {/* Company dropdown for company notes - for attendee association */}
-            {entityType === 'company' && conferences.length === 0 && companies.length === 0 && null}
           </div>
-          <textarea
+
+          <MentionTextarea
             value={noteText}
-            onChange={e => setNoteText(e.target.value)}
-            placeholder="Enter your note..."
+            onChange={setNoteText}
+            onMentionAdd={handleMentionAdd}
+            userOptions={userOptionsWithIds}
             className="input-field resize-none w-full text-sm"
+            placeholder="Enter your note... (type @ to mention a user)"
             rows={5}
             autoFocus
           />
+
           {onPin && (entityType === 'attendee' || entityType === 'company') && (
             <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
               <input
@@ -517,7 +497,15 @@ export function NotesSection({
             </button>
             <button
               type="button"
-              onClick={() => { setIsAdding(false); setNoteText(''); setSelectedUser(''); setSelectedConference(''); setSelectedCompanyId(''); setSelectedAttendeeId(''); setPinOnSubmit(false); }}
+              onClick={() => {
+                setIsAdding(false);
+                setNoteText('');
+                setTaggedUserIds([]);
+                setSelectedConference('');
+                setSelectedCompanyId('');
+                setSelectedAttendeeId('');
+                setPinOnSubmit(false);
+              }}
               className="btn-secondary text-sm"
             >
               Cancel
@@ -534,9 +522,18 @@ export function NotesSection({
             const expanded = expandedIds.has(note.id);
             const long = isLongNote(note.content);
             const repInitials = note.rep ? note.rep.split(' ').map(n => n.charAt(0).toUpperCase()).join('') : null;
+
+            // Resolve tagged users
+            const taggedIds = note.tagged_users
+              ? note.tagged_users.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+              : [];
+            const taggedNames = taggedIds
+              .map(id => userOptionsWithIds.find(u => u.id === id)?.value)
+              .filter(Boolean) as string[];
+
             return (
               <div key={note.id} className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-all">
-                {/* Meta row: date · conference badge on left; rep pill + pin on right */}
+                {/* Meta row */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
@@ -555,6 +552,16 @@ export function NotesSection({
                         {note.company_name}
                       </span>
                     )}
+                    {/* Tagged users pills */}
+                    {taggedNames.map(name => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-xs font-medium border border-violet-200 whitespace-nowrap"
+                        title={`@${name}`}
+                      >
+                        @{getRepInitials(name)}
+                      </span>
+                    ))}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {repInitials && (
@@ -565,7 +572,6 @@ export function NotesSection({
                         {repInitials}
                       </span>
                     )}
-                    {/* Pinned indicator (shown in conference view) */}
                     {showPinnedIndicator && pinnedNoteIds.has(note.id) && (
                       <span className="text-procare-gold flex-shrink-0" title="Pinned in Company or Attendee details">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -573,7 +579,6 @@ export function NotesSection({
                         </svg>
                       </span>
                     )}
-                    {/* Pin button (shown in attendee and company views) */}
                     {onPin && (entityType === 'attendee' || entityType === 'company') && (
                       <button
                         type="button"
@@ -602,7 +607,6 @@ export function NotesSection({
                     {expanded ? 'Show Less' : 'Show Full Note'}
                   </button>
                 )}
-                {/* Delete button at bottom-right */}
                 <div className="flex justify-end mt-2">
                   <button
                     type="button"
@@ -630,7 +634,6 @@ export function NotesSection({
               Pin Note
             </h3>
             <div className="space-y-4">
-              {/* Conference selector - required for attendee, optional for company */}
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
                   Conference {entityType === 'attendee' ? '*' : '(optional)'}
@@ -646,7 +649,6 @@ export function NotesSection({
                   ))}
                 </select>
               </div>
-              {/* Attendee selector - only for company details */}
               {entityType === 'company' && attendees.length > 0 && (
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
