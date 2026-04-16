@@ -19,6 +19,7 @@ interface MentionTextareaProps {
 // Uses a hidden mirror div that replicates the textarea's text layout.
 function getCaretViewportCoords(el: HTMLTextAreaElement, position: number): { top: number; left: number; lineH: number } {
   const cs = window.getComputedStyle(el);
+
   const mirror = document.createElement('div');
 
   for (const p of [
@@ -30,9 +31,11 @@ function getCaretViewportCoords(el: HTMLTextAreaElement, position: number): { to
     (mirror.style as unknown as Record<string, string>)[p] = cs.getPropertyValue(p);
   }
 
-  mirror.style.position = 'fixed';
-  mirror.style.top = '-9999px';
-  mirror.style.left = '-9999px';
+  // position: absolute at top:0/left:0 is more reliably laid out on mobile
+  // than position: fixed at extreme negative coordinates.
+  mirror.style.position = 'absolute';
+  mirror.style.top = '0';
+  mirror.style.left = '0';
   mirror.style.visibility = 'hidden';
   mirror.style.pointerEvents = 'none';
   mirror.style.whiteSpace = 'pre-wrap';
@@ -41,15 +44,16 @@ function getCaretViewportCoords(el: HTMLTextAreaElement, position: number): { to
   mirror.style.overflow = 'hidden';
   mirror.style.width = el.offsetWidth + 'px';
 
-  // Text before the caret position
   mirror.textContent = el.value.slice(0, position);
 
-  // Zero-width marker span to measure the caret location
   const marker = document.createElement('span');
-  marker.textContent = '\u200b';
+  marker.textContent = '\u200b'; // zero-width space
   mirror.appendChild(marker);
 
   document.body.appendChild(mirror);
+  // Force synchronous layout — required on mobile browsers
+  void mirror.offsetHeight;
+
   const mirrorRect = mirror.getBoundingClientRect();
   const markerRect = marker.getBoundingClientRect();
   document.body.removeChild(mirror);
@@ -66,8 +70,13 @@ function getCaretViewportCoords(el: HTMLTextAreaElement, position: number): { to
   };
 }
 
-const DROPDOWN_W = 224;  // w-56
-const DROPDOWN_H = 220;  // approximate max height (header + up to ~6 rows)
+// Available viewport height accounting for mobile virtual keyboard.
+function getVisibleHeight(): number {
+  return window.visualViewport?.height ?? window.innerHeight;
+}
+
+const DROPDOWN_W = 224; // w-56
+const DROPDOWN_H = 220; // approx max height
 
 export function MentionTextarea({
   value,
@@ -85,6 +94,7 @@ export function MentionTextarea({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const [mounted, setMounted] = useState(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -96,15 +106,27 @@ export function MentionTextarea({
     const el = textareaRef.current;
     if (!el) return;
 
-    const { top: caretTop, left: caretLeft, lineH } = getCaretViewportCoords(el, atIdx);
+    let caretTop: number;
+    let caretLeft: number;
+    let lineH: number;
+
+    try {
+      const coords = getCaretViewportCoords(el, atIdx);
+      caretTop = coords.top;
+      caretLeft = coords.left;
+      lineH = coords.lineH;
+    } catch {
+      // Fallback: position at top of textarea
+      const rect = el.getBoundingClientRect();
+      caretTop = rect.top;
+      caretLeft = rect.left;
+      lineH = 20;
+    }
 
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vh = getVisibleHeight();
 
-    // Clamp left so the dropdown doesn't fall off the right edge
     const left = Math.max(8, Math.min(caretLeft, vw - DROPDOWN_W - 8));
-
-    // Prefer above; fall back to below if insufficient space above
     const spaceAbove = caretTop;
     const above = spaceAbove >= DROPDOWN_H;
 
@@ -118,7 +140,8 @@ export function MentionTextarea({
     if (above) {
       style.bottom = vh - caretTop + 4;
     } else {
-      style.top = caretTop + lineH + 4;
+      // If below and space is tight, cap so it doesn't overlap keyboard
+      style.top = Math.min(caretTop + lineH + 4, vh - DROPDOWN_H - 8);
     }
 
     setDropdownStyle(style);
@@ -173,6 +196,17 @@ export function MentionTextarea({
     }
   };
 
+  const cancelBlur = () => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+  };
+
+  const handleBlur = () => {
+    blurTimerRef.current = setTimeout(() => setShowSuggestions(false), 200);
+  };
+
   const dropdown = showSuggestions && filteredUsers.length > 0 && mounted ? createPortal(
     <div
       style={dropdownStyle}
@@ -185,8 +219,11 @@ export function MentionTextarea({
         <button
           key={u.id}
           type="button"
-          onMouseDown={e => { e.preventDefault(); handleSelectUser(u); }}
-          className="w-full text-left px-3 py-2 text-sm hover:bg-violet-50 flex items-center gap-2 transition-colors"
+          // Both onMouseDown (desktop) and onTouchStart (mobile) cancel the
+          // pending blur timer so the dropdown stays open long enough to select.
+          onMouseDown={e => { e.preventDefault(); cancelBlur(); handleSelectUser(u); }}
+          onTouchStart={e => { e.preventDefault(); cancelBlur(); handleSelectUser(u); }}
+          className="w-full text-left px-3 py-2 text-sm hover:bg-violet-50 active:bg-violet-100 flex items-center gap-2 transition-colors"
         >
           <span className="w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
             {getRepInitials(u.value)}
@@ -207,7 +244,7 @@ export function MentionTextarea({
         onChange={handleChange}
         onKeyUp={handleKeyUp}
         onKeyDown={handleKeyDown}
-        onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+        onBlur={handleBlur}
         onScroll={() => { if (showSuggestions) computeDropdownStyle(mentionStartIdx); }}
         placeholder={placeholder}
         rows={rows}
