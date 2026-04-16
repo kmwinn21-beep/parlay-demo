@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
-import { getConfigIdByEmail, notifyCompanyAssignees, notifyForAttendee, notifyConferenceInternalAttendees } from '@/lib/notifications';
+import {
+  getConfigIdByEmail,
+  notifyCompanyAssignees,
+  notifyForAttendee,
+  notifyConferenceInternalAttendees,
+  notifyMentionedUsers,
+} from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -20,16 +26,15 @@ export async function GET(request: NextRequest) {
     let result;
     if (entityIds) {
       const ids = entityIds.split(',').map(id => id.trim()).filter(Boolean);
-      // When fetching for multiple entities, join to get the company name for context
       const joinCompany = entityType === 'company';
       result = await db.execute({
         sql: joinCompany
-          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, co.name AS joined_company_name
+          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, co.name AS joined_company_name
                 FROM entity_notes en
                 LEFT JOIN companies co ON en.entity_id = co.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
                 ORDER BY en.created_at DESC`
-          : `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name
+          : `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users
                 FROM entity_notes
                 WHERE entity_type = ? AND entity_id IN (${ids.map(() => '?').join(',')})
                 ORDER BY created_at DESC`,
@@ -37,7 +42,7 @@ export async function GET(request: NextRequest) {
       });
     } else {
       result = await db.execute({
-        sql: `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name
+        sql: `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users
               FROM entity_notes
               WHERE entity_type = ? AND entity_id = ?
               ORDER BY created_at DESC`,
@@ -58,6 +63,7 @@ export async function GET(request: NextRequest) {
         company_name: r.joined_company_name != null
           ? String(r.joined_company_name)
           : (r.company_name != null ? String(r.company_name) : null),
+        tagged_users: r.tagged_users != null ? String(r.tagged_users) : null,
       }))
     );
   } catch (error) {
@@ -72,17 +78,25 @@ export async function POST(request: NextRequest) {
   const user = authResult;
   try {
     await dbReady;
-    const { entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, skip_notification } = await request.json();
+    const {
+      entity_type, entity_id, content, conference_name, rep,
+      attendee_name, company_name, skip_notification, tagged_users,
+    } = await request.json();
 
     if (!entity_type || !entity_id || !content?.trim()) {
       return NextResponse.json({ error: 'entity_type, entity_id, and content are required' }, { status: 400 });
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name`,
-      args: [entity_type, entity_id, content.trim(), conference_name || null, rep || null, attendee_name || null, company_name || null],
+      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users`,
+      args: [
+        entity_type, entity_id, content.trim(),
+        conference_name || null, rep || null,
+        attendee_name || null, company_name || null,
+        tagged_users || null,
+      ],
     });
 
     const row = result.rows[0];
@@ -96,14 +110,14 @@ export async function POST(request: NextRequest) {
       rep: row.rep != null ? String(row.rep) : null,
       attendee_name: row.attendee_name != null ? String(row.attendee_name) : null,
       company_name: row.company_name != null ? String(row.company_name) : null,
+      tagged_users: row.tagged_users != null ? String(row.tagged_users) : null,
     };
 
-    // Fire notifications (best-effort) — skipped on cross-posts to avoid duplicates
+    // Fire standard notifications (best-effort) — skipped on cross-posts to avoid duplicates
     if (!skip_notification) {
       const changedByConfigId = await getConfigIdByEmail(user.email);
       const snippet = content.trim().slice(0, 80);
       if (entity_type === 'attendee') {
-        // Always look up the name from DB so it's never blank
         const attRow = await db.execute({
           sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
           args: [entity_id],
@@ -143,6 +157,55 @@ export async function POST(request: NextRequest) {
           message: `New note added: "${snippet}"`,
           changedByEmail: user.email,
           changedByConfigId,
+        });
+      }
+    }
+
+    // Fire @mention notifications — always, regardless of skip_notification
+    if (tagged_users) {
+      const taggedConfigIds = String(tagged_users)
+        .split(',')
+        .map(s => parseInt(s.trim(), 10))
+        .filter(n => !isNaN(n) && n > 0);
+
+      if (taggedConfigIds.length > 0) {
+        const changedByConfigId = await getConfigIdByEmail(user.email);
+        // Resolve entity name for the notification message
+        let entityName = '';
+        try {
+          if (entity_type === 'company') {
+            const r = await db.execute({ sql: 'SELECT name FROM companies WHERE id = ?', args: [entity_id] });
+            entityName = r.rows.length > 0 ? String(r.rows[0].name) : company_name || `Company #${entity_id}`;
+          } else if (entity_type === 'attendee') {
+            const r = await db.execute({ sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?', args: [entity_id] });
+            entityName = r.rows.length > 0
+              ? `${r.rows[0].first_name} ${r.rows[0].last_name}`.trim()
+              : attendee_name || `Attendee #${entity_id}`;
+          } else if (entity_type === 'conference') {
+            const r = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [entity_id] });
+            entityName = r.rows.length > 0 ? String(r.rows[0].name) : conference_name || `Conference #${entity_id}`;
+          }
+        } catch { /* non-fatal */ }
+
+        // Resolve mentioner display name
+        const mentionerRow = await db.execute({
+          sql: `SELECT u.config_id, co.value as display_name
+                FROM users u LEFT JOIN config_options co ON u.config_id = co.id
+                WHERE u.email = ?`,
+          args: [user.email],
+        });
+        const mentionerName = mentionerRow.rows[0]?.display_name
+          ? String(mentionerRow.rows[0].display_name)
+          : user.email;
+
+        notifyMentionedUsers({
+          taggedConfigIds,
+          mentionerName,
+          mentionerEmail: user.email,
+          mentionerConfigId: changedByConfigId,
+          entityName,
+          entityType: entity_type,
+          entityId: Number(entity_id),
         });
       }
     }

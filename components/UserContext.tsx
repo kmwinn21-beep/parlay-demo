@@ -7,6 +7,8 @@ export interface AuthUser {
   email: string;
   role: 'user' | 'administrator';
   emailVerified: boolean;
+  configId: number | null;
+  displayName: string | null;
 }
 
 interface UserContextValue {

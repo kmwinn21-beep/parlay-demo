@@ -9,6 +9,7 @@ import {
   resolveRepNames,
 } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
+import { useUser } from '@/components/UserContext';
 
 interface ConferenceOption {
   id: number;
@@ -154,6 +155,7 @@ export function AssignFollowUpModal({
   availableConferences,
 }: AssignFollowUpModalProps) {
   useHideBottomNav(isOpen);
+  const { user } = useUser();
   const userOptions = useUserOptions();
   const actionOptions = useConfigWithIds('next_steps');
 
@@ -291,7 +293,8 @@ export function AssignFollowUpModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    setRepIds([]);
+    // Auto-select logged-in user
+    setRepIds(user?.configId ? [user.configId] : []);
     setConferenceId('');
     setCompanyId('');
     setAttendeeId('');

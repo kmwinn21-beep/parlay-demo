@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useHideBottomNav } from './BottomNavContext';
 import { useUser } from '@/components/UserContext';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { MentionTextarea } from '@/components/MentionTextarea';
+import { useUserOptions } from '@/lib/useUserOptions';
 
 interface ConferenceOption {
   id: number;
@@ -31,14 +34,14 @@ interface NewNoteModalProps {
 
 export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   useHideBottomNav(isOpen);
-  const [userOptions, setUserOptions] = useState<string[]>([]);
+  const userOptionsWithIds = useUserOptions();
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [allCompanies, setAllCompanies] = useState<CompanyOption[]>([]);
   const [conferenceAttendees, setConferenceAttendees] = useState<AttendeeOption[]>([]);
   const [allAttendees, setAllAttendees] = useState<AttendeeOption[]>([]);
   const [loadingConference, setLoadingConference] = useState(false);
 
-  const [selectedUser, setSelectedUser] = useState('');
+  const [taggedUserIds, setTaggedUserIds] = useState<number[]>([]);
   const [selectedConferenceId, setSelectedConferenceId] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
@@ -51,13 +54,9 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
 
   const companyDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch users, conferences, all companies, all attendees on open
+  // Fetch conferences, all companies, all attendees on open
   useEffect(() => {
     if (!isOpen) return;
-    fetch('/api/config?category=user')
-      .then(r => r.json())
-      .then((data: { value: string }[]) => setUserOptions(data.map(d => d.value)))
-      .catch(() => {});
     fetch('/api/conferences')
       .then(r => r.json())
       .then((data: ConferenceOption[]) => setConferences(data))
@@ -77,7 +76,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     if (!selectedConferenceId) {
       setConferenceAttendees([]);
       setSelectedAttendeeId('');
-      // Preserve company selection when conference is cleared
       return;
     }
     setLoadingConference(true);
@@ -87,7 +85,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       .then((data: { attendees: AttendeeOption[] }) => {
         const attendees = data.attendees || [];
         setConferenceAttendees(attendees);
-        // Clear company selection only if the selected company is not associated with this conference
         if (selectedCompanyId) {
           const conferenceCompanyIds = new Set(
             attendees.map(a => a.company_id).filter((id): id is number => id !== null)
@@ -114,7 +111,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showCompanyDropdown]);
 
-  // When a conference is selected, filter companies to those associated with conference attendees
   const companies = useMemo(() => {
     if (!selectedConferenceId || conferenceAttendees.length === 0) return allCompanies;
     const conferenceCompanyIds = new Set(
@@ -123,7 +119,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     return allCompanies.filter(c => conferenceCompanyIds.has(c.id));
   }, [selectedConferenceId, conferenceAttendees, allCompanies]);
 
-  // Filter companies by search text
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return companies;
     const q = companySearch.toLowerCase();
@@ -132,10 +127,8 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
 
   const selectedCompanyName = allCompanies.find(c => c.id === Number(selectedCompanyId))?.name || '';
 
-  // Current attendees source: conference attendees if conference selected, otherwise all attendees
   const currentAttendees = selectedConferenceId ? conferenceAttendees : allAttendees;
 
-  // Filter attendees by selected company
   const filteredAttendees = useMemo(() => {
     if (!selectedCompanyId) return currentAttendees;
     return currentAttendees.filter(a => String(a.company_id) === selectedCompanyId);
@@ -145,7 +138,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   const canSubmit = noteText.trim() && hasRequiredSelection && !submitting;
 
   function resetForm() {
-    setSelectedUser('');
+    setTaggedUserIds([]);
     setSelectedConferenceId('');
     setSelectedCompanyId('');
     setSelectedAttendeeId('');
@@ -160,6 +153,11 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     onClose();
   }
 
+  // When @mention resolves in textarea, add to tagged users
+  function handleMentionAdd(configId: number) {
+    setTaggedUserIds(prev => prev.includes(configId) ? prev : [...prev, configId]);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
@@ -167,10 +165,11 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
 
     setSubmitting(true);
     const content = noteText.trim();
-    const repValue = selectedUser || null;
+    // Auto-detect rep from logged-in user
+    const repValue = user?.displayName || null;
+    const taggedUsersStr = taggedUserIds.length > 0 ? taggedUserIds.join(',') : null;
 
     try {
-      // Resolve selected entities
       const selConf = conferences.find(c => String(c.id) === selectedConferenceId);
       const selCompany = companies.find(c => String(c.id) === selectedCompanyId);
       const selAttendee = filteredAttendees.find(a => String(a.id) === selectedAttendeeId);
@@ -179,12 +178,10 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       const companyLabel = selCompany ? selCompany.name : (selAttendee?.company_name || '');
       const conferenceName = selConf ? selConf.name : 'General Note';
 
-      // Only one entity fires a notification — most specific wins: attendee > company > conference
       const notifyFor = selAttendee ? 'attendee' : selCompany ? 'company' : selConf ? 'conference' : null;
 
       const notePromises: Promise<unknown>[] = [];
 
-      // Post to conference if selected
       if (selConf) {
         notePromises.push(
           fetch('/api/notes', {
@@ -199,12 +196,12 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               attendee_name: attendeeLabel || null,
               company_name: companyLabel || null,
               skip_notification: notifyFor !== 'conference',
+              tagged_users: taggedUsersStr,
             }),
           })
         );
       }
 
-      // Post to company if selected
       if (selCompany) {
         notePromises.push(
           fetch('/api/notes', {
@@ -219,12 +216,12 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               attendee_name: attendeeLabel || null,
               company_name: companyLabel || null,
               skip_notification: notifyFor !== 'company',
+              tagged_users: notifyFor === 'company' ? taggedUsersStr : null,
             }),
           })
         );
       }
 
-      // Post to attendee if selected
       if (selAttendee) {
         notePromises.push(
           fetch('/api/notes', {
@@ -239,6 +236,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               attendee_name: attendeeLabel || null,
               company_name: companyLabel || null,
               skip_notification: notifyFor !== 'attendee',
+              tagged_users: notifyFor === 'attendee' ? taggedUsersStr : null,
             }),
           })
         );
@@ -248,10 +246,8 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       const allOk = results.every(r => (r as Response).ok);
       if (!allOk) throw new Error('Failed to save note');
 
-      // If user opted to pin the note, pin it to the company or attendee
       if (pinOnSubmit && user?.email) {
         try {
-          // Get the note IDs from the created notes
           const noteResponses = await Promise.all(
             results.map(r => (r as Response).clone().json())
           );
@@ -305,13 +301,24 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-          {/* Entered By */}
+          {/* Entered by indicator (auto-detected, read-only) */}
+          {user?.displayName && (
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="font-semibold text-gray-600 uppercase tracking-wide">Entered By:</span>
+              <span className="font-medium text-procare-dark-blue">{user.displayName}</span>
+            </div>
+          )}
+
+          {/* Tag User multiselect */}
           <div>
-            <label className={labelClass}>Entered By</label>
-            <select className={inputClass} value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
-              <option value="">Select user...</option>
-              {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
+            <label className={labelClass}>Tag User</label>
+            <RepMultiSelect
+              options={userOptionsWithIds}
+              selectedIds={taggedUserIds}
+              onChange={setTaggedUserIds}
+              triggerClass={`${inputClass} flex items-center justify-between gap-2`}
+              placeholder="Tag a user to notify them..."
+            />
           </div>
 
           {/* Conference */}
@@ -399,19 +406,20 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
             </select>
           </div>
 
-          {/* Note validation hint */}
           {!hasRequiredSelection && (
             <p className="text-xs text-amber-600">At least one of Conference, Company, or Attendee must be selected.</p>
           )}
 
-          {/* Note Text */}
+          {/* Note Text with @mention support */}
           <div>
             <label className={labelClass}>Note *</label>
-            <textarea
-              className={`${inputClass} resize-none`}
+            <MentionTextarea
               value={noteText}
-              onChange={e => setNoteText(e.target.value)}
-              placeholder="Enter your note..."
+              onChange={setNoteText}
+              onMentionAdd={handleMentionAdd}
+              userOptions={userOptionsWithIds}
+              className={`${inputClass} resize-none`}
+              placeholder="Enter your note... (type @ to mention a user)"
               rows={5}
               autoFocus
             />

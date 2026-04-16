@@ -6,6 +6,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
+import { useUser } from '@/components/UserContext';
 
 interface ConferenceOption {
   id: number;
@@ -49,6 +50,7 @@ export function NewMeetingModal({
   availableConferences,
 }: NewMeetingModalProps) {
   useHideBottomNav(isOpen);
+  const { user } = useUser();
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [attendees, setAttendees] = useState<AttendeeOption[]>([]);
@@ -71,9 +73,12 @@ export function NewMeetingModal({
   // the company programmatically from the prefill logic.
   const isPrefilling = useRef(false);
 
-  // Fetch users and conferences on open
+  // Fetch users and conferences on open; auto-select logged-in user as Rep
   useEffect(() => {
     if (!isOpen) return;
+    if (user?.configId) {
+      setSelectedRepIds([user.configId]);
+    }
     fetch('/api/config?category=user')
       .then(r => r.json())
       .then((data: { id: number; value: string }[]) =>
