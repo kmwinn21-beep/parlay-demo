@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useUser } from './UserContext';
+import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 
 const navItems = [
   {
@@ -75,6 +76,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
+  const unreadCount = useUnreadNotificationCount();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -119,7 +121,14 @@ export function Sidebar() {
                 : 'text-blue-100 hover:bg-blue-800 hover:text-white'
             }`}
           >
-            {item.icon}
+            {item.href === '/notifications' && unreadCount > 0 ? (
+              <span className="relative flex-shrink-0">
+                {item.icon}
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              </span>
+            ) : item.icon}
             {item.label}
           </Link>
         ))}
