@@ -779,7 +779,7 @@ export default function CompanyDetailPage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Added</p>
-                <p className="text-sm text-gray-600">{new Date(company.created_at).toLocaleDateString()}</p>
+                <p className="text-sm text-gray-600">{new Date(company.created_at.includes('Z') || company.created_at.includes('+') ? company.created_at : company.created_at + 'Z').toLocaleDateString()}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>

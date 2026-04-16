@@ -20,7 +20,7 @@ export interface EntityNote {
 }
 
 function formatDateTime(dt: string) {
-  const d = new Date(dt);
+  const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
   if (isNaN(d.getTime())) return dt;
   return d.toLocaleString('en-US', {
     month: 'short',
@@ -125,12 +125,15 @@ export function NotesSection({
       let selConf: (typeof conferences)[0] | undefined;
       let attendeeLabel = '';
       let companyLabel = '';
+      // For conference notes: determines which cross-post owns the single notification
+      let notifyFor: 'attendee' | 'company' | 'conference' | null = null;
 
       if (entityType === 'conference') {
         selCompany = companies.find(c => String(c.id) === selectedCompanyId);
         selAttendee = filteredAttendees.find(a => String(a.id) === selectedAttendeeId);
         attendeeLabel = selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : '';
         companyLabel = selCompany ? selCompany.name : '';
+        notifyFor = selAttendee ? 'attendee' : selCompany ? 'company' : 'conference';
       } else if (entityType === 'company') {
         selConf = conferences.find(c => c.name === selectedConference);
         selAttendee = attendees.find(a => String(a.id) === selectedAttendeeId);
@@ -157,6 +160,8 @@ export function NotesSection({
           rep: repValue,
           attendee_name: attendeeLabel || null,
           company_name: companyLabel || null,
+          // For conference notes, only fire the conference notification when no company/attendee is selected
+          ...(entityType === 'conference' && notifyFor !== 'conference' ? { skip_notification: true } : {}),
         }),
       });
       if (!res.ok) throw new Error();
@@ -208,7 +213,7 @@ export function NotesSection({
           );
         }
       } else if (entityType === 'conference') {
-        // Cross-post to company
+        // Cross-post to company — fires notification only when company is the designated notifyFor target
         if (selCompany) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -222,13 +227,13 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
-                skip_notification: true,
+                skip_notification: notifyFor !== 'company',
               }),
             })
           );
         }
 
-        // Cross-post to attendee
+        // Cross-post to attendee — fires notification only when attendee is the designated notifyFor target
         if (selAttendee) {
           crossPostPromises.push(
             fetch('/api/notes', {
@@ -242,7 +247,7 @@ export function NotesSection({
                 rep: repValue,
                 attendee_name: attendeeLabel || null,
                 company_name: companyLabel || null,
-                skip_notification: true,
+                skip_notification: notifyFor !== 'attendee',
               }),
             })
           );

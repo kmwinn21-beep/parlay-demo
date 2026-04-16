@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 function formatNoteDate(dt: string) {
-  const d = new Date(dt);
+  const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
   if (isNaN(d.getTime())) return dt;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
