@@ -723,7 +723,7 @@ export default function AttendeeDetailPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Added</p>
-                    <p className="text-sm text-gray-600">{new Date(attendee.created_at).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-600">{new Date(attendee.created_at.includes('Z') || attendee.created_at.includes('+') ? attendee.created_at : attendee.created_at + 'Z').toLocaleDateString()}</p>
                   </div>
                 </div>
               </div>

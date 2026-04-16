@@ -19,7 +19,7 @@ export interface PinnedNote {
 }
 
 function formatDateTime(dt: string) {
-  const d = new Date(dt);
+  const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
   if (isNaN(d.getTime())) return dt;
   return d.toLocaleString('en-US', {
     month: 'short',

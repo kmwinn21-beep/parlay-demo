@@ -43,7 +43,7 @@ interface Attendee {
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
   try {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   } catch { return '—'; }
 }

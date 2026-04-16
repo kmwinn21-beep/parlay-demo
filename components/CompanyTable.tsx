@@ -153,7 +153,7 @@ const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
   try {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   } catch { return '—'; }
 }
@@ -273,7 +273,8 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
         if (!filterUpdatedWithin) return true;
         if (!c.updated_at) return false;
         const days = filterUpdatedWithin === '1day' ? 1 : filterUpdatedWithin === '1week' ? 7 : filterUpdatedWithin === '2weeks' ? 14 : 30;
-        return new Date(c.updated_at).getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+        const updAt = String(c.updated_at);
+        return new Date(updAt.endsWith('Z') || updAt.includes('+') ? updAt : updAt + 'Z').getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
       })();
       const matchHierarchy = !filterHierarchy
         || (filterHierarchy === 'parent' && !c.parent_company_id)

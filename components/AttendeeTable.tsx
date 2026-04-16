@@ -97,7 +97,7 @@ const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company:
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
   try {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   } catch { return '—'; }
 }
@@ -188,7 +188,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         if (!filterUpdatedWithin) return true;
         if (!a.updated_at) return false;
         const days = filterUpdatedWithin === '1day' ? 1 : filterUpdatedWithin === '1week' ? 7 : filterUpdatedWithin === '2weeks' ? 14 : 30;
-        return new Date(a.updated_at).getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+        const updAt = String(a.updated_at);
+        return new Date(updAt.endsWith('Z') || updAt.includes('+') ? updAt : updAt + 'Z').getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
       })();
       return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchUpdatedWithin;
     });

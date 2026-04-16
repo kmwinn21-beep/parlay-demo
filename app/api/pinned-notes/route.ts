@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail, notifyCompanyAssignees, notifyForAttendee } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
     });
 
     const row = result.rows[0];
-    return NextResponse.json({
+    const response = {
       id: Number(row.id),
       note_id: Number(row.note_id),
       entity_type: String(row.entity_type),
@@ -90,7 +91,42 @@ export async function POST(request: NextRequest) {
       attendee_name: row.attendee_name != null ? String(row.attendee_name) : null,
       attendee_id: row.attendee_id != null ? Number(row.attendee_id) : null,
       created_at: String(row.created_at),
-    }, { status: 201 });
+    };
+
+    // Fire notification to company's assigned users (best-effort)
+    if (entity_type === 'company' || entity_type === 'attendee') {
+      const [noteRow, changedByConfigId] = await Promise.all([
+        db.execute({ sql: 'SELECT content FROM entity_notes WHERE id = ?', args: [note_id] }),
+        getConfigIdByEmail(pinned_by),
+      ]);
+      const snippet = noteRow.rows.length > 0 ? String(noteRow.rows[0].content).slice(0, 80) : '';
+
+      if (entity_type === 'company') {
+        const coRow = await db.execute({ sql: 'SELECT name FROM companies WHERE id = ?', args: [entity_id] });
+        const nameStr = coRow.rows.length > 0 ? String(coRow.rows[0].name) : `Company #${entity_id}`;
+        notifyCompanyAssignees({
+          companyId: Number(entity_id),
+          companyName: nameStr,
+          message: `Note pinned: "${snippet}"`,
+          changedByEmail: pinned_by,
+          changedByConfigId,
+        });
+      } else if (entity_type === 'attendee') {
+        const attRow = await db.execute({ sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?', args: [entity_id] });
+        const nameStr = attRow.rows.length > 0
+          ? `${attRow.rows[0].first_name} ${attRow.rows[0].last_name}`.trim()
+          : `Attendee #${entity_id}`;
+        notifyForAttendee({
+          attendeeId: Number(entity_id),
+          attendeeName: nameStr,
+          message: `Note pinned: "${snippet}"`,
+          changedByEmail: pinned_by,
+          changedByConfigId,
+        });
+      }
+    }
+
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('POST /api/pinned-notes error:', error);
     return NextResponse.json({ error: 'Failed to pin note' }, { status: 500 });
