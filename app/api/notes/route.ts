@@ -103,6 +103,10 @@ export async function POST(request: NextRequest) {
         }
       } catch { /* non-fatal */ }
     }
+    // Final fallback: store email so the pill can derive initials (e.g. "kwinn@..." → "KW")
+    if (!resolvedRep) {
+      resolvedRep = user.email;
+    }
 
     const result = await db.execute({
       sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users)
@@ -205,7 +209,9 @@ export async function POST(request: NextRequest) {
         } catch { /* non-fatal */ }
 
         // Resolve mentioner display name from config_options using the already-looked-up configId
-        let mentionerName = user.email;
+        const emailUsername = user.email.split('@')[0];
+        const emailInitials = ((emailUsername[0] || '') + (emailUsername[1] || '')).toUpperCase();
+        let mentionerName = emailInitials || user.email;
         if (changedByConfigId) {
           try {
             const nameRow = await db.execute({
