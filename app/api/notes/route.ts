@@ -87,13 +87,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'entity_type, entity_id, and content are required' }, { status: 400 });
     }
 
+    // Resolve rep server-side if not provided by client (e.g. user has no displayName set)
+    let resolvedRep = rep || null;
+    if (!resolvedRep) {
+      try {
+        const configId = await getConfigIdByEmail(user.email);
+        if (configId) {
+          const nameRow = await db.execute({
+            sql: 'SELECT value FROM config_options WHERE id = ?',
+            args: [configId],
+          });
+          if (nameRow.rows.length > 0 && nameRow.rows[0].value) {
+            resolvedRep = String(nameRow.rows[0].value);
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+
     const result = await db.execute({
       sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users`,
       args: [
         entity_type, entity_id, content.trim(),
-        conference_name || null, rep || null,
+        conference_name || null, resolvedRep,
         attendee_name || null, company_name || null,
         tagged_users || null,
       ],
@@ -187,16 +204,19 @@ export async function POST(request: NextRequest) {
           }
         } catch { /* non-fatal */ }
 
-        // Resolve mentioner display name
-        const mentionerRow = await db.execute({
-          sql: `SELECT u.config_id, co.value as display_name
-                FROM users u LEFT JOIN config_options co ON u.config_id = co.id
-                WHERE u.email = ?`,
-          args: [user.email],
-        });
-        const mentionerName = mentionerRow.rows[0]?.display_name
-          ? String(mentionerRow.rows[0].display_name)
-          : user.email;
+        // Resolve mentioner display name from config_options using the already-looked-up configId
+        let mentionerName = user.email;
+        if (changedByConfigId) {
+          try {
+            const nameRow = await db.execute({
+              sql: 'SELECT value FROM config_options WHERE id = ?',
+              args: [changedByConfigId],
+            });
+            if (nameRow.rows.length > 0 && nameRow.rows[0].value) {
+              mentionerName = String(nameRow.rows[0].value);
+            }
+          } catch { /* non-fatal */ }
+        }
 
         notifyMentionedUsers({
           taggedConfigIds,
