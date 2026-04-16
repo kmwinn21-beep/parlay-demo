@@ -187,16 +187,19 @@ export async function POST(request: NextRequest) {
           }
         } catch { /* non-fatal */ }
 
-        // Resolve mentioner display name
-        const mentionerRow = await db.execute({
-          sql: `SELECT u.config_id, co.value as display_name
-                FROM users u LEFT JOIN config_options co ON u.config_id = co.id
-                WHERE u.email = ?`,
-          args: [user.email],
-        });
-        const mentionerName = mentionerRow.rows[0]?.display_name
-          ? String(mentionerRow.rows[0].display_name)
-          : user.email;
+        // Resolve mentioner display name from config_options using the already-looked-up configId
+        let mentionerName = user.email;
+        if (changedByConfigId) {
+          try {
+            const nameRow = await db.execute({
+              sql: 'SELECT value FROM config_options WHERE id = ?',
+              args: [changedByConfigId],
+            });
+            if (nameRow.rows.length > 0 && nameRow.rows[0].value) {
+              mentionerName = String(nameRow.rows[0].value);
+            }
+          } catch { /* non-fatal */ }
+        }
 
         notifyMentionedUsers({
           taggedConfigIds,
