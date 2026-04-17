@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { useUser } from './UserContext';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 import { useAppName } from '@/lib/useAppName';
+import { LogoImage } from './LogoImage';
 
 const navItems = [
   {
@@ -99,14 +100,7 @@ export function Sidebar() {
       {/* Logo area */}
       <div className="p-5 border-b border-blue-800">
         <div className="flex items-center gap-3">
-          <Image
-            src="/logo-white.png"
-            alt="Procare HR Logo"
-            width={140}
-            height={42}
-            className="object-contain"
-            priority
-          />
+          <LogoImage variant="white" width={140} height={42} className="object-contain" alt="Logo" />
         </div>
         <p className="text-blue-300 text-xs mt-2 italic">Caring for people who care for people.</p>
       </div>

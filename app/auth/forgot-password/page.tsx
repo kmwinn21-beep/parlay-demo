@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import toast from 'react-hot-toast';
+import { LogoImage } from '@/components/LogoImage';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-procare-dark-blue flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <Image src="/logo-white.png" alt="Procare HR" width={160} height={48} className="object-contain mb-2" />
+          <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">

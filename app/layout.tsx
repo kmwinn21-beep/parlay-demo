@@ -18,11 +18,22 @@ async function getAppName(): Promise<string> {
   }
 }
 
+async function getFaviconUrl(): Promise<string> {
+  try {
+    await dbReady;
+    const row = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'favicon_url'", args: [] });
+    return row.rows[0] ? String(row.rows[0].value).trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 export async function generateMetadata(): Promise<Metadata> {
-  const appName = await getAppName();
+  const [appName, faviconUrl] = await Promise.all([getAppName(), getFaviconUrl()]);
   return {
     title: appName,
     description: `Track and manage conference attendees — ${appName}.`,
+    ...(faviconUrl ? { icons: { icon: faviconUrl } } : {}),
   };
 }
 

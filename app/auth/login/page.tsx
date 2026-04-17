@@ -3,8 +3,8 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import toast from 'react-hot-toast';
+import { LogoImage } from '@/components/LogoImage';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -44,7 +44,7 @@ function LoginForm() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <Image src="/logo-white.png" alt="Procare HR" width={160} height={48} className="object-contain mb-2" />
+          <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
           <p className="text-blue-300 text-sm italic">Caring for people who care for people.</p>
         </div>
 
