@@ -894,9 +894,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </p>
                     )}
                   </td>}
-                  {isVisible('type') && <td className="px-3 py-3 overflow-visible">
+                  {isVisible('type') && <td className="px-3 py-3 overflow-visible relative">
                     {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
+                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
                         <option value="">—</option>
                         {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -949,9 +949,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </button>
                     )}
                   </td>}
-                  {isVisible('status') && <td className="px-3 py-3 overflow-visible">
+                  {isVisible('status') && <td className="px-3 py-3 overflow-visible relative">
                     {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
+                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
                         <option value="">—</option>
                         {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -963,10 +963,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   </td>}
                   {isVisible('attendees') && <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>}
                   {isVisible('conferences') && <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>}
-                  {isVisible('wse') && <td className="px-3 py-3 overflow-visible">
+                  {isVisible('wse') && <td className="px-3 py-3 overflow-visible relative">
                     {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
                       <input
-                        className="input-field bg-white text-sm py-2 min-w-[180px] w-auto"
+                        className="input-field bg-white text-sm py-2 min-w-[180px] w-auto relative z-30 shadow-md"
                         value={cellDraft}
                         onChange={(e) => setCellDraft(e.target.value)}
                         onBlur={() => saveInlineEdit(company, 'wse')}

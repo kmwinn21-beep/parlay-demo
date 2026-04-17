@@ -1410,10 +1410,10 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('title') && (
-                        <td className="px-4 py-3 text-gray-600 overflow-visible" style={{ maxWidth: colWidths.title }}>
+                        <td className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
                           {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
                             <input
-                              className="input-field bg-white text-sm py-2 min-w-[260px] w-auto"
+                              className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
                               value={cellDraft}
                               onChange={(e) => setCellDraft(e.target.value)}
                               onBlur={() => saveInlineEdit(attendee, 'title')}
@@ -1431,7 +1431,7 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('company') && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {attendee.company_name ? (
                             <div>
                               {attendee.company_id ? (
@@ -1442,7 +1442,7 @@ export default function ConferenceDetailPage() {
                               {attendee.company_wse != null && (
                                 editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
                                   <input
-                                    className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1"
+                                    className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
                                     value={cellDraft}
                                     onChange={(e) => setCellDraft(e.target.value)}
                                     onBlur={() => saveInlineEdit(attendee, 'company_wse')}
@@ -1465,9 +1465,9 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('type') && (
-                        <td className="px-4 py-3 overflow-visible">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
-                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
+                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
                               <option value="">—</option>
                               {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
@@ -1483,9 +1483,9 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('seniority') && (
-                        <td className="px-4 py-3 overflow-visible">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
                               <option value="">Auto-detect</option>
                               {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
