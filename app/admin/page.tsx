@@ -235,8 +235,11 @@ export default function AdminPage() {
 
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
+  const [allowedDomain, setAllowedDomain] = useState('');
+  const [domainInput, setDomainInput] = useState('');
   const [loadingPerms, setLoadingPerms] = useState(false);
   const [savingPerms, setSavingPerms] = useState(false);
+  const [savingDomain, setSavingDomain] = useState(false);
 
   // ── Types tab ────────────────────────────────────────────────────────────────
 
@@ -392,6 +395,9 @@ export default function AdminPage() {
       if (!res.ok) throw new Error();
       const data = await res.json() as Record<string, string>;
       setAllowUpload(data['allow_attendee_upload'] !== 'false');
+      const domain = data['allowed_email_domain'] ?? '';
+      setAllowedDomain(domain);
+      setDomainInput(domain);
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoadingPerms(false); }
   };
@@ -415,6 +421,23 @@ export default function AdminPage() {
       toast.error('Failed to save permission.');
       setAllowUpload(!value);
     } finally { setSavingPerms(false); }
+  };
+
+  const handleSaveDomain = async () => {
+    const trimmed = domainInput.trim().replace(/^@/, '');
+    setSavingDomain(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'allowed_email_domain', value: trimmed }),
+      });
+      if (!res.ok) throw new Error();
+      setAllowedDomain(trimmed);
+      setDomainInput(trimmed);
+      toast.success(trimmed ? `Domain restriction set to @${trimmed}.` : 'Domain restriction removed.');
+    } catch { toast.error('Failed to save domain setting.'); }
+    finally { setSavingDomain(false); }
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -611,6 +634,36 @@ export default function AdminPage() {
                   <Toggle checked={allowUpload} onChange={handleUploadToggle} disabled={savingPerms} />
                 </div>
               </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Email Domain Restriction</h2>
+              <p className="text-sm text-gray-500 mb-4">Restrict new account sign-ups to a specific email domain. Leave blank to allow any email address.</p>
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                <span className="text-sm text-gray-500 flex-shrink-0">@</span>
+                <input
+                  type="text"
+                  value={domainInput}
+                  onChange={e => setDomainInput(e.target.value.replace(/^@/, ''))}
+                  placeholder="yourcompany.com"
+                  className="input-field flex-1 text-sm"
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveDomain(); }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveDomain}
+                  disabled={savingDomain || domainInput.trim().replace(/^@/, '') === allowedDomain}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingDomain ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              {allowedDomain && (
+                <p className="text-xs text-gray-400 mt-2">Currently restricted to <span className="font-medium text-gray-600">@{allowedDomain}</span></p>
+              )}
+              {!allowedDomain && (
+                <p className="text-xs text-gray-400 mt-2">No restriction — any email address may sign up.</p>
+              )}
             </div>
           </div>
         )

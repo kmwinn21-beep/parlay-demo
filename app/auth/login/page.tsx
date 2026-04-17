@@ -61,7 +61,7 @@ function LoginForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@procarehr.com"
+                placeholder={`you@${process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? 'yourcompany.com'}`}
                 required
                 autoComplete="email"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-transparent"
@@ -109,9 +109,11 @@ function LoginForm() {
           </p>
         </div>
 
-        <p className="text-center text-blue-400 text-xs mt-6">
-          Only @procarehr.com accounts are permitted.
-        </p>
+        {process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN && (
+          <p className="text-center text-blue-400 text-xs mt-6">
+            Only @{process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN} accounts are permitted.
+          </p>
+        )}
       </div>
     </div>
   );

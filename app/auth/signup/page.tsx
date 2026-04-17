@@ -62,12 +62,14 @@ export default function SignupPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@procarehr.com"
+                placeholder={`you@${process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? 'yourcompany.com'}`}
                 required
                 autoComplete="email"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-transparent"
               />
-              <p className="text-xs text-gray-400 mt-1">Must be a @procarehr.com address</p>
+              {process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN && (
+                <p className="text-xs text-gray-400 mt-1">Must be a @{process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN} address</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">

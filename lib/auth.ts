@@ -121,14 +121,18 @@ export async function requireAdmin(
 
 // ─── Input validation ─────────────────────────────────────────────────────────
 
-export function validateEmail(email: string): { valid: boolean; error?: string } {
+export function validateEmail(email: string, allowedDomain?: string | null): { valid: boolean; error?: string } {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return { valid: false, error: 'Email is required.' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
     return { valid: false, error: 'Enter a valid email address.' };
   }
-  if (!normalized.endsWith('@procarehr.com')) {
-    return { valid: false, error: 'Only @procarehr.com email addresses may sign up.' };
+  const domain = allowedDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null;
+  if (domain) {
+    const suffix = domain.startsWith('@') ? domain : `@${domain}`;
+    if (!normalized.endsWith(suffix)) {
+      return { valid: false, error: `Only ${suffix} email addresses may sign up.` };
+    }
   }
   return { valid: true };
 }
