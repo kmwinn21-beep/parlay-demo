@@ -108,7 +108,9 @@ function ConferenceTooltip({ count, names }: { count: number; names?: string }) 
 interface CompanyTableProps {
   companies: Company[];
   onRefresh: () => void;
+  tableName?: string;
   rowAction?: (company: Company) => React.ReactNode;
+  onDecoupleSelected?: (ids: Set<number>) => void;
 }
 
 function EntityStructureIcon({ structure }: { structure?: string }) {
@@ -160,12 +162,12 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh, rowAction }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
   const userOptionsFull = useUserOptions();
   const searchParams = useSearchParams();
-  const { isVisible } = useTableColumnConfig('companies');
+  const { isVisible } = useTableColumnConfig(tableName);
 
   // Local copy for optimistic updates — syncs whenever the parent re-fetches
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
@@ -426,6 +428,17 @@ export function CompanyTable({ companies, onRefresh, rowAction }: CompanyTablePr
 
         {selectedIds.size >= 1 && (
           <>
+            {onDecoupleSelected && (
+              <button
+                onClick={() => { onDecoupleSelected(selectedIds); setSelectedIds(new Set()); }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Decouple ({selectedIds.size})
+              </button>
+            )}
             <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className="btn-secondary flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
               Edit Fields ({selectedIds.size})

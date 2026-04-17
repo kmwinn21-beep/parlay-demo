@@ -62,6 +62,26 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'invite_only', label: 'Invite Only' },
     { key: 'guest_list',  label: 'Guest List' },
   ],
+  conference_attendees: [
+    { key: 'name',        label: 'Name' },
+    { key: 'title',       label: 'Title' },
+    { key: 'company',     label: 'Company' },
+    { key: 'type',        label: 'Type' },
+    { key: 'seniority',   label: 'Seniority' },
+    { key: 'conferences', label: 'Conferences' },
+    { key: 'notes',       label: 'Notes' },
+    { key: 'date_added',  label: 'Date Added' },
+  ],
+  conference_companies: [
+    { key: 'name',        label: 'Company Name' },
+    { key: 'type',        label: 'Type' },
+    { key: 'sfowner',     label: 'SF Owner' },
+    { key: 'status',      label: 'Status' },
+    { key: 'attendees',   label: 'Attendees' },
+    { key: 'conferences', label: 'Conferences' },
+    { key: 'wse',         label: "WSE's" },
+    { key: 'updated_on',  label: 'Updated On' },
+  ],
 };
 
 // Module-level cache so all table instances share the same fetched config

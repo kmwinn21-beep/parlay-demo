@@ -36,11 +36,13 @@ const CATEGORIES = [
 ];
 
 const TABLE_LABELS: Record<string, string> = {
-  attendees:    'Attendees Table',
-  companies:    'Companies Table',
-  follow_ups:   'Follow Ups Table',
-  meetings:     'Meetings Table',
-  social_events: 'Social Events Table',
+  attendees:             'Attendees Table',
+  companies:             'Companies Table',
+  follow_ups:            'Follow Ups Table',
+  meetings:              'Meetings Table',
+  social_events:         'Social Events Table',
+  conference_attendees:  'Conference Attendee Table',
+  conference_companies:  'Conference Company Table',
 };
 
 type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions';
@@ -227,6 +229,7 @@ export default function AdminPage() {
   const [tableConfig, setTableConfig] = useState<Record<string, Record<string, boolean>>>({});
   const [loadingTables, setLoadingTables] = useState(false);
   const [savingCol, setSavingCol] = useState<string | null>(null);
+  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set(Object.keys(TABLE_LABELS)));
 
   // Sections tab
   type LocalSection = { key: string; label: string; sort_order: number; visible: boolean };
@@ -621,34 +624,55 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             <p className="text-sm text-gray-500">Toggle columns on or off for each table. Changes take effect immediately for all users.</p>
-            {Object.entries(TABLE_COLUMN_DEFS).map(([tableName, cols]) => (
-              <div key={tableName} className="card">
-                <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-4">
-                  {TABLE_LABELS[tableName] ?? tableName}
-                </h2>
-                <div className="divide-y divide-gray-100">
-                  {cols.map(col => {
-                    const visible = isColVisible(tableName, col.key);
-                    const saveKey = `${tableName}:${col.key}`;
-                    return (
-                      <div key={col.key} className="flex items-center justify-between py-3">
-                        <span className="text-sm text-gray-700">{col.label}</span>
-                        <div className="flex items-center gap-2">
-                          {savingCol === saveKey && (
-                            <span className="text-xs text-gray-400">Saving…</span>
-                          )}
-                          <Toggle
-                            checked={visible}
-                            onChange={v => handleColumnToggle(tableName, col.key, v)}
-                            disabled={savingCol === saveKey}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+            {Object.entries(TABLE_COLUMN_DEFS).map(([tableName, cols]) => {
+              const isExpanded = expandedTables.has(tableName);
+              return (
+                <div key={tableName} className="card p-0 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTables(prev => {
+                      const next = new Set(prev);
+                      if (next.has(tableName)) next.delete(tableName); else next.add(tableName);
+                      return next;
+                    })}
+                    className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                      {TABLE_LABELS[tableName] ?? tableName}
+                    </h2>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <div className="divide-y divide-gray-100 border-t border-gray-100 px-6 pb-2">
+                      {cols.map(col => {
+                        const visible = isColVisible(tableName, col.key);
+                        const saveKey = `${tableName}:${col.key}`;
+                        return (
+                          <div key={col.key} className="flex items-center justify-between py-3">
+                            <span className="text-sm text-gray-700">{col.label}</span>
+                            <div className="flex items-center gap-2">
+                              {savingCol === saveKey && (
+                                <span className="text-xs text-gray-400">Saving…</span>
+                              )}
+                              <Toggle
+                                checked={visible}
+                                onChange={v => handleColumnToggle(tableName, col.key, v)}
+                                disabled={savingCol === saveKey}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
