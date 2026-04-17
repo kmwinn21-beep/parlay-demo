@@ -3,10 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --procare-dark-blue: #0B3C62;
-  --procare-bright-blue: #1B76BC;
-  --procare-beige: #E7DED9;
-  --procare-gold: #FFCB3F;
+  /* RGB channels for brand colors — overridden at runtime via server-injected <style> */
+  --procare-dark-blue-rgb:   11  60  98;   /* default #0B3C62 */
+  --procare-bright-blue-rgb: 27 118 188;   /* default #1B76BC */
+  --procare-beige-rgb:      231 222 217;   /* default #E7DED9 */
+  --procare-gold-rgb:       255 203  63;   /* default #FFCB3F */
 }
 
 * {

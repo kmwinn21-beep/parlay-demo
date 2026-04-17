@@ -8,6 +8,7 @@ import { invalidateConfigColors } from '@/lib/useConfigColors';
 import { invalidateConfigOptions } from '@/lib/useConfigOptions';
 import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig } from '@/lib/useTableColumnConfig';
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
+import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
 
 interface ConfigOption {
   id: number;
@@ -40,7 +41,7 @@ const TABLE_LABELS: Record<string, string> = {
   social_events: 'Social Events Table',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'permissions';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions';
 
 const SECTION_PAGE_LABELS: Record<string, string> = {
   attendee: 'Attendee Page',
@@ -233,6 +234,12 @@ export default function AdminPage() {
   const [editingSectionLabel, setEditingSectionLabel] = useState<{ page: string; key: string } | null>(null);
   const [editLabelValue, setEditLabelValue] = useState('');
 
+  // Brand tab
+  const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
+  const [brandDraft, setBrandDraft] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
+  const [loadingBrand, setLoadingBrand] = useState(false);
+  const [savingBrand, setSavingBrand] = useState(false);
+
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
   const [allowedDomain, setAllowedDomain] = useState('');
@@ -386,6 +393,75 @@ export default function AdminPage() {
     return tbl[columnKey];
   };
 
+  // ── Brand tab ────────────────────────────────────────────────────────────────
+
+  const fetchBrandColors = async () => {
+    setLoadingBrand(true);
+    try {
+      const res = await fetch('/api/admin/settings');
+      if (!res.ok) throw new Error();
+      const data = await res.json() as Record<string, string>;
+      const colors = { ...BRAND_COLOR_DEFAULTS };
+      for (const key of Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]) {
+        if (data[key]) colors[key] = data[key];
+      }
+      setBrandColors(colors);
+      setBrandDraft(colors);
+    } catch { toast.error('Failed to load brand colors.'); }
+    finally { setLoadingBrand(false); }
+  };
+
+  useEffect(() => {
+    if (tab === 'brand') fetchBrandColors();
+  }, [tab]);
+
+  const handleBrandColorChange = (key: BrandColorKey, hex: string) => {
+    setBrandDraft(prev => ({ ...prev, [key]: hex }));
+    const channels = hexToRgbChannels(hex);
+    if (channels) document.documentElement.style.setProperty(BRAND_CSS_VARS[key], channels);
+  };
+
+  const handleSaveBrand = async () => {
+    setSavingBrand(true);
+    try {
+      await Promise.all(
+        (Object.entries(brandDraft) as [BrandColorKey, string][]).map(([key, value]) =>
+          fetch('/api/admin/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value }),
+          })
+        )
+      );
+      setBrandColors({ ...brandDraft });
+      toast.success('Brand colors saved!');
+    } catch { toast.error('Failed to save brand colors.'); }
+    finally { setSavingBrand(false); }
+  };
+
+  const handleResetBrand = async () => {
+    if (!confirm('Reset all brand colors to defaults?')) return;
+    setBrandDraft({ ...BRAND_COLOR_DEFAULTS });
+    for (const key of Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]) {
+      document.documentElement.style.setProperty(BRAND_CSS_VARS[key], hexToRgbChannels(BRAND_COLOR_DEFAULTS[key]));
+    }
+    setSavingBrand(true);
+    try {
+      await Promise.all(
+        (Object.entries(BRAND_COLOR_DEFAULTS) as [BrandColorKey, string][]).map(([key, value]) =>
+          fetch('/api/admin/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value }),
+          })
+        )
+      );
+      setBrandColors({ ...BRAND_COLOR_DEFAULTS });
+      toast.success('Brand colors reset to defaults.');
+    } catch { toast.error('Failed to reset brand colors.'); }
+    finally { setSavingBrand(false); }
+  };
+
   // ── Permissions tab ──────────────────────────────────────────────────────────
 
   const fetchSettings = async () => {
@@ -453,14 +529,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-6">
-          {(['types', 'tables', 'sections', 'permissions'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${tab === t ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : 'Permissions'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : 'Permissions'}
             </button>
           ))}
         </nav>
@@ -609,6 +685,114 @@ export default function AdminPage() {
                 </div>
               );
             })}
+          </div>
+        )
+      )}
+
+      {/* ── Brand tab ── */}
+      {tab === 'brand' && (
+        loadingBrand ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <p className="text-sm text-gray-500">Customize the application&apos;s primary brand colors. Changes apply as a live preview instantly — click Save to persist for all users.</p>
+
+            {/* Live preview */}
+            <div className="card overflow-hidden p-0">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Preview</span>
+              </div>
+              <div className="px-5 py-4 flex flex-wrap items-center gap-4">
+                <h3 className="text-procare-dark-blue font-serif font-semibold text-lg leading-none">Heading</h3>
+                <button type="button" className="btn-primary text-xs py-1.5 px-3 pointer-events-none">Primary Button</button>
+                <button type="button" className="btn-secondary text-xs py-1.5 px-3 pointer-events-none">Secondary Button</button>
+                <button type="button" className="btn-gold text-xs py-1.5 px-3 pointer-events-none">Gold Button</button>
+                <span className="text-procare-bright-blue text-sm font-medium">Link text</span>
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-procare-bright-blue/10 text-procare-bright-blue">Badge</span>
+                <div className="flex gap-1.5">
+                  {(Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]).map(key => (
+                    <div key={key} className="w-5 h-5 rounded-full border border-white shadow-sm ring-1 ring-gray-200" style={{ backgroundColor: brandDraft[key] }} title={BRAND_COLOR_META[key].label} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Color pickers */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Brand Colors</h2>
+              <p className="text-sm text-gray-500 mb-5">Pick a color or paste a hex code. The preview above updates immediately.</p>
+              <div className="divide-y divide-gray-100">
+                {(Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]).map(key => {
+                  const { label, description } = BRAND_COLOR_META[key];
+                  const hex = brandDraft[key];
+                  const isDefault = hex.toUpperCase() === BRAND_COLOR_DEFAULTS[key].toUpperCase();
+                  return (
+                    <div key={key} className="flex items-center gap-4 py-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{label}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{description}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {!isDefault && (
+                          <button
+                            type="button"
+                            onClick={() => handleBrandColorChange(key, BRAND_COLOR_DEFAULTS[key])}
+                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Reset to default"
+                          >
+                            Reset
+                          </button>
+                        )}
+                        <input
+                          type="text"
+                          value={hex}
+                          onChange={e => {
+                            const v = e.target.value;
+                            if (/^#?[0-9A-Fa-f]{0,6}$/.test(v)) {
+                              handleBrandColorChange(key, v.startsWith('#') ? v : `#${v}`);
+                            }
+                          }}
+                          className="w-24 px-2 py-1.5 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-procare-bright-blue"
+                          spellCheck={false}
+                        />
+                        <label className="cursor-pointer flex-shrink-0 relative" title="Pick color">
+                          <input
+                            type="color"
+                            value={/^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : BRAND_COLOR_DEFAULTS[key]}
+                            onChange={e => handleBrandColorChange(key, e.target.value)}
+                            className="sr-only"
+                          />
+                          <div
+                            className="w-9 h-9 rounded-lg border-2 border-gray-200 hover:border-procare-bright-blue transition-colors"
+                            style={{ backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : BRAND_COLOR_DEFAULTS[key] }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleResetBrand}
+                  disabled={savingBrand}
+                  className="btn-secondary text-sm"
+                >
+                  Reset All to Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveBrand}
+                  disabled={savingBrand || JSON.stringify(brandDraft) === JSON.stringify(brandColors)}
+                  className="btn-primary text-sm"
+                >
+                  {savingBrand ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
           </div>
         )
       )}
