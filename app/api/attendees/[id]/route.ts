@@ -106,7 +106,7 @@ export async function PATCH(
   try {
     await dbReady;
     const body = await request.json();
-    const { action, next_steps, next_steps_notes, status, notes, company_id, seniority } = body;
+    const { action, next_steps, next_steps_notes, status, notes, company_id, seniority, first_name, last_name, title, company_type, company_wse } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id, company_id FROM attendees WHERE id = ?',
@@ -143,6 +143,22 @@ export async function PATCH(
       setClauses.push('seniority = ?');
       args.push(seniority || null);
     }
+    if ('first_name' in body) {
+      const value = typeof first_name === 'string' ? first_name.trim() : '';
+      if (!value) return NextResponse.json({ error: 'first_name cannot be empty' }, { status: 400 });
+      setClauses.push('first_name = ?');
+      args.push(value);
+    }
+    if ('last_name' in body) {
+      const value = typeof last_name === 'string' ? last_name.trim() : '';
+      if (!value) return NextResponse.json({ error: 'last_name cannot be empty' }, { status: 400 });
+      setClauses.push('last_name = ?');
+      args.push(value);
+    }
+    if ('title' in body) {
+      setClauses.push('title = ?');
+      args.push(title || null);
+    }
     if ('company_id' in body) {
       setClauses.push('company_id = ?');
       args.push(company_id || null);
@@ -165,6 +181,31 @@ export async function PATCH(
         sql: 'UPDATE companies SET status = ? WHERE id = ?',
         args: [status, effectiveCompanyId],
       });
+    }
+
+    if ((('company_type' in body) || ('company_wse' in body)) && effectiveCompanyId) {
+      const companySetClauses: string[] = [];
+      const companyArgs: (string | number | null)[] = [];
+      if ('company_type' in body) {
+        companySetClauses.push('company_type = ?');
+        companyArgs.push(company_type || null);
+      }
+      if ('company_wse' in body) {
+        const wseRaw = company_wse;
+        const parsedWse = wseRaw === '' || wseRaw == null ? null : Number(wseRaw);
+        if (parsedWse != null && (!Number.isFinite(parsedWse) || parsedWse < 0)) {
+          return NextResponse.json({ error: 'company_wse must be a non-negative number' }, { status: 400 });
+        }
+        companySetClauses.push('wse = ?');
+        companyArgs.push(parsedWse != null ? Math.round(parsedWse) : null);
+      }
+      if (companySetClauses.length > 0) {
+        companyArgs.push(effectiveCompanyId);
+        await db.execute({
+          sql: `UPDATE companies SET ${companySetClauses.join(', ')}, updated_at = datetime('now') WHERE id = ?`,
+          args: companyArgs,
+        });
+      }
     }
 
     return NextResponse.json(updatedResult.rows[0]);
