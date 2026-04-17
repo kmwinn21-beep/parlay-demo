@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -65,7 +65,6 @@ function formatDate(d: string) {
 export default function AttendeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
@@ -311,6 +310,23 @@ export default function AttendeeDetailPage() {
   const handleInviteSubmit = async () => {
     if (!inviteForm.event_id) { toast.error('Please select an event.'); return; }
     setIsInviting(true);
+
+    // Build optimistic event card from current form selections
+    const eventId = Number(inviteForm.event_id);
+    const conferenceId = Number(inviteForm.conference_id);
+    const selectedEvent = inviteConferenceEvents.find(e => e.id === eventId);
+    const selectedConference = attendee?.conferences.find(c => c.id === conferenceId);
+    const optimisticEvent: AttendeeEventItem = {
+      event_id: eventId,
+      event_name: selectedEvent?.event_name ?? null,
+      event_type: selectedEvent?.event_type ?? null,
+      conference_id: conferenceId,
+      conference_name: selectedConference?.name ?? '',
+      rsvp_status: 'maybe',
+    };
+    const alreadyPresent = attendeeEvents.some(e => e.event_id === eventId);
+    if (!alreadyPresent) setAttendeeEvents(prev => [...prev, optimisticEvent]);
+
     try {
       const res = await fetch(`/api/social-events/${inviteForm.event_id}/guest`, {
         method: 'POST',
@@ -323,7 +339,11 @@ export default function AttendeeDetailPage() {
       setInviteForm({ rep: '', conference_id: '', event_id: '' });
       setInviteConferenceEvents([]);
       fetchAttendeeEvents();
-    } catch { toast.error('Failed to add to guest list.'); }
+    } catch {
+      // Roll back the optimistic addition
+      if (!alreadyPresent) setAttendeeEvents(prev => prev.filter(e => e.event_id !== eventId));
+      toast.error('Failed to add to guest list.');
+    }
     finally { setIsInviting(false); }
   };
 
