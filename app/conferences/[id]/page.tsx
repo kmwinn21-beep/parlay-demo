@@ -17,6 +17,7 @@ import { BackButton } from '@/components/BackButton';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -107,6 +108,10 @@ interface ConferenceDetail {
   notes?: string;
   assigned_rep?: string;
 }
+
+type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes';
+
+const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -231,6 +236,7 @@ export default function ConferenceDetailPage() {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
   const { isVisible: isConfAttendeeColVisible } = useTableColumnConfig('conference_attendees');
+  const conferenceTabConfig = useSectionConfig('conference_details');
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -239,7 +245,7 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'meetings' | 'analytics' | 'follow-ups' | 'social' | 'notes'>('attendees');
+  const [activeTab, setActiveTab] = useState<ConferenceTabKey>('attendees');
   const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
@@ -316,6 +322,24 @@ export default function ConferenceDetailPage() {
     sampleRows: Record<string, string>[];
     totalRows: number;
   } | null>(null);
+
+  const visibleConferenceTabs = CONFERENCE_TAB_ORDER.filter(
+    (tabKey) => conferenceTabConfig.orderedKeys.includes(tabKey) && conferenceTabConfig.isVisible(tabKey),
+  );
+
+  useEffect(() => {
+    if (visibleConferenceTabs.length === 0) return;
+    if (!visibleConferenceTabs.includes(activeTab)) {
+      setActiveTab(visibleConferenceTabs[0]);
+    }
+  }, [activeTab, visibleConferenceTabs]);
+
+  const handleTabChange = (tabKey: ConferenceTabKey) => {
+    setActiveTab(tabKey);
+    if (tabKey === 'companies' || tabKey === 'social' || tabKey === 'notes') {
+      loadCompanies();
+    }
+  };
 
   const fetchConference = useCallback(async () => {
     try {
@@ -1030,48 +1054,30 @@ export default function ConferenceDetailPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          <button
-            onClick={() => setActiveTab('attendees')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'attendees' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Attendees ({conference.attendees.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('companies'); loadCompanies(); }}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'companies' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Companies
-          </button>
-          <button
-            onClick={() => setActiveTab('meetings')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'meetings' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Meetings{confMeetings.length > 0 ? ` (${confMeetings.length})` : ''}
-          </button>
-          <button
-            onClick={() => setActiveTab('follow-ups')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
-          </button>
-          <button
-            onClick={() => { setActiveTab('social'); loadCompanies(); }}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'social' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Social{confSocialEvents.length > 0 ? ` (${confSocialEvents.length})` : ''}
-          </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Insights
-          </button>
-          <button
-            onClick={() => { setActiveTab('notes'); loadCompanies(); }}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'notes' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Notes{confNotes.length > 0 ? ` (${confNotes.length})` : ''}
-          </button>
+          {visibleConferenceTabs.map((tabKey) => {
+            const baseLabel = conferenceTabConfig.getLabel(tabKey);
+            const labelWithCount = tabKey === 'attendees'
+              ? `${baseLabel} (${conference.attendees.length})`
+              : tabKey === 'meetings' && confMeetings.length > 0
+                ? `${baseLabel} (${confMeetings.length})`
+                : tabKey === 'follow-ups' && confFollowUps.length > 0
+                  ? `${baseLabel} (${confFollowUps.length})`
+                  : tabKey === 'social' && confSocialEvents.length > 0
+                    ? `${baseLabel} (${confSocialEvents.length})`
+                    : tabKey === 'notes' && confNotes.length > 0
+                      ? `${baseLabel} (${confNotes.length})`
+                      : baseLabel;
+
+            return (
+              <button
+                key={tabKey}
+                onClick={() => handleTabChange(tabKey)}
+                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === tabKey ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {labelWithCount}
+              </button>
+            );
+          })}
         </nav>
       </div>
 

@@ -50,6 +50,7 @@ type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions';
 const SECTION_PAGE_LABELS: Record<string, string> = {
   attendee: 'Attendee Page',
   company: 'Company Page',
+  conference_details: 'Conference Details Page',
 };
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
@@ -238,6 +239,7 @@ export default function AdminPage() {
   const [savingSections, setSavingSections] = useState<string | null>(null);
   const [editingSectionLabel, setEditingSectionLabel] = useState<{ page: string; key: string } | null>(null);
   const [editLabelValue, setEditLabelValue] = useState('');
+  const [expandedSectionPages, setExpandedSectionPages] = useState<Set<string>>(new Set());
 
   // Brand tab
   const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
@@ -374,6 +376,15 @@ export default function AdminPage() {
     setSectionConfig(prev => ({ ...prev, [page]: arr }));
     setEditingSectionLabel(null);
     await saveSectionPage(page, arr);
+  };
+
+  const toggleSectionPageExpanded = (page: string) => {
+    setExpandedSectionPages(prev => {
+      const next = new Set(prev);
+      if (next.has(page)) next.delete(page);
+      else next.add(page);
+      return next;
+    });
   };
 
   const handleColumnToggle = async (tableName: string, columnKey: string, visible: boolean) => {
@@ -685,82 +696,97 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <p className="text-sm text-gray-500">Customize the title, order, and visibility of sections on Attendee and Company detail pages. Changes take effect immediately for all users.</p>
+            <p className="text-sm text-gray-500">Customize the title, order, and visibility of sections on Attendee and Company detail pages, plus the tab order/visibility on Conference Details pages. Changes take effect immediately for all users.</p>
             {Object.entries(SECTION_DEFS).map(([page]) => {
               const sections = sectionConfig[page] ?? [];
+              const isExpanded = expandedSectionPages.has(page);
               return (
                 <div key={page} className="card">
-                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-4">
-                    {SECTION_PAGE_LABELS[page] ?? page}
-                  </h2>
-                  <div className="divide-y divide-gray-100">
-                    {sections.map((section, index) => {
-                      const isEditing = editingSectionLabel?.page === page && editingSectionLabel?.key === section.key;
-                      return (
-                        <div key={section.key} className="flex items-center gap-3 py-3">
-                          {/* Up/Down */}
-                          <div className="flex flex-col gap-0.5 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => moveSectionItem(page, index, -1)}
-                              disabled={index === 0 || savingSections === page}
-                              className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Move up"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveSectionItem(page, index, 1)}
-                              disabled={index === sections.length - 1 || savingSections === page}
-                              className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Move down"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                            </button>
-                          </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleSectionPageExpanded(page)}
+                    className="w-full flex items-center justify-between gap-3 text-left"
+                  >
+                    <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                      {SECTION_PAGE_LABELS[page] ?? page}
+                    </h2>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <div className="divide-y divide-gray-100 border-t border-gray-100 mt-4">
+                      {sections.map((section, index) => {
+                        const isEditing = editingSectionLabel?.page === page && editingSectionLabel?.key === section.key;
+                        return (
+                          <div key={section.key} className="flex items-center gap-3 py-3">
+                            {/* Up/Down */}
+                            <div className="flex flex-col gap-0.5 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => moveSectionItem(page, index, -1)}
+                                disabled={index === 0 || savingSections === page}
+                                className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move up"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveSectionItem(page, index, 1)}
+                                disabled={index === sections.length - 1 || savingSections === page}
+                                className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move down"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </button>
+                            </div>
 
-                          {/* Label */}
-                          <div className="flex-1 min-w-0">
-                            {isEditing ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  value={editLabelValue}
-                                  onChange={e => setEditLabelValue(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') saveSectionLabel(page, section.key); if (e.key === 'Escape') setEditingSectionLabel(null); }}
-                                  className="input-field flex-1 text-sm"
-                                  autoFocus
-                                />
-                                <button type="button" onClick={() => saveSectionLabel(page, section.key)} className="btn-primary text-xs px-3 py-1.5">Save</button>
-                                <button type="button" onClick={() => setEditingSectionLabel(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <span className={`text-sm ${section.visible ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{section.label}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => { setEditingSectionLabel({ page, key: section.key }); setEditLabelValue(section.label); }}
-                                  className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium"
-                                >
-                                  Edit
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                            {/* Label */}
+                            <div className="flex-1 min-w-0">
+                              {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    value={editLabelValue}
+                                    onChange={e => setEditLabelValue(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveSectionLabel(page, section.key); if (e.key === 'Escape') setEditingSectionLabel(null); }}
+                                    className="input-field flex-1 text-sm"
+                                    autoFocus
+                                  />
+                                  <button type="button" onClick={() => saveSectionLabel(page, section.key)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                                  <button type="button" onClick={() => setEditingSectionLabel(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm ${section.visible ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{section.label}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setEditingSectionLabel({ page, key: section.key }); setEditLabelValue(section.label); }}
+                                    className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium"
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              )}
+                            </div>
 
-                          {/* Visibility toggle */}
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {savingSections === page && <span className="text-xs text-gray-400">Saving…</span>}
-                            <Toggle
-                              checked={section.visible}
-                              onChange={() => toggleSectionVisible(page, section.key)}
-                              disabled={savingSections === page}
-                            />
+                            {/* Visibility toggle */}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {savingSections === page && <span className="text-xs text-gray-400">Saving…</span>}
+                              <Toggle
+                                checked={section.visible}
+                                onChange={() => toggleSectionVisible(page, section.key)}
+                                disabled={savingSections === page}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

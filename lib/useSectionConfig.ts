@@ -21,6 +21,15 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'relationships', label: 'Internal Relationships' },
     { key: 'operator_capital', label: 'Operator / Capital Relationships' },
   ],
+  conference_details: [
+    { key: 'attendees', label: 'Attendees' },
+    { key: 'companies', label: 'Companies' },
+    { key: 'meetings', label: 'Meetings' },
+    { key: 'follow-ups', label: 'Follow Ups' },
+    { key: 'social', label: 'Social' },
+    { key: 'analytics', label: 'Insights' },
+    { key: 'notes', label: 'Notes' },
+  ],
 };
 
 interface SectionConfig {
