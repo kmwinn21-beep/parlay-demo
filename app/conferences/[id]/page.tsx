@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -232,6 +232,7 @@ function MeetingMultiSelect({
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('conference_detail');
@@ -464,6 +465,18 @@ export default function ConferenceDetailPage() {
       setCompaniesLoaded(true);
     } catch { /* non-fatal */ } finally { setIsLoadingCompanies(false); }
   }, [conference, companiesLoaded]);
+
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    if (!requestedTab) return;
+    if (!CONFERENCE_TAB_ORDER.includes(requestedTab as ConferenceTabKey)) return;
+    const tabKey = requestedTab as ConferenceTabKey;
+    if (!visibleConferenceTabs.includes(tabKey)) return;
+    setActiveTab(tabKey);
+    if (tabKey === 'companies' || tabKey === 'social' || tabKey === 'notes') {
+      loadCompanies();
+    }
+  }, [searchParams, visibleConferenceTabs, loadCompanies]);
 
   const handleSave = async () => {
     if (!editData.name || !editData.start_date || !editData.end_date || !editData.location) {
