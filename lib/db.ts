@@ -170,7 +170,7 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET color = 'blue' WHERE category = 'event_type' AND value = 'Sponsored Event' AND color IS NULL`,
     `UPDATE config_options SET color = 'orange' WHERE category = 'event_type' AND value = 'Lunch' AND color IS NULL`,
     `UPDATE config_options SET color = 'purple' WHERE category = 'event_type' AND value = 'Dinner' AND color IS NULL`,
-    `UPDATE config_options SET color = 'teal' WHERE category = 'event_type' AND value = 'Procare Hosted' AND color IS NULL`,
+    `UPDATE config_options SET color = 'teal' WHERE category = 'event_type' AND value = 'Company Hosted' AND color IS NULL`,
     `UPDATE config_options SET color = 'green' WHERE category = 'event_type' AND value = 'Partner' AND color IS NULL`,
     `UPDATE config_options SET color = 'yellow' WHERE category = 'event_type' AND value = 'Conference Event' AND color IS NULL`,
     `CREATE TABLE IF NOT EXISTS company_relationships (
@@ -294,6 +294,8 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('allow_attendee_upload', 'true')`,
     `CREATE TABLE IF NOT EXISTS table_column_config (table_name TEXT NOT NULL, column_key TEXT NOT NULL, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (table_name, column_key))`,
     `CREATE TABLE IF NOT EXISTS section_config (page TEXT NOT NULL, section_key TEXT NOT NULL, label TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (page, section_key))`,
+    // Rename 'Procare Hosted' event type to generic 'Company Hosted'
+    `UPDATE config_options SET value = 'Company Hosted' WHERE category = 'event_type' AND value = 'Procare Hosted'`,
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
@@ -383,7 +385,7 @@ export async function initDb(): Promise<void> {
     { category: 'event_type', value: 'Sponsored Event', sort_order: 1 },
     { category: 'event_type', value: 'Lunch', sort_order: 2 },
     { category: 'event_type', value: 'Dinner', sort_order: 3 },
-    { category: 'event_type', value: 'Procare Hosted', sort_order: 4 },
+    { category: 'event_type', value: 'Company Hosted', sort_order: 4 },
     { category: 'event_type', value: 'Partner', sort_order: 5 },
     { category: 'event_type', value: 'Conference Event', sort_order: 6 },
     { category: 'rep_relationship_type', value: 'Strong', sort_order: 1 },
