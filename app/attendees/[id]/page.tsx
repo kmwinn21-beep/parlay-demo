@@ -206,11 +206,11 @@ export default function AttendeeDetailPage() {
       const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes, relTypeRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
-        fetch('/api/config?category=status'),
-        fetch('/api/config?category=action'),
-        fetch('/api/config?category=seniority'),
-        fetch('/api/config?category=user'),
-        fetch('/api/config?category=rep_relationship_type'),
+        fetch('/api/config?category=status&form=attendee_detail'),
+        fetch('/api/config?category=action&form=attendee_detail'),
+        fetch('/api/config?category=seniority&form=attendee_detail'),
+        fetch('/api/config?category=user&form=attendee_detail'),
+        fetch('/api/config?category=rep_relationship_type&form=attendee_detail'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
       const [atData, coData, statusData, actionData, seniorityData, userData, relTypeData] = await Promise.all([
@@ -940,7 +940,12 @@ export default function AttendeeDetailPage() {
                           return (
                             <div key={ev.event_id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                               <div className="px-3 pt-3 pb-2">
-                                <p className="text-sm font-semibold text-gray-900 leading-tight">{ev.event_name || ev.event_type || 'Social Event'}</p>
+                                <Link
+                                  href={`/conferences/${ev.conference_id}?tab=social&event_id=${ev.event_id}`}
+                                  className="inline-block text-sm font-semibold text-procare-dark-blue leading-tight hover:text-procare-bright-blue hover:underline"
+                                >
+                                  {ev.event_name || ev.event_type || 'Social Event'}
+                                </Link>
                                 <p className="text-xs text-gray-500 mt-0.5">{ev.conference_name}</p>
                               </div>
                               <div className="flex gap-1 px-3 pb-3">

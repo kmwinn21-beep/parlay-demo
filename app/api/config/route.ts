@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { requireAuth, requireAdmin } from '@/lib/auth';
+import { getCategoryFormKeys } from '@/lib/configOptionForms';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -9,6 +10,8 @@ export async function GET(request: NextRequest) {
     await dbReady;
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
+    const form = searchParams.get('form');
+    const includeVisibility = searchParams.get('include_visibility') === '1';
 
     let result;
     if (category) {
@@ -24,14 +27,52 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(result.rows.map(r => ({
+    const baseRows = result.rows.map(r => ({
       id: Number(r.id),
       category: String(r.category),
       value: String(r.value),
       sort_order: Number(r.sort_order ?? 0),
       color: r.color ? String(r.color) : null,
       action_key: r.action_key ? String(r.action_key) : null,
-    })), { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } });
+    }));
+
+    if (!form && !includeVisibility) {
+      return NextResponse.json(baseRows, { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } });
+    }
+
+    const optionIds = baseRows.map(r => r.id);
+    if (optionIds.length === 0) {
+      return NextResponse.json([], { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } });
+    }
+
+    const visibilityRows = await db.execute({
+      sql: `SELECT option_id, form_key, visible
+            FROM config_option_visibility
+            WHERE option_id IN (${optionIds.map(() => '?').join(',')})`,
+      args: optionIds,
+    });
+    const visibilityMap = new Map<string, boolean>();
+    for (const row of visibilityRows.rows) {
+      visibilityMap.set(`${Number(row.option_id)}::${String(row.form_key)}`, Number(row.visible) !== 0);
+    }
+
+    let enriched = baseRows.map((row) => {
+      const formKeys = getCategoryFormKeys(row.category);
+      const visibleForms = formKeys.filter((formKey) => visibilityMap.get(`${row.id}::${formKey}`) ?? true);
+      return { ...row, visible_forms: visibleForms };
+    });
+
+    if (form) {
+      enriched = enriched.filter(row => {
+        const visible = visibilityMap.get(`${row.id}::${form}`);
+        return visible ?? true;
+      });
+    }
+
+    const cacheControl = (includeVisibility || form)
+      ? 'no-store'
+      : 'private, max-age=300, stale-while-revalidate=600';
+    return NextResponse.json(enriched, { headers: { 'Cache-Control': cacheControl } });
   } catch (error) {
     console.error('GET /api/config error:', error);
     return NextResponse.json({ error: 'Failed to fetch config options' }, { status: 500 });

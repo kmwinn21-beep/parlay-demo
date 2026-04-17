@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -17,6 +17,7 @@ import { BackButton } from '@/components/BackButton';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -107,6 +108,10 @@ interface ConferenceDetail {
   notes?: string;
   assigned_rep?: string;
 }
+
+type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes';
+
+const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -227,10 +232,12 @@ function MeetingMultiSelect({
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('conference_detail');
   const { isVisible: isConfAttendeeColVisible } = useTableColumnConfig('conference_attendees');
+  const conferenceTabConfig = useSectionConfig('conference_details');
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -239,7 +246,7 @@ export default function ConferenceDetailPage() {
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendees' | 'companies' | 'meetings' | 'analytics' | 'follow-ups' | 'social' | 'notes'>('attendees');
+  const [activeTab, setActiveTab] = useState<ConferenceTabKey>('attendees');
   const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
@@ -270,6 +277,9 @@ export default function ConferenceDetailPage() {
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
+  const [cellDraft, setCellDraft] = useState('');
+  const [isSavingCell, setIsSavingCell] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editInternalAttendees, setEditInternalAttendees] = useState<string[]>([]);
@@ -313,6 +323,24 @@ export default function ConferenceDetailPage() {
     totalRows: number;
   } | null>(null);
 
+  const visibleConferenceTabs = CONFERENCE_TAB_ORDER.filter(
+    (tabKey) => conferenceTabConfig.orderedKeys.includes(tabKey) && conferenceTabConfig.isVisible(tabKey),
+  );
+
+  useEffect(() => {
+    if (visibleConferenceTabs.length === 0) return;
+    if (!visibleConferenceTabs.includes(activeTab)) {
+      setActiveTab(visibleConferenceTabs[0]);
+    }
+  }, [activeTab, visibleConferenceTabs]);
+
+  const handleTabChange = (tabKey: ConferenceTabKey) => {
+    setActiveTab(tabKey);
+    if (tabKey === 'companies' || tabKey === 'social' || tabKey === 'notes') {
+      loadCompanies();
+    }
+  };
+
   const fetchConference = useCallback(async () => {
     try {
       const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes] = await Promise.all([
@@ -321,12 +349,12 @@ export default function ConferenceDetailPage() {
         fetch(`/api/follow-ups?conference_id=${id}`),
         fetch(`/api/notes?entity_type=conference&entity_id=${id}`),
         fetch(`/api/meetings?conference_id=${id}`),
-        fetch('/api/config?category=action'),
-        fetch('/api/config?category=user'),
+        fetch('/api/config?category=action&form=conference_detail'),
+        fetch('/api/config?category=user&form=conference_detail'),
         fetch(`/api/social-events?conference_id=${id}`),
-        fetch('/api/config?category=event_type'),
-        fetch('/api/config?category=company_type'),
-        fetch('/api/config?category=seniority'),
+        fetch('/api/config?category=event_type&form=conference_detail'),
+        fetch('/api/config?category=company_type&form=conference_detail'),
+        fetch('/api/config?category=seniority&form=conference_detail'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -438,6 +466,18 @@ export default function ConferenceDetailPage() {
     } catch { /* non-fatal */ } finally { setIsLoadingCompanies(false); }
   }, [conference, companiesLoaded]);
 
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    if (!requestedTab) return;
+    if (!CONFERENCE_TAB_ORDER.includes(requestedTab as ConferenceTabKey)) return;
+    const tabKey = requestedTab as ConferenceTabKey;
+    if (!visibleConferenceTabs.includes(tabKey)) return;
+    setActiveTab(tabKey);
+    if (tabKey === 'companies' || tabKey === 'social' || tabKey === 'notes') {
+      loadCompanies();
+    }
+  }, [searchParams, visibleConferenceTabs, loadCompanies]);
+
   const handleSave = async () => {
     if (!editData.name || !editData.start_date || !editData.end_date || !editData.location) {
       toast.error('Please fill in all required fields.');
@@ -486,6 +526,71 @@ export default function ConferenceDetailPage() {
       if (next.has(aid)) next.delete(aid); else next.add(aid);
       return next;
     });
+  };
+
+  const startInlineEdit = (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+    setEditingCell({ attendeeId: attendee.id, field });
+    if (field === 'company_wse') {
+      setCellDraft(attendee.company_wse != null ? String(attendee.company_wse) : '');
+      return;
+    }
+    if (field === 'title') setCellDraft(attendee.title || '');
+    else if (field === 'company_type') setCellDraft(attendee.company_type || '');
+    else if (field === 'status') setCellDraft(attendee.status || '');
+    else if (field === 'seniority') setCellDraft(attendee.seniority || '');
+  };
+
+  const saveInlineEdit = async (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+    if (!conference || isSavingCell) return;
+    const payload: Record<string, string | number | null> = {};
+    if (field === 'company_wse') {
+      const trimmed = cellDraft.trim();
+      const parsed = trimmed === '' ? null : Number(trimmed);
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
+      if ((attendee.company_wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
+      payload.company_wse = parsed == null ? null : Math.round(parsed);
+    } else {
+      const nextValue = cellDraft.trim();
+      const currentValue =
+        field === 'title' ? (attendee.title || '')
+        : field === 'company_type' ? (attendee.company_type || '')
+        : field === 'status' ? (attendee.status || '')
+        : (attendee.seniority || '');
+      if (nextValue === currentValue) { setEditingCell(null); return; }
+      payload[field] = nextValue || null;
+    }
+    setIsSavingCell(true);
+    try {
+      const res = await fetch(`/api/attendees/${attendee.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error();
+      setConference(prev => prev ? {
+        ...prev,
+        attendees: prev.attendees.map(a => {
+          if (a.id !== attendee.id) return a;
+          const updated: Attendee = { ...a };
+          if (field === 'company_wse') {
+            updated.company_wse = payload.company_wse == null ? undefined : Number(payload.company_wse);
+          } else {
+            if (field === 'title') updated.title = payload[field] == null ? undefined : String(payload[field]);
+            if (field === 'company_type') updated.company_type = payload[field] == null ? undefined : String(payload[field]);
+            if (field === 'status') updated.status = payload[field] == null ? undefined : String(payload[field]);
+            if (field === 'seniority') updated.seniority = payload[field] == null ? undefined : String(payload[field]);
+          }
+          return updated;
+        }),
+      } : prev);
+      setEditingCell(null);
+      toast.success('Updated.');
+      fetchConference();
+    } catch {
+      toast.error('Failed to update attendee.');
+    } finally {
+      setIsSavingCell(false);
+    }
   };
 
   const handleRemoveOne = async (aid: number, name: string) => {
@@ -947,48 +1052,30 @@ export default function ConferenceDetailPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          <button
-            onClick={() => setActiveTab('attendees')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'attendees' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Attendees ({conference.attendees.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('companies'); loadCompanies(); }}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'companies' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Companies
-          </button>
-          <button
-            onClick={() => setActiveTab('meetings')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'meetings' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Meetings{confMeetings.length > 0 ? ` (${confMeetings.length})` : ''}
-          </button>
-          <button
-            onClick={() => setActiveTab('follow-ups')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'follow-ups' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Follow Ups{confFollowUps.length > 0 ? ` (${confFollowUps.length})` : ''}
-          </button>
-          <button
-            onClick={() => { setActiveTab('social'); loadCompanies(); }}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'social' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Social{confSocialEvents.length > 0 ? ` (${confSocialEvents.length})` : ''}
-          </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'analytics' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Insights
-          </button>
-          <button
-            onClick={() => { setActiveTab('notes'); loadCompanies(); }}
-            className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === 'notes' ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            Notes{confNotes.length > 0 ? ` (${confNotes.length})` : ''}
-          </button>
+          {visibleConferenceTabs.map((tabKey) => {
+            const baseLabel = conferenceTabConfig.getLabel(tabKey);
+            const labelWithCount = tabKey === 'attendees'
+              ? `${baseLabel} (${conference.attendees.length})`
+              : tabKey === 'meetings' && confMeetings.length > 0
+                ? `${baseLabel} (${confMeetings.length})`
+                : tabKey === 'follow-ups' && confFollowUps.length > 0
+                  ? `${baseLabel} (${confFollowUps.length})`
+                  : tabKey === 'social' && confSocialEvents.length > 0
+                    ? `${baseLabel} (${confSocialEvents.length})`
+                    : tabKey === 'notes' && confNotes.length > 0
+                      ? `${baseLabel} (${confNotes.length})`
+                      : baseLabel;
+
+            return (
+              <button
+                key={tabKey}
+                onClick={() => handleTabChange(tabKey)}
+                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === tabKey ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {labelWithCount}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -1327,25 +1414,62 @@ export default function ConferenceDetailPage() {
                         />
                       </td>
                       {isConfAttendeeColVisible('name') && (
-                        <td className="px-4 py-3 font-medium overflow-hidden">
-                          <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
-                            {attendee.first_name} {attendee.last_name}
-                          </Link>
+                        <td className="px-4 py-3 font-medium overflow-visible">
+                          <div className="text-left">
+                            <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                              {attendee.first_name} {attendee.last_name}
+                            </Link>
+                          </div>
                         </td>
                       )}
                       {isConfAttendeeColVisible('title') && (
-                        <td className="px-4 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
-                          <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                        <td className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
+                            <input
+                              className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
+                              value={cellDraft}
+                              onChange={(e) => setCellDraft(e.target.value)}
+                              onBlur={() => saveInlineEdit(attendee, 'title')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveInlineEdit(attendee, 'title');
+                                if (e.key === 'Escape') setEditingCell(null);
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <button type="button" className="text-left w-full" onClick={() => startInlineEdit(attendee, 'title')}>
+                              <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                            </button>
+                          )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('company') && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {attendee.company_name ? (
                             <div>
                               {attendee.company_id ? (
                                 <Link href={`/companies/${attendee.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
                               ) : (
                                 <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
+                              )}
+                              {attendee.company_wse != null && (
+                                editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
+                                  <input
+                                    className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
+                                    value={cellDraft}
+                                    onChange={(e) => setCellDraft(e.target.value)}
+                                    onBlur={() => saveInlineEdit(attendee, 'company_wse')}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse');
+                                      if (e.key === 'Escape') setEditingCell(null);
+                                    }}
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')}>
+                                    WSE: {Number(attendee.company_wse).toLocaleString()}
+                                  </button>
+                                )
                               )}
                             </div>
                           ) : (
@@ -1354,22 +1478,40 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('type') && (
-                        <td className="px-4 py-3">
-                          {attendee.company_type ? (
-                            <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                        <td className="px-4 py-3 overflow-visible relative">
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
+                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
+                              <option value="">—</option>
+                              {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
                           ) : (
-                            <span className="text-gray-300">—</span>
+                            <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
+                              {attendee.company_type ? (
+                                <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </button>
                           )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('seniority') && (
-                        <td className="px-4 py-3">
-                          {(() => {
-                            const s = effectiveSeniority(attendee.seniority, attendee.title);
-                            return (
-                              <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
-                            );
-                          })()}
+                        <td className="px-4 py-3 overflow-visible relative">
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
+                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                              <option value="">Auto-detect</option>
+                              {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          ) : (
+                            (() => {
+                              const s = effectiveSeniority(attendee.seniority, attendee.title);
+                              return (
+                                <button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}>
+                                  <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
+                                </button>
+                              );
+                            })()
+                          )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('conferences') && (
