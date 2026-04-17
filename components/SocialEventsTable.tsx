@@ -636,10 +636,7 @@ export function SocialEventsTable({
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
   const { user } = useUser();
-<<<<<<< HEAD
-=======
   const { isVisible } = useTableColumnConfig('social_events');
->>>>>>> 0659e7a (Add Admin Settings page with Types/Edit Tables/Permissions tabs)
 
   /* form state */
   const [showForm, setShowForm] = useState(false);
