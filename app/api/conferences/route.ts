@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, classifyCompanyType } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -74,6 +74,8 @@ export async function POST(request: NextRequest) {
     const notes = formData.get('notes') as string | null;
     const internal_attendees = formData.get('internal_attendees') as string | null;
     const file = formData.get('file') as File | null;
+    const mappingJson = formData.get('mapping') as string | null;
+    const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
 
     if (!name || !start_date || !end_date || !location) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -101,7 +103,9 @@ export async function POST(request: NextRequest) {
       const companyTypeOptions = await getConfigOptionValues('company_type');
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const parsed = await parseFile(buffer, file.name);
+      const parsed = mapping
+        ? await parseFileWithMapping(buffer, file.name, mapping)
+        : await parseFile(buffer, file.name);
       const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
 
       if (valid.length > 0) {

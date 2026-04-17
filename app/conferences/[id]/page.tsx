@@ -20,6 +20,8 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
+import { ColumnMappingModal } from '@/components/ColumnMappingModal';
+import { type ColumnMapping } from '@/lib/columnMapping';
 
 interface Attendee {
   id: number;
@@ -302,6 +304,13 @@ export default function ConferenceDetailPage() {
   // Upload attendee list state
   const [isUploading, setIsUploading] = useState(false);
   const uploadFileRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [columnMappingData, setColumnMappingData] = useState<{
+    headers: string[];
+    suggestions: ColumnMapping;
+    sampleRows: Record<string, string>[];
+    totalRows: number;
+  } | null>(null);
 
   const fetchConference = useCallback(async () => {
     try {
@@ -547,20 +556,37 @@ export default function ConferenceDetailPage() {
   const handleUploadAttendees = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (uploadFileRef.current) uploadFileRef.current.value = '';
     const ext = file.name.toLowerCase().split('.').pop();
     if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
       toast.error('Please upload an Excel (.xlsx, .xls) or CSV file.');
-      if (uploadFileRef.current) uploadFileRef.current.value = '';
       return;
     }
     setIsUploading(true);
     try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload-preview', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to read file');
+      setPendingUploadFile(file);
+      setColumnMappingData(data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to read file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleConfirmMapping = async (mapping: ColumnMapping) => {
+    if (!pendingUploadFile) return;
+    setColumnMappingData(null);
+    setIsUploading(true);
+    try {
       const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch(`/api/conferences/${id}/attendees/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+      formData.append('file', pendingUploadFile);
+      formData.append('mapping', JSON.stringify(mapping));
+      const res = await fetch(`/api/conferences/${id}/attendees/upload`, { method: 'POST', body: formData });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
       if (result.new_count === 0 && (!result.updated_count || result.updated_count === 0)) {
@@ -577,7 +603,7 @@ export default function ConferenceDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to upload attendees');
     } finally {
       setIsUploading(false);
-      if (uploadFileRef.current) uploadFileRef.current.value = '';
+      setPendingUploadFile(null);
     }
   };
 
@@ -624,6 +650,19 @@ export default function ConferenceDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+
+      {/* Column mapping modal */}
+      {columnMappingData && pendingUploadFile && (
+        <ColumnMappingModal
+          fileName={pendingUploadFile.name}
+          totalRows={columnMappingData.totalRows}
+          headers={columnMappingData.headers}
+          suggestions={columnMappingData.suggestions}
+          sampleRows={columnMappingData.sampleRows}
+          onConfirm={handleConfirmMapping}
+          onCancel={() => { setColumnMappingData(null); setPendingUploadFile(null); }}
+        />
+      )}
 
       {/* Conference Info Card */}
       <div className="card">

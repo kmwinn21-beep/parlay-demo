@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, classifyCompanyType, parseServicesValue, classifyICP } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, parseServicesValue, classifyICP, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -100,8 +100,13 @@ export async function POST(
     );
     if (operatorTypeValues.size === 0) operatorTypeValues.add('Operator'); // safe fallback
 
+    const mappingJson = formData.get('mapping') as string | null;
+    const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = await parseFile(buffer, file.name);
+    const parsed = mapping
+      ? await parseFileWithMapping(buffer, file.name, mapping)
+      : await parseFile(buffer, file.name);
     const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
 
     if (valid.length === 0) {
