@@ -1325,8 +1325,8 @@ export default function CompanyDetailPage() {
       </div>{/* end grid */}
 
       <NewMeetingModal
-        isOpen={showScheduleMeeting}
-        onClose={() => setShowScheduleMeeting(false)}
+        isOpen={showMeeting}
+        onClose={() => setShowMeeting(false)}
         prefillCompanyId={company ? Number(id) : undefined}
         onSuccess={(meeting) => setCompanyMeetings(prev => [meeting, ...prev])}
         availableConferences={company?.conferences}
