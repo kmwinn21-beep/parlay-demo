@@ -66,7 +66,7 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
 
 // Module-level cache so all table instances share the same fetched config
 const _cache: Record<string, Record<string, boolean>> = {};
-const _pending: Record<string, Promise<Record<string, boolean>>> = {};
+const _pending: Record<string, Promise<Record<string, boolean>> | undefined> = {};
 
 function fetchConfig(tableName: string): Promise<Record<string, boolean>> {
   if (_cache[tableName]) return Promise.resolve(_cache[tableName]);
