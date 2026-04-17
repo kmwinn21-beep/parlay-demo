@@ -940,7 +940,12 @@ export default function AttendeeDetailPage() {
                           return (
                             <div key={ev.event_id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                               <div className="px-3 pt-3 pb-2">
-                                <p className="text-sm font-semibold text-gray-900 leading-tight">{ev.event_name || ev.event_type || 'Social Event'}</p>
+                                <Link
+                                  href={`/conferences/${ev.conference_id}?tab=social&event_id=${ev.event_id}`}
+                                  className="inline-block text-sm font-semibold text-procare-dark-blue leading-tight hover:text-procare-bright-blue hover:underline"
+                                >
+                                  {ev.event_name || ev.event_type || 'Social Event'}
+                                </Link>
                                 <p className="text-xs text-gray-500 mt-0.5">{ev.conference_name}</p>
                               </div>
                               <div className="flex gap-1 px-3 pb-3">
