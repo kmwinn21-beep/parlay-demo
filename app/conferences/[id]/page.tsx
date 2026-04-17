@@ -525,6 +525,68 @@ export default function ConferenceDetailPage() {
     }
   };
 
+  const handleDecoupleOne = async (aid: number, name: string) => {
+    if (!confirm(`Decouple ${name} from this conference? The record will remain in the database.`)) return;
+    setIsRemoving(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_ids: [aid], decouple_only: true }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${name} decoupled from conference.`);
+      fetchConference();
+    } catch {
+      toast.error('Failed to decouple attendee.');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const handleDecoupleSelected = async () => {
+    const count = selectedAttendeeIds.size;
+    if (!confirm(`Decouple ${count} attendee(s) from this conference? Records will remain in the database.`)) return;
+    setIsRemoving(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_ids: Array.from(selectedAttendeeIds), decouple_only: true }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${count} attendee(s) decoupled.`);
+      setSelectedAttendeeIds(new Set());
+      fetchConference();
+    } catch {
+      toast.error('Failed to decouple attendees.');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const handleDecoupleCompany = async (companyId: number, companyName: string) => {
+    const companyAttendees = conference!.attendees.filter(a => a.company_id === companyId);
+    if (companyAttendees.length === 0) {
+      toast.error('No attendees found for this company in this conference.');
+      return;
+    }
+    if (!confirm(`Decouple "${companyName}" and its ${companyAttendees.length} attendee(s) from this conference? Records will remain in the database.`)) return;
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_ids: companyAttendees.map(a => a.id), decouple_only: true }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`"${companyName}" decoupled from conference.`);
+      fetchConference();
+      loadCompanies();
+    } catch {
+      toast.error('Failed to decouple company.');
+    }
+  };
+
   const handleAddAttendee = async () => {
     if (!addFormData.first_name || !addFormData.last_name) {
       toast.error('First and last name are required.');
@@ -922,16 +984,28 @@ export default function ConferenceDetailPage() {
             <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Attendee List</h2>
             <div className="flex items-center gap-3 flex-wrap">
               {selectedAttendeeIds.size >= 1 && (
-                <button
-                  onClick={handleRemoveSelected}
-                  disabled={isRemoving}
-                  className="btn-danger flex items-center gap-2 text-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Remove ({selectedAttendeeIds.size})
-                </button>
+                <>
+                  <button
+                    onClick={handleDecoupleSelected}
+                    disabled={isRemoving}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    Decouple ({selectedAttendeeIds.size})
+                  </button>
+                  <button
+                    onClick={handleRemoveSelected}
+                    disabled={isRemoving}
+                    className="btn-danger flex items-center gap-2 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Remove ({selectedAttendeeIds.size})
+                  </button>
+                </>
               )}
               <button
                 onClick={() => setShowAddForm((v) => !v)}
@@ -1162,6 +1236,16 @@ export default function ConferenceDetailPage() {
                       {attendee.created_at && (
                         <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
                       )}
+                      <div className="mt-2 ml-6">
+                        <button
+                          type="button"
+                          onClick={() => handleDecoupleOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)}
+                          disabled={isRemoving}
+                          className="text-xs text-amber-600 hover:text-amber-700 font-medium disabled:opacity-50"
+                        >
+                          Decouple from conference
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1195,6 +1279,7 @@ export default function ConferenceDetailPage() {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date Added</th>
+                    <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1254,6 +1339,16 @@ export default function ConferenceDetailPage() {
                         }
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => handleDecoupleOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)}
+                          disabled={isRemoving}
+                          className="text-xs text-amber-600 hover:text-amber-700 font-medium whitespace-nowrap disabled:opacity-50"
+                        >
+                          Decouple
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1283,7 +1378,19 @@ export default function ConferenceDetailPage() {
               <div className="animate-spin w-6 h-6 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
             </div>
           ) : (
-            <CompanyTable companies={conferenceCompanies} onRefresh={loadCompanies} />
+            <CompanyTable
+              companies={conferenceCompanies}
+              onRefresh={loadCompanies}
+              rowAction={(company) => (
+                <button
+                  type="button"
+                  onClick={() => handleDecoupleCompany(company.id, company.name)}
+                  className="text-xs text-amber-600 hover:text-amber-700 font-medium whitespace-nowrap"
+                >
+                  Decouple
+                </button>
+              )}
+            />
           )}
         </div>
       )}

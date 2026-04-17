@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -108,6 +108,7 @@ function ConferenceTooltip({ count, names }: { count: number; names?: string }) 
 interface CompanyTableProps {
   companies: Company[];
   onRefresh: () => void;
+  rowAction?: (company: Company) => React.ReactNode;
 }
 
 function EntityStructureIcon({ structure }: { structure?: string }) {
@@ -159,7 +160,7 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, rowAction }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
   const userOptionsFull = useUserOptions();
@@ -801,11 +802,12 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                 {isVisible('conferences') && <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>}
                 {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>}
                 {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
+                {rowAction && <th className="px-3 py-3 w-20" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={rowAction ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
@@ -877,6 +879,7 @@ export function CompanyTable({ companies, onRefresh }: CompanyTableProps) {
                     ) : <span className="text-gray-300">—</span>}
                   </td>}
                   {isVisible('updated_on') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>}
+                  {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
                 </tr>
               ))}
             </tbody>
