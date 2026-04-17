@@ -94,9 +94,9 @@ export default function FollowUpsPage() {
       const [fuRes, mtgRes, actionRes, userRes, nsRes, confRes] = await Promise.all([
         fetch('/api/follow-ups'),
         fetch('/api/meetings'),
-        fetch('/api/config?category=action'),
-        fetch('/api/config?category=user'),
-        fetch('/api/config?category=next_steps'),
+        fetch('/api/config?category=action&form=follow_ups_page'),
+        fetch('/api/config?category=user&form=follow_ups_page'),
+        fetch('/api/config?category=next_steps&form=follow_ups_page'),
         fetch('/api/conferences?nav=1'),
       ]);
       if (!fuRes.ok) throw new Error();

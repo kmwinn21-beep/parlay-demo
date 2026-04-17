@@ -307,8 +307,8 @@ export function NewRelationshipModal({ isOpen, onClose }: NewRelationshipModalPr
 
     setIsLoading(true);
     Promise.all([
-      fetch('/api/config?category=user').then(r => r.json()),
-      fetch('/api/config?category=rep_relationship_type').then(r => r.json()),
+      fetch('/api/config?category=user&form=relationships_page').then(r => r.json()),
+      fetch('/api/config?category=rep_relationship_type&form=relationships_page').then(r => r.json()),
       fetch('/api/companies?minimal=1&has_relationships=1').then(r => r.json()),
     ]).then(([userData, relData, companyData]) => {
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));

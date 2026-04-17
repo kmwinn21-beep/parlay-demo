@@ -108,7 +108,7 @@ export function FollowUpNotesPopover({
   // Fetch user options and attendee conferences when adding
   useEffect(() => {
     if (!isAdding) return;
-    fetch('/api/config?category=user')
+    fetch('/api/config?category=user&form=follow_ups_page')
       .then(res => res.json())
       .then((data: { value: string }[]) => setUserOptions(data.map(d => d.value)))
       .catch(() => {});

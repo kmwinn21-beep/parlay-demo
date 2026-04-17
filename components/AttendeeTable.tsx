@@ -131,8 +131,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string }>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
-  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
-  const [nameDraft, setNameDraft] = useState<{ first_name: string; last_name: string }>({ first_name: '', last_name: '' });
+  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
   const [cellDraft, setCellDraft] = useState<string>('');
   const [isSavingCell, setIsSavingCell] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
@@ -257,12 +256,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     } catch { toast.error('Failed to apply changes.'); } finally { setIsApplying(false); }
   };
 
-  const startInlineEdit = (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+  const startInlineEdit = (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
     setEditingCell({ attendeeId: attendee.id, field });
-    if (field === 'name') {
-      setNameDraft({ first_name: attendee.first_name || '', last_name: attendee.last_name || '' });
-      return;
-    }
     if (field === 'company_wse') {
       setCellDraft(attendee.company_wse != null ? String(attendee.company_wse) : '');
       return;
@@ -273,17 +268,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     else if (field === 'seniority') setCellDraft(attendee.seniority || '');
   };
 
-  const saveInlineEdit = async (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+  const saveInlineEdit = async (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
     if (isSavingCell) return;
     const payload: Record<string, string | number | null> = {};
-    if (field === 'name') {
-      const first = nameDraft.first_name.trim();
-      const last = nameDraft.last_name.trim();
-      if (!first || !last) { toast.error('First and last name are required.'); return; }
-      if (first === attendee.first_name && last === attendee.last_name) { setEditingCell(null); return; }
-      payload.first_name = first;
-      payload.last_name = last;
-    } else if (field === 'company_wse') {
+    if (field === 'company_wse') {
       const trimmed = cellDraft.trim();
       const parsed = trimmed === '' ? null : Number(trimmed);
       if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
@@ -310,10 +298,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       setLocalAttendees(prev => prev.map(a => {
         if (a.id !== attendee.id) return a;
         const updated: Attendee = { ...a };
-        if (field === 'name') {
-          updated.first_name = String(payload.first_name);
-          updated.last_name = String(payload.last_name);
-        } else if (field === 'company_wse') {
+        if (field === 'company_wse') {
           updated.company_wse = payload.company_wse == null ? undefined : Number(payload.company_wse);
         } else {
           if (field === 'title') updated.title = payload[field] == null ? undefined : String(payload[field]);
@@ -595,41 +580,17 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
 
-                    {isVisible('name') && <td className="px-3 py-3 overflow-hidden">
-                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'name' ? (
-                        <div className="flex flex-col gap-1">
-                          <input
-                            className="input-field text-xs py-1"
-                            value={nameDraft.first_name}
-                            onChange={(e) => setNameDraft((p) => ({ ...p, first_name: e.target.value }))}
-                            placeholder="First"
-                            autoFocus
-                          />
-                          <input
-                            className="input-field text-xs py-1"
-                            value={nameDraft.last_name}
-                            onChange={(e) => setNameDraft((p) => ({ ...p, last_name: e.target.value }))}
-                            placeholder="Last"
-                            onBlur={() => saveInlineEdit(attendee, 'name')}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveInlineEdit(attendee, 'name');
-                              if (e.key === 'Escape') setEditingCell(null);
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="text-left group cursor-pointer" onClick={() => startInlineEdit(attendee, 'name')} title="Click to edit name">
-                          <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
-                            {attendee.first_name} {attendee.last_name}
-                          </Link>
-                          <span className="block text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">Click to edit</span>
-                        </div>
-                      )}
+                    {isVisible('name') && <td className="px-3 py-3 overflow-visible">
+                      <div className="text-left">
+                        <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                          {attendee.first_name} {attendee.last_name}
+                        </Link>
+                      </div>
                     </td>}
-                    {isVisible('title') && <td className="px-3 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
+                    {isVisible('title') && <td className="px-3 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
                       {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
                         <input
-                          className="input-field text-xs py-1 w-full"
+                          className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
                           value={cellDraft}
                           onChange={(e) => setCellDraft(e.target.value)}
                           onBlur={() => saveInlineEdit(attendee, 'title')}
@@ -645,7 +606,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         </button>
                       )}
                     </td>}
-                    {isVisible('company') && <td className="px-3 py-3">
+                    {isVisible('company') && <td className="px-3 py-3 overflow-visible relative">
                       {attendee.company_name ? (
                         <div>
                           {attendee.company_id ? (
@@ -658,7 +619,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                           {attendee.company_wse != null && (
                             editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
                               <input
-                                className="input-field text-xs py-1 w-24 mt-1"
+                                className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
                                 value={cellDraft}
                                 onChange={(e) => setCellDraft(e.target.value)}
                                 onBlur={() => saveInlineEdit(attendee, 'company_wse')}
@@ -677,10 +638,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         </div>
                       ) : <span className="text-gray-300">—</span>}
                     </td>}
-                    {isVisible('company_type') && <td className="px-3 py-3">
+                    {isVisible('company_type') && <td className="px-3 py-3 overflow-visible relative">
                       {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
                         <select
-                          className="input-field text-xs py-1"
+                          className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
                           value={cellDraft}
                           onChange={(e) => setCellDraft(e.target.value)}
                           onBlur={() => saveInlineEdit(attendee, 'company_type')}
@@ -699,9 +660,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         </button>
                       )}
                     </td>}
-                    {isVisible('status') && <td className="px-3 py-3">
+                    {isVisible('status') && <td className="px-3 py-3 overflow-visible relative">
                       {editingCell?.attendeeId === attendee.id && editingCell.field === 'status' ? (
-                        <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'status')} autoFocus>
+                        <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'status')} autoFocus>
                           <option value="">—</option>
                           {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -711,9 +672,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         </button>
                       )}
                     </td>}
-                    {isVisible('seniority') && <td className="px-3 py-3">
+                    {isVisible('seniority') && <td className="px-3 py-3 overflow-visible relative">
                       {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                        <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                        <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
                           <option value="">Auto-detect</option>
                           {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
