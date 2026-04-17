@@ -17,6 +17,7 @@ import { BackButton } from '@/components/BackButton';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
@@ -229,6 +230,7 @@ export default function ConferenceDetailPage() {
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions();
+  const { isVisible: isConfAttendeeColVisible } = useTableColumnConfig('conference_attendees');
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -527,7 +529,9 @@ export default function ConferenceDetailPage() {
 
   const handleDecoupleOne = async (aid: number, name: string) => {
     if (!confirm(`Decouple ${name} from this conference? The record will remain in the database.`)) return;
-    setIsRemoving(true);
+    // Optimistic remove
+    const prevConference = conference;
+    setConference(prev => prev ? { ...prev, attendees: prev.attendees.filter(a => a.id !== aid) } : prev);
     try {
       const res = await fetch(`/api/conferences/${id}/attendees`, {
         method: 'DELETE',
@@ -536,54 +540,65 @@ export default function ConferenceDetailPage() {
       });
       if (!res.ok) throw new Error();
       toast.success(`${name} decoupled from conference.`);
-      fetchConference();
     } catch {
       toast.error('Failed to decouple attendee.');
-    } finally {
-      setIsRemoving(false);
+      setConference(prevConference);
     }
   };
 
   const handleDecoupleSelected = async () => {
     const count = selectedAttendeeIds.size;
     if (!confirm(`Decouple ${count} attendee(s) from this conference? Records will remain in the database.`)) return;
-    setIsRemoving(true);
+    const idsToRemove = new Set(selectedAttendeeIds);
+    // Optimistic remove
+    const prevConference = conference;
+    setConference(prev => prev ? { ...prev, attendees: prev.attendees.filter(a => !idsToRemove.has(a.id)) } : prev);
+    setSelectedAttendeeIds(new Set());
     try {
       const res = await fetch(`/api/conferences/${id}/attendees`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_ids: Array.from(selectedAttendeeIds), decouple_only: true }),
+        body: JSON.stringify({ attendee_ids: Array.from(idsToRemove), decouple_only: true }),
       });
       if (!res.ok) throw new Error();
       toast.success(`${count} attendee(s) decoupled.`);
-      setSelectedAttendeeIds(new Set());
-      fetchConference();
     } catch {
       toast.error('Failed to decouple attendees.');
-    } finally {
-      setIsRemoving(false);
+      setConference(prevConference);
     }
   };
 
-  const handleDecoupleCompany = async (companyId: number, companyName: string) => {
-    const companyAttendees = conference!.attendees.filter(a => a.company_id === companyId);
-    if (companyAttendees.length === 0) {
-      toast.error('No attendees found for this company in this conference.');
+  const handleDecoupleCompanies = async (selectedCompanyIds: Set<number>) => {
+    const count = selectedCompanyIds.size;
+    if (!conference) return;
+    const attendeeIds = conference.attendees
+      .filter(a => a.company_id != null && selectedCompanyIds.has(a.company_id))
+      .map(a => a.id);
+    if (attendeeIds.length === 0) {
+      toast.error('No attendees found for the selected company/companies.');
       return;
     }
-    if (!confirm(`Decouple "${companyName}" and its ${companyAttendees.length} attendee(s) from this conference? Records will remain in the database.`)) return;
+    if (!confirm(`Decouple ${count} company/companies from this conference? Records will remain in the database.`)) return;
+    // Optimistic remove
+    const prevConference = conference;
+    const prevCompanies = conferenceCompanies;
+    setConference(prev => prev
+      ? { ...prev, attendees: prev.attendees.filter(a => !(a.company_id != null && selectedCompanyIds.has(a.company_id))) }
+      : prev
+    );
+    setConferenceCompanies(prev => prev.filter(c => !selectedCompanyIds.has(c.id)));
     try {
       const res = await fetch(`/api/conferences/${id}/attendees`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_ids: companyAttendees.map(a => a.id), decouple_only: true }),
+        body: JSON.stringify({ attendee_ids: attendeeIds, decouple_only: true }),
       });
       if (!res.ok) throw new Error();
-      toast.success(`"${companyName}" decoupled from conference.`);
-      fetchConference();
-      loadCompanies();
+      toast.success(`${count} company/companies decoupled from conference.`);
     } catch {
-      toast.error('Failed to decouple company.');
+      toast.error('Failed to decouple company/companies.');
+      setConference(prevConference);
+      setConferenceCompanies(prevCompanies);
     }
   };
 
@@ -1236,16 +1251,6 @@ export default function ConferenceDetailPage() {
                       {attendee.created_at && (
                         <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
                       )}
-                      <div className="mt-2 ml-6">
-                        <button
-                          type="button"
-                          onClick={() => handleDecoupleOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)}
-                          disabled={isRemoving}
-                          className="text-xs text-amber-600 hover:text-amber-700 font-medium disabled:opacity-50"
-                        >
-                          Decouple from conference
-                        </button>
-                      </div>
                     </div>
                   );
                 })}
@@ -1267,19 +1272,47 @@ export default function ConferenceDetailPage() {
                         className="accent-procare-bright-blue"
                       />
                     </th>
-                    {(['name', 'title', 'company', 'type', 'seniority'] as const).map(col => (
-                      <th key={col} onClick={col !== 'type' ? () => handleSort(col as 'name' | 'title' | 'company' | 'seniority') : undefined} className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative ${col !== 'type' ? 'cursor-pointer hover:text-procare-bright-blue' : ''}`} style={{ width: colWidths[col] }}>
-                        {{ name: 'Name', title: 'Title', company: 'Company', type: 'Type', seniority: 'Seniority' }[col]}
-                        {sortKey === col && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                    {isConfAttendeeColVisible('name') && (
+                      <th onClick={() => handleSort('name')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.name }}>
+                        Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                        <div onMouseDown={e => startResize(e, 'name')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
                       </th>
-                    ))}
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.conferences }}># Conf
-                      <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date Added</th>
-                    <th className="px-4 py-3 w-24" />
+                    )}
+                    {isConfAttendeeColVisible('title') && (
+                      <th onClick={() => handleSort('title')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.title }}>
+                        Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                        <div onMouseDown={e => startResize(e, 'title')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                      </th>
+                    )}
+                    {isConfAttendeeColVisible('company') && (
+                      <th onClick={() => handleSort('company')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.company }}>
+                        Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                        <div onMouseDown={e => startResize(e, 'company')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                      </th>
+                    )}
+                    {isConfAttendeeColVisible('type') && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.type }}>
+                        Type
+                        <div onMouseDown={e => startResize(e, 'type')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                      </th>
+                    )}
+                    {isConfAttendeeColVisible('seniority') && (
+                      <th onClick={() => handleSort('seniority')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.seniority }}>
+                        Seniority{sortKey === 'seniority' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                        <div onMouseDown={e => startResize(e, 'seniority')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                      </th>
+                    )}
+                    {isConfAttendeeColVisible('conferences') && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.conferences }}># Conf
+                        <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                      </th>
+                    )}
+                    {isConfAttendeeColVisible('notes') && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
+                    )}
+                    {isConfAttendeeColVisible('date_added') && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date Added</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1293,62 +1326,68 @@ export default function ConferenceDetailPage() {
                           className="accent-procare-bright-blue"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium overflow-hidden">
-                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
-                          {attendee.first_name} {attendee.last_name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
-                        <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {attendee.company_name ? (
-                          <div>
-                            {attendee.company_id ? (
-                              <Link href={`/companies/${attendee.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
-                            ) : (
-                              <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {attendee.company_type ? (
-                          <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {(() => {
-                          const s = effectiveSeniority(attendee.seniority, attendee.title);
-                          return (
-                            <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
-                      </td>
-                      <td className="px-4 py-3">
-                        {Number(attendee.entity_notes_count ?? 0) > 0
-                          ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
-                          : <span className="text-gray-300">—</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => handleDecoupleOne(attendee.id, `${attendee.first_name} ${attendee.last_name}`)}
-                          disabled={isRemoving}
-                          className="text-xs text-amber-600 hover:text-amber-700 font-medium whitespace-nowrap disabled:opacity-50"
-                        >
-                          Decouple
-                        </button>
-                      </td>
+                      {isConfAttendeeColVisible('name') && (
+                        <td className="px-4 py-3 font-medium overflow-hidden">
+                          <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                            {attendee.first_name} {attendee.last_name}
+                          </Link>
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('title') && (
+                        <td className="px-4 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
+                          <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('company') && (
+                        <td className="px-4 py-3">
+                          {attendee.company_name ? (
+                            <div>
+                              {attendee.company_id ? (
+                                <Link href={`/companies/${attendee.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                              ) : (
+                                <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('type') && (
+                        <td className="px-4 py-3">
+                          {attendee.company_type ? (
+                            <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('seniority') && (
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const s = effectiveSeniority(attendee.seniority, attendee.title);
+                            return (
+                              <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
+                            );
+                          })()}
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('conferences') && (
+                        <td className="px-4 py-3">
+                          <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('notes') && (
+                        <td className="px-4 py-3">
+                          {Number(attendee.entity_notes_count ?? 0) > 0
+                            ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
+                      )}
+                      {isConfAttendeeColVisible('date_added') && (
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -1381,15 +1420,8 @@ export default function ConferenceDetailPage() {
             <CompanyTable
               companies={conferenceCompanies}
               onRefresh={loadCompanies}
-              rowAction={(company) => (
-                <button
-                  type="button"
-                  onClick={() => handleDecoupleCompany(company.id, company.name)}
-                  className="text-xs text-amber-600 hover:text-amber-700 font-medium whitespace-nowrap"
-                >
-                  Decouple
-                </button>
-              )}
+              tableName="conference_companies"
+              onDecoupleSelected={handleDecoupleCompanies}
             />
           )}
         </div>
