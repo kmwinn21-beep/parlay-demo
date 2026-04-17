@@ -270,6 +270,10 @@ export default function ConferenceDetailPage() {
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
+  const [cellDraft, setCellDraft] = useState('');
+  const [nameDraft, setNameDraft] = useState({ first_name: '', last_name: '' });
+  const [isSavingCell, setIsSavingCell] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editInternalAttendees, setEditInternalAttendees] = useState<string[]>([]);
@@ -486,6 +490,85 @@ export default function ConferenceDetailPage() {
       if (next.has(aid)) next.delete(aid); else next.add(aid);
       return next;
     });
+  };
+
+  const startInlineEdit = (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+    setEditingCell({ attendeeId: attendee.id, field });
+    if (field === 'name') {
+      setNameDraft({ first_name: attendee.first_name || '', last_name: attendee.last_name || '' });
+      return;
+    }
+    if (field === 'company_wse') {
+      setCellDraft(attendee.company_wse != null ? String(attendee.company_wse) : '');
+      return;
+    }
+    if (field === 'title') setCellDraft(attendee.title || '');
+    else if (field === 'company_type') setCellDraft(attendee.company_type || '');
+    else if (field === 'status') setCellDraft(attendee.status || '');
+    else if (field === 'seniority') setCellDraft(attendee.seniority || '');
+  };
+
+  const saveInlineEdit = async (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+    if (!conference || isSavingCell) return;
+    const payload: Record<string, string | number | null> = {};
+    if (field === 'name') {
+      const first = nameDraft.first_name.trim();
+      const last = nameDraft.last_name.trim();
+      if (!first || !last) { toast.error('First and last name are required.'); return; }
+      if (first === attendee.first_name && last === attendee.last_name) { setEditingCell(null); return; }
+      payload.first_name = first;
+      payload.last_name = last;
+    } else if (field === 'company_wse') {
+      const trimmed = cellDraft.trim();
+      const parsed = trimmed === '' ? null : Number(trimmed);
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
+      if ((attendee.company_wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
+      payload.company_wse = parsed == null ? null : Math.round(parsed);
+    } else {
+      const nextValue = cellDraft.trim();
+      const currentValue =
+        field === 'title' ? (attendee.title || '')
+        : field === 'company_type' ? (attendee.company_type || '')
+        : field === 'status' ? (attendee.status || '')
+        : (attendee.seniority || '');
+      if (nextValue === currentValue) { setEditingCell(null); return; }
+      payload[field] = nextValue || null;
+    }
+    setIsSavingCell(true);
+    try {
+      const res = await fetch(`/api/attendees/${attendee.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error();
+      setConference(prev => prev ? {
+        ...prev,
+        attendees: prev.attendees.map(a => {
+          if (a.id !== attendee.id) return a;
+          const updated: Attendee = { ...a };
+          if (field === 'name') {
+            updated.first_name = String(payload.first_name);
+            updated.last_name = String(payload.last_name);
+          } else if (field === 'company_wse') {
+            updated.company_wse = payload.company_wse == null ? undefined : Number(payload.company_wse);
+          } else {
+            if (field === 'title') updated.title = payload[field] == null ? undefined : String(payload[field]);
+            if (field === 'company_type') updated.company_type = payload[field] == null ? undefined : String(payload[field]);
+            if (field === 'status') updated.status = payload[field] == null ? undefined : String(payload[field]);
+            if (field === 'seniority') updated.seniority = payload[field] == null ? undefined : String(payload[field]);
+          }
+          return updated;
+        }),
+      } : prev);
+      setEditingCell(null);
+      toast.success('Updated.');
+      fetchConference();
+    } catch {
+      toast.error('Failed to update attendee.');
+    } finally {
+      setIsSavingCell(false);
+    }
   };
 
   const handleRemoveOne = async (aid: number, name: string) => {
@@ -1328,14 +1411,49 @@ export default function ConferenceDetailPage() {
                       </td>
                       {isConfAttendeeColVisible('name') && (
                         <td className="px-4 py-3 font-medium overflow-hidden">
-                          <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
-                            {attendee.first_name} {attendee.last_name}
-                          </Link>
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'name' ? (
+                            <div className="flex flex-col gap-1">
+                              <input className="input-field text-xs py-1" value={nameDraft.first_name} onChange={(e) => setNameDraft(p => ({ ...p, first_name: e.target.value }))} placeholder="First" autoFocus />
+                              <input
+                                className="input-field text-xs py-1"
+                                value={nameDraft.last_name}
+                                onChange={(e) => setNameDraft(p => ({ ...p, last_name: e.target.value }))}
+                                placeholder="Last"
+                                onBlur={() => saveInlineEdit(attendee, 'name')}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveInlineEdit(attendee, 'name');
+                                  if (e.key === 'Escape') setEditingCell(null);
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="text-left cursor-pointer" onClick={() => startInlineEdit(attendee, 'name')}>
+                              <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                                {attendee.first_name} {attendee.last_name}
+                              </Link>
+                            </div>
+                          )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('title') && (
                         <td className="px-4 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
-                          <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
+                            <input
+                              className="input-field text-xs py-1 w-full"
+                              value={cellDraft}
+                              onChange={(e) => setCellDraft(e.target.value)}
+                              onBlur={() => saveInlineEdit(attendee, 'title')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveInlineEdit(attendee, 'title');
+                                if (e.key === 'Escape') setEditingCell(null);
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <button type="button" className="text-left w-full" onClick={() => startInlineEdit(attendee, 'title')}>
+                              <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                            </button>
+                          )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('company') && (
@@ -1347,6 +1465,25 @@ export default function ConferenceDetailPage() {
                               ) : (
                                 <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                               )}
+                              {attendee.company_wse != null && (
+                                editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
+                                  <input
+                                    className="input-field text-xs py-1 w-24 mt-1"
+                                    value={cellDraft}
+                                    onChange={(e) => setCellDraft(e.target.value)}
+                                    onBlur={() => saveInlineEdit(attendee, 'company_wse')}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse');
+                                      if (e.key === 'Escape') setEditingCell(null);
+                                    }}
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')}>
+                                    WSE: {Number(attendee.company_wse).toLocaleString()}
+                                  </button>
+                                )
+                              )}
                             </div>
                           ) : (
                             <span className="text-gray-300">—</span>
@@ -1355,21 +1492,39 @@ export default function ConferenceDetailPage() {
                       )}
                       {isConfAttendeeColVisible('type') && (
                         <td className="px-4 py-3">
-                          {attendee.company_type ? (
-                            <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
+                            <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
+                              <option value="">—</option>
+                              {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
                           ) : (
-                            <span className="text-gray-300">—</span>
+                            <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
+                              {attendee.company_type ? (
+                                <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </button>
                           )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('seniority') && (
                         <td className="px-4 py-3">
-                          {(() => {
-                            const s = effectiveSeniority(attendee.seniority, attendee.title);
-                            return (
-                              <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
-                            );
-                          })()}
+                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
+                            <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                              <option value="">Auto-detect</option>
+                              {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          ) : (
+                            (() => {
+                              const s = effectiveSeniority(attendee.seniority, attendee.title);
+                              return (
+                                <button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}>
+                                  <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
+                                </button>
+                              );
+                            })()
+                          )}
                         </td>
                       )}
                       {isConfAttendeeColVisible('conferences') && (
