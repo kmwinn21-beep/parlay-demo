@@ -208,26 +208,63 @@ export async function PATCH(
   try {
     await dbReady;
     const body = await request.json();
-    const { status } = body;
-
-    if (status === undefined || status === null) {
-      return NextResponse.json({ error: 'status is required' }, { status: 400 });
+    const existingResult = await db.execute({
+      sql: 'SELECT id FROM companies WHERE id = ?',
+      args: [params.id],
+    });
+    if (existingResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
 
-    // Update company status and propagate to all associated attendees
-    await db.batch(
-      [
-        { sql: 'UPDATE companies SET status = ?, updated_at = datetime(\'now\') WHERE id = ?', args: [status, params.id] },
-        { sql: 'UPDATE attendees SET status = ? WHERE company_id = ?', args: [status, params.id] },
-      ],
-      'write'
-    );
+    const setClauses: string[] = [];
+    const args: (string | number | null)[] = [];
+
+    if ('name' in body) {
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name) return NextResponse.json({ error: 'name cannot be empty' }, { status: 400 });
+      setClauses.push('name = ?');
+      args.push(name);
+    }
+    if ('company_type' in body) {
+      setClauses.push('company_type = ?');
+      args.push(body.company_type || null);
+    }
+    if ('status' in body) {
+      setClauses.push('status = ?');
+      args.push(body.status ?? '');
+    }
+    if ('wse' in body) {
+      const wseRaw = body.wse;
+      const parsedWse = wseRaw === '' || wseRaw == null ? null : Number(wseRaw);
+      if (parsedWse != null && (!Number.isFinite(parsedWse) || parsedWse < 0)) {
+        return NextResponse.json({ error: 'wse must be a non-negative number' }, { status: 400 });
+      }
+      setClauses.push('wse = ?');
+      args.push(parsedWse != null ? Math.round(parsedWse) : null);
+    }
+
+    if (setClauses.length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
+    args.push(params.id);
+    await db.execute({
+      sql: `UPDATE companies SET ${setClauses.join(', ')}, updated_at = datetime('now') WHERE id = ?`,
+      args,
+    });
+
+    if ('status' in body) {
+      await db.execute({
+        sql: 'UPDATE attendees SET status = ? WHERE company_id = ?',
+        args: [body.status ?? '', params.id],
+      });
+    }
 
     const result = await db.execute({ sql: 'SELECT * FROM companies WHERE id = ?', args: [params.id] });
     return NextResponse.json(result.rows[0]);
   } catch (error) {
     console.error('PATCH /api/companies/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to update company status' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update company' }, { status: 500 });
   }
 }
 
