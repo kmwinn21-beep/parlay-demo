@@ -51,7 +51,7 @@ export default function SignupPage() {
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h1 className="text-2xl font-bold text-procare-dark-blue font-serif mb-1">Create account</h1>
-          <p className="text-sm text-gray-500 mb-6">Join Conference Hub with your Procare email</p>
+          <p className="text-sm text-gray-500 mb-6">Join {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'} with your email</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

@@ -5,10 +5,26 @@ import { ToastProvider } from '@/components/Toast';
 import { db, dbReady } from '@/lib/db';
 import { BRAND_COLOR_DEFAULTS, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
 
-export const metadata: Metadata = {
-  title: 'Senior Housing Conference Hub | Procare HR',
-  description: 'Track and manage conference attendees for senior housing industry events.',
-};
+const DEFAULT_APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
+
+async function getAppName(): Promise<string> {
+  try {
+    await dbReady;
+    const row = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'app_name'", args: [] });
+    const name = row.rows[0] ? String(row.rows[0].value).trim() : '';
+    return name || DEFAULT_APP_NAME;
+  } catch {
+    return DEFAULT_APP_NAME;
+  }
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const appName = await getAppName();
+  return {
+    title: appName,
+    description: `Track and manage conference attendees — ${appName}.`,
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',

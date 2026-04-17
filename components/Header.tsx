@@ -11,6 +11,7 @@ import { NewRelationshipModal } from './NewRelationshipModal';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { useUser } from './UserContext';
+import { useAppName } from '@/lib/useAppName';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',
@@ -29,7 +30,7 @@ function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/conferences/') && pathname.split('/').length === 3) return 'Conference Details';
   if (pathname.startsWith('/attendees/')) return 'Attendee Details';
   if (pathname.startsWith('/companies/')) return 'Company Details';
-  return 'Senior Housing Conference Hub';
+  return process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 }
 
 interface ConferenceOption {
@@ -76,6 +77,7 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
+  const appName = useAppName();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -138,7 +140,7 @@ export function Header() {
     <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
       <div>
         <h1 className="text-xl font-semibold text-procare-dark-blue font-serif">{title}</h1>
-        <p className="text-xs text-gray-500 hidden sm:block">Senior Housing Conference Hub</p>
+        <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
       </div>
       <div className="flex items-center gap-2">
         {/* Notification Bell */}

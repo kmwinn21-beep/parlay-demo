@@ -50,7 +50,7 @@ function LoginForm() {
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h1 className="text-2xl font-bold text-procare-dark-blue font-serif mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-500 mb-6">Sign in to Conference Hub</p>
+          <p className="text-sm text-gray-500 mb-6">Sign in to {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'}</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

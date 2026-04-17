@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
+
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ??
   (process.env.NODE_ENV === 'production'
@@ -32,7 +34,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<{ d
     return { devLink };
   }
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? '"Conference Hub" <noreply@procarehr.com>',
+    from: process.env.SMTP_FROM ?? `"${APP_NAME}" <noreply@procarehr.com>`,
     to,
     subject,
     html,
@@ -54,9 +56,9 @@ export async function sendVerificationEmail(
   const link = `${BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`;
   return sendEmail(
     email,
-    'Verify your Conference Hub account',
+    `Verify your ${APP_NAME} account`,
     `<div style="${baseStyle}">
-      <h2 style="color:#0B3C62">Welcome to Senior Housing Conference Hub</h2>
+      <h2 style="color:#0B3C62">Welcome to ${APP_NAME}</h2>
       <p>Thanks for signing up! Click the button below to verify your email and activate your account.</p>
       <p style="margin:24px 0"><a href="${link}" style="${btnStyle}">Verify Email Address</a></p>
       <p style="${footerStyle}">Or copy this link into your browser:<br>${link}</p>
@@ -72,10 +74,10 @@ export async function sendPasswordResetEmail(
   const link = `${BASE_URL}/auth/reset-password?token=${encodeURIComponent(token)}`;
   return sendEmail(
     email,
-    'Reset your Conference Hub password',
+    `Reset your ${APP_NAME} password`,
     `<div style="${baseStyle}">
       <h2 style="color:#0B3C62">Password Reset Request</h2>
-      <p>We received a request to reset the password for your Conference Hub account.</p>
+      <p>We received a request to reset the password for your ${APP_NAME} account.</p>
       <p style="margin:24px 0"><a href="${link}" style="${btnStyle}">Reset Password</a></p>
       <p style="${footerStyle}">Or copy this link into your browser:<br>${link}</p>
       <p style="${footerStyle}">This link expires in 1 hour. If you didn't request a password reset, no action is required — your password remains unchanged.</p>

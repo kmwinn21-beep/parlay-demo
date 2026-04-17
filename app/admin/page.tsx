@@ -9,6 +9,7 @@ import { invalidateConfigOptions } from '@/lib/useConfigOptions';
 import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig } from '@/lib/useTableColumnConfig';
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
+import { invalidateAppName } from '@/lib/useAppName';
 
 interface ConfigOption {
   id: number;
@@ -239,6 +240,9 @@ export default function AdminPage() {
   const [brandDraft, setBrandDraft] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
   const [loadingBrand, setLoadingBrand] = useState(false);
   const [savingBrand, setSavingBrand] = useState(false);
+  const [savedAppName, setSavedAppName] = useState('');
+  const [appNameInput, setAppNameInput] = useState('');
+  const [savingAppName, setSavingAppName] = useState(false);
 
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
@@ -401,12 +405,15 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/settings');
       if (!res.ok) throw new Error();
       const data = await res.json() as Record<string, string>;
-      const colors = { ...BRAND_COLOR_DEFAULTS };
+      const colors: Record<BrandColorKey, string> = { ...BRAND_COLOR_DEFAULTS };
       for (const key of Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]) {
         if (data[key]) colors[key] = data[key];
       }
       setBrandColors(colors);
       setBrandDraft(colors);
+      const name = data['app_name'] ?? '';
+      setSavedAppName(name);
+      setAppNameInput(name);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
   };
@@ -460,6 +467,23 @@ export default function AdminPage() {
       toast.success('Brand colors reset to defaults.');
     } catch { toast.error('Failed to reset brand colors.'); }
     finally { setSavingBrand(false); }
+  };
+
+  const handleSaveAppName = async () => {
+    const trimmed = appNameInput.trim();
+    setSavingAppName(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'app_name', value: trimmed }),
+      });
+      if (!res.ok) throw new Error();
+      setSavedAppName(trimmed);
+      invalidateAppName();
+      toast.success(trimmed ? 'App name saved.' : 'App name reset to default.');
+    } catch { toast.error('Failed to save app name.'); }
+    finally { setSavingAppName(false); }
   };
 
   // ── Permissions tab ──────────────────────────────────────────────────────────
@@ -716,6 +740,29 @@ export default function AdminPage() {
                     <div key={key} className="w-5 h-5 rounded-full border border-white shadow-sm ring-1 ring-gray-200" style={{ backgroundColor: brandDraft[key] }} title={BRAND_COLOR_META[key].label} />
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* App Name */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">App Name</h2>
+              <p className="text-sm text-gray-500 mb-4">Set the application name shown in the browser tab, header, and emails. Leave blank to use the <code className="bg-gray-100 px-1 rounded text-xs">NEXT_PUBLIC_APP_NAME</code> environment variable, or &quot;Conference Hub&quot; if unset.</p>
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                <input
+                  type="text"
+                  value={appNameInput}
+                  onChange={e => setAppNameInput(e.target.value)}
+                  placeholder={process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'}
+                  className="input-field text-sm flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveAppName}
+                  disabled={savingAppName || appNameInput.trim() === savedAppName}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingAppName ? 'Saving…' : 'Save'}
+                </button>
               </div>
             </div>
 
