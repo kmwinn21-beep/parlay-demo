@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -75,7 +75,6 @@ loadConferences();
 
 export function Header() {
   const pathname = usePathname();
-  const router = useRouter();
   const { user } = useUser();
   const appName = useAppName();
   const title = getPageTitle(pathname);
@@ -274,10 +273,10 @@ export function Header() {
                     return sorted.map(conf => {
                       const isActive = conf.start_date <= today && conf.end_date >= today;
                       return (
-                        <button
+                        <Link
                           key={conf.id}
-                          type="button"
-                          onClick={() => { setShowConferences(false); router.push(`/conferences/${conf.id}`); }}
+                          href={`/conferences/${conf.id}`}
+                          onClick={() => setShowConferences(false)}
                           className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0"
                         >
                           <span className="flex items-center gap-2 min-w-0">
@@ -285,7 +284,7 @@ export function Header() {
                             <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
                           </span>
                           <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
-                        </button>
+                        </Link>
                       );
                     });
                   })()

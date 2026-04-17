@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface Notification {
@@ -70,7 +69,6 @@ function entityUrl(entityType: string, entityId: number): string {
 }
 
 export function NotificationBell() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -152,11 +150,6 @@ export function NotificationBell() {
     } catch { /* non-fatal */ }
   }, []);
 
-  const handleRowClick = useCallback(async (n: Notification) => {
-    setOpen(false);
-    await markRead(n.id);
-    router.push(entityUrl(n.entity_type, n.entity_id));
-  }, [markRead, router]);
 
   return (
     <div className="relative" ref={panelRef}>
@@ -220,10 +213,10 @@ export function NotificationBell() {
               notifications.map(n => (
                 <div key={n.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group">
                   {/* Clickable main content */}
-                  <button
-                    type="button"
+                  <Link
+                    href={entityUrl(n.entity_type, n.entity_id)}
+                    onClick={() => { setOpen(false); markRead(n.id); }}
                     className="flex items-start gap-3 flex-1 min-w-0 text-left"
-                    onClick={() => handleRowClick(n)}
                   >
                     <TypePill type={n.type} />
                     <div className="flex-1 min-w-0">
@@ -236,7 +229,7 @@ export function NotificationBell() {
                         <span className="text-[10px] text-gray-400">{formatRelativeTime(n.created_at)}</span>
                       </div>
                     </div>
-                  </button>
+                  </Link>
                   {/* Mark-read button */}
                   <button
                     type="button"

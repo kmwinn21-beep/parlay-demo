@@ -125,8 +125,8 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  const handleRowClick = useCallback(async (n: Notification) => {
-    if (!n.is_read) await markRead(n.id);
+  const handleRowClick = useCallback((n: Notification) => {
+    if (!n.is_read) markRead(n.id);
     router.push(entityUrl(n.entity_type, n.entity_id));
   }, [markRead, router]);
 
