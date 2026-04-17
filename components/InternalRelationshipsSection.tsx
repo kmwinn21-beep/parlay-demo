@@ -571,8 +571,8 @@ export function InternalRelationshipModal({
     if (!isOpen) return;
     setIsLoading(true);
     Promise.all([
-      fetch('/api/config?category=user').then(r => r.json()),
-      fetch('/api/config?category=rep_relationship_type').then(r => r.json()),
+      fetch('/api/config?category=user&form=relationships_page').then(r => r.json()),
+      fetch('/api/config?category=rep_relationship_type&form=relationships_page').then(r => r.json()),
       ...(entityType === 'company'
         ? entityIds.map(id => fetch(`/api/companies/${id}`).then(r => r.json()))
         : entityIds.map(id => fetch(`/api/attendees/${id}`).then(r => r.json()))

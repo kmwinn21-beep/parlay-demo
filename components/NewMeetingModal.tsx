@@ -79,7 +79,7 @@ export function NewMeetingModal({
     if (user?.configId) {
       setSelectedRepIds([user.configId]);
     }
-    fetch('/api/config?category=user')
+    fetch('/api/config?category=user&form=conference_detail')
       .then(r => r.json())
       .then((data: { id: number; value: string }[]) =>
         setUserOptions(data.map(d => ({ id: Number(d.id), value: String(d.value) })))

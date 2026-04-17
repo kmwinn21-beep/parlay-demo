@@ -206,11 +206,11 @@ export default function AttendeeDetailPage() {
       const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes, relTypeRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
-        fetch('/api/config?category=status'),
-        fetch('/api/config?category=action'),
-        fetch('/api/config?category=seniority'),
-        fetch('/api/config?category=user'),
-        fetch('/api/config?category=rep_relationship_type'),
+        fetch('/api/config?category=status&form=attendee_detail'),
+        fetch('/api/config?category=action&form=attendee_detail'),
+        fetch('/api/config?category=seniority&form=attendee_detail'),
+        fetch('/api/config?category=user&form=attendee_detail'),
+        fetch('/api/config?category=rep_relationship_type&form=attendee_detail'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
       const [atData, coData, statusData, actionData, seniorityData, userData, relTypeData] = await Promise.all([

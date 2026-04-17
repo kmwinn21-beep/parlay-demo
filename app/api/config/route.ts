@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const cacheControl = includeVisibility
+    const cacheControl = (includeVisibility || form)
       ? 'no-store'
       : 'private, max-age=300, stale-while-revalidate=600';
     return NextResponse.json(enriched, { headers: { 'Cache-Control': cacheControl } });

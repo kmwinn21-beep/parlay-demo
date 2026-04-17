@@ -31,7 +31,7 @@ export function useConfigOptions(formKey?: string): Record<string, string[]> {
     }
 
     const url = formKey ? `/api/config?form=${encodeURIComponent(formKey)}` : '/api/config';
-    fetch(url)
+    fetch(url, formKey ? { cache: 'no-store' } : undefined)
       .then(r => r.json())
       .then((rows: ConfigOption[]) => {
         const byCategory: Record<string, ConfigOption[]> = {};

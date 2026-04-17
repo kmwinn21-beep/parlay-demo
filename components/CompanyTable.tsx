@@ -204,7 +204,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [editingRepCompanyId, setEditingRepCompanyId] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [showRepModal, setShowRepModal] = useState(false);
-  const [editingCell, setEditingCell] = useState<{ companyId: number; field: 'name' | 'company_type' | 'status' | 'wse' } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ companyId: number; field: 'company_type' | 'status' | 'wse' } | null>(null);
   const [cellDraft, setCellDraft] = useState<string>('');
   const [isSavingCell, setIsSavingCell] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
@@ -374,18 +374,17 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     }
   };
 
-  const startInlineEdit = (company: Company, field: 'name' | 'company_type' | 'status' | 'wse') => {
+  const startInlineEdit = (company: Company, field: 'company_type' | 'status' | 'wse') => {
     setEditingCell({ companyId: company.id, field });
     if (field === 'wse') {
       setCellDraft(company.wse != null ? String(company.wse) : '');
       return;
     }
-    if (field === 'name') setCellDraft(company.name || '');
-    else if (field === 'company_type') setCellDraft(company.company_type || '');
+    if (field === 'company_type') setCellDraft(company.company_type || '');
     else if (field === 'status') setCellDraft(company.status || '');
   };
 
-  const saveInlineEdit = async (company: Company, field: 'name' | 'company_type' | 'status' | 'wse') => {
+  const saveInlineEdit = async (company: Company, field: 'company_type' | 'status' | 'wse') => {
     if (isSavingCell) return;
     const payload: Record<string, string | number | null> = {};
     if (field === 'wse') {
@@ -397,10 +396,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     } else {
       const nextValue = cellDraft.trim();
       const currentValue =
-        field === 'name' ? (company.name || '')
-        : field === 'company_type' ? (company.company_type || '')
+        field === 'company_type' ? (company.company_type || '')
         : (company.status || '');
-      if (field === 'name' && !nextValue) { toast.error('Name is required.'); return; }
       if (nextValue === currentValue) { setEditingCell(null); return; }
       payload[field] = nextValue || null;
     }
@@ -416,7 +413,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         if (c.id !== company.id) return c;
         const updated: Company = { ...c };
         if (field === 'wse') updated.wse = payload.wse == null ? undefined : Number(payload.wse);
-        else if (field === 'name') updated.name = String(payload[field] ?? '');
         else if (field === 'company_type') updated.company_type = payload[field] == null ? undefined : String(payload[field]);
         else if (field === 'status') updated.status = payload[field] == null ? undefined : String(payload[field]);
         return updated;
@@ -885,26 +881,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
                   {isVisible('name') && <td className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
-                    {editingCell?.companyId === company.id && editingCell.field === 'name' ? (
-                      <input
-                        className="input-field text-xs py-1 w-full"
-                        value={cellDraft}
-                        onChange={(e) => setCellDraft(e.target.value)}
-                        onBlur={() => saveInlineEdit(company, 'name')}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveInlineEdit(company, 'name');
-                          if (e.key === 'Escape') setEditingCell(null);
-                        }}
-                        autoFocus
-                      />
-                    ) : (
-                      <div onClick={() => startInlineEdit(company, 'name')} className="text-left group cursor-pointer">
-                        <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
-                          {company.name}
-                        </Link>
-                        <span className="block text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">Click to edit</span>
-                      </div>
-                    )}
+                    <div className="text-left">
+                      <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
+                        {company.name}
+                      </Link>
+                    </div>
                     {company.parent_company_name && (
                       <p className="text-[10px] text-gray-400 mt-0.5">
                         <Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">
@@ -913,9 +894,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </p>
                     )}
                   </td>}
-                  {isVisible('type') && <td className="px-3 py-3">
+                  {isVisible('type') && <td className="px-3 py-3 overflow-visible relative">
                     {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                      <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
+                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
                         <option value="">—</option>
                         {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -968,9 +949,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </button>
                     )}
                   </td>}
-                  {isVisible('status') && <td className="px-3 py-3">
+                  {isVisible('status') && <td className="px-3 py-3 overflow-visible relative">
                     {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                      <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
+                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
                         <option value="">—</option>
                         {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -982,10 +963,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   </td>}
                   {isVisible('attendees') && <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>}
                   {isVisible('conferences') && <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>}
-                  {isVisible('wse') && <td className="px-3 py-3">
+                  {isVisible('wse') && <td className="px-3 py-3 overflow-visible relative">
                     {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
                       <input
-                        className="input-field text-xs py-1 w-24"
+                        className="input-field bg-white text-sm py-2 min-w-[180px] w-auto relative z-30 shadow-md"
                         value={cellDraft}
                         onChange={(e) => setCellDraft(e.target.value)}
                         onBlur={() => saveInlineEdit(company, 'wse')}

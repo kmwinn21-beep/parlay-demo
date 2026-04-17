@@ -276,9 +276,8 @@ export default function ConferenceDetailPage() {
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
-  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
   const [cellDraft, setCellDraft] = useState('');
-  const [nameDraft, setNameDraft] = useState({ first_name: '', last_name: '' });
   const [isSavingCell, setIsSavingCell] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -349,12 +348,12 @@ export default function ConferenceDetailPage() {
         fetch(`/api/follow-ups?conference_id=${id}`),
         fetch(`/api/notes?entity_type=conference&entity_id=${id}`),
         fetch(`/api/meetings?conference_id=${id}`),
-        fetch('/api/config?category=action'),
-        fetch('/api/config?category=user'),
+        fetch('/api/config?category=action&form=conference_detail'),
+        fetch('/api/config?category=user&form=conference_detail'),
         fetch(`/api/social-events?conference_id=${id}`),
-        fetch('/api/config?category=event_type'),
-        fetch('/api/config?category=company_type'),
-        fetch('/api/config?category=seniority'),
+        fetch('/api/config?category=event_type&form=conference_detail'),
+        fetch('/api/config?category=company_type&form=conference_detail'),
+        fetch('/api/config?category=seniority&form=conference_detail'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -516,12 +515,8 @@ export default function ConferenceDetailPage() {
     });
   };
 
-  const startInlineEdit = (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+  const startInlineEdit = (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
     setEditingCell({ attendeeId: attendee.id, field });
-    if (field === 'name') {
-      setNameDraft({ first_name: attendee.first_name || '', last_name: attendee.last_name || '' });
-      return;
-    }
     if (field === 'company_wse') {
       setCellDraft(attendee.company_wse != null ? String(attendee.company_wse) : '');
       return;
@@ -532,17 +527,10 @@ export default function ConferenceDetailPage() {
     else if (field === 'seniority') setCellDraft(attendee.seniority || '');
   };
 
-  const saveInlineEdit = async (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+  const saveInlineEdit = async (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
     if (!conference || isSavingCell) return;
     const payload: Record<string, string | number | null> = {};
-    if (field === 'name') {
-      const first = nameDraft.first_name.trim();
-      const last = nameDraft.last_name.trim();
-      if (!first || !last) { toast.error('First and last name are required.'); return; }
-      if (first === attendee.first_name && last === attendee.last_name) { setEditingCell(null); return; }
-      payload.first_name = first;
-      payload.last_name = last;
-    } else if (field === 'company_wse') {
+    if (field === 'company_wse') {
       const trimmed = cellDraft.trim();
       const parsed = trimmed === '' ? null : Number(trimmed);
       if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
@@ -571,10 +559,7 @@ export default function ConferenceDetailPage() {
         attendees: prev.attendees.map(a => {
           if (a.id !== attendee.id) return a;
           const updated: Attendee = { ...a };
-          if (field === 'name') {
-            updated.first_name = String(payload.first_name);
-            updated.last_name = String(payload.last_name);
-          } else if (field === 'company_wse') {
+          if (field === 'company_wse') {
             updated.company_wse = payload.company_wse == null ? undefined : Number(payload.company_wse);
           } else {
             if (field === 'title') updated.title = payload[field] == null ? undefined : String(payload[field]);
@@ -1416,36 +1401,19 @@ export default function ConferenceDetailPage() {
                         />
                       </td>
                       {isConfAttendeeColVisible('name') && (
-                        <td className="px-4 py-3 font-medium overflow-hidden">
-                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'name' ? (
-                            <div className="flex flex-col gap-1">
-                              <input className="input-field text-xs py-1" value={nameDraft.first_name} onChange={(e) => setNameDraft(p => ({ ...p, first_name: e.target.value }))} placeholder="First" autoFocus />
-                              <input
-                                className="input-field text-xs py-1"
-                                value={nameDraft.last_name}
-                                onChange={(e) => setNameDraft(p => ({ ...p, last_name: e.target.value }))}
-                                placeholder="Last"
-                                onBlur={() => saveInlineEdit(attendee, 'name')}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveInlineEdit(attendee, 'name');
-                                  if (e.key === 'Escape') setEditingCell(null);
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="text-left cursor-pointer" onClick={() => startInlineEdit(attendee, 'name')}>
-                              <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
-                                {attendee.first_name} {attendee.last_name}
-                              </Link>
-                            </div>
-                          )}
+                        <td className="px-4 py-3 font-medium overflow-visible">
+                          <div className="text-left">
+                            <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                              {attendee.first_name} {attendee.last_name}
+                            </Link>
+                          </div>
                         </td>
                       )}
                       {isConfAttendeeColVisible('title') && (
-                        <td className="px-4 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
+                        <td className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
                           {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
                             <input
-                              className="input-field text-xs py-1 w-full"
+                              className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
                               value={cellDraft}
                               onChange={(e) => setCellDraft(e.target.value)}
                               onBlur={() => saveInlineEdit(attendee, 'title')}
@@ -1463,7 +1431,7 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('company') && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {attendee.company_name ? (
                             <div>
                               {attendee.company_id ? (
@@ -1474,7 +1442,7 @@ export default function ConferenceDetailPage() {
                               {attendee.company_wse != null && (
                                 editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
                                   <input
-                                    className="input-field text-xs py-1 w-24 mt-1"
+                                    className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
                                     value={cellDraft}
                                     onChange={(e) => setCellDraft(e.target.value)}
                                     onBlur={() => saveInlineEdit(attendee, 'company_wse')}
@@ -1497,9 +1465,9 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('type') && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
-                            <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
+                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
                               <option value="">—</option>
                               {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
@@ -1515,9 +1483,9 @@ export default function ConferenceDetailPage() {
                         </td>
                       )}
                       {isConfAttendeeColVisible('seniority') && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 overflow-visible relative">
                           {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                            <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
                               <option value="">Auto-detect</option>
                               {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
