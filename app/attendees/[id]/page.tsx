@@ -19,6 +19,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
 import { useUserOptions, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -68,6 +69,7 @@ export default function AttendeeDetailPage() {
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
+  const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('attendee');
 
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -797,159 +799,161 @@ export default function AttendeeDetailPage() {
 
         {/* Right column (1/3 width) */}
         <div className="space-y-6">
-          {/* Status */}
-          <div className="card">
-            <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Status</h2>
-            <div className="flex flex-wrap gap-2">
-              {statusOptions.map(val => (
-                <button key={val} onClick={() => handleStatus(val)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatuses.has(val) ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
-                  {val}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Conferences — collapsible */}
-          <div className="card">
-            {(() => {
-              const today = new Date().toISOString().slice(0, 10);
-              const inProgressConfs = attendee.conferences.filter(conf => conf.start_date <= today && conf.end_date >= today);
-              return (
-                <>
-                  <button
-                    onClick={() => setConferencesExpanded(prev => !prev)}
-                    className="flex items-center justify-between w-full text-left"
-                  >
-                    <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Conferences ({attendee.conferences.length})</h2>
-                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </button>
-                  {!conferencesExpanded && inProgressConfs.length > 0 && (
-                    <div className="space-y-2 mt-4">
-                      {inProgressConfs.map(conf => (
-                        <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
-                          <div className="min-w-0">
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                              <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
-                              In Progress
-                            </span>
-                            <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                            <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                  {conferencesExpanded && (
-                    <>
-                      {attendee.conferences.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4 mt-4">Not associated with any conferences.</p>
-                      ) : (
-                        <div className="space-y-2 mt-4">
-                          {attendee.conferences.map(conf => {
-                            const isActive = conf.start_date <= today && conf.end_date >= today;
-                            return (
-                              <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+          {(() => {
+            const sectionMap: Record<string, React.ReactNode> = {
+              status: (
+                <div key="status" className="card">
+                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">{getSectionLabel('status')}</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {statusOptions.map(val => (
+                      <button key={val} onClick={() => handleStatus(val)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatuses.has(val) ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ),
+              conferences: (
+                <div key="conferences" className="card">
+                  {(() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const inProgressConfs = attendee.conferences.filter(conf => conf.start_date <= today && conf.end_date >= today);
+                    return (
+                      <>
+                        <button
+                          onClick={() => setConferencesExpanded(prev => !prev)}
+                          className="flex items-center justify-between w-full text-left"
+                        >
+                          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">{getSectionLabel('conferences')} ({attendee.conferences.length})</h2>
+                          <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        {!conferencesExpanded && inProgressConfs.length > 0 && (
+                          <div className="space-y-2 mt-4">
+                            {inProgressConfs.map(conf => (
+                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
                                 <div className="min-w-0">
-                                  {isActive && (
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                                      <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
-                                      In Progress
-                                    </span>
-                                  )}
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                                    <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                    In Progress
+                                  </span>
                                   <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
                                   <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
                                 </div>
                                 <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                               </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-
-          {/* Internal Relationships */}
-          {attendee.company_id && (
-            <InternalRelationshipsSection
-              companyId={attendee.company_id}
-              attendeeId={attendee.id}
-              userOptions={userOptions}
-              relTypeOptions={relTypeOptions}
-              relationships={internalRelationships}
-              onRefresh={fetchInternalRelationships}
-            />
-          )}
-
-          {/* Events / Social */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <button
-                type="button"
-                onClick={() => setEventsExpanded(v => !v)}
-                className="flex items-center gap-2 text-left flex-1"
-              >
-                <h2 className="text-base font-semibold text-procare-dark-blue font-serif">Events / Social</h2>
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${eventsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowInviteModal(true)}
-                className="flex items-center gap-1 text-xs font-medium text-procare-bright-blue hover:text-procare-dark-blue transition-colors flex-shrink-0"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                Invite
-              </button>
-            </div>
-            {eventsExpanded && (
-              <div className="space-y-2">
-                {attendeeEvents.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-3">No events yet.</p>
-                ) : (
-                  attendeeEvents.map(ev => {
-                    const statuses = localEventRsvps[ev.event_id] ?? parseRsvpStatuses(ev.rsvp_status);
-                    const has = (s: RsvpStatus) => statuses.includes(s);
-                    return (
-                      <div key={ev.event_id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                        <div className="px-3 pt-3 pb-2">
-                          <p className="text-sm font-semibold text-gray-900 leading-tight">{ev.event_name || ev.event_type || 'Social Event'}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{ev.conference_name}</p>
-                        </div>
-                        <div className="flex gap-1 px-3 pb-3">
-                          {(['yes', 'attended', 'no', 'maybe'] as RsvpStatus[]).map(s => (
-                            <button
-                              key={s}
-                              type="button"
-                              onClick={() => handleToggleEventRsvp(ev.event_id, s)}
-                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
-                                has(s)
-                                  ? s === 'yes' ? 'bg-green-100 text-green-700' : s === 'attended' ? 'bg-purple-100 text-purple-700' : s === 'no' ? 'bg-red-50 text-red-600' : 'bg-gray-200 text-gray-700'
-                                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-                              }`}
-                            >
-                              {s === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                              {s === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
-                              {s === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
-                              {s === 'maybe' && <span className="font-bold leading-none">?</span>}
-                              {s.charAt(0).toUpperCase() + s.slice(1)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                            ))}
+                          </div>
+                        )}
+                        {conferencesExpanded && (
+                          <>
+                            {attendee.conferences.length === 0 ? (
+                              <p className="text-sm text-gray-400 text-center py-4 mt-4">Not associated with any conferences.</p>
+                            ) : (
+                              <div className="space-y-2 mt-4">
+                                {attendee.conferences.map(conf => {
+                                  const isActive = conf.start_date <= today && conf.end_date >= today;
+                                  return (
+                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+                                      <div className="min-w-0">
+                                        {isActive && (
+                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                                            <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                            In Progress
+                                          </span>
+                                        )}
+                                        <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                                        <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
                     );
-                  })
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Conference selector — admin only */}
-          {isAdminUser && <div className="card">
-            <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Conference Activity</h2>
+                  })()}
+                </div>
+              ),
+              relationships: attendee.company_id ? (
+                <InternalRelationshipsSection
+                  key="relationships"
+                  companyId={attendee.company_id}
+                  attendeeId={attendee.id}
+                  userOptions={userOptions}
+                  relTypeOptions={relTypeOptions}
+                  relationships={internalRelationships}
+                  onRefresh={fetchInternalRelationships}
+                />
+              ) : null,
+              events: (
+                <div key="events" className="card">
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setEventsExpanded(v => !v)}
+                      className="flex items-center gap-2 text-left flex-1"
+                    >
+                      <h2 className="text-base font-semibold text-procare-dark-blue font-serif">{getSectionLabel('events')}</h2>
+                      <svg className={`w-4 h-4 text-gray-400 transition-transform ${eventsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowInviteModal(true)}
+                      className="flex items-center gap-1 text-xs font-medium text-procare-bright-blue hover:text-procare-dark-blue transition-colors flex-shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                      Invite
+                    </button>
+                  </div>
+                  {eventsExpanded && (
+                    <div className="space-y-2">
+                      {attendeeEvents.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-3">No events yet.</p>
+                      ) : (
+                        attendeeEvents.map(ev => {
+                          const statuses = localEventRsvps[ev.event_id] ?? parseRsvpStatuses(ev.rsvp_status);
+                          const has = (s: RsvpStatus) => statuses.includes(s);
+                          return (
+                            <div key={ev.event_id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                              <div className="px-3 pt-3 pb-2">
+                                <p className="text-sm font-semibold text-gray-900 leading-tight">{ev.event_name || ev.event_type || 'Social Event'}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">{ev.conference_name}</p>
+                              </div>
+                              <div className="flex gap-1 px-3 pb-3">
+                                {(['yes', 'attended', 'no', 'maybe'] as RsvpStatus[]).map(s => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => handleToggleEventRsvp(ev.event_id, s)}
+                                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                                      has(s)
+                                        ? s === 'yes' ? 'bg-green-100 text-green-700' : s === 'attended' ? 'bg-purple-100 text-purple-700' : s === 'no' ? 'bg-red-50 text-red-600' : 'bg-gray-200 text-gray-700'
+                                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                                    }`}
+                                  >
+                                    {s === 'yes' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                    {s === 'attended' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>}
+                                    {s === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
+                                    {s === 'maybe' && <span className="font-bold leading-none">?</span>}
+                                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              ),
+              conference_activity: isAdminUser ? (
+                <div key="conference_activity" className="card">
+                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">{getSectionLabel('conference_activity')}</h2>
             <div className="mb-4">
               <label className="label text-xs">Select a conference to log activity</label>
               <select
@@ -1063,7 +1067,11 @@ export default function AttendeeDetailPage() {
 
               </div>
             )}
-          </div>}
+                </div>
+              ) : null,
+            };
+            return sectionOrder.map(key => isSectionVisible(key) ? sectionMap[key] : null);
+          })()}
         </div>
       </div>
 

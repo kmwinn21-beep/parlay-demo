@@ -51,7 +51,7 @@ export default function SignupPage() {
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h1 className="text-2xl font-bold text-procare-dark-blue font-serif mb-1">Create account</h1>
-          <p className="text-sm text-gray-500 mb-6">Join Conference Hub with your Procare email</p>
+          <p className="text-sm text-gray-500 mb-6">Join {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'} with your email</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -62,12 +62,14 @@ export default function SignupPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@procarehr.com"
+                placeholder={`you@${process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? 'yourcompany.com'}`}
                 required
                 autoComplete="email"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-transparent"
               />
-              <p className="text-xs text-gray-400 mt-1">Must be a @procarehr.com address</p>
+              {process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN && (
+                <p className="text-xs text-gray-400 mt-1">Must be a @{process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN} address</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">

@@ -5,10 +5,11 @@
  *   npx tsx scripts/create-admin.ts <email> <password>
  *
  * Example:
- *   npx tsx scripts/create-admin.ts admin@procarehr.com MySecurePass123
+ *   npx tsx scripts/create-admin.ts admin@yourcompany.com MySecurePass123
  *
  * Requires TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in environment
  * (set them in .env.local or pass inline).
+ * Optionally set ALLOWED_EMAIL_DOMAIN to enforce a domain restriction.
  */
 
 import { createClient } from '@libsql/client';
@@ -22,9 +23,13 @@ async function main() {
     process.exit(1);
   }
 
-  if (!email.endsWith('@procarehr.com')) {
-    console.error('Error: email must be a @procarehr.com address.');
-    process.exit(1);
+  const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN ?? null;
+  if (allowedDomain) {
+    const suffix = allowedDomain.startsWith('@') ? allowedDomain : `@${allowedDomain}`;
+    if (!email.endsWith(suffix)) {
+      console.error(`Error: email must be a ${suffix} address (ALLOWED_EMAIL_DOMAIN=${allowedDomain}).`);
+      process.exit(1);
+    }
   }
 
   if (password.length < 8) {

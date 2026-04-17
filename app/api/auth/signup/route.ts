@@ -8,11 +8,6 @@ export async function POST(request: NextRequest) {
   try {
     const { email: rawEmail, password, name } = await request.json();
 
-    // Validate inputs
-    const emailCheck = validateEmail(rawEmail ?? '');
-    if (!emailCheck.valid) {
-      return NextResponse.json({ error: emailCheck.error }, { status: 400 });
-    }
     const passwordCheck = validatePassword(password ?? '');
     if (!passwordCheck.valid) {
       return NextResponse.json({ error: passwordCheck.error }, { status: 400 });
@@ -21,6 +16,18 @@ export async function POST(request: NextRequest) {
     const email = rawEmail.trim().toLowerCase();
 
     await dbReady;
+
+    // Read allowed domain from DB (admin-configurable), fall back to env var
+    let allowedDomain: string | null = process.env.ALLOWED_EMAIL_DOMAIN ?? null;
+    try {
+      const settingRow = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'allowed_email_domain'", args: [] });
+      if (settingRow.rows[0]) allowedDomain = String(settingRow.rows[0].value) || null;
+    } catch { /* ignore — use env var fallback */ }
+
+    const emailCheck = validateEmail(rawEmail ?? '', allowedDomain);
+    if (!emailCheck.valid) {
+      return NextResponse.json({ error: emailCheck.error }, { status: 400 });
+    }
 
     // Check for existing account
     const existing = await db.execute({

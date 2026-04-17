@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useUser } from './UserContext';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
+import { useAppName } from '@/lib/useAppName';
 
 const navItems = [
   {
@@ -77,6 +78,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const unreadCount = useUnreadNotificationCount();
+  const appName = useAppName();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -184,7 +186,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2 pt-1">
           <Image src="/emblem.png" alt="Procare HR Emblem" width={24} height={24} className="object-contain opacity-60" />
           <div>
-            <p className="text-blue-300 text-xs">Conference Hub</p>
+            <p className="text-blue-300 text-xs">{appName}</p>
             <p className="text-blue-400 text-xs">v1.0</p>
           </div>
         </div>

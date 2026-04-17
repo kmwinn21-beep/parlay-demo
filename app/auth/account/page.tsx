@@ -143,7 +143,7 @@ export default function AccountPage() {
       {/* Sign out */}
       <div className="card">
         <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Session</h2>
-        <p className="text-sm text-gray-500 mb-4">Sign out of Conference Hub on this device.</p>
+        <p className="text-sm text-gray-500 mb-4">Sign out of {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'} on this device.</p>
         <button
           onClick={handleLogout}
           disabled={loggingOut}
