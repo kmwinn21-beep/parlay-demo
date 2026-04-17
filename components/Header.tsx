@@ -11,7 +11,6 @@ import { NewRelationshipModal } from './NewRelationshipModal';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { useUser } from './UserContext';
-
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',

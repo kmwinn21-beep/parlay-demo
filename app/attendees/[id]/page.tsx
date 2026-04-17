@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { parseBreadcrumbs, withTrail, type BreadcrumbItem } from '@/lib/breadcrumb';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -67,7 +66,6 @@ export default function AttendeeDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params.id as string;
-  const trail = parseBreadcrumbs(searchParams.get('trail'));
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
 
@@ -587,24 +585,8 @@ export default function AttendeeDetailPage() {
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
   const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(Boolean));
-  const attendeeTrailBase = trail.length > 0 ? trail : [{ label: 'Attendees', href: '/attendees' }];
-  const attendeeChildTrail: BreadcrumbItem[] = [...attendeeTrailBase, { label: `${attendee.first_name} ${attendee.last_name}`, href: `/attendees/${id}` }];
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <nav className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
-          {attendeeTrailBase.map((item, i) => (
-            <span key={i} className="flex items-center gap-2">
-              {i > 0 && <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
-              <Link href={item.href} className="hover:text-procare-bright-blue">{item.label}</Link>
-            </span>
-          ))}
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          <span className="text-gray-800">{attendee.first_name} {attendee.last_name}</span>
-        </nav>
-        <BackButton />
-      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column (2/3 width) — profile + follow ups */}
         <div className="lg:col-span-2 space-y-6">
@@ -670,7 +652,7 @@ export default function AttendeeDetailPage() {
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
                     {attendee.company_name ? (
                       attendee.company_id ? (
-                        <Link href={withTrail(`/companies/${attendee.company_id}`, attendeeChildTrail)} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                        <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
                       ) : (
                         <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
                       )
@@ -844,7 +826,7 @@ export default function AttendeeDetailPage() {
                   {!conferencesExpanded && inProgressConfs.length > 0 && (
                     <div className="space-y-2 mt-4">
                       {inProgressConfs.map(conf => (
-                        <Link key={conf.id} href={withTrail(`/conferences/${conf.id}`, attendeeChildTrail)} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
+                        <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
                           <div className="min-w-0">
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
                               <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
@@ -867,7 +849,7 @@ export default function AttendeeDetailPage() {
                           {attendee.conferences.map(conf => {
                             const isActive = conf.start_date <= today && conf.end_date >= today;
                             return (
-                              <Link key={conf.id} href={withTrail(`/conferences/${conf.id}`, attendeeChildTrail)} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+                              <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
                                 <div className="min-w-0">
                                   {isActive && (
                                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">

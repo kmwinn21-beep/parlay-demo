@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { parseBreadcrumbs, withTrail, type BreadcrumbItem } from '@/lib/breadcrumb';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
@@ -105,7 +104,6 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params.id as string;
-  const trail = parseBreadcrumbs(searchParams.get('trail'));
   const colorMaps = useConfigColors();
 
   const [company, setCompany] = useState<Company | null>(null);
@@ -535,27 +533,8 @@ export default function CompanyDetailPage() {
 
   if (!company) return null;
 
-  const companyTrailBase = trail.length > 0 ? trail : [{ label: 'Companies', href: '/companies' }];
-  const companyChildTrail: BreadcrumbItem[] = [...companyTrailBase, { label: company.name, href: `/companies/${id}` }];
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center justify-between">
-        <nav className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
-          {companyTrailBase.map((item, i) => (
-            <span key={i} className="flex items-center gap-2">
-              {i > 0 && <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
-              <Link href={item.href} className="hover:text-procare-bright-blue">{item.label}</Link>
-            </span>
-          ))}
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="text-gray-800">{company.name}</span>
-        </nav>
-        <BackButton />
-      </div>
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -862,7 +841,7 @@ export default function CompanyDetailPage() {
                 <div key={attendee.id} className="p-4 bg-white">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Link href={withTrail(`/attendees/${attendee.id}`, companyChildTrail)} className="font-semibold text-procare-bright-blue hover:underline text-sm">
+                      <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm">
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                       {attendee.email && (
@@ -907,7 +886,7 @@ export default function CompanyDetailPage() {
                     return (
                     <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
-                        <Link href={withTrail(`/attendees/${attendee.id}`, companyChildTrail)} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>
@@ -1137,7 +1116,7 @@ export default function CompanyDetailPage() {
                       {inProgressConfs.map(conf => (
                         <Link
                           key={conf.id}
-                          href={withTrail(`/conferences/${conf.id}`, companyChildTrail)}
+                          href={`/conferences/${conf.id}`}
                           className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all"
                         >
                           <div className="min-w-0">
@@ -1167,7 +1146,7 @@ export default function CompanyDetailPage() {
                             return (
                               <Link
                                 key={conf.id}
-                                href={withTrail(`/conferences/${conf.id}`, companyChildTrail)}
+                                href={`/conferences/${conf.id}`}
                                 className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}
                               >
                                 <div className="min-w-0">
