@@ -896,7 +896,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   </td>}
                   {isVisible('type') && <td className="px-3 py-3 overflow-visible">
                     {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                      <select className="input-field text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
+                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
                         <option value="">—</option>
                         {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -951,7 +951,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   </td>}
                   {isVisible('status') && <td className="px-3 py-3 overflow-visible">
                     {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                      <select className="input-field text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
+                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
                         <option value="">—</option>
                         {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -966,7 +966,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   {isVisible('wse') && <td className="px-3 py-3 overflow-visible">
                     {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
                       <input
-                        className="input-field text-sm py-2 min-w-[180px] w-auto"
+                        className="input-field bg-white text-sm py-2 min-w-[180px] w-auto"
                         value={cellDraft}
                         onChange={(e) => setCellDraft(e.target.value)}
                         onBlur={() => saveInlineEdit(company, 'wse')}
