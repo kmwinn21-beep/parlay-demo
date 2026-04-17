@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -65,7 +65,6 @@ function formatDate(d: string) {
 export default function AttendeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
