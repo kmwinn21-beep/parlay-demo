@@ -1,6 +1,10 @@
 import * as XLSX from 'xlsx';
 import { ParsedAttendee } from './db';
 import companyTypeLookup from './company-type-lookup.json';
+import { type ColumnMapping, type SystemFieldKey, SYSTEM_FIELD_LABELS, FIELD_ORDER } from './columnMapping';
+
+export { SYSTEM_FIELD_LABELS, FIELD_ORDER };
+export type { ColumnMapping, SystemFieldKey };
 
 export async function parseFile(
   buffer: Buffer,
@@ -15,6 +19,95 @@ export async function parseFile(
   } else {
     throw new Error(`Unsupported file type: ${ext}. Please upload Excel (.xlsx, .xls) or CSV files.`);
   }
+}
+
+/** Extract raw rows from an Excel or CSV buffer without mapping to ParsedAttendee. */
+export function extractRawRows(buffer: Buffer, filename: string): Record<string, unknown>[] {
+  const ext = filename.toLowerCase().split('.').pop();
+  let workbook;
+  if (ext === 'csv') {
+    workbook = XLSX.read(buffer.toString('utf-8'), { type: 'string' });
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    workbook = XLSX.read(buffer, { type: 'buffer' });
+  } else {
+    return [];
+  }
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: false });
+}
+
+/** Return auto-suggested column mapping based on file headers. */
+export function suggestMapping(headers: string[]): ColumnMapping {
+  return {
+    first_name:    findColumn(headers, 'first_name', 'firstname', 'first name', 'fname', 'given_name', 'given name'),
+    last_name:     findColumn(headers, 'last_name', 'lastname', 'last name', 'lname', 'surname', 'family_name', 'family name'),
+    full_name:     findColumn(headers, 'full_name', 'fullname', 'full name', 'name', 'attendee_name', 'attendee name', 'contact_name', 'contact name'),
+    title:         findColumn(headers, 'title', 'job_title', 'job title', 'position', 'role', 'designation'),
+    company:       findColumn(headers, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm'),
+    email:         findColumn(headers, 'email', 'email_address', 'email address', 'e_mail', 'e-mail'),
+    website:       findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website'),
+    company_type:  findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type'),
+    assigned_user: findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager'),
+    wse:           findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees'),
+    services:      findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting'),
+    icp:           findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp'),
+  };
+}
+
+/** Parse a file using an explicit column mapping. */
+export async function parseFileWithMapping(
+  buffer: Buffer,
+  filename: string,
+  mapping: ColumnMapping
+): Promise<ParsedAttendee[]> {
+  const rows = extractRawRows(buffer, filename);
+  return parseRowsWithMapping(rows, mapping);
+}
+
+function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMapping): ParsedAttendee[] {
+  if (rows.length === 0) return [];
+  const attendees: ParsedAttendee[] = [];
+
+  for (const row of rows) {
+    let firstName = '';
+    let lastName = '';
+
+    if (mapping.first_name || mapping.last_name) {
+      firstName = mapping.first_name ? String(row[mapping.first_name] || '').trim() : '';
+      lastName  = mapping.last_name  ? String(row[mapping.last_name]  || '').trim() : '';
+    } else if (mapping.full_name) {
+      const full = String(row[mapping.full_name] || '').trim();
+      if (full) {
+        const parts = full.split(/\s+/);
+        firstName = parts[0] || '';
+        lastName  = parts.slice(1).join(' ') || '';
+      }
+    }
+
+    if (!firstName && !lastName) continue;
+
+    const attendee: ParsedAttendee = { first_name: firstName, last_name: lastName };
+
+    if (mapping.title         && row[mapping.title])         attendee.title         = String(row[mapping.title]).trim();
+    if (mapping.company       && row[mapping.company])       attendee.company        = String(row[mapping.company]).trim();
+    if (mapping.email         && row[mapping.email])         attendee.email          = String(row[mapping.email]).trim();
+    if (mapping.website       && row[mapping.website])       attendee.website        = String(row[mapping.website]).trim();
+    if (mapping.company_type  && row[mapping.company_type])  attendee.company_type   = String(row[mapping.company_type]).trim();
+    if (mapping.assigned_user && row[mapping.assigned_user]) attendee.assigned_user  = String(row[mapping.assigned_user]).trim();
+    if (mapping.wse && row[mapping.wse]) {
+      const rawWse = String(row[mapping.wse]).trim().replace(/[^0-9]/g, '');
+      if (rawWse) attendee.wse = rawWse;
+    }
+    if (mapping.services && row[mapping.services]) {
+      const raw = String(row[mapping.services]).trim();
+      if (raw) attendee.services = parseServicesValue(raw);
+    }
+    if (mapping.icp && row[mapping.icp]) attendee.icp = String(row[mapping.icp]).trim();
+
+    attendees.push(attendee);
+  }
+
+  return attendees;
 }
 
 function normalizeHeader(header: string): string {

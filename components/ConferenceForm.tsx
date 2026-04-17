@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { ColumnMappingModal } from './ColumnMappingModal';
+import { type ColumnMapping } from '@/lib/columnMapping';
 
 interface ConferenceFormData {
   name: string;
@@ -17,8 +19,17 @@ interface ConferenceFormData {
 export function ConferenceForm() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
+  const [confirmedMapping, setConfirmedMapping] = useState<ColumnMapping | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewData, setPreviewData] = useState<{
+    headers: string[];
+    suggestions: ColumnMapping;
+    sampleRows: Record<string, string>[];
+    totalRows: number;
+  } | null>(null);
   const [selectedInternalAttendees, setSelectedInternalAttendees] = useState<string[]>([]);
   const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
   const internalDropdownRef = useRef<HTMLDivElement>(null);
@@ -41,17 +52,36 @@ export function ConferenceForm() {
     formState: { errors },
   } = useForm<ConferenceFormData>();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) {
-      const ext = f.name.toLowerCase().split('.').pop();
-      if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
-        toast.error('Please upload an Excel (.xlsx, .xls) or CSV file.');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-      setFile(f);
+    if (!f) return;
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    const ext = f.name.toLowerCase().split('.').pop();
+    if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
+      toast.error('Please upload an Excel (.xlsx, .xls) or CSV file.');
+      return;
     }
+    setIsLoadingPreview(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const res = await fetch('/api/upload-preview', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to read file');
+      setPendingFile(f);
+      setPreviewData(data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to read file');
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleMappingConfirmed = (mapping: ColumnMapping) => {
+    setConfirmedMapping(mapping);
+    setFile(pendingFile);
+    setPreviewData(null);
+    setPendingFile(null);
   };
 
   const onSubmit = async (data: ConferenceFormData) => {
@@ -67,6 +97,7 @@ export function ConferenceForm() {
 
       if (file) {
         formData.append('file', file);
+        if (confirmedMapping) formData.append('mapping', JSON.stringify(confirmedMapping));
       }
 
       const res = await fetch('/api/conferences', {
@@ -92,6 +123,18 @@ export function ConferenceForm() {
   };
 
   return (
+    <>
+    {previewData && pendingFile && (
+      <ColumnMappingModal
+        fileName={pendingFile.name}
+        totalRows={previewData.totalRows}
+        headers={previewData.headers}
+        suggestions={previewData.suggestions}
+        sampleRows={previewData.sampleRows}
+        onConfirm={handleMappingConfirmed}
+        onCancel={() => { setPreviewData(null); setPendingFile(null); }}
+      />
+    )}
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Basic Info */}
       <div className="card">
@@ -226,7 +269,7 @@ export function ConferenceForm() {
       <div className="card">
         <h2 className="text-lg font-semibold text-procare-dark-blue mb-2 font-serif">Import Attendees</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Upload an Excel (.xlsx, .xls) or CSV file with attendee data. The system will auto-detect columns for name, title, company, email, website, company type, assigned user, and WSE (worksite employee count).
+          Upload an Excel (.xlsx, .xls) or CSV file. You&apos;ll map your column names to system fields before the conference is created.
         </p>
 
         <div
@@ -234,32 +277,52 @@ export function ConferenceForm() {
             file ? 'border-procare-bright-blue bg-blue-50' : 'border-gray-300 hover:border-gray-400'
           }`}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
+          onDrop={async (e) => {
             e.preventDefault();
             const f = e.dataTransfer.files[0];
-            if (f) {
-              const ext = f.name.toLowerCase().split('.').pop();
-              if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
-                toast.error('Please upload an Excel or CSV file.');
-                return;
-              }
-              setFile(f);
+            if (!f) return;
+            const ext = f.name.toLowerCase().split('.').pop();
+            if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
+              toast.error('Please upload an Excel or CSV file.');
+              return;
+            }
+            setIsLoadingPreview(true);
+            try {
+              const fd = new FormData();
+              fd.append('file', f);
+              const res = await fetch('/api/upload-preview', { method: 'POST', body: fd });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Failed to read file');
+              setPendingFile(f);
+              setPreviewData(data);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Failed to read file');
+            } finally {
+              setIsLoadingPreview(false);
             }
           }}
         >
-          {file ? (
+          {isLoadingPreview ? (
+            <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
+              <svg className="animate-spin w-5 h-5 text-procare-bright-blue" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Reading file…
+            </div>
+          ) : file ? (
             <div className="flex items-center justify-center gap-3">
-              <svg className="w-8 h-8 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-8 h-8 text-procare-bright-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <div className="text-left">
-                <p className="text-sm font-medium text-procare-dark-blue">{file.name}</p>
-                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+              <div className="text-left min-w-0">
+                <p className="text-sm font-medium text-procare-dark-blue truncate">{file.name}</p>
+                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB &middot; columns mapped</p>
               </div>
               <button
                 type="button"
-                onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                className="ml-2 text-red-400 hover:text-red-600"
+                onClick={() => { setFile(null); setConfirmedMapping(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                className="ml-2 text-red-400 hover:text-red-600 flex-shrink-0"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -323,5 +386,6 @@ export function ConferenceForm() {
         </button>
       </div>
     </form>
+    </>
   );
 }
