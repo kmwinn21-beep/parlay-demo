@@ -164,7 +164,7 @@ function fmtDate(dateStr?: string): string {
 
 export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected }: CompanyTableProps) {
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('company_table');
   const userOptionsFull = useUserOptions();
   const searchParams = useSearchParams();
   const { isVisible } = useTableColumnConfig(tableName);

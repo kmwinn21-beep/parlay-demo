@@ -42,7 +42,7 @@ export default function CompaniesPage() {
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AddCompanyForm>({
     defaultValues: { services: [], icp: null },
   });
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('company_table');
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
   const servicesOptions = configOptions.services ?? [];

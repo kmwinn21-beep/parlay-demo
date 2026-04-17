@@ -234,7 +234,7 @@ export default function ConferenceDetailPage() {
   const router = useRouter();
   const id = params.id as string;
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('conference_detail');
   const { isVisible: isConfAttendeeColVisible } = useTableColumnConfig('conference_attendees');
   const conferenceTabConfig = useSectionConfig('conference_details');
 
