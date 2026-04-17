@@ -11,7 +11,26 @@ import { NewRelationshipModal } from './NewRelationshipModal';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { useUser } from './UserContext';
+const pageTitles: Record<string, string> = {
+  '/': 'Dashboard',
+  '/conferences': 'Conferences',
+  '/conferences/new': 'New Conference',
+  '/attendees': 'Attendees',
+  '/companies': 'Companies',
+  '/admin': 'Admin Settings',
+  '/follow-ups': 'Meetings & Follow Ups',
+  '/relationships': 'Relationships',
+  '/notifications': 'Notifications',
+  '/auth/account': 'My Account',
+};
 
+function getPageTitle(pathname: string): string {
+  if (pageTitles[pathname]) return pageTitles[pathname];
+  if (pathname.startsWith('/conferences/') && pathname.split('/').length === 3) return 'Conference Details';
+  if (pathname.startsWith('/attendees/')) return 'Attendee Details';
+  if (pathname.startsWith('/companies/')) return 'Company Details';
+  return 'Senior Housing Conference Hub';
+}
 
 interface ConferenceOption {
   id: number;
@@ -57,6 +76,7 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
+  const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
   // dropdown renders with data on the very first paint with no loading state.
@@ -115,7 +135,11 @@ export function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-end flex-shrink-0">
+    <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
+      <div>
+        <h1 className="text-xl font-semibold text-procare-dark-blue font-serif">{title}</h1>
+        <p className="text-xs text-gray-500 hidden sm:block">Senior Housing Conference Hub</p>
+      </div>
       <div className="flex items-center gap-2">
         {/* Notification Bell */}
         <NotificationBell />
