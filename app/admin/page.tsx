@@ -229,7 +229,7 @@ export default function AdminPage() {
   const [tableConfig, setTableConfig] = useState<Record<string, Record<string, boolean>>>({});
   const [loadingTables, setLoadingTables] = useState(false);
   const [savingCol, setSavingCol] = useState<string | null>(null);
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set(Object.keys(TABLE_LABELS)));
+  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
 
   // Sections tab
   type LocalSection = { key: string; label: string; sort_order: number; visible: boolean };
