@@ -116,7 +116,7 @@ export default function RelationshipsPage() {
 
   const userOptions = useUserOptions();
   const relTypeOptions = useConfigWithIds('rep_relationship_type');
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('relationships_page');
   const colorMaps = useConfigColors();
 
   useEffect(() => {

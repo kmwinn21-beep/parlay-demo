@@ -14,22 +14,24 @@ interface ConfigOption {
  * Fetches all config options and returns values grouped by category.
  * Caches in-memory so multiple components on the same page share data.
  */
-let globalCache: { options: Record<string, string[]>; ts: number } | null = null;
+let globalCache: Record<string, { options: Record<string, string[]>; ts: number }> = {};
 const CACHE_TTL = 5 * 60_000; // 5 minutes
 
 // Legacy "True"/"False" values should never appear in ICP options
 const BLOCKED_ICP_VALUES = new Set(['True', 'False']);
 
-export function useConfigOptions(): Record<string, string[]> {
-  const [options, setOptions] = useState<Record<string, string[]>>(globalCache?.options ?? {});
+export function useConfigOptions(formKey?: string): Record<string, string[]> {
+  const cacheKey = formKey ?? '__all__';
+  const [options, setOptions] = useState<Record<string, string[]>>(globalCache[cacheKey]?.options ?? {});
 
   useEffect(() => {
-    if (globalCache && Date.now() - globalCache.ts < CACHE_TTL) {
-      setOptions(globalCache.options);
+    if (globalCache[cacheKey] && Date.now() - globalCache[cacheKey].ts < CACHE_TTL) {
+      setOptions(globalCache[cacheKey].options);
       return;
     }
 
-    fetch('/api/config')
+    const url = formKey ? `/api/config?form=${encodeURIComponent(formKey)}` : '/api/config';
+    fetch(url)
       .then(r => r.json())
       .then((rows: ConfigOption[]) => {
         const byCategory: Record<string, ConfigOption[]> = {};
@@ -46,16 +48,16 @@ export function useConfigOptions(): Record<string, string[]> {
           }
           result[cat] = values;
         }
-        globalCache = { options: result, ts: Date.now() };
+        globalCache[cacheKey] = { options: result, ts: Date.now() };
         setOptions(result);
       })
       .catch(() => { /* keep existing/empty options */ });
-  }, []);
+  }, [cacheKey, formKey]);
 
   return options;
 }
 
 /** Invalidate the cache (call after admin panel saves an option) */
 export function invalidateConfigOptions() {
-  globalCache = null;
+  globalCache = {};
 }

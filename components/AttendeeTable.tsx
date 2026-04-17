@@ -106,7 +106,7 @@ function fmtDate(dateStr?: string): string {
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const { isVisible } = useTableColumnConfig('attendees');
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('attendee_table');
   const statusOptions = configOptions.status ?? [];
   const seniorityConfigOptions = useMemo(() => configOptions.seniority ?? [], [configOptions.seniority]);
   const companyTypeOptions = useMemo(() => configOptions.company_type ?? [], [configOptions.company_type]);

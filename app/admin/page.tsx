@@ -8,6 +8,7 @@ import { invalidateConfigColors } from '@/lib/useConfigColors';
 import { invalidateConfigOptions } from '@/lib/useConfigOptions';
 import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig } from '@/lib/useTableColumnConfig';
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
+import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
@@ -18,6 +19,7 @@ interface ConfigOption {
   value: string;
   sort_order: number;
   color: string | null;
+  visible_forms?: string[];
 }
 
 const CATEGORIES = [
@@ -109,23 +111,43 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const [localOptions, setLocalOptions] = useState<ConfigOption[]>(options);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editVisibleForms, setEditVisibleForms] = useState<string[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [expandedOptions, setExpandedOptions] = useState<Set<number>>(new Set());
+  const [formPickerOpenId, setFormPickerOpenId] = useState<number | null>(null);
+  const availableForms = CATEGORY_FORM_USAGE[category] ?? [];
 
   useEffect(() => { setLocalOptions(options); }, [options]);
 
-  const handleEdit = (opt: ConfigOption) => { setEditingId(opt.id); setEditValue(opt.value); };
+  const handleEdit = (opt: ConfigOption) => {
+    setEditingId(opt.id);
+    setEditValue(opt.value);
+    setEditVisibleForms(opt.visible_forms ?? availableForms.map(f => f.key));
+    setFormPickerOpenId(null);
+    setExpandedOptions(prev => new Set(prev).add(opt.id));
+  };
 
   const handleSaveEdit = async (id: number) => {
     if (!editValue.trim()) { toast.error('Value cannot be empty.'); return; }
     try {
-      const res = await fetch(`/api/config/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: editValue.trim() }) });
+      const res = await fetch(`/api/config/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: editValue.trim(), visible_forms: editVisibleForms }),
+      });
       if (!res.ok) throw new Error('Update failed');
-      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim() } : opt));
+      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), visible_forms: [...editVisibleForms] } : opt));
       toast.success('Updated!');
       setEditingId(null);
+      setExpandedOptions(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setFormPickerOpenId(null);
       onRefresh();
     } catch { toast.error('Failed to update.'); }
   };
@@ -151,7 +173,14 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
       const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category, value: trimmed, sort_order: localOptions.length + 1 }) });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed to add'); }
       const newOption = await res.json();
-      setLocalOptions(prev => [...prev, { id: Number(newOption.id), category: String(newOption.category), value: String(newOption.value), sort_order: Number(newOption.sort_order ?? 0), color: newOption.color ? String(newOption.color) : null }]);
+      setLocalOptions(prev => [...prev, {
+        id: Number(newOption.id),
+        category: String(newOption.category),
+        value: String(newOption.value),
+        sort_order: Number(newOption.sort_order ?? 0),
+        color: newOption.color ? String(newOption.color) : null,
+        visible_forms: availableForms.map(f => f.key),
+      }]);
       toast.success('Added!');
       form.reset();
       onRefresh();
@@ -177,21 +206,96 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     } catch { toast.error('Failed to save order.'); setLocalOptions(options); }
   };
   const handleDragEnd = () => { dragIndexRef.current = null; setDragOverIndex(null); setIsDragging(false); };
+  const toggleForm = (formKey: string) => {
+    setEditVisibleForms(prev => prev.includes(formKey) ? prev.filter(f => f !== formKey) : [...prev, formKey]);
+  };
 
   return (
     <div className="card">
       <h2 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">{label}</h2>
       {localOptions.length === 0 ? <p className="text-sm text-gray-400 mb-4">No options yet.</p> : (
         <ul className="space-y-1 mb-4">
-          {localOptions.map((opt, index) => (
-            <li key={opt.id} draggable={editingId !== opt.id} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['flex items-center gap-2 rounded-lg transition-all', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-procare-bright-blue ring-offset-1' : ''].join(' ')}>
-              {editingId === opt.id ? (
-                <><span className="w-4 flex-shrink-0" /><input value={editValue} onChange={(e) => setEditValue(e.target.value)} className="input-field flex-1 text-sm" onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }} autoFocus /><button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button><button type="button" onClick={() => setEditingId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button></>
-              ) : (
-                <><DragHandle /><ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} /><span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer" onClick={() => handleEdit(opt)}>{opt.value}</span><button type="button" onClick={() => handleEdit(opt)} className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium px-2 py-1">Edit</button><button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button></>
-              )}
-            </li>
-          ))}
+          {localOptions.map((opt, index) => {
+            const isExpanded = expandedOptions.has(opt.id);
+            const isEditing = editingId === opt.id;
+            return (
+              <li key={opt.id} draggable={!isExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-procare-bright-blue ring-offset-1' : '', isExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
+                <div className="flex items-center gap-2 px-1 py-1">
+                  <DragHandle />
+                  <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
+                  <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded">{opt.value}</span>
+                  <button type="button" onClick={() => handleEdit(opt)} className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium px-2 py-1">Edit</button>
+                  <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
+                </div>
+                {isExpanded && (
+                  <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
+                      <input
+                        value={isEditing ? editValue : opt.value}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="input-field w-full text-sm"
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
+                        autoFocus={isEditing}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Visible In Forms</label>
+                      {availableForms.length === 0 ? (
+                        <p className="text-xs text-gray-400">No mapped forms for this option category yet.</p>
+                      ) : (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setFormPickerOpenId(prev => prev === opt.id ? null : opt.id)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                          >
+                            <span className="truncate">{editVisibleForms.length === 0 ? 'No forms selected' : `${editVisibleForms.length} form(s) selected`}</span>
+                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${formPickerOpenId === opt.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                          {formPickerOpenId === opt.id && (
+                            <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto divide-y divide-gray-100">
+                              {availableForms.map((form) => (
+                                <label key={form.key} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                                  <input
+                                    type="checkbox"
+                                    className="accent-procare-bright-blue"
+                                    checked={editVisibleForms.includes(form.key)}
+                                    onChange={() => toggleForm(form.key)}
+                                  />
+                                  <span>{form.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(null);
+                          setExpandedOptions(prev => {
+                            const next = new Set(prev);
+                            next.delete(opt.id);
+                            return next;
+                          });
+                          setFormPickerOpenId(null);
+                        }}
+                        className="btn-secondary text-xs px-3 py-1.5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       <form onSubmit={handleAdd} className="flex gap-2 pt-3 border-t border-gray-100">
@@ -273,7 +377,7 @@ export default function AdminPage() {
     try {
       const results = await Promise.all(
         CATEGORIES.map(cat =>
-          fetch(`/api/config?category=${cat.key}`, { cache: 'no-store' })
+          fetch(`/api/config?category=${cat.key}&include_visibility=1`, { cache: 'no-store' })
             .then(r => r.json())
             .then(data => ({ key: cat.key, options: data }))
         )

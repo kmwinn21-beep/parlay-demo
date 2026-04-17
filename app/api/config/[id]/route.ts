@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
+import { getCategoryFormKeys } from '@/lib/configOptionForms';
 
 export async function PUT(
   request: NextRequest,
@@ -11,7 +12,12 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { value, sort_order, color } = body;
+    const { value, sort_order, color, visible_forms } = body as {
+      value: string;
+      sort_order?: number;
+      color?: string | null;
+      visible_forms?: string[];
+    };
 
     if (!value) {
       return NextResponse.json({ error: 'value is required' }, { status: 400 });
@@ -120,6 +126,18 @@ export async function PUT(
       } catch (cascadeErr) {
         console.error('Cascade rename error:', cascadeErr);
         // Still return success for the config update itself
+      }
+    }
+
+    if (Array.isArray(visible_forms)) {
+      const allowedFormKeys = getCategoryFormKeys(category);
+      const selected = new Set(visible_forms.filter(f => allowedFormKeys.includes(f)));
+      await db.execute({ sql: 'DELETE FROM config_option_visibility WHERE option_id = ?', args: [params.id] });
+      for (const formKey of allowedFormKeys) {
+        await db.execute({
+          sql: 'INSERT INTO config_option_visibility (option_id, form_key, visible) VALUES (?, ?, ?)',
+          args: [params.id, formKey, selected.has(formKey) ? 1 : 0],
+        });
       }
     }
 
