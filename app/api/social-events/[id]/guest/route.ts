@@ -56,27 +56,33 @@ export async function POST(
       args: [id, aid],
     });
 
-    // Notify company assignees for this attendee (best-effort)
-    const attendeeRow = await db.execute({
-      sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
-      args: [aid],
-    });
-    if (attendeeRow.rows.length > 0) {
-      const a = attendeeRow.rows[0];
-      const attendeeName = `${a.first_name} ${a.last_name}`.trim();
-      const eventRow = await db.execute({ sql: 'SELECT name FROM social_events WHERE id = ?', args: [id] });
-      const eventName = eventRow.rows.length > 0 ? String(eventRow.rows[0].name) : `Social Event #${id}`;
-      const changedByConfigId = await getConfigIdByEmail(user.email);
-      notifyForAttendee({
-        attendeeId: aid,
-        attendeeName,
-        message: `${attendeeName} added to guest list for ${eventName}`,
-        changedByEmail: user.email,
-        changedByConfigId,
-      });
-    }
+    // Return success before best-effort notification so DB failures in
+    // notification lookup never surface as a guest-add failure to the client.
+    const response = NextResponse.json({ success: true });
 
-    return NextResponse.json({ success: true });
+    // Notify company assignees for this attendee (best-effort, non-blocking)
+    try {
+      const attendeeRow = await db.execute({
+        sql: 'SELECT first_name, last_name FROM attendees WHERE id = ?',
+        args: [aid],
+      });
+      if (attendeeRow.rows.length > 0) {
+        const a = attendeeRow.rows[0];
+        const attendeeName = `${a.first_name} ${a.last_name}`.trim();
+        const eventRow = await db.execute({ sql: 'SELECT name FROM social_events WHERE id = ?', args: [id] });
+        const eventName = eventRow.rows.length > 0 ? String(eventRow.rows[0].name) : `Social Event #${id}`;
+        const changedByConfigId = await getConfigIdByEmail(user.email);
+        notifyForAttendee({
+          attendeeId: aid,
+          attendeeName,
+          message: `${attendeeName} added to guest list for ${eventName}`,
+          changedByEmail: user.email,
+          changedByConfigId,
+        });
+      }
+    } catch { /* non-fatal */ }
+
+    return response;
   } catch (error) {
     console.error('POST /api/social-events/[id]/guest error:', error);
     return NextResponse.json({ error: 'Failed to add guest' }, { status: 500 });
