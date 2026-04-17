@@ -10,6 +10,7 @@ import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig } from '@/lib/useTableCo
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
 import { invalidateAppName } from '@/lib/useAppName';
+import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 
 interface ConfigOption {
   id: number;
@@ -243,6 +244,13 @@ export default function AdminPage() {
   const [savedAppName, setSavedAppName] = useState('');
   const [appNameInput, setAppNameInput] = useState('');
   const [savingAppName, setSavingAppName] = useState(false);
+  const [logoWhiteInput, setLogoWhiteInput] = useState('');
+  const [logoDarkInput, setLogoDarkInput] = useState('');
+  const [faviconInput, setFaviconInput] = useState('');
+  const [savedLogoWhite, setSavedLogoWhite] = useState('');
+  const [savedLogoDark, setSavedLogoDark] = useState('');
+  const [savedFavicon, setSavedFavicon] = useState('');
+  const [savingLogos, setSavingLogos] = useState(false);
 
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
@@ -414,6 +422,12 @@ export default function AdminPage() {
       const name = data['app_name'] ?? '';
       setSavedAppName(name);
       setAppNameInput(name);
+      const lw = data['logo_white_url'] ?? '';
+      const ld = data['logo_dark_url'] ?? '';
+      const fav = data['favicon_url'] ?? '';
+      setSavedLogoWhite(lw); setLogoWhiteInput(lw);
+      setSavedLogoDark(ld); setLogoDarkInput(ld);
+      setSavedFavicon(fav); setFaviconInput(fav);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
   };
@@ -467,6 +481,23 @@ export default function AdminPage() {
       toast.success('Brand colors reset to defaults.');
     } catch { toast.error('Failed to reset brand colors.'); }
     finally { setSavingBrand(false); }
+  };
+
+  const handleSaveLogos = async () => {
+    setSavingLogos(true);
+    try {
+      await Promise.all([
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'logo_white_url', value: logoWhiteInput.trim() }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'logo_dark_url', value: logoDarkInput.trim() }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'favicon_url', value: faviconInput.trim() }) }),
+      ]);
+      setSavedLogoWhite(logoWhiteInput.trim());
+      setSavedLogoDark(logoDarkInput.trim());
+      setSavedFavicon(faviconInput.trim());
+      invalidateLogoConfig();
+      toast.success('Logo & favicon settings saved.');
+    } catch { toast.error('Failed to save logo settings.'); }
+    finally { setSavingLogos(false); }
   };
 
   const handleSaveAppName = async () => {
@@ -762,6 +793,49 @@ export default function AdminPage() {
                   className="btn-primary text-sm flex-shrink-0"
                 >
                   {savingAppName ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+
+            {/* Logos & Favicon */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Logos &amp; Favicon</h2>
+              <p className="text-sm text-gray-500 mb-5">Provide URLs to your logo images and browser favicon. Leave blank to use the default static files.</p>
+              <div className="space-y-5">
+                {([
+                  { label: 'White Logo URL', desc: 'Used on dark backgrounds — sidebar, login, signup.', value: logoWhiteInput, set: setLogoWhiteInput, placeholder: '/logo-white.png' },
+                  { label: 'Dark Logo URL', desc: 'Used on light backgrounds.', value: logoDarkInput, set: setLogoDarkInput, placeholder: '/logo-dark.png' },
+                  { label: 'Favicon URL', desc: 'Shown in the browser tab. Use a .ico, .png, or .svg URL.', value: faviconInput, set: setFaviconInput, placeholder: '/favicon.ico' },
+                ] as { label: string; desc: string; value: string; set: (v: string) => void; placeholder: string }[]).map(({ label, desc, value, set, placeholder }) => (
+                  <div key={label}>
+                    <p className="text-sm font-medium text-gray-800 mb-0.5">{label}</p>
+                    <p className="text-xs text-gray-400 mb-2">{desc}</p>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="url"
+                        value={value}
+                        onChange={e => set(e.target.value)}
+                        placeholder={placeholder}
+                        className="input-field text-sm flex-1 font-mono"
+                      />
+                      {value && (
+                        <div className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden flex-shrink-0 bg-gray-800 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={value} alt="preview" className="max-w-full max-h-full object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleSaveLogos}
+                  disabled={savingLogos || (logoWhiteInput.trim() === savedLogoWhite && logoDarkInput.trim() === savedLogoDark && faviconInput.trim() === savedFavicon)}
+                  className="btn-primary text-sm"
+                >
+                  {savingLogos ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>
