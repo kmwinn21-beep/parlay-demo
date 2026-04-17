@@ -13,6 +13,7 @@ import {
   resolveRepInitials,
   getRepInitials,
 } from '@/lib/useUserOptions';
+import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
 
 export interface Meeting {
   id: number;
@@ -474,6 +475,7 @@ export function MeetingsTable({
   userOptions?: UserOption[];
   hideCompany?: boolean;
 }) {
+  const { isVisible } = useTableColumnConfig('meetings');
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -617,14 +619,14 @@ export function MeetingsTable({
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <SortHeader label="Name" col="name" />
-              <SortHeader label="Title" col="title" />
-              <SortHeader label="Rep" col="scheduled_by" />
-              {!hideCompany && <SortHeader label="Company" col="company" />}
-              <SortHeader label="Date/Time" col="datetime" />
-              <SortHeader label="Conference" col="conference" />
-              <SortHeader label="Outcome" col="outcome" />
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>
+              {isVisible('name') && <SortHeader label="Name" col="name" />}
+              {isVisible('title') && <SortHeader label="Title" col="title" />}
+              {isVisible('rep') && <SortHeader label="Rep" col="scheduled_by" />}
+              {isVisible('company') && !hideCompany && <SortHeader label="Company" col="company" />}
+              {isVisible('datetime') && <SortHeader label="Date/Time" col="datetime" />}
+              {isVisible('conference') && <SortHeader label="Conference" col="conference" />}
+              {isVisible('outcome') && <SortHeader label="Outcome" col="outcome" />}
+              {isVisible('info') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>}
               {hasActions && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -642,18 +644,18 @@ export function MeetingsTable({
                 />
               ) : (
                 <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
-                  <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                  {isVisible('name') && <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
                     <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
                       {m.first_name} {m.last_name}
                     </Link>
-                  </td>
-                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                  </td>}
+                  {isVisible('title') && <td className="px-3 py-2 text-gray-600 leading-snug">
                     <span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span>
-                  </td>
-                  <td className="px-3 py-2 leading-snug">
+                  </td>}
+                  {isVisible('rep') && <td className="px-3 py-2 leading-snug">
                     <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} />
-                  </td>
-                  {!hideCompany && (
+                  </td>}
+                  {isVisible('company') && !hideCompany && (
                     <td className="px-3 py-2 text-gray-600 leading-snug">
                       {m.company_name && m.company_id ? (
                         <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
@@ -664,31 +666,31 @@ export function MeetingsTable({
                       )}
                     </td>
                   )}
-                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                  {isVisible('datetime') && <td className="px-3 py-2 text-gray-600 leading-snug">
                     <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
                     <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
-                  </td>
-                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                  </td>}
+                  {isVisible('conference') && <td className="px-3 py-2 text-gray-600 leading-snug">
                     <Link href={`/conferences/${m.conference_id}`} className="text-procare-bright-blue hover:underline">
                       {m.conference_name}
                     </Link>
-                  </td>
-                  <td className="px-3 py-2">
+                  </td>}
+                  {isVisible('outcome') && <td className="px-3 py-2">
                     <OutcomeButton
                       value={m.outcome}
                       options={actionOptions}
                       colorMap={colorMap}
                       onChange={(val) => onOutcomeChange(m.id, val)}
                     />
-                  </td>
-                  <td className="px-3 py-2">
+                  </td>}
+                  {isVisible('info') && <td className="px-3 py-2">
                     <MeetingInfoTooltip
                       scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
                       location={m.location}
                       attendees={m.additional_attendees}
                       companyWse={m.company_wse}
                     />
-                  </td>
+                  </td>}
                   {hasActions && (
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">

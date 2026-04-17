@@ -7,6 +7,7 @@ import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { parseRepIds } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
+import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -635,6 +636,10 @@ export function SocialEventsTable({
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
   const { user } = useUser();
+<<<<<<< HEAD
+=======
+  const { isVisible } = useTableColumnConfig('social_events');
+>>>>>>> 0659e7a (Add Admin Settings page with Types/Edit Tables/Permissions tabs)
 
   /* form state */
   const [showForm, setShowForm] = useState(false);
@@ -1018,9 +1023,17 @@ export function SocialEventsTable({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  {['Entered By','Internal','Name','Type','Host','Location','Date','Time','Invite Only','Guest List',''].map(h => (
-                    <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
+                  {isVisible('entered_by') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Entered By</th>}
+                  {isVisible('internal') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Internal</th>}
+                  {isVisible('event_name') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Name</th>}
+                  {isVisible('event_type') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Type</th>}
+                  {isVisible('host') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Host</th>}
+                  {isVisible('location') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Location</th>}
+                  {isVisible('date') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date</th>}
+                  {isVisible('time') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Time</th>}
+                  {isVisible('invite_only') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Invite Only</th>}
+                  {isVisible('guest_list') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Guest List</th>}
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1030,20 +1043,20 @@ export function SocialEventsTable({
                   return (
                     <Fragment key={ev.id}>
                       <tr className="hover:bg-gray-50 align-top">
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>
-                        <td className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>
-                        <td className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(ev.event_date)}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(ev.event_time)}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</td>
-                        <td className="px-3 py-3">
+                        {isVisible('entered_by') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>}
+                        {isVisible('internal') && <td className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>}
+                        {isVisible('event_name') && <td className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>}
+                        {isVisible('event_type') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>}
+                        {isVisible('host') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>}
+                        {isVisible('location') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>}
+                        {isVisible('date') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(ev.event_date)}</td>}
+                        {isVisible('time') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(ev.event_time)}</td>}
+                        {isVisible('invite_only') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</td>}
+                        {isVisible('guest_list') && <td className="px-3 py-3">
                           {invited.length > 0
                             ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">{invited.length}</span>
                             : <span className="text-gray-400">—</span>}
-                        </td>
+                        </td>}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             {invited.length > 0 && (
@@ -1063,7 +1076,7 @@ export function SocialEventsTable({
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={11} className="p-0 border-b border-gray-200">
+                          <td colSpan={99} className="p-0 border-b border-gray-200">
                             <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
                           </td>
                         </tr>

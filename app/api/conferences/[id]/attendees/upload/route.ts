@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
 import { parseFile, classifyCompanyType, parseServicesValue, classifyICP } from '@/lib/parsers';
 import {
@@ -29,8 +30,28 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const currentUser = authResult;
+
   try {
     await dbReady;
+
+    // Check permission: non-admins can only upload if site_settings allows it
+    if (currentUser.role !== 'administrator') {
+      const settingRow = await db.execute({
+        sql: "SELECT value FROM site_settings WHERE key = 'allow_attendee_upload'",
+        args: [],
+      });
+      const allowed = settingRow.rows.length === 0 || String(settingRow.rows[0].value) !== 'false';
+      if (!allowed) {
+        return NextResponse.json(
+          { error: 'Attendee list upload is restricted to administrators.' },
+          { status: 403 }
+        );
+      }
+    }
+
     const conferenceId = Number(params.id);
 
     // Check conference exists
