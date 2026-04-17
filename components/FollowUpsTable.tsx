@@ -14,6 +14,7 @@ import {
   resolveConfigValue,
   getRepInitials,
 } from '@/lib/useUserOptions';
+import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
 
 export interface FollowUp {
   id: number;
@@ -86,6 +87,7 @@ export function FollowUpsTable({
   onRepChange?: (id: number, rep: string | null) => void;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
+  const { isVisible } = useTableColumnConfig('follow_ups');
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
 
@@ -232,14 +234,14 @@ export function FollowUpsTable({
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Title</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Company</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Next Step</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Conference</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Rep</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
-              <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+              {isVisible('name') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Name</th>}
+              {isVisible('title') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Title</th>}
+              {isVisible('company') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Company</th>}
+              {isVisible('next_step') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Next Step</th>}
+              {isVisible('conference') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Conference</th>}
+              {isVisible('rep') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Rep</th>}
+              {isVisible('notes') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>}
+              {isVisible('status') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Status</th>}
               {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -252,34 +254,34 @@ export function FollowUpsTable({
                   key={fu.id}
                   className={`transition-colors align-top ${fu.completed ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}
                 >
-                  <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                  {isVisible('name') && <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
                     <Link href={`/attendees/${fu.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
                       {fu.first_name} {fu.last_name}
                     </Link>
-                  </td>
-                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                  </td>}
+                  {isVisible('title') && <td className="px-3 py-2 text-gray-600 leading-snug">
                     {fu.title || <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                  </td>}
+                  {isVisible('company') && <td className="px-3 py-2 text-gray-600 leading-snug">
                     <span className="text-xs break-words whitespace-normal leading-snug">
                       {fu.company_name || <span className="text-gray-300">—</span>}
                     </span>
-                  </td>
-                  <td className="px-3 py-2">
+                  </td>}
+                  {isVisible('next_step') && <td className="px-3 py-2">
                     <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
                       {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                     </span>
                     {fu.next_steps_notes && (
                       <p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-gray-600 leading-snug">
+                  </td>}
+                  {isVisible('conference') && <td className="px-3 py-2 text-gray-600 leading-snug">
                     <Link href={`/conferences/${fu.conference_id}`} className="text-procare-bright-blue hover:underline">
                       {fu.conference_name}
                     </Link>
                     <p className="text-gray-400">{formatDate(fu.start_date)}</p>
-                  </td>
-                  <td className="px-3 py-2">
+                  </td>}
+                  {isVisible('rep') && <td className="px-3 py-2">
                     {canEditRep && isEditingRep ? (
                       <div className="w-36">
                         <RepMultiSelect
@@ -310,15 +312,15 @@ export function FollowUpsTable({
                         <span className="text-gray-300">—</span>
                       )
                     )}
-                  </td>
-                  <td className="px-3 py-2">
+                  </td>}
+                  {isVisible('notes') && <td className="px-3 py-2">
                     <FollowUpNotesPopover
                       attendeeId={fu.attendee_id}
                       notesCount={Number(fu.entity_notes_count)}
                       conferenceName={fu.conference_name}
                     />
-                  </td>
-                  <td className="px-3 py-2">
+                  </td>}
+                  {isVisible('status') && <td className="px-3 py-2">
                     <button
                       type="button"
                       onClick={() => onToggle(fu.id, !fu.completed)}
@@ -337,7 +339,7 @@ export function FollowUpsTable({
                         </>
                       ) : 'Done'}
                     </button>
-                  </td>
+                  </td>}
                   {onDelete && (
                     <td className="px-3 py-2">
                       <button
