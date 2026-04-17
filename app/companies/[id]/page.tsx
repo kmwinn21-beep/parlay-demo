@@ -166,16 +166,16 @@ export default function CompanyDetailPage() {
     try {
       const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
-        fetch('/api/config?category=status'),
-        fetch('/api/config?category=company_type'),
-        fetch('/api/config?category=profit_type'),
-        fetch('/api/config?category=action'),
-        fetch('/api/config?category=user'),
-        fetch('/api/config?category=entity_structure'),
-        fetch('/api/config?category=services'),
-        fetch('/api/config?category=icp'),
+        fetch('/api/config?category=status&form=company_detail'),
+        fetch('/api/config?category=company_type&form=company_detail'),
+        fetch('/api/config?category=profit_type&form=company_detail'),
+        fetch('/api/config?category=action&form=company_detail'),
+        fetch('/api/config?category=user&form=company_detail'),
+        fetch('/api/config?category=entity_structure&form=company_detail'),
+        fetch('/api/config?category=services&form=company_detail'),
+        fetch('/api/config?category=icp&form=company_detail'),
         fetch('/api/companies'),
-        fetch('/api/config?category=rep_relationship_type'),
+        fetch('/api/config?category=rep_relationship_type&form=company_detail'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();

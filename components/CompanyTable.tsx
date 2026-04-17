@@ -164,7 +164,7 @@ function fmtDate(dateStr?: string): string {
 
 export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected }: CompanyTableProps) {
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('company_table');
   const userOptionsFull = useUserOptions();
   const searchParams = useSearchParams();
   const { isVisible } = useTableColumnConfig(tableName);
@@ -204,6 +204,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [editingRepCompanyId, setEditingRepCompanyId] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [showRepModal, setShowRepModal] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ companyId: number; field: 'name' | 'company_type' | 'status' | 'wse' } | null>(null);
+  const [cellDraft, setCellDraft] = useState<string>('');
+  const [isSavingCell, setIsSavingCell] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   const [wseMin, setWseMin] = useState<number | null>(null);
@@ -368,6 +371,63 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       toast.error('Failed to update rep.');
       // Revert to server state on failure
       onRefresh();
+    }
+  };
+
+  const startInlineEdit = (company: Company, field: 'name' | 'company_type' | 'status' | 'wse') => {
+    setEditingCell({ companyId: company.id, field });
+    if (field === 'wse') {
+      setCellDraft(company.wse != null ? String(company.wse) : '');
+      return;
+    }
+    if (field === 'name') setCellDraft(company.name || '');
+    else if (field === 'company_type') setCellDraft(company.company_type || '');
+    else if (field === 'status') setCellDraft(company.status || '');
+  };
+
+  const saveInlineEdit = async (company: Company, field: 'name' | 'company_type' | 'status' | 'wse') => {
+    if (isSavingCell) return;
+    const payload: Record<string, string | number | null> = {};
+    if (field === 'wse') {
+      const trimmed = cellDraft.trim();
+      const parsed = trimmed === '' ? null : Number(trimmed);
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
+      if ((company.wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
+      payload.wse = parsed == null ? null : Math.round(parsed);
+    } else {
+      const nextValue = cellDraft.trim();
+      const currentValue =
+        field === 'name' ? (company.name || '')
+        : field === 'company_type' ? (company.company_type || '')
+        : (company.status || '');
+      if (field === 'name' && !nextValue) { toast.error('Name is required.'); return; }
+      if (nextValue === currentValue) { setEditingCell(null); return; }
+      payload[field] = nextValue || null;
+    }
+    setIsSavingCell(true);
+    try {
+      const res = await fetch(`/api/companies/${company.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error();
+      setLocalCompanies(prev => prev.map(c => {
+        if (c.id !== company.id) return c;
+        const updated: Company = { ...c };
+        if (field === 'wse') updated.wse = payload.wse == null ? undefined : Number(payload.wse);
+        else if (field === 'name') updated.name = String(payload[field] ?? '');
+        else if (field === 'company_type') updated.company_type = payload[field] == null ? undefined : String(payload[field]);
+        else if (field === 'status') updated.status = payload[field] == null ? undefined : String(payload[field]);
+        return updated;
+      }));
+      setEditingCell(null);
+      toast.success('Updated.');
+      onRefresh();
+    } catch {
+      toast.error('Failed to update company.');
+    } finally {
+      setIsSavingCell(false);
     }
   };
 
@@ -825,9 +885,26 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
                   {isVisible('name') && <td className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
-                    <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
-                      {company.name}
-                    </Link>
+                    {editingCell?.companyId === company.id && editingCell.field === 'name' ? (
+                      <input
+                        className="input-field text-xs py-1 w-full"
+                        value={cellDraft}
+                        onChange={(e) => setCellDraft(e.target.value)}
+                        onBlur={() => saveInlineEdit(company, 'name')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveInlineEdit(company, 'name');
+                          if (e.key === 'Escape') setEditingCell(null);
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <div onClick={() => startInlineEdit(company, 'name')} className="text-left group cursor-pointer">
+                        <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
+                          {company.name}
+                        </Link>
+                        <span className="block text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">Click to edit</span>
+                      </div>
+                    )}
                     {company.parent_company_name && (
                       <p className="text-[10px] text-gray-400 mt-0.5">
                         <Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">
@@ -836,7 +913,18 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </p>
                     )}
                   </td>}
-                  {isVisible('type') && <td className="px-3 py-3">{company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}</td>}
+                  {isVisible('type') && <td className="px-3 py-3">
+                    {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
+                      <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
+                        <option value="">—</option>
+                        {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <button type="button" onClick={() => startInlineEdit(company, 'company_type')}>
+                        {company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}
+                      </button>
+                    )}
+                  </td>}
                   {isVisible('sfowner') && <td className="px-3 py-3">
                     {editingRepCompanyId === company.id && !showRepModal ? (
                       <div className="flex items-start gap-1">
@@ -880,16 +968,43 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </button>
                     )}
                   </td>}
-                  {isVisible('status') && <td className="px-3 py-3"><span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(company.status || '').trim() && <span className="text-gray-300">—</span>}</span></td>}
+                  {isVisible('status') && <td className="px-3 py-3">
+                    {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
+                      <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
+                        <option value="">—</option>
+                        {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <button type="button" onClick={() => startInlineEdit(company, 'status')}>
+                        <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(company.status || '').trim() && <span className="text-gray-300">—</span>}</span>
+                      </button>
+                    )}
+                  </td>}
                   {isVisible('attendees') && <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>}
                   {isVisible('conferences') && <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>}
                   {isVisible('wse') && <td className="px-3 py-3">
-                    {company.wse != null ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                        <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                        {Number(company.wse).toLocaleString()}
-                      </span>
-                    ) : <span className="text-gray-300">—</span>}
+                    {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
+                      <input
+                        className="input-field text-xs py-1 w-24"
+                        value={cellDraft}
+                        onChange={(e) => setCellDraft(e.target.value)}
+                        onBlur={() => saveInlineEdit(company, 'wse')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveInlineEdit(company, 'wse');
+                          if (e.key === 'Escape') setEditingCell(null);
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <button type="button" onClick={() => startInlineEdit(company, 'wse')}>
+                        {company.wse != null ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                            <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                            {Number(company.wse).toLocaleString()}
+                          </span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </button>
+                    )}
                   </td>}
                   {isVisible('updated_on') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>}
                   {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}

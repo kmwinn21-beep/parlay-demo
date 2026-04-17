@@ -106,9 +106,12 @@ function fmtDate(dateStr?: string): string {
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const { isVisible } = useTableColumnConfig('attendees');
   const colorMaps = useConfigColors();
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('attendee_table');
   const statusOptions = configOptions.status ?? [];
   const seniorityConfigOptions = useMemo(() => configOptions.seniority ?? [], [configOptions.seniority]);
+  const companyTypeOptions = useMemo(() => configOptions.company_type ?? [], [configOptions.company_type]);
+  const [localAttendees, setLocalAttendees] = useState<Attendee[]>(attendees);
+  useEffect(() => { setLocalAttendees(attendees); }, [attendees]);
   const [search, setSearch] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -128,6 +131,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string }>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
+  const [nameDraft, setNameDraft] = useState<{ first_name: string; last_name: string }>({ first_name: '', last_name: '' });
+  const [cellDraft, setCellDraft] = useState<string>('');
+  const [isSavingCell, setIsSavingCell] = useState(false);
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   useEffect(() => {
@@ -179,7 +186,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   };
 
   const filtered = useMemo(() => {
-    const list = attendees.filter(a => {
+    const list = localAttendees.filter(a => {
       const fullName = `${a.first_name} ${a.last_name}`.toLowerCase();
       const matchSearch = !search || fullName.includes(search.toLowerCase()) || a.company_name?.toLowerCase().includes(search.toLowerCase()) || a.email?.toLowerCase().includes(search.toLowerCase()) || a.title?.toLowerCase().includes(search.toLowerCase());
       const matchType = !filterCompanyType || a.company_type === filterCompanyType;
@@ -207,13 +214,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, sortKey, sortDir]);
+  }, [localAttendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selectedAttendees = attendees.filter(a => selectedIds.has(a.id));
-  const companyTypes = Array.from(new Set(attendees.map(a => a.company_type).filter(Boolean))) as string[];
+  const selectedAttendees = localAttendees.filter(a => selectedIds.has(a.id));
+  const companyTypes = Array.from(new Set(localAttendees.map(a => a.company_type).filter(Boolean))) as string[];
 
   const handleDeleteOne = async (id: number, name: string) => {
     if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
@@ -248,6 +255,82 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       toast.success(`Updated ${selectedIds.size} attendee(s).`);
       setShowMassEdit(false); setMassEditFields({}); onRefresh();
     } catch { toast.error('Failed to apply changes.'); } finally { setIsApplying(false); }
+  };
+
+  const startInlineEdit = (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+    setEditingCell({ attendeeId: attendee.id, field });
+    if (field === 'name') {
+      setNameDraft({ first_name: attendee.first_name || '', last_name: attendee.last_name || '' });
+      return;
+    }
+    if (field === 'company_wse') {
+      setCellDraft(attendee.company_wse != null ? String(attendee.company_wse) : '');
+      return;
+    }
+    if (field === 'title') setCellDraft(attendee.title || '');
+    else if (field === 'company_type') setCellDraft(attendee.company_type || '');
+    else if (field === 'status') setCellDraft(attendee.status || '');
+    else if (field === 'seniority') setCellDraft(attendee.seniority || '');
+  };
+
+  const saveInlineEdit = async (attendee: Attendee, field: 'name' | 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
+    if (isSavingCell) return;
+    const payload: Record<string, string | number | null> = {};
+    if (field === 'name') {
+      const first = nameDraft.first_name.trim();
+      const last = nameDraft.last_name.trim();
+      if (!first || !last) { toast.error('First and last name are required.'); return; }
+      if (first === attendee.first_name && last === attendee.last_name) { setEditingCell(null); return; }
+      payload.first_name = first;
+      payload.last_name = last;
+    } else if (field === 'company_wse') {
+      const trimmed = cellDraft.trim();
+      const parsed = trimmed === '' ? null : Number(trimmed);
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
+      if ((attendee.company_wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
+      payload.company_wse = parsed == null ? null : Math.round(parsed);
+    } else {
+      const nextValue = cellDraft.trim();
+      const currentValue =
+        field === 'title' ? (attendee.title || '')
+        : field === 'company_type' ? (attendee.company_type || '')
+        : field === 'status' ? (attendee.status || '')
+        : (attendee.seniority || '');
+      if (nextValue === currentValue) { setEditingCell(null); return; }
+      payload[field] = nextValue || null;
+    }
+    setIsSavingCell(true);
+    try {
+      const res = await fetch(`/api/attendees/${attendee.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error();
+      setLocalAttendees(prev => prev.map(a => {
+        if (a.id !== attendee.id) return a;
+        const updated: Attendee = { ...a };
+        if (field === 'name') {
+          updated.first_name = String(payload.first_name);
+          updated.last_name = String(payload.last_name);
+        } else if (field === 'company_wse') {
+          updated.company_wse = payload.company_wse == null ? undefined : Number(payload.company_wse);
+        } else {
+          if (field === 'title') updated.title = payload[field] == null ? undefined : String(payload[field]);
+          if (field === 'company_type') updated.company_type = payload[field] == null ? undefined : String(payload[field]);
+          if (field === 'status') updated.status = payload[field] == null ? undefined : String(payload[field]);
+          if (field === 'seniority') updated.seniority = payload[field] == null ? undefined : String(payload[field]);
+        }
+        return updated;
+      }));
+      setEditingCell(null);
+      toast.success('Updated.');
+      onRefresh();
+    } catch {
+      toast.error('Failed to update attendee.');
+    } finally {
+      setIsSavingCell(false);
+    }
   };
 
   const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap relative';
@@ -415,7 +498,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         </div>
       )}
 
-      <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {attendees.length} attendees{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
+      <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {localAttendees.length} attendees{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
 
       <div className="rounded-xl border border-gray-200 overflow-hidden">
         {/* Mobile card layout */}
@@ -513,12 +596,54 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
 
                     {isVisible('name') && <td className="px-3 py-3 overflow-hidden">
-                      <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug" title={`${attendee.first_name} ${attendee.last_name}`}>
-                        {attendee.first_name} {attendee.last_name}
-                      </Link>
+                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'name' ? (
+                        <div className="flex flex-col gap-1">
+                          <input
+                            className="input-field text-xs py-1"
+                            value={nameDraft.first_name}
+                            onChange={(e) => setNameDraft((p) => ({ ...p, first_name: e.target.value }))}
+                            placeholder="First"
+                            autoFocus
+                          />
+                          <input
+                            className="input-field text-xs py-1"
+                            value={nameDraft.last_name}
+                            onChange={(e) => setNameDraft((p) => ({ ...p, last_name: e.target.value }))}
+                            placeholder="Last"
+                            onBlur={() => saveInlineEdit(attendee, 'name')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveInlineEdit(attendee, 'name');
+                              if (e.key === 'Escape') setEditingCell(null);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-left group cursor-pointer" onClick={() => startInlineEdit(attendee, 'name')} title="Click to edit name">
+                          <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                            {attendee.first_name} {attendee.last_name}
+                          </Link>
+                          <span className="block text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">Click to edit</span>
+                        </div>
+                      )}
                     </td>}
                     {isVisible('title') && <td className="px-3 py-3 text-gray-600" style={{ maxWidth: colWidths.title }}>
-                      <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
+                        <input
+                          className="input-field text-xs py-1 w-full"
+                          value={cellDraft}
+                          onChange={(e) => setCellDraft(e.target.value)}
+                          onBlur={() => saveInlineEdit(attendee, 'title')}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveInlineEdit(attendee, 'title');
+                            if (e.key === 'Escape') setEditingCell(null);
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        <button type="button" className="block text-left w-full" onClick={() => startInlineEdit(attendee, 'title')} title="Click to edit title">
+                          <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                        </button>
+                      )}
                     </td>}
                     {isVisible('company') && <td className="px-3 py-3">
                       {attendee.company_name ? (
@@ -531,20 +656,73 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                             <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                           )}
                           {attendee.company_wse != null && (
-                            <p className="text-[10px] text-gray-400 mt-0.5">WSE: {Number(attendee.company_wse).toLocaleString()}</p>
+                            editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
+                              <input
+                                className="input-field text-xs py-1 w-24 mt-1"
+                                value={cellDraft}
+                                onChange={(e) => setCellDraft(e.target.value)}
+                                onBlur={() => saveInlineEdit(attendee, 'company_wse')}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse');
+                                  if (e.key === 'Escape') setEditingCell(null);
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')} title="Click to edit WSE">
+                                WSE: {Number(attendee.company_wse).toLocaleString()}
+                              </button>
+                            )
                           )}
                         </div>
                       ) : <span className="text-gray-300">—</span>}
                     </td>}
                     {isVisible('company_type') && <td className="px-3 py-3">
-                      {attendee.company_type ? (
-                        <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
+                        <select
+                          className="input-field text-xs py-1"
+                          value={cellDraft}
+                          onChange={(e) => setCellDraft(e.target.value)}
+                          onBlur={() => saveInlineEdit(attendee, 'company_type')}
+                          autoFocus
+                        >
+                          <option value="">—</option>
+                          {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
+                          {attendee.company_type ? (
+                            <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </button>
                       )}
                     </td>}
-                    {isVisible('status') && <td className="px-3 py-3"><span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(attendee.status || '').trim() && <span className="text-gray-300">—</span>}</span></td>}
-                    {isVisible('seniority') && <td className="px-3 py-3"><span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span></td>}
+                    {isVisible('status') && <td className="px-3 py-3">
+                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'status' ? (
+                        <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'status')} autoFocus>
+                          <option value="">—</option>
+                          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <button type="button" onClick={() => startInlineEdit(attendee, 'status')}>
+                          <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(attendee.status || '').trim() && <span className="text-gray-300">—</span>}</span>
+                        </button>
+                      )}
+                    </td>}
+                    {isVisible('seniority') && <td className="px-3 py-3">
+                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
+                        <select className="input-field text-xs py-1" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                          <option value="">Auto-detect</option>
+                          {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}>
+                          <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
+                        </button>
+                      )}
+                    </td>}
                     {isVisible('conferences') && <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>}
                     {isVisible('notes') && <td className="px-3 py-3">
                       {Number(attendee.notes_count) > 0 ? (

@@ -33,7 +33,7 @@ export function ConferenceForm() {
   const [selectedInternalAttendees, setSelectedInternalAttendees] = useState<string[]>([]);
   const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
   const internalDropdownRef = useRef<HTMLDivElement>(null);
-  const configOptions = useConfigOptions();
+  const configOptions = useConfigOptions('conference_form');
   const userOptions = configOptions.user ?? [];
 
   useEffect(() => {
