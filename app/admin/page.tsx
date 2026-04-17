@@ -7,6 +7,7 @@ import { COLOR_PRESETS, getPreset } from '@/lib/colors';
 import { invalidateConfigColors } from '@/lib/useConfigColors';
 import { invalidateConfigOptions } from '@/lib/useConfigOptions';
 import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 
 interface ConfigOption {
   id: number;
@@ -39,7 +40,12 @@ const TABLE_LABELS: Record<string, string> = {
   social_events: 'Social Events Table',
 };
 
-type Tab = 'types' | 'tables' | 'permissions';
+type Tab = 'types' | 'tables' | 'sections' | 'permissions';
+
+const SECTION_PAGE_LABELS: Record<string, string> = {
+  attendee: 'Attendee Page',
+  company: 'Company Page',
+};
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
@@ -219,6 +225,14 @@ export default function AdminPage() {
   const [loadingTables, setLoadingTables] = useState(false);
   const [savingCol, setSavingCol] = useState<string | null>(null);
 
+  // Sections tab
+  type LocalSection = { key: string; label: string; sort_order: number; visible: boolean };
+  const [sectionConfig, setSectionConfig] = useState<Record<string, LocalSection[]>>({});
+  const [loadingSections, setLoadingSections] = useState(false);
+  const [savingSections, setSavingSections] = useState<string | null>(null);
+  const [editingSectionLabel, setEditingSectionLabel] = useState<{ page: string; key: string } | null>(null);
+  const [editLabelValue, setEditLabelValue] = useState('');
+
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
   const [loadingPerms, setLoadingPerms] = useState(false);
@@ -266,6 +280,76 @@ export default function AdminPage() {
   useEffect(() => {
     if (tab === 'tables') fetchTableConfig();
   }, [tab]);
+
+  // ── Sections tab ─────────────────────────────────────────────────────────────
+
+  const fetchSectionConfig = async () => {
+    setLoadingSections(true);
+    try {
+      const res = await fetch('/api/admin/section-config');
+      if (!res.ok) throw new Error();
+      const data = await res.json() as Record<string, Array<{ key: string; label: string; sort_order: number; visible: boolean }>>;
+      // Merge with SECTION_DEFS so every section appears even before saved
+      const merged: Record<string, LocalSection[]> = {};
+      for (const [page, defs] of Object.entries(SECTION_DEFS)) {
+        const saved = data[page] ?? [];
+        const savedMap = Object.fromEntries(saved.map(s => [s.key, s]));
+        const full: LocalSection[] = defs.map((def, i) => ({
+          key: def.key,
+          label: savedMap[def.key]?.label ?? def.label,
+          sort_order: savedMap[def.key]?.sort_order ?? i,
+          visible: savedMap[def.key]?.visible ?? true,
+        }));
+        full.sort((a, b) => a.sort_order - b.sort_order);
+        merged[page] = full;
+      }
+      setSectionConfig(merged);
+    } catch { toast.error('Failed to load section config.'); }
+    finally { setLoadingSections(false); }
+  };
+
+  useEffect(() => {
+    if (tab === 'sections') fetchSectionConfig();
+  }, [tab]);
+
+  const saveSectionPage = async (page: string, sections: LocalSection[]) => {
+    setSavingSections(page);
+    try {
+      const res = await fetch('/api/admin/section-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page, sections: sections.map((s, i) => ({ ...s, sort_order: i })) }),
+      });
+      if (!res.ok) throw new Error();
+      invalidateSectionConfig(page);
+      toast.success('Saved!');
+    } catch { toast.error('Failed to save section config.'); }
+    finally { setSavingSections(null); }
+  };
+
+  const moveSectionItem = (page: string, index: number, dir: -1 | 1) => {
+    const arr = [...(sectionConfig[page] ?? [])];
+    const swapIdx = index + dir;
+    if (swapIdx < 0 || swapIdx >= arr.length) return;
+    [arr[index], arr[swapIdx]] = [arr[swapIdx], arr[index]];
+    const updated = { ...sectionConfig, [page]: arr };
+    setSectionConfig(updated);
+    saveSectionPage(page, arr);
+  };
+
+  const toggleSectionVisible = (page: string, key: string) => {
+    const arr = (sectionConfig[page] ?? []).map(s => s.key === key ? { ...s, visible: !s.visible } : s);
+    setSectionConfig(prev => ({ ...prev, [page]: arr }));
+    saveSectionPage(page, arr);
+  };
+
+  const saveSectionLabel = async (page: string, key: string) => {
+    if (!editLabelValue.trim()) { toast.error('Label cannot be empty.'); return; }
+    const arr = (sectionConfig[page] ?? []).map(s => s.key === key ? { ...s, label: editLabelValue.trim() } : s);
+    setSectionConfig(prev => ({ ...prev, [page]: arr }));
+    setEditingSectionLabel(null);
+    await saveSectionPage(page, arr);
+  };
 
   const handleColumnToggle = async (tableName: string, columnKey: string, visible: boolean) => {
     const saveKey = `${tableName}:${columnKey}`;
@@ -346,14 +430,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-6">
-          {(['types', 'tables', 'permissions'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'permissions'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${tab === t ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : 'Permissions'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : 'Permissions'}
             </button>
           ))}
         </nav>
@@ -411,6 +495,97 @@ export default function AdminPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )
+      )}
+
+      {/* ── Section Management tab ── */}
+      {tab === 'sections' && (
+        loadingSections ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <p className="text-sm text-gray-500">Customize the title, order, and visibility of sections on Attendee and Company detail pages. Changes take effect immediately for all users.</p>
+            {Object.entries(SECTION_DEFS).map(([page]) => {
+              const sections = sectionConfig[page] ?? [];
+              return (
+                <div key={page} className="card">
+                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-4">
+                    {SECTION_PAGE_LABELS[page] ?? page}
+                  </h2>
+                  <div className="divide-y divide-gray-100">
+                    {sections.map((section, index) => {
+                      const isEditing = editingSectionLabel?.page === page && editingSectionLabel?.key === section.key;
+                      return (
+                        <div key={section.key} className="flex items-center gap-3 py-3">
+                          {/* Up/Down */}
+                          <div className="flex flex-col gap-0.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => moveSectionItem(page, index, -1)}
+                              disabled={index === 0 || savingSections === page}
+                              className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move up"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveSectionItem(page, index, 1)}
+                              disabled={index === sections.length - 1 || savingSections === page}
+                              className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move down"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                          </div>
+
+                          {/* Label */}
+                          <div className="flex-1 min-w-0">
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={editLabelValue}
+                                  onChange={e => setEditLabelValue(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') saveSectionLabel(page, section.key); if (e.key === 'Escape') setEditingSectionLabel(null); }}
+                                  className="input-field flex-1 text-sm"
+                                  autoFocus
+                                />
+                                <button type="button" onClick={() => saveSectionLabel(page, section.key)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                                <button type="button" onClick={() => setEditingSectionLabel(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm ${section.visible ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{section.label}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingSectionLabel({ page, key: section.key }); setEditLabelValue(section.label); }}
+                                  className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium"
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Visibility toggle */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {savingSections === page && <span className="text-xs text-gray-400">Saving…</span>}
+                            <Toggle
+                              checked={section.visible}
+                              onChange={() => toggleSectionVisible(page, section.key)}
+                              disabled={savingSections === page}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )
       )}

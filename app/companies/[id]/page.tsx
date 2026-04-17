@@ -19,6 +19,7 @@ import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -105,6 +106,7 @@ export default function CompanyDetailPage() {
   const searchParams = useSearchParams();
   const id = params.id as string;
   const colorMaps = useConfigColors();
+  const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
 
   const [company, setCompany] = useState<Company | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1070,92 +1072,59 @@ export default function CompanyDetailPage() {
 
         </div>{/* end left column */}
 
-        {/* Right column — Status */}
+        {/* Right column */}
         <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Status</h2>
-            <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
-            <div className="flex flex-wrap gap-2">
-              {statusOptions.map(val => {
-                const activeStatuses = new Set((company.status || '').split(',').map(s => s.trim()).filter(Boolean));
-                const isActive = activeStatuses.has(val);
-                return (
-                  <button
-                    key={val}
-                    onClick={() => handleStatus(val)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                      isActive ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                    }`}
-                  >
-                    {val}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Conferences this company has attended — collapsible */}
-          <div className="card">
-            {(() => {
-              const today = new Date().toISOString().slice(0, 10);
-              const confs = company.conferences || [];
-              const inProgressConfs = confs.filter(conf => conf.start_date <= today && conf.end_date >= today);
-              return (
-                <>
-                  <button
-                    onClick={() => setConferencesExpanded(prev => !prev)}
-                    className="flex items-center justify-between w-full text-left"
-                  >
-                    <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
-                      Conferences ({confs.length})
-                    </h2>
-                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </button>
-                  {!conferencesExpanded && inProgressConfs.length > 0 && (
-                    <div className="space-y-2 mt-3">
-                      {inProgressConfs.map(conf => (
-                        <Link
-                          key={conf.id}
-                          href={`/conferences/${conf.id}`}
-                          className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all"
+          {(() => {
+            const sectionMap: Record<string, React.ReactNode> = {
+              status: (
+                <div key="status" className="card">
+                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">{getSectionLabel('status')}</h2>
+                  <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {statusOptions.map(val => {
+                      const activeStatuses = new Set((company.status || '').split(',').map(s => s.trim()).filter(Boolean));
+                      const isActive = activeStatuses.has(val);
+                      return (
+                        <button
+                          key={val}
+                          onClick={() => handleStatus(val)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                            isActive ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                          }`}
                         >
-                          <div className="min-w-0">
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                              <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
-                              In Progress
-                            </span>
-                            <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                              {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
-                            </p>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                  {conferencesExpanded && (
-                    <>
-                      {confs.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-3 mt-3">No conferences attended yet.</p>
-                      ) : (
-                        <div className="space-y-2 mt-3">
-                          {confs.map(conf => {
-                            const isActive = conf.start_date <= today && conf.end_date >= today;
-                            return (
-                              <Link
-                                key={conf.id}
-                                href={`/conferences/${conf.id}`}
-                                className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}
-                              >
+                          {val}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ),
+              conferences: (
+                <div key="conferences" className="card">
+                  {(() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const confs = company.conferences || [];
+                    const inProgressConfs = confs.filter(conf => conf.start_date <= today && conf.end_date >= today);
+                    return (
+                      <>
+                        <button
+                          onClick={() => setConferencesExpanded(prev => !prev)}
+                          className="flex items-center justify-between w-full text-left"
+                        >
+                          <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                            {getSectionLabel('conferences')} ({confs.length})
+                          </h2>
+                          <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        {!conferencesExpanded && inProgressConfs.length > 0 && (
+                          <div className="space-y-2 mt-3">
+                            {inProgressConfs.map(conf => (
+                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
                                 <div className="min-w-0">
-                                  {isActive && (
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                                      <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
-                                      In Progress
-                                    </span>
-                                  )}
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                                    <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                    In Progress
+                                  </span>
                                   <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
                                   <p className="text-xs text-gray-500 mt-0.5">
                                     {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -1164,173 +1133,193 @@ export default function CompanyDetailPage() {
                                 </div>
                                 <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                               </Link>
-                            );
-                          })}
+                            ))}
+                          </div>
+                        )}
+                        {conferencesExpanded && (
+                          <>
+                            {confs.length === 0 ? (
+                              <p className="text-sm text-gray-400 text-center py-3 mt-3">No conferences attended yet.</p>
+                            ) : (
+                              <div className="space-y-2 mt-3">
+                                {confs.map(conf => {
+                                  const isActive = conf.start_date <= today && conf.end_date >= today;
+                                  return (
+                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+                                      <div className="min-w-0">
+                                        {isActive && (
+                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
+                                            <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                            In Progress
+                                          </span>
+                                        )}
+                                        <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                          {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                          {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                                        </p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              ),
+              communities: (company.child_companies && company.child_companies.length > 0) ? (
+                <div key="communities" className="card">
+                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">
+                    {getSectionLabel('communities')} ({company.child_companies.length})
+                  </h2>
+                  <div className="space-y-2">
+                    {company.child_companies.map(child => (
+                      <Link key={child.id} href={`/companies/${child.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{child.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {child.company_type && <span className="text-xs text-gray-500">{child.company_type}</span>}
+                            <span className="text-xs text-gray-400">{child.attendee_count} attendees</span>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : null,
+              relationships: (
+                <InternalRelationshipsSection
+                  key="relationships"
+                  companyId={Number(id)}
+                  companyName={company.name}
+                  userOptions={userOptions}
+                  attendees={company.attendees?.map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title })) || []}
+                  relTypeOptions={relTypeOptions}
+                  relationships={internalRelationships}
+                  onRefresh={fetchInternalRelationships}
+                />
+              ),
+              operator_capital: (company.company_type && (operatorTypeValues.has(company.company_type) || capitalTypeValues.has(company.company_type))) ? (
+                <div key="operator_capital" className="card">
+                  <button
+                    onClick={() => setOpCapRelExpanded(prev => !prev)}
+                    className="flex items-center justify-between w-full text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                        {getSectionLabel('operator_capital')}
+                      </h2>
+                      {opCapRelExpanded && (
+                        <span
+                          role="button"
+                          onClick={(e) => { e.stopPropagation(); setShowRelateModal(true); }}
+                          className="text-xs text-procare-bright-blue hover:underline font-medium"
+                        >
+                          + Add
+                        </span>
+                      )}
+                    </div>
+                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${opCapRelExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                  {opCapRelExpanded && (
+                    <>
+                      {!company.related_companies || company.related_companies.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-3">No related companies yet.</p>
+                      ) : (
+                        <div className="space-y-2 mt-3">
+                          {company.related_companies.map(rel => (
+                            <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group">
+                              <Link href={`/companies/${rel.id}`} className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
+                                {rel.company_type && (
+                                  <span className={`mt-1 ${getBadgeClass(rel.company_type, colorMaps.company_type || {})}`}>
+                                    {rel.company_type}
+                                  </span>
+                                )}
+                              </Link>
+                              <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                <button
+                                  onClick={() => handleRemoveRelationship(rel.id)}
+                                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+                                  title="Remove relationship"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                                <Link href={`/companies/${rel.id}`}>
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </Link>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </>
                   )}
-                </>
-              );
-            })()}
-          </div>
-
-          {/* Child / subsidiary companies */}
-          {company.child_companies && company.child_companies.length > 0 && (
-            <div className="card">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">
-                Communities ({company.child_companies.length})
-              </h2>
-              <div className="space-y-2">
-                {company.child_companies.map(child => (
-                  <Link
-                    key={child.id}
-                    href={`/companies/${child.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{child.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {child.company_type && <span className="text-xs text-gray-500">{child.company_type}</span>}
-                        <span className="text-xs text-gray-400">{child.attendee_count} attendees</span>
+                  {showRelateModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+                        <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
+                          Add Related Company
+                        </h3>
+                        <input
+                          type="text"
+                          placeholder="Search companies..."
+                          value={relateSearch}
+                          onChange={(e) => setRelateSearch(e.target.value)}
+                          className="input w-full mb-3"
+                          autoFocus
+                        />
+                        <div className="max-h-60 overflow-y-auto space-y-1">
+                          {relateResults.length === 0 && relateSearch.length >= 2 && (
+                            <p className="text-sm text-gray-400 text-center py-3">No companies found.</p>
+                          )}
+                          {relateResults.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => handleAddRelationship(c.id)}
+                              disabled={relateSaving}
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-between"
+                            >
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{c.name}</p>
+                                {c.company_type && (
+                                  <span className={`mt-0.5 ${getBadgeClass(c.company_type, colorMaps.company_type || {})}`}>
+                                    {c.company_type}
+                                  </span>
+                                )}
+                              </div>
+                              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}
+                            className="btn-secondary text-sm"
+                          >
+                            Close
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Internal Relationships */}
-          <InternalRelationshipsSection
-            companyId={Number(id)}
-            companyName={company.name}
-            userOptions={userOptions}
-            attendees={company.attendees?.map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title })) || []}
-            relTypeOptions={relTypeOptions}
-            relationships={internalRelationships}
-            onRefresh={fetchInternalRelationships}
-          />
-
-          {/* Operator / Capital Relationships — shown when company type is Operator or Capital */}
-          {company.company_type && (operatorTypeValues.has(company.company_type) || capitalTypeValues.has(company.company_type)) && (
-            <div className="card">
-              <button
-                onClick={() => setOpCapRelExpanded(prev => !prev)}
-                className="flex items-center justify-between w-full text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
-                    Operator / Capital Relationships
-                  </h2>
-                  {opCapRelExpanded && (
-                    <span
-                      role="button"
-                      onClick={(e) => { e.stopPropagation(); setShowRelateModal(true); }}
-                      className="text-xs text-procare-bright-blue hover:underline font-medium"
-                    >
-                      + Add
-                    </span>
                   )}
                 </div>
-                <svg className={`w-5 h-5 text-gray-400 transition-transform ${opCapRelExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-              {opCapRelExpanded && (
-                <>
-                  {!company.related_companies || company.related_companies.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-3">No related companies yet.</p>
-                  ) : (
-                    <div className="space-y-2 mt-3">
-                  {company.related_companies.map(rel => (
-                    <div
-                      key={rel.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group"
-                    >
-                      <Link href={`/companies/${rel.id}`} className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
-                        {rel.company_type && (
-                          <span className={`mt-1 ${getBadgeClass(rel.company_type, colorMaps.company_type || {})}`}>
-                            {rel.company_type}
-                          </span>
-                        )}
-                      </Link>
-                      <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                        <button
-                          onClick={() => handleRemoveRelationship(rel.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
-                          title="Remove relationship"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                        <Link href={`/companies/${rel.id}`}>
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-                </>
-              )}
-
-              {/* Relate modal */}
-              {showRelateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                  <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-                    <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
-                      Add Related Company
-                    </h3>
-                    <input
-                      type="text"
-                      placeholder="Search companies..."
-                      value={relateSearch}
-                      onChange={(e) => setRelateSearch(e.target.value)}
-                      className="input w-full mb-3"
-                      autoFocus
-                    />
-                    <div className="max-h-60 overflow-y-auto space-y-1">
-                      {relateResults.length === 0 && relateSearch.length >= 2 && (
-                        <p className="text-sm text-gray-400 text-center py-3">No companies found.</p>
-                      )}
-                      {relateResults.map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => handleAddRelationship(c.id)}
-                          disabled={relateSaving}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-between"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">{c.name}</p>
-                            {c.company_type && (
-                              <span className={`mt-0.5 ${getBadgeClass(c.company_type, colorMaps.company_type || {})}`}>
-                                {c.company_type}
-                              </span>
-                            )}
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}
-                        className="btn-secondary text-sm"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+              ) : null,
+            };
+            return sectionOrder.map(key => isSectionVisible(key) ? sectionMap[key] : null);
+          })()}
         </div>
 
       </div>{/* end grid */}
