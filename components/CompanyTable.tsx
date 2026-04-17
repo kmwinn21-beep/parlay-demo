@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
@@ -166,7 +165,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   const userOptionsFull = useUserOptions();
-  const searchParams = useSearchParams();
   const { isVisible } = useTableColumnConfig(tableName);
 
   // Local copy for optimistic updates — syncs whenever the parent re-fetches
@@ -178,7 +176,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // filterSFOwner stores a user ID (as string) for filtering, or '' for all
   const [filterSFOwner, setFilterSFOwner] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') ?? '');
+  const [filterStatus, setFilterStatus] = useState('');
+  // Read initial ?status= filter from URL after mount (avoids useSearchParams hydration issue)
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get('status');
+    if (status) setFilterStatus(status);
+  }, []);
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterConference, setFilterConference] = useState('');

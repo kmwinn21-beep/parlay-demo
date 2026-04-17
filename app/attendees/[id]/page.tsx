@@ -65,6 +65,8 @@ function formatDate(d: string) {
 export default function AttendeeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
@@ -227,9 +229,9 @@ export default function AttendeeDetailPage() {
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
     } catch {
       toast.error('Failed to load attendee');
-      router.push('/attendees');
+      routerRef.current.push('/attendees');
     } finally { setIsLoading(false); }
-  }, [id, router]);
+  }, [id]);
 
   useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); fetchInternalRelationships(); fetchAttendeeEvents(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes, fetchInternalRelationships, fetchAttendeeEvents]);
 
