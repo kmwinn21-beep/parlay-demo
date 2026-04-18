@@ -298,9 +298,12 @@ export async function initDb(): Promise<void> {
     // Rename 'Procare Hosted' event type to generic 'Company Hosted'
     `UPDATE config_options SET value = 'Company Hosted' WHERE category = 'event_type' AND value = 'Procare Hosted'`,
   ];
-  for (const sql of migrations) {
-    try { await db.execute({ sql, args: [] }); } catch { /* already exists */ }
-  }
+  // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
+  // Each group runs in parallel; groups stay sequential relative to each other.
+  const ddlMigrations = migrations.filter(sql => /^\s*(CREATE|ALTER)/i.test(sql));
+  const dmlMigrations = migrations.filter(sql => /^\s*(UPDATE|INSERT|DELETE)/i.test(sql));
+  await Promise.all(ddlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
+  await Promise.all(dmlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
 
   // Migrate existing follow-up data from conference_attendee_details to follow_ups table
   try {
@@ -345,14 +348,12 @@ export async function initDb(): Promise<void> {
       { category: 'next_steps', value: 'General Follow Up', sort_order: 2 },
       { category: 'next_steps', value: 'Other', sort_order: 3 },
     ];
-    for (const seed of seeds) {
-      try {
-        await db.execute({
-          sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
-          args: [seed.category, seed.value, seed.sort_order],
-        });
-      } catch { /* ignore */ }
-    }
+    await Promise.all(seeds.map(seed =>
+      db.execute({
+        sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
+        args: [seed.category, seed.value, seed.sort_order],
+      }).catch(() => {})
+    ));
   }
 
   // Always ensure seniority and profit_type seeds exist (for existing DBs)
@@ -393,14 +394,12 @@ export async function initDb(): Promise<void> {
     { category: 'rep_relationship_type', value: 'Former Client', sort_order: 2 },
     { category: 'rep_relationship_type', value: 'Other', sort_order: 3 },
   ];
-  for (const seed of newCategorySeeds) {
-    try {
-      await db.execute({
-        sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
-        args: [seed.category, seed.value, seed.sort_order],
-      });
-    } catch { /* ignore */ }
-  }
+  await Promise.all(newCategorySeeds.map(seed =>
+    db.execute({
+      sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
+      args: [seed.category, seed.value, seed.sort_order],
+    }).catch(() => {})
+  ));
 
   // Remove legacy "True"/"False" ICP config options if they exist
   try {
@@ -420,14 +419,12 @@ export async function initDb(): Promise<void> {
     { key: 'no_show', pattern: '%no%show%' },
     { key: 'pending', pattern: '%pending%' },
   ];
-  for (const { key, pattern } of actionKeySeeds) {
-    try {
-      await db.execute({
-        sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ? AND (action_key IS NULL OR action_key = '')",
-        args: [key, pattern],
-      });
-    } catch { /* ignore */ }
-  }
+  await Promise.all(actionKeySeeds.map(({ key, pattern }) =>
+    db.execute({
+      sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ? AND (action_key IS NULL OR action_key = '')",
+      args: [key, pattern],
+    }).catch(() => {})
+  ));
 }
 
 // Run initDb once at module load so tables exist before any query
