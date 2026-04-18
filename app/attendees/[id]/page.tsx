@@ -91,20 +91,7 @@ export default function AttendeeDetailPage() {
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
-  const [showEmailTooltip, setShowEmailTooltip] = useState(false);
-  const emailTooltipRef = useRef<HTMLSpanElement>(null);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!showEmailTooltip) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (emailTooltipRef.current && !emailTooltipRef.current.contains(e.target as Node)) {
-        setShowEmailTooltip(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showEmailTooltip]);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -702,29 +689,13 @@ export default function AttendeeDetailPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
                     {attendee.email ? (
-                      <span
-                        ref={emailTooltipRef}
-                        className="relative group/email inline-block"
+                      <a
+                        href={`mailto:${attendee.email}`}
+                        className="text-sm text-procare-bright-blue hover:underline block truncate"
+                        title={attendee.email}
                       >
-                        <button type="button" onClick={() => setShowEmailTooltip(v => !v)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors text-procare-bright-blue">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                        <span className={`pointer-events-auto absolute bottom-full left-0 mb-2 z-20 flex-col items-start ${showEmailTooltip ? 'flex' : 'hidden group-hover/email:flex'}`}>
-                          <span className="rounded-lg bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl whitespace-nowrap">
-                            <span className="block font-semibold mb-1 text-gray-300 uppercase tracking-wide text-sm">Email</span>
-                            <a
-                              href={`mailto:${attendee.email}`}
-                              className="text-procare-bright-blue hover:underline"
-                              onClick={e => e.stopPropagation()}
-                            >
-                              {attendee.email}
-                            </a>
-                          </span>
-                          <span className="w-2 h-2 bg-gray-900 rotate-45 -mt-1 ml-3" />
-                        </span>
-                      </span>
+                        {attendee.email}
+                      </a>
                     ) : <p className="text-sm text-gray-400">—</p>}
                   </div>
                   <div>
