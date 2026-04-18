@@ -611,6 +611,7 @@ export default function AttendeeDetailPage() {
   const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(Boolean));
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <BackButton />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column (2/3 width) — profile + follow ups */}
         <div className="lg:col-span-2 space-y-6">
