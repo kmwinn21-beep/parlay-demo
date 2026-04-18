@@ -55,8 +55,8 @@ export default function AttendeesTooltip({ attendees, align = 'center' }: Attend
         setOpen(false);
       }
     }
-    document.addEventListener('click', handleClickOutside, true);
-    return () => document.removeEventListener('click', handleClickOutside, true);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
   if (attendees.length === 0) return null;
