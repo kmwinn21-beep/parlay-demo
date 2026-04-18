@@ -421,8 +421,7 @@ export default function RelationshipsPage() {
         {/* Conference history modal */}
         {showConferences && (
           <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowConferences(false)}>
-            <div className="absolute inset-0 bg-black/40" />
-            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold w-full max-w-sm mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
                 <div>
                   <h3 className="text-sm font-semibold text-procare-dark-blue font-serif">Conference History</h3>
