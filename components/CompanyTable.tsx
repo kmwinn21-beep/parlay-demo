@@ -422,7 +422,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       }));
       setEditingCell(null);
       toast.success('Updated.');
-      onRefresh();
     } catch {
       toast.error('Failed to update company.');
     } finally {

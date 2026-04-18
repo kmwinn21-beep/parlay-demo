@@ -102,8 +102,8 @@ export default function AttendeeDetailPage() {
         setShowEmailTooltip(false);
       }
     }
-    document.addEventListener('click', handleClickOutside, true);
-    return () => document.removeEventListener('click', handleClickOutside, true);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showEmailTooltip]);
 
   // Follow-ups
@@ -1123,8 +1123,8 @@ export default function AttendeeDetailPage() {
 
       {/* Add to Guest List Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowInviteModal(false); setInviteForm({ rep: '', conference_id: '', event_id: '' }); setInviteConferenceEvents([]); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-base font-semibold text-procare-dark-blue font-serif">Add to Guest List</h3>
               <button type="button" onClick={() => { setShowInviteModal(false); setInviteForm({ rep: '', conference_id: '', event_id: '' }); setInviteConferenceEvents([]); }} className="text-gray-400 hover:text-gray-600 transition-colors">

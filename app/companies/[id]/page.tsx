@@ -1265,8 +1265,8 @@ export default function CompanyDetailPage() {
                     </>
                   )}
                   {showRelateModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}>
+                      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
                           Add Related Company
                         </h3>
