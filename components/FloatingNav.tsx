@@ -222,10 +222,9 @@ export function FloatingNav() {
           ...(above
             ? { bottom: vh - pos.y + 10 }
             : { top: pos.y + BTN + 10 }),
-          display: 'flex',
+          display: open ? 'flex' : 'none',
           flexDirection: above ? 'column-reverse' : 'column',
           gap: 6,
-          pointerEvents: open ? 'auto' : 'none',
         }}
       >
         {ordered.map((item, i) => {

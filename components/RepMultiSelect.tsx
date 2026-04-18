@@ -30,7 +30,7 @@ export function RepMultiSelect({
   // snapshot the IDs when the dropdown opens so we can detect changes on close
   const openIdsRef = useRef<number[]>([]);
 
-  // Close on outside click — call onClose regardless of whether the options list was open
+  // Close on outside click — only call onClose if the dropdown was actually open
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -42,8 +42,8 @@ export function RepMultiSelect({
         if (open) {
           setOpen(false);
           setPos(null);
+          onClose?.(selectedIds);
         }
-        onClose?.(selectedIds);
       }
     };
     document.addEventListener('mousedown', handler);

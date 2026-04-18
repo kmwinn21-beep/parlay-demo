@@ -102,8 +102,8 @@ export default function AttendeeDetailPage() {
         setShowEmailTooltip(false);
       }
     }
-    document.addEventListener('click', handleClickOutside, true);
-    return () => document.removeEventListener('click', handleClickOutside, true);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showEmailTooltip]);
 
   // Follow-ups
