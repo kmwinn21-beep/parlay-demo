@@ -40,8 +40,8 @@ export function ColumnMappingModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between flex-shrink-0">
