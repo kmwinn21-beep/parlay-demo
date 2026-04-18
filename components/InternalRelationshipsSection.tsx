@@ -66,6 +66,8 @@ interface InternalRelationshipsSectionProps {
   onRefresh: () => void;
 }
 
+const EMPTY_ATTENDEES: AttendeeOption[] = [];
+
 function MultiSelectDropdownById({
   label,
   options,
@@ -330,7 +332,7 @@ export function InternalRelationshipsSection({
   companyName,
   attendeeId,
   userOptions,
-  attendees = [],
+  attendees = EMPTY_ATTENDEES,
   relTypeOptions,
   relationships,
   onRefresh,
