@@ -316,7 +316,7 @@ export default function ConferencesPage() {
 
   const isMonthExpanded = (y: number, m: number) => {
     const k = `${y}-${m}`;
-    return k in monthExpanded ? monthExpanded[k] : (y === currentYear && m === currentMonth);
+    return k in monthExpanded ? monthExpanded[k] : true;
   };
   const toggleMonth = (y: number, m: number) =>
     setMonthExpanded((p) => ({ ...p, [`${y}-${m}`]: !isMonthExpanded(y, m) }));
@@ -350,7 +350,7 @@ export default function ConferencesPage() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setFiltersOpen((v) => !v)}
-              className="lg:hidden flex items-center gap-2 text-sm font-semibold text-procare-dark-blue"
+              className="flex items-center gap-2 text-sm font-semibold text-procare-dark-blue"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
@@ -360,13 +360,12 @@ export default function ConferencesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
               </svg>
             </button>
-            <h2 className="hidden lg:block text-sm font-semibold text-procare-dark-blue">Filters</h2>
             {hasFilters && (
               <button onClick={clearFilters} className="text-xs text-procare-bright-blue hover:underline">Clear all</button>
             )}
           </div>
 
-          <div className={`${filtersOpen ? 'grid' : 'hidden'} lg:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3`}>
+          <div className={`${filtersOpen ? 'grid' : 'hidden'} grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3`}>
             <div>
               <label className="label text-xs">Year</label>
               <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="input-field text-sm">
@@ -538,7 +537,7 @@ export default function ConferencesPage() {
               mc.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-4">No conferences this month.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                   {mc.map((conf) => <ConferenceCard key={conf.id} conf={conf}/>)}
                 </div>
               )
