@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBottomNav } from './BottomNavContext';
 import { GlobalSearchModal } from './GlobalSearch';
+import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 
 const STORAGE_KEY = 'floatingNavPos';
@@ -92,6 +93,7 @@ export function FloatingNav() {
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showQuickNote, setShowQuickNote] = useState(false);
   const fabRef = useRef<HTMLDivElement>(null);
   const ds = useRef({
     on: false,
@@ -196,6 +198,19 @@ export function FloatingNav() {
       ),
       href: null,
       active: false,
+      action: 'search' as const,
+    },
+    {
+      key: 'quick-note',
+      label: 'Quick Note',
+      icon: (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      ),
+      href: null,
+      active: false,
+      action: 'quick-note' as const,
     },
   ];
   // When above, reverse so stagger goes from FAB outward (Dashboard closest, Search farthest)
@@ -225,6 +240,8 @@ export function FloatingNav() {
 
       {/* Global search modal */}
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
+      {/* Quick note modal */}
+      {showQuickNote && <QuickNoteInlineModal onClose={() => setShowQuickNote(false)} />}
 
       {/* Menu items — always in DOM so closing can animate out */}
       <div
@@ -286,7 +303,11 @@ export function FloatingNav() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => { setOpen(false); setShowSearch(true); }}
+                  onClick={() => {
+                    setOpen(false);
+                    if (item.key === 'quick-note') setShowQuickNote(true);
+                    else setShowSearch(true);
+                  }}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border min-w-[152px] transition-colors ${pillCls}`}
                 >
                   {item.icon}
