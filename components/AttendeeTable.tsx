@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
+import { AddToConferenceModal } from './AddToConferenceModal';
 import { effectiveSeniority } from '@/lib/parsers';
 import { NotesPopover } from './NotesPopover';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -123,6 +124,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showRepRelModal, setShowRepRelModal] = useState(false);
+  const [showAddToConf, setShowAddToConf] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('last_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -366,6 +368,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             <button onClick={() => setShowRepRelModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               + Rep Relationship
+            </button>
+            <button onClick={() => setShowAddToConf(true)} className="btn-secondary flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              Add to Conference
             </button>
           </>
         )}
@@ -729,6 +735,15 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         entityIds={Array.from(selectedIds)}
         entityNames={new Map(selectedAttendees.map(a => [a.id, `${a.first_name} ${a.last_name}`]))}
       />
+
+      {showAddToConf && (
+        <AddToConferenceModal
+          entityType="attendee"
+          selectedIds={selectedIds}
+          onClose={() => setShowAddToConf(false)}
+          onSuccess={() => { setSelectedIds(new Set()); onRefresh(); }}
+        />
+      )}
     </div>
   );
 }
