@@ -896,13 +896,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 {isVisible('conferences') && <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>}
                 {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>}
                 {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>
+                {isVisible('relationships') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>}
                 {rowAction && <th className="px-3 py-3 w-20" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={rowAction ? 11 : 10} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
@@ -1014,20 +1014,22 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     )}
                   </td>}
                   {isVisible('updated_on') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>}
-                  <td className="px-3 py-3">
-                    {Number(company.relationship_count) > 0 && (
-                      <button
-                        type="button"
-                        onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
-                        title="View relationships"
-                        className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                        </svg>
-                      </button>
-                    )}
-                  </td>
+                  {isVisible('relationships') && (
+                    <td className="px-3 py-3">
+                      {Number(company.relationship_count) > 0 && (
+                        <button
+                          type="button"
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
+                          title="View relationships"
+                          className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                        </button>
+                      )}
+                    </td>
+                  )}
                   {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
                 </tr>
               ))}
