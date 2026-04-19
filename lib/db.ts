@@ -293,6 +293,7 @@ export async function initDb(): Promise<void> {
     `CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('allow_attendee_upload', 'true')`,
     `CREATE TABLE IF NOT EXISTS table_column_config (table_name TEXT NOT NULL, column_key TEXT NOT NULL, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (table_name, column_key))`,
+    `ALTER TABLE table_column_config ADD COLUMN sort_order INTEGER`,
     `CREATE TABLE IF NOT EXISTS section_config (page TEXT NOT NULL, section_key TEXT NOT NULL, label TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (page, section_key))`,
     `CREATE TABLE IF NOT EXISTS config_option_visibility (option_id INTEGER NOT NULL, form_key TEXT NOT NULL, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (option_id, form_key), FOREIGN KEY (option_id) REFERENCES config_options(id) ON DELETE CASCADE)`,
     // Rename 'Procare Hosted' event type to generic 'Company Hosted'

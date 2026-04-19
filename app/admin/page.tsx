@@ -331,10 +331,12 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Edit Tables tab
-  const [tableConfig, setTableConfig] = useState<Record<string, Record<string, boolean>>>({});
+  const [tableConfig, setTableConfig] = useState<Record<string, Record<string, { visible: boolean; sort_order: number | null }>>>({});
   const [loadingTables, setLoadingTables] = useState(false);
   const [savingCol, setSavingCol] = useState<string | null>(null);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [dragCol, setDragCol] = useState<{ table: string; key: string } | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   // Sections tab
   type LocalSection = { key: string; label: string; sort_order: number; visible: boolean };
@@ -402,7 +404,7 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/table-config');
       if (!res.ok) throw new Error();
-      const data = await res.json() as Record<string, Record<string, boolean>>;
+      const data = await res.json() as Record<string, Record<string, { visible: boolean; sort_order: number | null }>>;
       setTableConfig(data);
     } catch { toast.error('Failed to load table config.'); }
     finally { setLoadingTables(false); }
@@ -494,10 +496,9 @@ export default function AdminPage() {
   const handleColumnToggle = async (tableName: string, columnKey: string, visible: boolean) => {
     const saveKey = `${tableName}:${columnKey}`;
     setSavingCol(saveKey);
-    // Optimistic update
     setTableConfig(prev => ({
       ...prev,
-      [tableName]: { ...(prev[tableName] ?? {}), [columnKey]: visible },
+      [tableName]: { ...(prev[tableName] ?? {}), [columnKey]: { ...(prev[tableName]?.[columnKey] ?? { sort_order: null }), visible } },
     }));
     try {
       const res = await fetch('/api/admin/table-config', {
@@ -509,18 +510,60 @@ export default function AdminPage() {
       invalidateTableColumnConfig(tableName);
     } catch {
       toast.error('Failed to save column visibility.');
-      // Revert
       setTableConfig(prev => ({
         ...prev,
-        [tableName]: { ...(prev[tableName] ?? {}), [columnKey]: !visible },
+        [tableName]: { ...(prev[tableName] ?? {}), [columnKey]: { ...(prev[tableName]?.[columnKey] ?? { sort_order: null }), visible: !visible } },
       }));
     } finally { setSavingCol(null); }
   };
 
   const isColVisible = (tableName: string, columnKey: string): boolean => {
     const tbl = tableConfig[tableName];
-    if (!tbl || !(columnKey in tbl)) return true; // default visible
-    return tbl[columnKey];
+    if (!tbl || !(columnKey in tbl)) return true;
+    return tbl[columnKey].visible;
+  };
+
+  const getOrderedCols = (tableName: string) => {
+    const defs = TABLE_COLUMN_DEFS[tableName] ?? [];
+    const tbl = tableConfig[tableName] ?? {};
+    return [...defs].sort((a, b) => {
+      const ia = defs.findIndex(d => d.key === a.key);
+      const ib = defs.findIndex(d => d.key === b.key);
+      const oa = tbl[a.key]?.sort_order ?? ia;
+      const ob = tbl[b.key]?.sort_order ?? ib;
+      return oa - ob;
+    });
+  };
+
+  const handleColumnReorder = async (tableName: string, fromKey: string, toKey: string) => {
+    if (fromKey === toKey) return;
+    const ordered = getOrderedCols(tableName);
+    const fromIdx = ordered.findIndex(c => c.key === fromKey);
+    const toIdx   = ordered.findIndex(c => c.key === toKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const next = [...ordered];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    const orders = next.map((col, i) => ({ column: col.key, sort_order: i }));
+    // Optimistic update
+    setTableConfig(prev => {
+      const updated = { ...(prev[tableName] ?? {}) };
+      orders.forEach(({ column, sort_order }) => {
+        updated[column] = { ...(updated[column] ?? { visible: true }), sort_order };
+      });
+      return { ...prev, [tableName]: updated };
+    });
+    try {
+      const res = await fetch('/api/admin/table-config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: tableName, orders }),
+      });
+      if (!res.ok) throw new Error();
+      invalidateTableColumnConfig(tableName);
+    } catch {
+      toast.error('Failed to save column order.');
+    }
   };
 
   // ── Brand tab ────────────────────────────────────────────────────────────────
@@ -739,8 +782,9 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             <p className="text-sm text-gray-500">Toggle columns on or off for each table. Changes take effect immediately for all users.</p>
-            {Object.entries(TABLE_COLUMN_DEFS).map(([tableName, cols]) => {
+            {Object.keys(TABLE_COLUMN_DEFS).map(tableName => {
               const isExpanded = expandedTables.has(tableName);
+              const orderedCols = getOrderedCols(tableName);
               return (
                 <div key={tableName} className="card p-0 overflow-hidden">
                   <button
@@ -764,12 +808,31 @@ export default function AdminPage() {
                   </button>
                   {isExpanded && (
                     <div className="divide-y divide-gray-100 border-t border-gray-100 px-6 pb-2">
-                      {cols.map(col => {
+                      {orderedCols.map(col => {
                         const visible = isColVisible(tableName, col.key);
                         const saveKey = `${tableName}:${col.key}`;
+                        const isDragTarget = dragCol?.table === tableName && dragOverKey === col.key && dragCol.key !== col.key;
                         return (
-                          <div key={col.key} className="flex items-center justify-between py-3">
-                            <span className="text-sm text-gray-700">{col.label}</span>
+                          <div
+                            key={col.key}
+                            draggable
+                            onDragStart={() => setDragCol({ table: tableName, key: col.key })}
+                            onDragEnd={() => { setDragCol(null); setDragOverKey(null); }}
+                            onDragOver={e => { e.preventDefault(); if (dragCol?.table === tableName) setDragOverKey(col.key); }}
+                            onDragLeave={() => setDragOverKey(null)}
+                            onDrop={e => {
+                              e.preventDefault();
+                              if (dragCol?.table === tableName) handleColumnReorder(tableName, dragCol.key, col.key);
+                              setDragCol(null); setDragOverKey(null);
+                            }}
+                            className={`flex items-center justify-between py-3 transition-colors rounded ${isDragTarget ? 'bg-blue-50 outline outline-2 outline-procare-bright-blue' : ''}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <svg className="w-4 h-4 text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                              </svg>
+                              <span className="text-sm text-gray-700">{col.label}</span>
+                            </div>
                             <div className="flex items-center gap-2">
                               {savingCol === saveKey && (
                                 <span className="text-xs text-gray-400">Saving…</span>

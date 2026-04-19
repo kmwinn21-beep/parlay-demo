@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 
+export interface ColumnEntry { visible: boolean; sort_order: number | null; }
+
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -12,25 +14,31 @@ export async function GET(request: NextRequest) {
 
     if (tableName) {
       const result = await db.execute({
-        sql: 'SELECT column_key, visible FROM table_column_config WHERE table_name = ?',
+        sql: 'SELECT column_key, visible, sort_order FROM table_column_config WHERE table_name = ?',
         args: [tableName],
       });
-      const config: Record<string, boolean> = {};
+      const config: Record<string, ColumnEntry> = {};
       for (const row of result.rows) {
-        config[String(row.column_key)] = Number(row.visible) === 1;
+        config[String(row.column_key)] = {
+          visible: Number(row.visible) === 1,
+          sort_order: row.sort_order != null ? Number(row.sort_order) : null,
+        };
       }
       return NextResponse.json(config);
     }
 
     const result = await db.execute({
-      sql: 'SELECT table_name, column_key, visible FROM table_column_config',
+      sql: 'SELECT table_name, column_key, visible, sort_order FROM table_column_config',
       args: [],
     });
-    const config: Record<string, Record<string, boolean>> = {};
+    const config: Record<string, Record<string, ColumnEntry>> = {};
     for (const row of result.rows) {
       const tbl = String(row.table_name);
       if (!config[tbl]) config[tbl] = {};
-      config[tbl][String(row.column_key)] = Number(row.visible) === 1;
+      config[tbl][String(row.column_key)] = {
+        visible: Number(row.visible) === 1,
+        sort_order: row.sort_order != null ? Number(row.sort_order) : null,
+      };
     }
     return NextResponse.json(config);
   } catch (error) {
@@ -64,5 +72,37 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('PUT /api/admin/table-config error:', error);
     return NextResponse.json({ error: 'Failed to save column config' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
+  if (user.role !== 'administrator') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  try {
+    await dbReady;
+    const { table, orders } = await request.json() as {
+      table: string;
+      orders: { column: string; sort_order: number }[];
+    };
+    if (!table || !Array.isArray(orders)) {
+      return NextResponse.json({ error: 'table and orders are required' }, { status: 400 });
+    }
+    await db.batch(
+      orders.map(({ column, sort_order }) => ({
+        sql: `INSERT INTO table_column_config (table_name, column_key, visible, sort_order)
+              VALUES (?, ?, 1, ?)
+              ON CONFLICT (table_name, column_key) DO UPDATE SET sort_order = excluded.sort_order`,
+        args: [table, column, sort_order],
+      })),
+      'write'
+    );
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('PATCH /api/admin/table-config error:', error);
+    return NextResponse.json({ error: 'Failed to save column order' }, { status: 500 });
   }
 }

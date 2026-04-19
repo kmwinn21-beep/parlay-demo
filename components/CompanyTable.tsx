@@ -168,7 +168,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   const userOptionsFull = useUserOptions();
-  const { isVisible } = useTableColumnConfig(tableName);
+  const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
 
   // Local copy for optimistic updates — syncs whenever the parent re-fetches
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
@@ -888,148 +888,108 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <th className="px-3 py-3 text-left w-10">
                   <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
                 </th>
-                {isVisible('name') && <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>}
-                {isVisible('type') && <th className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>}
-                {isVisible('sfowner') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>}
-                {isVisible('status') && <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>}
-                {isVisible('attendees') && <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>}
-                {isVisible('conferences') && <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>}
-                {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>}
-                {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
-                {isVisible('relationships') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>}
+                {orderedColumns.map(({ key }) => { if (!isVisible(key)) return null; switch (key) {
+                  case 'name':          return <th key="name" className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
+                  case 'type':          return <th key="type" className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>;
+                  case 'sfowner':       return <th key="sfowner" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>;
+                  case 'status':        return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
+                  case 'attendees':     return <th key="attendees" className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>;
+                  case 'conferences':   return <th key="conferences" className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>;
+                  case 'wse':           return <th key="wse" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>;
+                  case 'updated_on':    return <th key="updated_on" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>;
+                  case 'relationships': return <th key="relationships" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>;
+                  default: return null;
+                }})}
                 {rowAction && <th className="px-3 py-3 w-20" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={1 + orderedColumns.filter(c => isVisible(c.key)).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
-                  {isVisible('name') && <td className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
-                    <div className="text-left">
-                      <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
-                        {company.name}
-                      </Link>
-                    </div>
-                    {company.parent_company_name && (
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        <Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">
-                          {company.parent_company_name}
-                        </Link>
-                      </p>
-                    )}
-                  </td>}
-                  {isVisible('type') && <td className="px-3 py-3 overflow-visible relative">
-                    {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
-                        <option value="">—</option>
-                        {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    ) : (
-                      <button type="button" onClick={() => startInlineEdit(company, 'company_type')}>
-                        {company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}
-                      </button>
-                    )}
-                  </td>}
-                  {isVisible('sfowner') && <td className="px-3 py-3">
-                    {editingRepCompanyId === company.id && !showRepModal ? (
-                      <div className="flex items-start gap-1">
-                        <div className="flex-1 min-w-0">
-                          <RepMultiSelect
-                            options={userOptionsFull}
-                            selectedIds={editingRepIds}
-                            onChange={setEditingRepIds}
-                            onClose={(ids) => handleRepSave(company.id, ids)}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setEditingRepCompanyId(null)}
-                          className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
-                          title="Cancel"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                  {orderedColumns.map(({ key }) => { if (!isVisible(key)) return null; switch (key) {
+                    case 'name': return <td key="name" className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
+                      <div className="text-left">
+                        <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">{company.name}</Link>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => startEditRep(company)}
-                        title="Click to assign rep"
-                        className="inline-flex flex-wrap gap-1 hover:opacity-70 transition-opacity text-left w-full"
-                      >
-                        {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
-                          <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
-                            <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            {getRepInitials(user!.value)}
-                          </span>
-                        ))}
-                        {!company.assigned_user && (
-                          <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>
-                        )}
-                      </button>
-                    )}
-                  </td>}
-                  {isVisible('status') && <td className="px-3 py-3 overflow-visible relative">
-                    {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                      <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
-                        <option value="">—</option>
-                        {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    ) : (
-                      <button type="button" onClick={() => startInlineEdit(company, 'status')}>
-                        <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(company.status || '').trim() && <span className="text-gray-300">—</span>}</span>
-                      </button>
-                    )}
-                  </td>}
-                  {isVisible('attendees') && <td className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>}
-                  {isVisible('conferences') && <td className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>}
-                  {isVisible('wse') && <td className="px-3 py-3 overflow-visible relative">
-                    {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
-                      <input
-                        className="input-field bg-white text-sm py-2 min-w-[180px] w-auto relative z-30 shadow-md"
-                        value={cellDraft}
-                        onChange={(e) => setCellDraft(e.target.value)}
-                        onBlur={() => saveInlineEdit(company, 'wse')}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveInlineEdit(company, 'wse');
-                          if (e.key === 'Escape') setEditingCell(null);
-                        }}
-                        autoFocus
-                      />
-                    ) : (
-                      <button type="button" onClick={() => startInlineEdit(company, 'wse')}>
-                        {company.wse != null ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                            <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                            {Number(company.wse).toLocaleString()}
-                          </span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </button>
-                    )}
-                  </td>}
-                  {isVisible('updated_on') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>}
-                  {isVisible('relationships') && (
-                    <td className="px-3 py-3">
-                      {Number(company.relationship_count) > 0 && (
-                        <button
-                          type="button"
-                          onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
-                          title="View relationships"
-                          className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                          </svg>
+                      {company.parent_company_name && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          <Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">{company.parent_company_name}</Link>
+                        </p>
+                      )}
+                    </td>;
+                    case 'type': return <td key="type" className="px-3 py-3 overflow-visible relative">
+                      {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
+                        <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={e => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
+                          <option value="">—</option>{companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <button type="button" onClick={() => startInlineEdit(company, 'company_type')}>
+                          {company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}
                         </button>
                       )}
-                    </td>
-                  )}
+                    </td>;
+                    case 'sfowner': return <td key="sfowner" className="px-3 py-3">
+                      {editingRepCompanyId === company.id && !showRepModal ? (
+                        <div className="flex items-start gap-1">
+                          <div className="flex-1 min-w-0">
+                            <RepMultiSelect options={userOptionsFull} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={ids => handleRepSave(company.id, ids)} />
+                          </div>
+                          <button type="button" onClick={() => setEditingRepCompanyId(null)} className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors" title="Cancel">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => startEditRep(company)} title="Click to assign rep" className="inline-flex flex-wrap gap-1 hover:opacity-70 transition-opacity text-left w-full">
+                          {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+                            <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                              <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                              {getRepInitials(user!.value)}
+                            </span>
+                          ))}
+                          {!company.assigned_user && <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>}
+                        </button>
+                      )}
+                    </td>;
+                    case 'status': return <td key="status" className="px-3 py-3 overflow-visible relative">
+                      {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
+                        <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={e => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
+                          <option value="">—</option>{statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <button type="button" onClick={() => startInlineEdit(company, 'status')}>
+                          <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(company.status || '').trim() && <span className="text-gray-300">—</span>}</span>
+                        </button>
+                      )}
+                    </td>;
+                    case 'attendees':     return <td key="attendees" className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>;
+                    case 'conferences':   return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>;
+                    case 'wse': return <td key="wse" className="px-3 py-3 overflow-visible relative">
+                      {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
+                        <input className="input-field bg-white text-sm py-2 min-w-[180px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={e => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'wse')} onKeyDown={e => { if (e.key === 'Enter') saveInlineEdit(company, 'wse'); if (e.key === 'Escape') setEditingCell(null); }} autoFocus />
+                      ) : (
+                        <button type="button" onClick={() => startInlineEdit(company, 'wse')}>
+                          {company.wse != null ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                              <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                              {Number(company.wse).toLocaleString()}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </button>
+                      )}
+                    </td>;
+                    case 'updated_on':    return <td key="updated_on" className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>;
+                    case 'relationships': return <td key="relationships" className="px-3 py-3">
+                      {Number(company.relationship_count) > 0 && (
+                        <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }} title="View relationships" className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                        </button>
+                      )}
+                    </td>;
+                    default: return null;
+                  }})}
                   {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
                 </tr>
               ))}
