@@ -298,6 +298,7 @@ export async function initDb(): Promise<void> {
     `CREATE TABLE IF NOT EXISTS config_option_visibility (option_id INTEGER NOT NULL, form_key TEXT NOT NULL, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (option_id, form_key), FOREIGN KEY (option_id) REFERENCES config_options(id) ON DELETE CASCADE)`,
     // Rename 'Procare Hosted' event type to generic 'Company Hosted'
     `UPDATE config_options SET value = 'Company Hosted' WHERE category = 'event_type' AND value = 'Procare Hosted'`,
+    `CREATE TABLE IF NOT EXISTS quick_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), created_by TEXT)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
