@@ -201,17 +201,32 @@ export function FloatingNav() {
   // When above, reverse so stagger goes from FAB outward (Dashboard closest, Search farthest)
   const ordered = above ? [...items].reverse() : items;
 
+  const n = ordered.length;
+
   return (
     <>
-      {/* Tap-away backdrop */}
-      {open && (
-        <div className="fixed inset-0 z-[59]" onClick={() => setOpen(false)} />
-      )}
+      {/* Tap-away backdrop — always rendered so it can fade */}
+      <div
+        onClick={() => setOpen(false)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 59,
+          background: 'rgba(0,0,0,0.18)',
+          backdropFilter: open ? 'blur(1px)' : 'blur(0px)',
+          WebkitBackdropFilter: open ? 'blur(1px)' : 'blur(0px)',
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+          transition: open
+            ? 'opacity 0.22s ease, backdrop-filter 0.22s ease'
+            : 'opacity 0.18s ease, backdrop-filter 0.18s ease',
+        } as React.CSSProperties}
+      />
 
       {/* Global search modal */}
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
 
-      {/* Menu items */}
+      {/* Menu items — always in DOM so closing can animate out */}
       <div
         style={{
           position: 'fixed',
@@ -222,9 +237,10 @@ export function FloatingNav() {
           ...(above
             ? { bottom: vh - pos.y + 10 }
             : { top: pos.y + BTN + 10 }),
-          display: open ? 'flex' : 'none',
+          display: 'flex',
           flexDirection: above ? 'column-reverse' : 'column',
           gap: 6,
+          pointerEvents: open ? 'auto' : 'none',
         }}
       >
         {ordered.map((item, i) => {
@@ -233,12 +249,18 @@ export function FloatingNav() {
             ? 'bg-procare-gold text-procare-dark-blue border-yellow-500/40 font-semibold'
             : 'bg-procare-dark-blue/90 text-blue-100 border-blue-700/40 hover:bg-procare-bright-blue/90';
 
+          // Opening: stagger from FAB outward (i=0 nearest FAB → fires first)
+          // Closing: reverse stagger so items fold back toward FAB last
+          const openDelay = i * 42;
+          const closeDelay = (n - 1 - i) * 28;
+
           return (
             <div
               key={item.key}
               style={{
-                transition: 'opacity 0.2s ease, transform 0.2s ease',
-                transitionDelay: open ? `${i * 45}ms` : '0ms',
+                transition: open
+                  ? `opacity 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms, transform 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms`
+                  : `opacity 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms, transform 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms`,
                 opacity: open ? 1 : 0,
                 transform: open
                   ? 'translateY(0) scale(1)'
@@ -298,19 +320,19 @@ export function FloatingNav() {
           'rounded-full flex items-center justify-center select-none',
           'bg-procare-dark-blue/85 backdrop-blur-sm',
           'border border-blue-700/50 shadow-2xl',
-          'transition-all duration-150',
+          'transition-all duration-200',
           dragging
             ? 'scale-110 shadow-black/40'
             : open
-              ? 'ring-2 ring-procare-gold ring-offset-1 ring-offset-transparent'
+              ? 'ring-2 ring-procare-gold ring-offset-1 ring-offset-transparent scale-95'
               : 'active:scale-90',
         ].join(' ')}
         role="button"
         aria-label="Navigation menu"
         aria-expanded={open}
       >
-        {/* Hamburger ↔ X with rotation */}
-        <div style={{ transition: 'transform 0.3s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+        {/* Hamburger ↔ X morph via rotation */}
+        <div style={{ transition: 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)', transform: open ? 'rotate(135deg)' : 'rotate(0deg)' }}>
           {open ? (
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
