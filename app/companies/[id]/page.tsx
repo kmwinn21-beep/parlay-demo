@@ -319,7 +319,7 @@ export default function CompanyDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
-    const currentStatuses = new Set((company?.status || '').split(',').map(s => s.trim()).filter(Boolean));
+    const currentStatuses = new Set((company?.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
     if (currentStatuses.has(value)) { currentStatuses.delete(value); } else { currentStatuses.add(value); }
     const newStatus = Array.from(currentStatuses).join(',');
     try {
@@ -764,10 +764,10 @@ export default function CompanyDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
                 <span className="flex flex-wrap gap-1">
-                  {(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => (
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
                     <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
                   ))}
-                  {!(company.status || '').trim() && <span className="text-sm text-gray-400">—</span>}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-sm text-gray-400">—</span>}
                 </span>
               </div>
               <div>

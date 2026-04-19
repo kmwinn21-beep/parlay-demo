@@ -768,7 +768,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 </button>
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}</span>
+                <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-400">—</span>}</span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
               </div>
               {/* Bottom row: stats (left) | WSE (bottom-right) */}
@@ -959,7 +959,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </select>
                     ) : (
                       <button type="button" onClick={() => startInlineEdit(company, 'status')}>
-                        <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(Boolean).map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{!(company.status || '').trim() && <span className="text-gray-300">—</span>}</span>
+                        <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-300">—</span>}</span>
                       </button>
                     )}
                   </td>}
