@@ -525,7 +525,7 @@ export default function ConferencesPage() {
       )}
 
       {/* ── Month sections ── */}
-      {!isLoading && conferences.length > 0 && grouped.map(({ year, month, conferences: mc }) => {
+      {!isLoading && conferences.length > 0 && [...grouped].reverse().map(({ year, month, conferences: mc }) => {
         const exp = isMonthExpanded(year, month);
         return (
           <div key={`${year}-${month}`}>
