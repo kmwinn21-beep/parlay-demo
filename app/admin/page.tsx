@@ -337,6 +337,12 @@ export default function AdminPage() {
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [dragCol, setDragCol] = useState<{ table: string; key: string } | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [mobileDragFrom, setMobileDragFrom] = useState<{ table: string; key: string } | null>(null);
+  const [mobileDragOver, setMobileDragOver] = useState<string | null>(null);
+  const _mDragFrom = useRef<{ table: string; key: string } | null>(null);
+  const _mDragOver = useRef<string | null>(null);
+  const _mActivated = useRef(false);
+  const _longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sections tab
   type LocalSection = { key: string; label: string; sort_order: number; visible: boolean };
@@ -564,6 +570,61 @@ export default function AdminPage() {
     } catch {
       toast.error('Failed to save column order.');
     }
+  };
+
+  // ── Mobile long-press drag for Edit Tables ───────────────────────────────────
+
+  useEffect(() => () => { if (_longPressTimer.current) clearTimeout(_longPressTimer.current); }, []);
+
+  const startMobileDrag = (tableName: string, colKey: string) => {
+    _mDragFrom.current = { table: tableName, key: colKey };
+    _mDragOver.current = null;
+    _mActivated.current = true;
+    setMobileDragFrom({ table: tableName, key: colKey });
+    setMobileDragOver(null);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
+
+    const move = (e: TouchEvent) => {
+      if (!_mActivated.current) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const row = el?.closest('[data-col-key]') as HTMLElement | null;
+      const newOver = row?.dataset.tableName === _mDragFrom.current?.table ? (row?.dataset.colKey ?? null) : null;
+      if (newOver !== _mDragOver.current) {
+        _mDragOver.current = newOver;
+        setMobileDragOver(newOver);
+      }
+    };
+    const end = () => {
+      const from = _mDragFrom.current;
+      const to = _mDragOver.current;
+      if (from && to && to !== from.key) handleColumnReorder(from.table, from.key, to);
+      _mActivated.current = false;
+      _mDragFrom.current = null;
+      _mDragOver.current = null;
+      setMobileDragFrom(null);
+      setMobileDragOver(null);
+      document.removeEventListener('touchmove', move);
+      document.removeEventListener('touchend', end);
+      document.removeEventListener('touchcancel', end);
+    };
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', end);
+    document.addEventListener('touchcancel', end);
+  };
+
+  const handleGripTouchStart = (tableName: string, colKey: string) => (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    if (_longPressTimer.current) clearTimeout(_longPressTimer.current);
+    _longPressTimer.current = setTimeout(() => {
+      startMobileDrag(tableName, colKey);
+      _longPressTimer.current = null;
+    }, 500);
+  };
+
+  const cancelLongPress = () => {
+    if (_longPressTimer.current) { clearTimeout(_longPressTimer.current); _longPressTimer.current = null; }
   };
 
   // ── Brand tab ────────────────────────────────────────────────────────────────
@@ -812,9 +873,13 @@ export default function AdminPage() {
                         const visible = isColVisible(tableName, col.key);
                         const saveKey = `${tableName}:${col.key}`;
                         const isDragTarget = dragCol?.table === tableName && dragOverKey === col.key && dragCol.key !== col.key;
+                        const isMobileDragTarget = mobileDragOver === col.key && mobileDragFrom?.table === tableName && mobileDragFrom.key !== col.key;
+                        const isMobileDragSource = mobileDragFrom?.table === tableName && mobileDragFrom.key === col.key;
                         return (
                           <div
                             key={col.key}
+                            data-col-key={col.key}
+                            data-table-name={tableName}
                             draggable
                             onDragStart={() => setDragCol({ table: tableName, key: col.key })}
                             onDragEnd={() => { setDragCol(null); setDragOverKey(null); }}
@@ -825,10 +890,17 @@ export default function AdminPage() {
                               if (dragCol?.table === tableName) handleColumnReorder(tableName, dragCol.key, col.key);
                               setDragCol(null); setDragOverKey(null);
                             }}
-                            className={`flex items-center justify-between py-3 transition-colors rounded ${isDragTarget ? 'bg-blue-50 outline outline-2 outline-procare-bright-blue' : ''}`}
+                            className={`flex items-center justify-between py-3 transition-colors rounded ${isDragTarget || isMobileDragTarget ? 'bg-blue-50 outline outline-2 outline-procare-bright-blue' : ''} ${isMobileDragSource ? 'opacity-40' : ''}`}
                           >
                             <div className="flex items-center gap-3">
-                              <svg className="w-4 h-4 text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg
+                                className="w-4 h-4 text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                onTouchStart={handleGripTouchStart(tableName, col.key)}
+                                onTouchMove={cancelLongPress}
+                                onTouchEnd={cancelLongPress}
+                                onTouchCancel={cancelLongPress}
+                              >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                               </svg>
                               <span className="text-sm text-gray-700">{col.label}</span>
