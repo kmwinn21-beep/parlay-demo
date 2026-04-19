@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
               conf_agg.conference_names,
               parent.name as parent_company_name,
               att_summary.attendee_summary,
-              COALESCE(pn.pinned_count, 0) as pinned_notes_count
+              COALESCE(pn.pinned_count, 0) as pinned_notes_count,
+              COALESCE(rel_agg.relationship_count, 0) as relationship_count
             FROM companies co
             LEFT JOIN (
               SELECT company_id, COUNT(*) as attendee_count
@@ -79,6 +80,11 @@ export async function GET(request: NextRequest) {
               WHERE entity_type = 'company'
               GROUP BY entity_id
             ) pn ON co.id = pn.entity_id
+            LEFT JOIN (
+              SELECT company_id, COUNT(*) as relationship_count
+              FROM internal_relationships
+              GROUP BY company_id
+            ) rel_agg ON co.id = rel_agg.company_id
             ORDER BY co.name`,
       args: [],
     });
