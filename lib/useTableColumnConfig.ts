@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 export interface ColumnDef {
   key: string;
   label: string;
+}
+
+export interface ColumnEntry {
+  visible: boolean;
+  sort_order: number | null;
 }
 
 export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
@@ -87,21 +92,21 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
 };
 
 // Module-level cache so all table instances share the same fetched config
-const _cache: Record<string, Record<string, boolean>> = {};
-const _pending: Record<string, Promise<Record<string, boolean>> | undefined> = {};
+const _cache: Record<string, Record<string, ColumnEntry>> = {};
+const _pending: Record<string, Promise<Record<string, ColumnEntry>> | undefined> = {};
 
-function fetchConfig(tableName: string): Promise<Record<string, boolean>> {
+function fetchConfig(tableName: string): Promise<Record<string, ColumnEntry>> {
   if (_cache[tableName]) return Promise.resolve(_cache[tableName]);
-  if (_pending[tableName]) return _pending[tableName];
+  if (_pending[tableName]) return _pending[tableName]!;
   _pending[tableName] = fetch(`/api/admin/table-config?table=${tableName}`, { credentials: 'include' })
     .then(r => (r.ok ? r.json() : {}))
-    .then((data: Record<string, boolean>) => {
+    .then((data: Record<string, ColumnEntry>) => {
       _cache[tableName] = data;
       delete _pending[tableName];
       return data;
     })
     .catch(() => ({}));
-  return _pending[tableName];
+  return _pending[tableName]!;
 }
 
 export function invalidateTableColumnConfig(tableName?: string) {
@@ -113,17 +118,27 @@ export function invalidateTableColumnConfig(tableName?: string) {
 }
 
 export function useTableColumnConfig(tableName: string) {
-  const [config, setConfig] = useState<Record<string, boolean>>(_cache[tableName] ?? {});
+  const [config, setConfig] = useState<Record<string, ColumnEntry>>(_cache[tableName] ?? {});
 
   useEffect(() => {
     fetchConfig(tableName).then(setConfig);
   }, [tableName]);
 
-  // Columns default to visible when not explicitly stored as false
   const isVisible = useCallback(
-    (columnKey: string): boolean => config[columnKey] !== false,
+    (columnKey: string): boolean => config[columnKey]?.visible !== false,
     [config]
   );
 
-  return { isVisible };
+  const orderedColumns = useMemo((): ColumnDef[] => {
+    const defs = TABLE_COLUMN_DEFS[tableName] ?? [];
+    return [...defs].sort((a, b) => {
+      const ia = defs.findIndex(d => d.key === a.key);
+      const ib = defs.findIndex(d => d.key === b.key);
+      const oa = config[a.key]?.sort_order ?? ia;
+      const ob = config[b.key]?.sort_order ?? ib;
+      return oa - ob;
+    });
+  }, [tableName, config]);
+
+  return { isVisible, orderedColumns };
 }
