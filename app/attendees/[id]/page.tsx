@@ -476,7 +476,7 @@ export default function AttendeeDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
-    const currentStatuses = new Set((attendee?.status || '').split(',').map(s => s.trim()).filter(Boolean));
+    const currentStatuses = new Set((attendee?.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
     if (currentStatuses.has(value)) { currentStatuses.delete(value); } else { currentStatuses.add(value); }
     const newStatus = Array.from(currentStatuses).join(',');
     try { await patchAttendee({ status: newStatus, company_id: attendee?.company_id ?? null }); toast.success(newStatus ? 'Status updated.' : 'Status cleared.'); }
@@ -595,7 +595,7 @@ export default function AttendeeDetailPage() {
   if (!attendee) return null;
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
-  const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(Boolean));
+  const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <BackButton />
