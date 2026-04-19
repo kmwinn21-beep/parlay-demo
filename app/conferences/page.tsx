@@ -216,6 +216,15 @@ export default function ConferencesPage() {
   // Month section expand state; key = "Y-M" (0-based month)
   const [monthExpanded, setMonthExpanded] = useState<Record<string, boolean>>({});
 
+  // Responsive: track mobile breakpoint for calendar bounds
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   // Init: detect desktop vs mobile for calendar default
   useEffect(() => { setCalExpanded(window.innerWidth >= 1024); }, []);
 
@@ -229,7 +238,8 @@ export default function ConferencesPage() {
         if (sorted.length === 0) return;
         const minYM     = toYM(sorted[0].start_date);
         const maxEndYM  = toYM(sorted[sorted.length - 1].end_date);
-        const maxAnchor = addMonths(maxEndYM[0], maxEndYM[1], -2);
+        const isMobileNow = window.innerWidth < 1024;
+        const maxAnchor = addMonths(maxEndYM[0], maxEndYM[1], isMobileNow ? 0 : -2);
         let [y, m] = [currentYear, currentMonth];
         if (cmpYM([y, m], minYM)     < 0) [y, m] = minYM;
         if (cmpYM([y, m], maxAnchor) > 0) [y, m] = maxAnchor;
@@ -262,8 +272,8 @@ export default function ConferencesPage() {
       if (!mn || cmpYM(s, mn) < 0) mn = s;
       if (!mx || cmpYM(e, mx) > 0) mx = e;
     }
-    return [mn, mx ? addMonths(mx[0], mx[1], -2) : null];
-  }, [conferences]);
+    return [mn, mx ? addMonths(mx[0], mx[1], isMobile ? 0 : -2) : null];
+  }, [conferences, isMobile]);
 
   const canGoLeft  = calMinYM ? cmpYM(calAnchor, calMinYM) > 0 : false;
   const canGoRight = calMaxYM ? cmpYM(calAnchor, calMaxYM) < 0 : false;
