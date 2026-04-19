@@ -105,7 +105,7 @@ function fmtDate(dateStr?: string): string {
 }
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
-  const { isVisible } = useTableColumnConfig('attendees');
+  const { isVisible, orderedColumns } = useTableColumnConfig('attendees');
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('attendee_table');
   const statusOptions = configOptions.status ?? [];
@@ -565,144 +565,166 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <th className="px-3 py-3 text-left w-10">
                   <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
                 </th>
-                {isVisible('name') && <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>}
-                {isVisible('title') && <th className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>}
-                {isVisible('company') && <th className={thCls} style={{ width: colWidths.company }} onClick={() => handleSort('company_name')}>Company <SortIcon col="company_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="company" /></th>}
-                {isVisible('company_type') && <th className={thCls} style={{ width: colWidths.company_type }}>Type<ResizeHandle col="company_type" /></th>}
-                {isVisible('status') && <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>}
-                {isVisible('seniority') && <th className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>}
-                {isVisible('conferences') && <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>}
-                {isVisible('notes') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>}
-                {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
-                {isVisible('date_added') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.date_added }}>Date Added<ResizeHandle col="date_added" /></th>}
+                {orderedColumns.map(({ key }) => {
+                  if (!isVisible(key)) return null;
+                  switch (key) {
+                    case 'name': return <th key="name" className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('last_name')}>Name <SortIcon col="last_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
+                    case 'title': return <th key="title" className={thCls} style={{ width: colWidths.title }} onClick={() => handleSort('title')}>Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="title" /></th>;
+                    case 'company': return <th key="company" className={thCls} style={{ width: colWidths.company }} onClick={() => handleSort('company_name')}>Company <SortIcon col="company_name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="company" /></th>;
+                    case 'company_type': return <th key="company_type" className={thCls} style={{ width: colWidths.company_type }}>Type<ResizeHandle col="company_type" /></th>;
+                    case 'status': return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
+                    case 'seniority': return <th key="seniority" className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>;
+                    case 'conferences': return <th key="conferences" className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>;
+                    case 'notes': return <th key="notes" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>;
+                    case 'updated_on': return <th key="updated_on" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>;
+                    case 'date_added': return <th key="date_added" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.date_added }}>Date Added<ResizeHandle col="date_added" /></th>;
+                    default: return null;
+                  }
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+                <tr><td colSpan={1 + orderedColumns.filter(c => isVisible(c.key)).length} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
-
-                    {isVisible('name') && <td className="px-3 py-3 overflow-visible">
-                      <div className="text-left">
-                        <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
-                          {attendee.first_name} {attendee.last_name}
-                        </Link>
-                      </div>
-                    </td>}
-                    {isVisible('title') && <td className="px-3 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
-                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
-                        <input
-                          className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
-                          value={cellDraft}
-                          onChange={(e) => setCellDraft(e.target.value)}
-                          onBlur={() => saveInlineEdit(attendee, 'title')}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveInlineEdit(attendee, 'title');
-                            if (e.key === 'Escape') setEditingCell(null);
-                          }}
-                          autoFocus
-                        />
-                      ) : (
-                        <button type="button" className="block text-left w-full" onClick={() => startInlineEdit(attendee, 'title')} title="Click to edit title">
-                          <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
-                        </button>
-                      )}
-                    </td>}
-                    {isVisible('company') && <td className="px-3 py-3 overflow-visible relative">
-                      {attendee.company_name ? (
-                        <div>
-                          {attendee.company_id ? (
-                            <Link href={`/companies/${attendee.company_id}`} className="text-sm text-gray-800 hover:text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
-                              {attendee.company_name}
-                            </Link>
-                          ) : (
-                            <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
-                          )}
-                          {attendee.company_wse != null && (
-                            editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
+                    {orderedColumns.map(({ key }) => {
+                      if (!isVisible(key)) return null;
+                      switch (key) {
+                        case 'name': return (
+                          <td key="name" className="px-3 py-3 overflow-visible">
+                            <div className="text-left">
+                              <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                                {attendee.first_name} {attendee.last_name}
+                              </Link>
+                            </div>
+                          </td>
+                        );
+                        case 'title': return (
+                          <td key="title" className="px-3 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
+                            {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
                               <input
-                                className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
+                                className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
                                 value={cellDraft}
                                 onChange={(e) => setCellDraft(e.target.value)}
-                                onBlur={() => saveInlineEdit(attendee, 'company_wse')}
+                                onBlur={() => saveInlineEdit(attendee, 'title')}
                                 onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse');
+                                  if (e.key === 'Enter') saveInlineEdit(attendee, 'title');
                                   if (e.key === 'Escape') setEditingCell(null);
                                 }}
                                 autoFocus
                               />
                             ) : (
-                              <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')} title="Click to edit WSE">
-                                WSE: {Number(attendee.company_wse).toLocaleString()}
+                              <button type="button" className="block text-left w-full" onClick={() => startInlineEdit(attendee, 'title')} title="Click to edit title">
+                                <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
                               </button>
-                            )
-                          )}
-                        </div>
-                      ) : <span className="text-gray-300">—</span>}
-                    </td>}
-                    {isVisible('company_type') && <td className="px-3 py-3 overflow-visible relative">
-                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
-                        <select
-                          className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
-                          value={cellDraft}
-                          onChange={(e) => setCellDraft(e.target.value)}
-                          onBlur={() => saveInlineEdit(attendee, 'company_type')}
-                          autoFocus
-                        >
-                          <option value="">—</option>
-                          {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      ) : (
-                        <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
-                          {attendee.company_type ? (
-                            <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </button>
-                      )}
-                    </td>}
-                    {isVisible('status') && <td className="px-3 py-3 overflow-visible relative">
-                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'status' ? (
-                        <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'status')} autoFocus>
-                          <option value="">—</option>
-                          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      ) : (
-                        <button type="button" onClick={() => startInlineEdit(attendee, 'status')}>
-                          <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-300">—</span>}</span>
-                        </button>
-                      )}
-                    </td>}
-                    {isVisible('seniority') && <td className="px-3 py-3 overflow-visible relative">
-                      {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                        <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
-                          <option value="">Auto-detect</option>
-                          {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      ) : (
-                        <button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}>
-                          <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
-                        </button>
-                      )}
-                    </td>}
-                    {isVisible('conferences') && <td className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>}
-                    {isVisible('notes') && <td className="px-3 py-3">
-                      {Number(attendee.notes_count) > 0 ? (
-                        <NotesPopover
-                          attendeeId={attendee.id}
-                          notesCount={Number(attendee.notes_count)}
-                        />
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>}
-                    {isVisible('updated_on') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.updated_at)}</td>}
-                    {isVisible('date_added') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>}
+                            )}
+                          </td>
+                        );
+                        case 'company': return (
+                          <td key="company" className="px-3 py-3 overflow-visible relative">
+                            {attendee.company_name ? (
+                              <div>
+                                {attendee.company_id ? (
+                                  <Link href={`/companies/${attendee.company_id}`} className="text-sm text-gray-800 hover:text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                                    {attendee.company_name}
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
+                                )}
+                                {attendee.company_wse != null && (
+                                  editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
+                                    <input
+                                      className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
+                                      value={cellDraft}
+                                      onChange={(e) => setCellDraft(e.target.value)}
+                                      onBlur={() => saveInlineEdit(attendee, 'company_wse')}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse');
+                                        if (e.key === 'Escape') setEditingCell(null);
+                                      }}
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')} title="Click to edit WSE">
+                                      WSE: {Number(attendee.company_wse).toLocaleString()}
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                        );
+                        case 'company_type': return (
+                          <td key="company_type" className="px-3 py-3 overflow-visible relative">
+                            {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
+                              <select
+                                className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
+                                value={cellDraft}
+                                onChange={(e) => setCellDraft(e.target.value)}
+                                onBlur={() => saveInlineEdit(attendee, 'company_type')}
+                                autoFocus
+                              >
+                                <option value="">—</option>
+                                {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            ) : (
+                              <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
+                                {attendee.company_type ? (
+                                  <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </button>
+                            )}
+                          </td>
+                        );
+                        case 'status': return (
+                          <td key="status" className="px-3 py-3 overflow-visible relative">
+                            {editingCell?.attendeeId === attendee.id && editingCell.field === 'status' ? (
+                              <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'status')} autoFocus>
+                                <option value="">—</option>
+                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            ) : (
+                              <button type="button" onClick={() => startInlineEdit(attendee, 'status')}>
+                                <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-300">—</span>}</span>
+                              </button>
+                            )}
+                          </td>
+                        );
+                        case 'seniority': return (
+                          <td key="seniority" className="px-3 py-3 overflow-visible relative">
+                            {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
+                              <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                                <option value="">Auto-detect</option>
+                                {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            ) : (
+                              <button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}>
+                                <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
+                              </button>
+                            )}
+                          </td>
+                        );
+                        case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>;
+                        case 'notes': return (
+                          <td key="notes" className="px-3 py-3">
+                            {Number(attendee.notes_count) > 0 ? (
+                              <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.notes_count)} />
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                        );
+                        case 'updated_on': return <td key="updated_on" className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.updated_at)}</td>;
+                        case 'date_added': return <td key="date_added" className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>;
+                        default: return null;
+                      }
+                    })}
                   </tr>
                 );
               })}
