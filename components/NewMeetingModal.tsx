@@ -276,7 +276,7 @@ export function NewMeetingModal({
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
