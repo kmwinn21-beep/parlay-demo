@@ -40,7 +40,7 @@ export function OperatorCapitalModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
         {/* Fixed header */}
