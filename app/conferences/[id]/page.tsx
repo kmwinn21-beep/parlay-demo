@@ -830,7 +830,7 @@ export default function ConferenceDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-
+      <BackButton />
       {/* Column mapping modal */}
       {columnMappingData && pendingUploadFile && (
         <ColumnMappingModal

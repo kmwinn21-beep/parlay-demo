@@ -536,7 +536,7 @@ export default function CompanyDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-
+      <BackButton />
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column — main content */}
@@ -1265,8 +1265,8 @@ export default function CompanyDetailPage() {
                     </>
                   )}
                   {showRelateModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}>
-                      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}>
+                      <div className="bg-white rounded-xl shadow-2xl border border-procare-gold p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
                           Add Related Company
                         </h3>

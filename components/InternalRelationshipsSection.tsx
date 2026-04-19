@@ -66,6 +66,8 @@ interface InternalRelationshipsSectionProps {
   onRefresh: () => void;
 }
 
+const EMPTY_ATTENDEES: AttendeeOption[] = [];
+
 function MultiSelectDropdownById({
   label,
   options,
@@ -330,7 +332,7 @@ export function InternalRelationshipsSection({
   companyName,
   attendeeId,
   userOptions,
-  attendees = [],
+  attendees = EMPTY_ATTENDEES,
   relTypeOptions,
   relationships,
   onRefresh,
@@ -679,8 +681,8 @@ export function InternalRelationshipModal({
   attendeesByCompany.forEach(atts => atts.forEach(a => allAttendees.push(a)));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl border border-procare-gold p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-1">
           Add Rep Relationship
         </h3>
