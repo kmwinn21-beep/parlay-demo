@@ -90,11 +90,11 @@ function ConferenceCard({ conf }: { conf: Conference }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-procare-dark-blue group-hover:text-procare-bright-blue font-serif leading-snug line-clamp-2">
+          <h4 className="text-lg font-semibold text-procare-dark-blue group-hover:text-procare-bright-blue font-serif leading-snug line-clamp-2">
             {conf.name}
           </h4>
           <div className="mt-1.5 space-y-0.5">
-            <div className="flex items-center gap-1 text-xs text-gray-600">
+            <div className="flex items-center gap-1 text-sm text-gray-600">
               <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
               </svg>
@@ -114,7 +114,7 @@ function ConferenceCard({ conf }: { conf: Conference }) {
           {conf.internal_attendees && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {conf.internal_attendees.split(',').filter(Boolean).map((u, i) => (
-                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-gray-300 bg-gray-50 text-[10px] text-gray-600">
+                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-gray-300 bg-gray-50 text-xs text-gray-600">
                   {getInitials(u.trim())}
                 </span>
               ))}
