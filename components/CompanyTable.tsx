@@ -7,6 +7,7 @@ import { MergeModal } from './MergeModal';
 import { ParentChildModal } from './ParentChildModal';
 import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
+import { CompanyRelationshipsPopup } from './CompanyRelationshipsPopup';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
@@ -34,6 +35,7 @@ interface Company {
   attendee_summary?: string;
   pinned_notes_count?: number;
   updated_at?: string;
+  relationship_count?: number;
 }
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
@@ -197,6 +199,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [showParentChildModal, setShowParentChildModal] = useState(false);
   const [showOperatorCapitalModal, setShowOperatorCapitalModal] = useState(false);
   const [showRepRelModal, setShowRepRelModal] = useState(false);
+  const [relPopupCompany, setRelPopupCompany] = useState<{ id: number; name: string } | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -783,13 +786,27 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
                   </div>
                 </div>
-                {/* WSE — bottom right */}
-                {company.wse != null && (
-                  <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                    {Number(company.wse).toLocaleString()}
-                  </span>
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {Number(company.relationship_count) > 0 && (
+                    <button
+                      type="button"
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
+                      title="View relationships"
+                      className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                    </button>
+                  )}
+                  {/* WSE — bottom right */}
+                  {company.wse != null && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                      <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                      {Number(company.wse).toLocaleString()}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -873,12 +890,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 {isVisible('conferences') && <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>}
                 {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>}
                 {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>
                 {rowAction && <th className="px-3 py-3 w-20" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={rowAction ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={rowAction ? 11 : 10} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
@@ -990,6 +1008,20 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     )}
                   </td>}
                   {isVisible('updated_on') && <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>}
+                  <td className="px-3 py-3">
+                    {Number(company.relationship_count) > 0 && (
+                      <button
+                        type="button"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
+                        title="View relationships"
+                        className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                      </button>
+                    )}
+                  </td>
                   {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
                 </tr>
               ))}
@@ -1036,6 +1068,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         entityIds={Array.from(selectedIds)}
         entityNames={new Map(selectedCompanies.map(c => [c.id, c.name]))}
       />
+
+      {relPopupCompany && (
+        <CompanyRelationshipsPopup
+          companyId={relPopupCompany.id}
+          companyName={relPopupCompany.name}
+          onClose={() => setRelPopupCompany(null)}
+        />
+      )}
     </div>
   );
 }
