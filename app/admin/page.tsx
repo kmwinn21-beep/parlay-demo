@@ -22,6 +22,7 @@ interface ConfigOption {
   sort_order: number;
   color: string | null;
   visible_forms?: string[];
+  scope?: string; // 'global' | 'user' — only meaningful for status category
 }
 
 const CATEGORIES = [
@@ -115,6 +116,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editVisibleForms, setEditVisibleForms] = useState<string[]>([]);
+  const [editScope, setEditScope] = useState<'global' | 'user'>('global');
   const [isAdding, setIsAdding] = useState(false);
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -122,6 +124,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const [expandedOptions, setExpandedOptions] = useState<Set<number>>(new Set());
   const [formPickerOpenId, setFormPickerOpenId] = useState<number | null>(null);
   const availableForms = CATEGORY_FORM_USAGE[category] ?? [];
+  const showScopeDropdown = category === 'status';
 
   useEffect(() => { setLocalOptions(options); }, [options]);
 
@@ -129,6 +132,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     setEditingId(opt.id);
     setEditValue(opt.value);
     setEditVisibleForms(opt.visible_forms ?? availableForms.map(f => f.key));
+    setEditScope((opt.scope === 'user' ? 'user' : 'global') as 'global' | 'user');
     setFormPickerOpenId(null);
     setExpandedOptions(prev => new Set(prev).add(opt.id));
   };
@@ -136,13 +140,15 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const handleSaveEdit = async (id: number) => {
     if (!editValue.trim()) { toast.error('Value cannot be empty.'); return; }
     try {
+      const payload: Record<string, unknown> = { value: editValue.trim(), visible_forms: editVisibleForms };
+      if (showScopeDropdown) payload.scope = editScope;
       const res = await fetch(`/api/config/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: editValue.trim(), visible_forms: editVisibleForms }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Update failed');
-      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), visible_forms: [...editVisibleForms] } : opt));
+      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), visible_forms: [...editVisibleForms], scope: showScopeDropdown ? editScope : opt.scope } : opt));
       toast.success('Updated!');
       setEditingId(null);
       setExpandedOptions(prev => {
@@ -242,7 +248,12 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                     <div className="flex items-center gap-2 px-1 py-1">
                       <DragHandle />
                       <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
-                      <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded">{opt.value}</span>
+                      <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded flex items-center gap-2">
+                        {opt.value}
+                        {showScopeDropdown && opt.scope === 'user' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
+                        )}
+                      </span>
                       <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
                       <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
                     </div>
@@ -292,6 +303,28 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                             </div>
                           )}
                         </div>
+                        {showScopeDropdown && (
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Visibility Scope</label>
+                            <div className="inline-flex items-center rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+                              {(['global', 'user'] as const).map(s => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() => setEditScope(s)}
+                                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize ${editScope === s ? 'bg-brand-secondary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                  {s === 'global' ? 'Global' : 'User'}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              {editScope === 'user'
+                                ? 'Only visible to the user who set it — shows as "StatusName - Initials" on company profiles.'
+                                : 'Visible to all users across all tables and views.'}
+                            </p>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
                           <button

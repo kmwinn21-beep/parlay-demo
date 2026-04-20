@@ -12,11 +12,12 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { value, sort_order, color, visible_forms } = body as {
+    const { value, sort_order, color, visible_forms, scope } = body as {
       value: string;
       sort_order?: number;
       color?: string | null;
       visible_forms?: string[];
+      scope?: string;
     };
 
     if (!value) {
@@ -36,13 +37,14 @@ export async function PUT(
     const oldValue = String(existing.rows[0].value);
     const category = String(existing.rows[0].category);
 
+    const scopeValue = scope === 'user' ? 'user' : 'global';
     const result = await db.execute({
       sql: sort_order !== undefined
-        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ? WHERE id = ? RETURNING *'
-        : 'UPDATE config_options SET value = ?, color = ? WHERE id = ? RETURNING *',
+        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ?, scope = ? WHERE id = ? RETURNING *'
+        : 'UPDATE config_options SET value = ?, color = ?, scope = ? WHERE id = ? RETURNING *',
       args: sort_order !== undefined
-        ? [value, sort_order, color !== undefined ? color : null, params.id]
-        : [value, color !== undefined ? color : null, params.id],
+        ? [value, sort_order, color !== undefined ? color : null, scopeValue, params.id]
+        : [value, color !== undefined ? color : null, scopeValue, params.id],
     });
 
     if (result.rows.length === 0) {
