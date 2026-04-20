@@ -108,6 +108,7 @@ function ColorPicker({ optionId, currentColor, onColorSaved }: { optionId: numbe
 }
 
 function CategorySection({ category, label, options, onRefresh }: { category: string; label: string; options: ConfigOption[]; onRefresh: () => void }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [localOptions, setLocalOptions] = useState<ConfigOption[]>(options);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -212,96 +213,114 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
 
   return (
     <div className="card">
-      <h2 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">{label}</h2>
-      {localOptions.length === 0 ? <p className="text-sm text-gray-400 mb-4">No options yet.</p> : (
-        <ul className="space-y-1 mb-4">
-          {localOptions.map((opt, index) => {
-            const isExpanded = expandedOptions.has(opt.id);
-            const isEditing = editingId === opt.id;
-            return (
-              <li key={opt.id} draggable={!isExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-procare-bright-blue ring-offset-1' : '', isExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
-                <div className="flex items-center gap-2 px-1 py-1">
-                  <DragHandle />
-                  <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
-                  <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded">{opt.value}</span>
-                  <button type="button" onClick={() => handleEdit(opt)} className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium px-2 py-1">Edit</button>
-                  <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
-                </div>
-                {isExpanded && (
-                  <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
-                      <input
-                        value={isEditing ? editValue : opt.value}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        className="input-field w-full text-sm"
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
-                        autoFocus={isEditing}
-                      />
+      <button
+        type="button"
+        onClick={() => setIsExpanded(prev => !prev)}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">{label}</h2>
+        <svg
+          className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isExpanded && (
+        <div className="pt-4">
+          {localOptions.length === 0 ? <p className="text-sm text-gray-400 mb-4">No options yet.</p> : (
+            <ul className="space-y-1 mb-4">
+              {localOptions.map((opt, index) => {
+                const isOptionExpanded = expandedOptions.has(opt.id);
+                const isEditing = editingId === opt.id;
+                return (
+                  <li key={opt.id} draggable={!isOptionExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-procare-bright-blue ring-offset-1' : '', isOptionExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
+                    <div className="flex items-center gap-2 px-1 py-1">
+                      <DragHandle />
+                      <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
+                      <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded">{opt.value}</span>
+                      <button type="button" onClick={() => handleEdit(opt)} className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium px-2 py-1">Edit</button>
+                      <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Visible In Forms</label>
-                      {availableForms.length === 0 ? (
-                        <p className="text-xs text-gray-400">No mapped forms for this option category yet.</p>
-                      ) : (
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setFormPickerOpenId(prev => prev === opt.id ? null : opt.id)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
-                          >
-                            <span className="truncate">{editVisibleForms.length === 0 ? 'No forms selected' : `${editVisibleForms.length} form(s) selected`}</span>
-                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${formPickerOpenId === opt.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                          {formPickerOpenId === opt.id && (
-                            <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto divide-y divide-gray-100">
-                              {availableForms.map((form) => (
-                                <label key={form.key} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
-                                  <input
-                                    type="checkbox"
-                                    className="accent-procare-bright-blue"
-                                    checked={editVisibleForms.includes(form.key)}
-                                    onChange={() => toggleForm(form.key)}
-                                  />
-                                  <span>{form.label}</span>
-                                </label>
-                              ))}
+                    {isOptionExpanded && (
+                      <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
+                          <input
+                            value={isEditing ? editValue : opt.value}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="input-field w-full text-sm"
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
+                            autoFocus={isEditing}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Visible In Forms</label>
+                          {availableForms.length === 0 ? (
+                            <p className="text-xs text-gray-400">No mapped forms for this option category yet.</p>
+                          ) : (
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setFormPickerOpenId(prev => prev === opt.id ? null : opt.id)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                              >
+                                <span className="truncate">{editVisibleForms.length === 0 ? 'No forms selected' : `${editVisibleForms.length} form(s) selected`}</span>
+                                <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${formPickerOpenId === opt.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                              {formPickerOpenId === opt.id && (
+                                <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto divide-y divide-gray-100">
+                                  {availableForms.map((form) => (
+                                    <label key={form.key} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-procare-bright-blue"
+                                        checked={editVisibleForms.includes(form.key)}
+                                        onChange={() => toggleForm(form.key)}
+                                      />
+                                      <span>{form.label}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingId(null);
-                          setExpandedOptions(prev => {
-                            const next = new Set(prev);
-                            next.delete(opt.id);
-                            return next;
-                          });
-                          setFormPickerOpenId(null);
-                        }}
-                        className="btn-secondary text-xs px-3 py-1.5"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(null);
+                              setExpandedOptions(prev => {
+                                const next = new Set(prev);
+                                next.delete(opt.id);
+                                return next;
+                              });
+                              setFormPickerOpenId(null);
+                            }}
+                            className="btn-secondary text-xs px-3 py-1.5"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <form onSubmit={handleAdd} className="flex gap-2 pt-3 border-t border-gray-100">
+            <input name="newOption" placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`} className="input-field flex-1 text-sm" autoComplete="off" />
+            <button type="submit" disabled={isAdding} className="btn-primary text-sm">{isAdding ? 'Adding...' : 'Add'}</button>
+          </form>
+        </div>
       )}
-      <form onSubmit={handleAdd} className="flex gap-2 pt-3 border-t border-gray-100">
-        <input name="newOption" placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`} className="input-field flex-1 text-sm" autoComplete="off" />
-        <button type="submit" disabled={isAdding} className="btn-primary text-sm">{isAdding ? 'Adding...' : 'Add'}</button>
-      </form>
     </div>
   );
 }
