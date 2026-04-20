@@ -3,6 +3,71 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
+function parseStatusValues(status: unknown): string[] {
+  if (status == null) return [];
+  return String(status)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+async function getPriorityStatusOptionId(): Promise<number | null> {
+  const result = await db.execute({
+    sql: `SELECT id
+          FROM config_options
+          WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
+          ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END, id
+          LIMIT 1`,
+    args: [],
+  });
+  if (result.rows.length === 0 || result.rows[0].id == null) return null;
+  return Number(result.rows[0].id);
+}
+
+async function setPriorityMarkForCompany(opts: {
+  companyId: string;
+  actorEmail: string;
+  status: unknown;
+}): Promise<void> {
+  const markerConfigId = await getConfigIdByEmail(opts.actorEmail);
+  if (markerConfigId == null) return;
+
+  const priorityOptionId = await getPriorityStatusOptionId();
+  if (priorityOptionId == null) return;
+
+  const statuses = parseStatusValues(opts.status);
+  if (statuses.length === 0) {
+    await db.execute({
+      sql: 'DELETE FROM company_priority_marks WHERE company_id = ? AND marked_by_config_id = ?',
+      args: [opts.companyId, markerConfigId],
+    });
+    return;
+  }
+
+  const placeholders = statuses.map(() => '?').join(',');
+  const selectedStatusOptions = await db.execute({
+    sql: `SELECT id FROM config_options WHERE category = 'status' AND value IN (${placeholders})`,
+    args: statuses,
+  });
+  const selectedIds = new Set(selectedStatusOptions.rows.map((row) => Number(row.id)));
+  const hasPriority = selectedIds.has(priorityOptionId);
+
+  if (hasPriority) {
+    await db.execute({
+      sql: `INSERT INTO company_priority_marks (company_id, marked_by_config_id, priority_option_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(company_id, marked_by_config_id)
+            DO UPDATE SET priority_option_id = excluded.priority_option_id`,
+      args: [opts.companyId, markerConfigId, priorityOptionId],
+    });
+  } else {
+    await db.execute({
+      sql: 'DELETE FROM company_priority_marks WHERE company_id = ? AND marked_by_config_id = ?',
+      args: [opts.companyId, markerConfigId],
+    });
+  }
+}
+
 function parseServices(value: unknown): string[] {
   if (!value) return [];
   return String(value)
@@ -205,6 +270,7 @@ export async function PATCH(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -257,6 +323,12 @@ export async function PATCH(
       await db.execute({
         sql: 'UPDATE attendees SET status = ? WHERE company_id = ?',
         args: [body.status ?? '', params.id],
+      });
+
+      await setPriorityMarkForCompany({
+        companyId: params.id,
+        actorEmail: user.email,
+        status: body.status,
       });
     }
 

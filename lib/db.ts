@@ -200,6 +200,7 @@ export async function initDb(): Promise<void> {
     )`,
     // Add action_key column for stable identification of meeting-related actions
     `ALTER TABLE config_options ADD COLUMN action_key TEXT`,
+    `ALTER TABLE config_options ADD COLUMN status_key TEXT`,
     // Seed action_key for known meeting actions (match by category + known default values)
     `UPDATE config_options SET action_key = 'meeting_scheduled' WHERE category = 'action' AND value = 'Meeting Scheduled' AND action_key IS NULL`,
     `UPDATE config_options SET action_key = 'meeting_held' WHERE category = 'action' AND value = 'Meeting Held' AND action_key IS NULL`,
@@ -207,6 +208,17 @@ export async function initDb(): Promise<void> {
     `UPDATE config_options SET action_key = 'cancelled' WHERE category = 'action' AND value = 'Cancelled' AND action_key IS NULL`,
     `UPDATE config_options SET action_key = 'no_show' WHERE category = 'action' AND value = 'Meeting No-Show' AND action_key IS NULL`,
     `UPDATE config_options SET action_key = 'pending' WHERE category = 'action' AND value = 'Pending' AND action_key IS NULL`,
+    `UPDATE config_options SET status_key = 'priority' WHERE category = 'status' AND value = 'Priority' AND status_key IS NULL`,
+    `CREATE TABLE IF NOT EXISTS company_priority_marks (
+      company_id INTEGER NOT NULL,
+      marked_by_config_id INTEGER NOT NULL,
+      priority_option_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (company_id, marked_by_config_id),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+      FOREIGN KEY (priority_option_id) REFERENCES config_options(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_company_priority_marks_marker ON company_priority_marks(marked_by_config_id)`,
     `CREATE TABLE IF NOT EXISTS pinned_notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       note_id INTEGER NOT NULL,

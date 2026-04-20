@@ -1,10 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { getConfigIdByEmail } from '@/lib/notifications';
+
+function parseStatusValues(status: unknown): string[] {
+  if (status == null) return [];
+  return String(status)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+async function getPriorityStatusOptionId(): Promise<number | null> {
+  const result = await db.execute({
+    sql: `SELECT id
+          FROM config_options
+          WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
+          ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END, id
+          LIMIT 1`,
+    args: [],
+  });
+  if (result.rows.length === 0 || result.rows[0].id == null) return null;
+  return Number(result.rows[0].id);
+}
 
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
@@ -45,6 +68,42 @@ export async function PATCH(request: NextRequest) {
         sql: `UPDATE companies SET assigned_user = ? WHERE parent_company_id IN (${placeholders})`,
         args: [fields.assigned_user || null, ...ids],
       });
+    }
+
+    if ('status' in fields) {
+      const markerConfigId = await getConfigIdByEmail(user.email);
+      const priorityOptionId = await getPriorityStatusOptionId();
+      if (markerConfigId != null && priorityOptionId != null) {
+        const statuses = parseStatusValues(fields.status);
+        const statusPh = statuses.map(() => '?').join(',');
+        const selectedStatusOptions = statuses.length > 0
+          ? await db.execute({
+              sql: `SELECT id FROM config_options WHERE category = 'status' AND value IN (${statusPh})`,
+              args: statuses,
+            })
+          : { rows: [] as Array<{ id: number }> };
+        const selectedIds = new Set(selectedStatusOptions.rows.map((row) => Number(row.id)));
+        const hasPriority = selectedIds.has(priorityOptionId);
+
+        if (hasPriority) {
+          for (const companyId of ids) {
+            await db.execute({
+              sql: `INSERT INTO company_priority_marks (company_id, marked_by_config_id, priority_option_id)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(company_id, marked_by_config_id)
+                    DO UPDATE SET priority_option_id = excluded.priority_option_id`,
+              args: [companyId, markerConfigId, priorityOptionId],
+            });
+          }
+        } else {
+          const idPh = ids.map(() => '?').join(',');
+          await db.execute({
+            sql: `DELETE FROM company_priority_marks
+                  WHERE marked_by_config_id = ? AND company_id IN (${idPh})`,
+            args: [markerConfigId, ...ids],
+          });
+        }
+      }
     }
 
     return NextResponse.json({ success: true, updated: ids.length });
