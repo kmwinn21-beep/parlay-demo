@@ -351,7 +351,7 @@ export default function RelationshipsPage() {
                       <div key={att.id} className="min-w-0">
                         <Link
                           href={`/attendees/${att.id}`}
-                          className="text-sm font-medium text-procare-bright-blue hover:underline leading-tight block"
+                          className="text-sm font-medium text-brand-secondary hover:underline leading-tight block"
                         >
                           {att.first_name} {att.last_name}
                         </Link>
@@ -394,7 +394,7 @@ export default function RelationshipsPage() {
                   onClick={handleConferenceClick}
                   disabled={loadingConfs || entry.contacts.length === 0}
                   title="View conference history"
-                  className="text-gray-400 hover:text-procare-bright-blue transition-colors disabled:opacity-40"
+                  className="text-gray-400 hover:text-brand-secondary transition-colors disabled:opacity-40"
                 >
                   {loadingConfs ? (
                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -421,10 +421,10 @@ export default function RelationshipsPage() {
         {/* Conference history modal */}
         {showConferences && (
           <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowConferences(false)}>
-            <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold w-full max-w-sm mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full max-w-sm mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
                 <div>
-                  <h3 className="text-sm font-semibold text-procare-dark-blue font-serif">Conference History</h3>
+                  <h3 className="text-sm font-semibold text-brand-primary font-serif">Conference History</h3>
                   {entry.contacts.length > 0 && (
                     <p className="text-xs text-gray-400 mt-0.5">
                       {entry.contacts.map(c => `${c.first_name} ${c.last_name}`).join(', ')}
@@ -504,7 +504,7 @@ export default function RelationshipsPage() {
                     setCompanyDropdownOpen(false);
                   }}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                    selectedCompanyId === company.id ? 'bg-blue-100 text-procare-dark-blue font-medium' : 'text-gray-700'
+                    selectedCompanyId === company.id ? 'bg-blue-100 text-brand-primary font-medium' : 'text-gray-700'
                   }`}
                 >
                   {company.name}
@@ -535,12 +535,12 @@ export default function RelationshipsPage() {
               <div className="w-[280px] flex items-stretch justify-center py-4 flex-shrink-0">
                 <div className="w-full rounded-xl border border-gray-200 bg-white shadow-sm p-5" style={{ minHeight: `${Math.max(420, Math.floor((mapBodyHeight - 32) * 0.75))}px` }}>
                   <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-procare-gold flex items-center justify-center text-procare-dark-blue text-xl font-bold font-serif flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-brand-highlight flex items-center justify-center text-brand-primary text-xl font-bold font-serif flex-shrink-0">
                       {companyDetails.name?.[0] || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
                       <Link href={`/companies/${companyDetails.id}`}>
-                        <h2 className="text-2xl font-bold text-procare-dark-blue font-serif break-words whitespace-normal overflow-hidden hover:underline cursor-pointer">
+                        <h2 className="text-2xl font-bold text-brand-primary font-serif break-words whitespace-normal overflow-hidden hover:underline cursor-pointer">
                           {companyDetails.name}
                         </h2>
                       </Link>

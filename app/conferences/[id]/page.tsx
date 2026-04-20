@@ -182,7 +182,7 @@ function MeetingMultiSelect({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white"
       >
         <span className={`truncate ${selected.length === 0 ? 'text-gray-400' : 'text-gray-800'}`}>{displayLabel}</span>
         <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +204,7 @@ function MeetingMultiSelect({
                 type="checkbox"
                 checked={selected.includes(opt.value)}
                 onChange={() => toggle(opt.value)}
-                className="accent-procare-bright-blue flex-shrink-0"
+                className="accent-brand-secondary flex-shrink-0"
               />
               <span>{opt.label}</span>
             </label>
@@ -821,7 +821,7 @@ export default function ConferenceDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -848,7 +848,7 @@ export default function ConferenceDetailPage() {
       <div className="card">
         {isEditing ? (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Conference</h2>
+            <h2 className="text-lg font-semibold text-brand-primary font-serif">Edit Conference</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="label">Conference Name *</label>
@@ -919,7 +919,7 @@ export default function ConferenceDetailPage() {
                               }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
                             >
-                              <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${isSelected ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                              <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${isSelected ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                                 {isSelected && (
                                   <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -939,7 +939,7 @@ export default function ConferenceDetailPage() {
                     {editInternalAttendees.map((user) => (
                       <span
                         key={user}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
                       >
                         {user}
                         <button
@@ -972,10 +972,10 @@ export default function ConferenceDetailPage() {
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{conference.name}</h1>
+              <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
                 <span className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   {formatDate(conference.start_date)}
@@ -984,7 +984,7 @@ export default function ConferenceDetailPage() {
                     : ''}
                 </span>
                 <span className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
@@ -1018,7 +1018,7 @@ export default function ConferenceDetailPage() {
                       return (
                         <span
                           key={user}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
                           title={user.trim()}
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1069,7 +1069,7 @@ export default function ConferenceDetailPage() {
               <button
                 key={tabKey}
                 onClick={() => handleTabChange(tabKey)}
-                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === tabKey ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === tabKey ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
                 {labelWithCount}
               </button>
@@ -1082,7 +1082,7 @@ export default function ConferenceDetailPage() {
       {activeTab === 'attendees' && (
         <div className="card">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Attendee List</h2>
+            <h2 className="text-lg font-semibold text-brand-primary font-serif">Attendee List</h2>
             <div className="flex items-center gap-3 flex-wrap">
               {selectedAttendeeIds.size >= 1 && (
                 <>
@@ -1110,7 +1110,7 @@ export default function ConferenceDetailPage() {
               )}
               <button
                 onClick={() => setShowAddForm((v) => !v)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-procare-dark-blue"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -1120,7 +1120,7 @@ export default function ConferenceDetailPage() {
               <button
                 onClick={() => uploadFileRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-procare-dark-blue disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary disabled:opacity-50"
               >
                 {isUploading ? (
                   <>
@@ -1160,14 +1160,14 @@ export default function ConferenceDetailPage() {
               {/* Filters toggle button */}
               <button
                 onClick={() => setAttendeeFiltersOpen(v => !v)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-procare-bright-blue text-white border-procare-bright-blue' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
                 </svg>
                 Filters
                 {(filterSeniority || filterCompanyType) && (
-                  <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-procare-bright-blue text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-procare-bright-blue">
+                  <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-brand-secondary text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-brand-secondary">
                     {[filterSeniority, filterCompanyType].filter(Boolean).length}
                   </span>
                 )}
@@ -1210,8 +1210,8 @@ export default function ConferenceDetailPage() {
 
           {/* Add Attendee Inline Form */}
           {showAddForm && (
-            <div className="mb-4 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
-              <h3 className="text-sm font-semibold text-procare-dark-blue mb-3">Add Attendee to Conference</h3>
+            <div className="mb-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
+              <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee to Conference</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <label className="label text-xs">First Name *</label>
@@ -1297,8 +1297,8 @@ export default function ConferenceDetailPage() {
                     <div key={attendee.id} className={`px-4 py-4 ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-procare-bright-blue flex-shrink-0" />
-                          <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
+                          <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
+                          <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm truncate">
                             {attendee.first_name} {attendee.last_name}
                           </Link>
                         </div>
@@ -1307,7 +1307,7 @@ export default function ConferenceDetailPage() {
                       {attendee.company_name && (
                         <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
                           {attendee.company_id ? (
-                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-brand-secondary hover:underline">{attendee.company_name}</Link>
                           ) : (
                             <span className="text-xs text-gray-700">{attendee.company_name}</span>
                           )}
@@ -1355,42 +1355,42 @@ export default function ConferenceDetailPage() {
                           if (e.target.checked) setSelectedAttendeeIds(new Set(filteredAttendees.map((a) => a.id)));
                           else setSelectedAttendeeIds(new Set());
                         }}
-                        className="accent-procare-bright-blue"
+                        className="accent-brand-secondary"
                       />
                     </th>
                     {isConfAttendeeColVisible('name') && (
-                      <th onClick={() => handleSort('name')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.name }}>
+                      <th onClick={() => handleSort('name')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.name }}>
                         Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'name')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                        <div onMouseDown={e => startResize(e, 'name')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
                       </th>
                     )}
                     {isConfAttendeeColVisible('title') && (
-                      <th onClick={() => handleSort('title')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.title }}>
+                      <th onClick={() => handleSort('title')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.title }}>
                         Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'title')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                        <div onMouseDown={e => startResize(e, 'title')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
                       </th>
                     )}
                     {isConfAttendeeColVisible('company') && (
-                      <th onClick={() => handleSort('company')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.company }}>
+                      <th onClick={() => handleSort('company')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.company }}>
                         Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'company')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                        <div onMouseDown={e => startResize(e, 'company')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
                       </th>
                     )}
                     {isConfAttendeeColVisible('type') && (
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.type }}>
                         Type
-                        <div onMouseDown={e => startResize(e, 'type')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                        <div onMouseDown={e => startResize(e, 'type')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
                       </th>
                     )}
                     {isConfAttendeeColVisible('seniority') && (
-                      <th onClick={() => handleSort('seniority')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-procare-bright-blue" style={{ width: colWidths.seniority }}>
+                      <th onClick={() => handleSort('seniority')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.seniority }}>
                         Seniority{sortKey === 'seniority' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'seniority')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                        <div onMouseDown={e => startResize(e, 'seniority')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
                       </th>
                     )}
                     {isConfAttendeeColVisible('conferences') && (
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.conferences }}># Conf
-                        <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+                        <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
                       </th>
                     )}
                     {isConfAttendeeColVisible('notes') && (
@@ -1409,13 +1409,13 @@ export default function ConferenceDetailPage() {
                           type="checkbox"
                           checked={selectedAttendeeIds.has(attendee.id)}
                           onChange={() => toggleAttendeeSelect(attendee.id)}
-                          className="accent-procare-bright-blue"
+                          className="accent-brand-secondary"
                         />
                       </td>
                       {isConfAttendeeColVisible('name') && (
                         <td className="px-4 py-3 font-medium overflow-visible">
                           <div className="text-left">
-                            <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                            <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                               {attendee.first_name} {attendee.last_name}
                             </Link>
                           </div>
@@ -1447,7 +1447,7 @@ export default function ConferenceDetailPage() {
                           {attendee.company_name ? (
                             <div>
                               {attendee.company_id ? (
-                                <Link href={`/companies/${attendee.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                                <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
                               ) : (
                                 <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                               )}
@@ -1465,7 +1465,7 @@ export default function ConferenceDetailPage() {
                                     autoFocus
                                   />
                                 ) : (
-                                  <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')}>
+                                  <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')}>
                                     WSE: {Number(attendee.company_wse).toLocaleString()}
                                   </button>
                                 )
@@ -1555,7 +1555,7 @@ export default function ConferenceDetailPage() {
         <div className="card">
           {isLoadingCompanies ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin w-6 h-6 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+              <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : (
             <CompanyTable
@@ -1656,7 +1656,7 @@ export default function ConferenceDetailPage() {
             <div className="px-6 py-4 border-b border-gray-100">
               {/* Top row: title + desktop pills + filters button */}
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex-shrink-0">
+                <h2 className="text-lg font-semibold text-brand-primary font-serif flex-shrink-0">
                   Meetings
                   {confMeetings.length > 0 && (
                     <span className="ml-2 text-sm font-normal text-gray-500">
@@ -1672,7 +1672,7 @@ export default function ConferenceDetailPage() {
                     onClick={() => setMeetingFiltersOpen(o => !o)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
                       anyFilters
-                        ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50'
+                        ? 'border-brand-secondary text-brand-secondary bg-blue-50'
                         : 'border-gray-200 text-gray-600 hover:border-gray-400'
                     }`}
                   >
@@ -1681,7 +1681,7 @@ export default function ConferenceDetailPage() {
                     </svg>
                     Filters
                     {anyFilters && (
-                      <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                      <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
                         {activeFilterCount}
                       </span>
                     )}
@@ -1706,7 +1706,7 @@ export default function ConferenceDetailPage() {
                       options={userOptions}
                       selectedIds={meetingFilterReps}
                       onChange={setMeetingFilterReps}
-                      triggerClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                      triggerClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white"
                       placeholder="All reps..."
                     />
                   </div>
@@ -1807,7 +1807,7 @@ export default function ConferenceDetailPage() {
         <div className="card p-0 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Follow Ups</h2>
+              <h2 className="text-lg font-semibold text-brand-primary font-serif">Follow Ups</h2>
               {confFollowUps.length > 0 && (
                 <p className="text-sm text-gray-500 mt-0.5">
                   {confFollowUps.filter(f => !f.completed).length} pending · {confFollowUps.filter(f => f.completed).length} completed

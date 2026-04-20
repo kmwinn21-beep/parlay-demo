@@ -109,7 +109,7 @@ function MeetingInfoTooltip({
 
   return (
     <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <button type="button" className="text-gray-400 hover:text-procare-bright-blue transition-colors" title="Meeting Info">
+      <button type="button" className="text-gray-400 hover:text-brand-secondary transition-colors" title="Meeting Info">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
@@ -277,7 +277,7 @@ function EditMeetingRow({
     parseRepIds(meeting.scheduled_by)
   );
 
-  const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+  const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
   const handleSave = () => {
     onSave(meeting.id, {
@@ -324,7 +324,7 @@ function EditMeetingRow({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="px-3 py-1.5 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
             disabled={!form.meeting_date || !form.meeting_time}
             onClick={handleSave}
           >
@@ -377,7 +377,7 @@ function EditMeetingTableRow({
     parseRepIds(meeting.scheduled_by)
   );
 
-  const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+  const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
   const handleSave = () => {
     onSave(meeting.id, {
@@ -426,7 +426,7 @@ function EditMeetingTableRow({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="px-2.5 py-1 bg-procare-bright-blue text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="px-2.5 py-1 bg-brand-secondary text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
                 disabled={!form.meeting_date || !form.meeting_time}
                 onClick={handleSave}
               >
@@ -563,12 +563,12 @@ export function MeetingsTable({
               <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-procare-bright-blue hover:underline">
+                    <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
                       {m.first_name} {m.last_name}
                     </Link>
                     {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
                     {!hideCompany && (m.company_name && m.company_id ? (
-                      <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline mt-0.5">
+                      <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline mt-0.5">
                         {m.company_name}
                       </Link>
                     ) : m.company_name ? (
@@ -582,7 +582,7 @@ export function MeetingsTable({
                     companyWse={m.company_wse}
                   />
                   {onEdit && (
-                    <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-procare-bright-blue p-1 rounded" title="Edit">
+                    <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-brand-secondary p-1 rounded" title="Edit">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
@@ -595,7 +595,7 @@ export function MeetingsTable({
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <Link href={`/conferences/${m.conference_id}`} className="text-xs text-procare-bright-blue hover:underline">
+                  <Link href={`/conferences/${m.conference_id}`} className="text-xs text-brand-secondary hover:underline">
                     {m.conference_name}
                   </Link>
                 </div>
@@ -645,7 +645,7 @@ export function MeetingsTable({
               ) : (
                 <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
                   {isVisible('name') && <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                    <Link href={`/attendees/${m.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
+                    <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
                       {m.first_name} {m.last_name}
                     </Link>
                   </td>}
@@ -658,7 +658,7 @@ export function MeetingsTable({
                   {isVisible('company') && !hideCompany && (
                     <td className="px-3 py-2 text-gray-600 leading-snug">
                       {m.company_name && m.company_id ? (
-                        <Link href={`/companies/${m.company_id}`} className="text-xs text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                        <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">
                           {m.company_name}
                         </Link>
                       ) : (
@@ -671,7 +671,7 @@ export function MeetingsTable({
                     <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
                   </td>}
                   {isVisible('conference') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <Link href={`/conferences/${m.conference_id}`} className="text-procare-bright-blue hover:underline">
+                    <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">
                       {m.conference_name}
                     </Link>
                   </td>}
@@ -694,7 +694,7 @@ export function MeetingsTable({
                   {hasActions && (
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-procare-bright-blue text-xs font-medium transition-colors">Edit</button>
+                        <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-brand-secondary text-xs font-medium transition-colors">Edit</button>
                       </div>
                     </td>
                   )}

@@ -8,10 +8,10 @@ export const BRAND_COLOR_DEFAULTS = {
 export type BrandColorKey = keyof typeof BRAND_COLOR_DEFAULTS;
 
 export const BRAND_CSS_VARS: Record<BrandColorKey, string> = {
-  brand_dark_blue:   '--procare-dark-blue-rgb',
-  brand_bright_blue: '--procare-bright-blue-rgb',
-  brand_beige:       '--procare-beige-rgb',
-  brand_gold:        '--procare-gold-rgb',
+  brand_dark_blue:   '--brand-primary-rgb',
+  brand_bright_blue: '--brand-secondary-rgb',
+  brand_beige:       '--brand-accent-rgb',
+  brand_gold:        '--brand-highlight-rgb',
 };
 
 export const BRAND_COLOR_META: Record<BrandColorKey, { label: string; description: string }> = {
@@ -29,3 +29,63 @@ export function hexToRgbChannels(hex: string): string {
   if (isNaN(r) || isNaN(g) || isNaN(b)) return '';
   return `${r} ${g} ${b}`;
 }
+
+export interface FontOption {
+  key: string;
+  label: string;
+  headingFamily: string;
+  bodyFamily: string;
+  googleFontsParam: string;
+  previewHeading: string;
+  previewBody: string;
+}
+
+export const FONT_OPTIONS: FontOption[] = [
+  {
+    key: 'default',
+    label: 'Default',
+    headingFamily: '"DM Serif Display"',
+    bodyFamily: '"Poppins"',
+    googleFontsParam: 'DM+Serif+Display:ital@0;1&family=Poppins:wght@300;400;500;600;700',
+    previewHeading: 'DM Serif Display',
+    previewBody: 'Poppins',
+  },
+  {
+    key: 'modern',
+    label: 'Modern',
+    headingFamily: '"Inter"',
+    bodyFamily: '"Inter"',
+    googleFontsParam: 'Inter:wght@300;400;500;600;700;800',
+    previewHeading: 'Inter',
+    previewBody: 'Inter',
+  },
+  {
+    key: 'classic',
+    label: 'Classic',
+    headingFamily: '"Playfair Display"',
+    bodyFamily: '"Lato"',
+    googleFontsParam: 'Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lato:wght@300;400;700',
+    previewHeading: 'Playfair Display',
+    previewBody: 'Lato',
+  },
+  {
+    key: 'contemporary',
+    label: 'Contemporary',
+    headingFamily: '"Montserrat"',
+    bodyFamily: '"Open Sans"',
+    googleFontsParam: 'Montserrat:wght@400;500;600;700;800&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700',
+    previewHeading: 'Montserrat',
+    previewBody: 'Open Sans',
+  },
+  {
+    key: 'elegant',
+    label: 'Elegant',
+    headingFamily: '"Raleway"',
+    bodyFamily: '"Source Sans 3"',
+    googleFontsParam: 'Raleway:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700',
+    previewHeading: 'Raleway',
+    previewBody: 'Source Sans 3',
+  },
+];
+
+export const DEFAULT_FONT_KEY = 'default';

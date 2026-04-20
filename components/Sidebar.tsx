@@ -96,7 +96,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-procare-dark-blue flex flex-col flex-shrink-0 h-full">
+    <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
       {/* Logo area */}
       <div className="p-5 border-b border-blue-800">
         <div className="flex items-center gap-3">
@@ -113,7 +113,7 @@ export function Sidebar() {
             href={item.href}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
               isActive(item.href)
-                ? 'bg-procare-gold text-procare-dark-blue'
+                ? 'bg-brand-highlight text-brand-primary'
                 : 'text-blue-100 hover:bg-blue-800 hover:text-white'
             }`}
           >
@@ -135,7 +135,7 @@ export function Sidebar() {
             href="/admin"
             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
               isActive('/admin')
-                ? 'bg-procare-gold text-procare-dark-blue'
+                ? 'bg-brand-highlight text-brand-primary'
                 : 'text-blue-100 hover:bg-blue-800 hover:text-white'
             }`}
           >
@@ -155,13 +155,13 @@ export function Sidebar() {
             href="/auth/account"
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-800 transition-colors group"
           >
-            <div className="w-7 h-7 rounded-full bg-procare-bright-blue flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-brand-secondary flex items-center justify-center flex-shrink-0">
               <span className="text-white text-xs font-bold">
                 {user.email.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-white text-xs font-medium truncate group-hover:text-procare-gold transition-colors">
+              <p className="text-white text-xs font-medium truncate group-hover:text-brand-highlight transition-colors">
                 {user.email.split('@')[0]}
               </p>
               <p className="text-blue-400 text-[10px] capitalize">{user.role}</p>

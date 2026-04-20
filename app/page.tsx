@@ -286,12 +286,12 @@ async function StatsSection() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
       {/* Conference Tracking banner — col 1-2 */}
-        <div className="lg:col-span-2 bg-procare-dark-blue rounded-2xl p-8 text-white relative overflow-hidden flex items-center">
+        <div className="lg:col-span-2 bg-brand-primary rounded-2xl p-8 text-white relative overflow-hidden flex items-center">
           <div className="relative z-10">
             <h1 className="text-3xl font-bold font-serif mb-2">Conference Tracking</h1>
           </div>
-          <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-procare-bright-blue opacity-20" />
-          <div className="absolute right-16 top-12 w-20 h-20 rounded-full bg-procare-gold opacity-10" />
+          <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-brand-secondary opacity-20" />
+          <div className="absolute right-16 top-12 w-20 h-20 rounded-full bg-brand-highlight opacity-10" />
         </div>
 
         {/* Overview card — col 3 */}
@@ -299,23 +299,23 @@ async function StatsSection() {
           <div className="flex flex-row gap-1">
             <Link href="/conferences" className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group">
               <div className="flex items-center gap-1.5">
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-procare-bright-blue transition-colors flex-shrink-0">
-                  <svg className="w-4 h-4 text-procare-bright-blue group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-brand-secondary transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-brand-secondary group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <p className="text-xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalConferences}</p>
+                <p className="text-xl font-bold text-brand-primary font-serif leading-none">{stats.totalConferences}</p>
               </div>
               <p className="text-xs text-gray-500 leading-tight">Conferences</p>
             </Link>
             <Link href="/attendees" className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group">
               <div className="flex items-center gap-1.5">
-                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center group-hover:bg-procare-gold transition-colors flex-shrink-0">
-                  <svg className="w-4 h-4 text-yellow-600 group-hover:text-procare-dark-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center group-hover:bg-brand-highlight transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-yellow-600 group-hover:text-brand-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <p className="text-xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalAttendees}</p>
+                <p className="text-xl font-bold text-brand-primary font-serif leading-none">{stats.totalAttendees}</p>
               </div>
               <p className="text-xs text-gray-500 leading-tight">Attendees</p>
             </Link>
@@ -326,7 +326,7 @@ async function StatsSection() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
                 </div>
-                <p className="text-xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalCompanies}</p>
+                <p className="text-xl font-bold text-brand-primary font-serif leading-none">{stats.totalCompanies}</p>
               </div>
               <p className="text-xs text-gray-500 leading-tight">Companies</p>
             </Link>
@@ -344,8 +344,8 @@ async function UpcomingSection() {
   return (
     <div className="card h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex items-center gap-2">
-          <svg className="w-5 h-5 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
+          <svg className="w-5 h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           Current &amp; Upcoming
@@ -354,7 +354,7 @@ async function UpcomingSection() {
         <AwaitingUploadModal conferences={awaitingUploadConferences} />
       </div>
       {upcomingConferences.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No current or upcoming conferences. <Link href="/conferences/new" className="text-procare-bright-blue hover:underline">Add one →</Link></p>
+        <p className="text-sm text-gray-400 text-center py-6">No current or upcoming conferences. <Link href="/conferences/new" className="text-brand-secondary hover:underline">Add one →</Link></p>
       ) : (
         <div
           className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto [&::-webkit-scrollbar]:hidden"
@@ -367,19 +367,19 @@ async function UpcomingSection() {
               <Link
                 key={conf.id}
                 href={`/conferences/${conf.id}`}
-                className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-procare-bright-blue group"
+                className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group"
                 style={{ borderColor: isActive ? '#1B76BC' : undefined }}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       {isActive && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-2">
-                          <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-2">
+                          <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
                           In Progress
                         </span>
                       )}
-                      <p className="font-semibold text-gray-800 group-hover:text-procare-bright-blue transition-colors leading-tight">{conf.name}</p>
+                      <p className="font-semibold text-gray-800 group-hover:text-brand-secondary transition-colors leading-tight">{conf.name}</p>
                       <p className="text-xs text-gray-500 mt-1">
                         {formatMonthDay(conf.start_date)} - {formatMonthDay(conf.end_date || conf.start_date)}
                       </p>
@@ -401,7 +401,7 @@ async function UpcomingSection() {
                   )}
                 </div>
                 <div className="flex justify-end mt-2 flex-shrink-0">
-                  <svg className="w-4 h-4 text-gray-300 group-hover:text-procare-bright-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-gray-300 group-hover:text-brand-secondary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
@@ -424,7 +424,7 @@ async function RecentAndPrioritySection() {
       {/* Priority Leads */}
       <div className="card">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
             Priority Leads
             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
               <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -433,7 +433,7 @@ async function RecentAndPrioritySection() {
               </svg>
             </span>
           </h2>
-          <Link href="/companies?status=Priority" className="text-sm text-procare-bright-blue hover:underline">View all &rarr;</Link>
+          <Link href="/companies?status=Priority" className="text-sm text-brand-secondary hover:underline">View all &rarr;</Link>
         </div>
         <PriorityLeads leads={priorityLeads} />
       </div>
@@ -441,8 +441,8 @@ async function RecentAndPrioritySection() {
       {/* Recent Conferences */}
       <div className="lg:col-span-2 card">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Recent</h2>
-          <Link href="/conferences" className="text-sm text-procare-bright-blue hover:underline">
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">Recent</h2>
+          <Link href="/conferences" className="text-sm text-brand-secondary hover:underline">
             View all →
           </Link>
         </div>
@@ -463,7 +463,7 @@ async function RecentAndPrioritySection() {
               <Link
                 key={conf.id}
                 href={`/conferences/${conf.id}`}
-                className="block p-4 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all"
+                className="block p-4 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all"
               >
                 <div className="flex items-start justify-between">
                   <div>

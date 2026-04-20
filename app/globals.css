@@ -4,10 +4,14 @@
 
 :root {
   /* RGB channels for brand colors — overridden at runtime via server-injected <style> */
-  --procare-dark-blue-rgb:   11  60  98;   /* default #0B3C62 */
-  --procare-bright-blue-rgb: 27 118 188;   /* default #1B76BC */
-  --procare-beige-rgb:      231 222 217;   /* default #E7DED9 */
-  --procare-gold-rgb:       255 203  63;   /* default #FFCB3F */
+  --brand-primary-rgb:   11  60  98;   /* default #0B3C62 */
+  --brand-secondary-rgb: 27 118 188;   /* default #1B76BC */
+  --brand-accent-rgb:   231 222 217;   /* default #E7DED9 */
+  --brand-highlight-rgb: 255 203  63;  /* default #FFCB3F */
+
+  /* Font families — overridden at runtime via server-injected <style> */
+  --font-heading: "DM Serif Display";
+  --font-body: "Poppins";
 }
 
 * {
@@ -15,13 +19,13 @@
 }
 
 body {
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--font-body), sans-serif;
   background-color: #f8f9fa;
   color: #1a1a2e;
 }
 
 h1, h2, h3 {
-  font-family: 'DM Serif Display', serif;
+  font-family: var(--font-heading), serif;
 }
 
 /* iOS safe area support */
@@ -31,11 +35,11 @@ h1, h2, h3 {
 
 @layer components {
   .btn-primary {
-    @apply bg-procare-bright-blue text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-brand-secondary text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-white text-procare-dark-blue border border-procare-dark-blue px-4 py-2 rounded-lg font-medium hover:bg-procare-beige transition-colors;
+    @apply bg-white text-brand-primary border border-brand-primary px-4 py-2 rounded-lg font-medium hover:bg-brand-accent transition-colors;
   }
 
   .btn-danger {
@@ -43,7 +47,7 @@ h1, h2, h3 {
   }
 
   .btn-gold {
-    @apply bg-procare-gold text-procare-dark-blue px-4 py-2 rounded-lg font-medium hover:bg-yellow-400 transition-colors;
+    @apply bg-brand-highlight text-brand-primary px-4 py-2 rounded-lg font-medium hover:bg-yellow-400 transition-colors;
   }
 
   .card {
@@ -51,7 +55,7 @@ h1, h2, h3 {
   }
 
   .input-field {
-    @apply w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-transparent;
+    @apply w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent;
   }
 
   .label {

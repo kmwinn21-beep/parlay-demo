@@ -79,7 +79,7 @@ export function PriorityLeads({ leads }: { leads: PriorityLead[] }) {
           >
             {/* Row 1: company name */}
             <Link href={`/companies/${lead.id}`} className="min-w-0">
-              <p className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
+              <p className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug">
                 {lead.name}
               </p>
             </Link>

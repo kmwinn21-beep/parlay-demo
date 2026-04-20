@@ -242,7 +242,7 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
     <button
       type="button"
       onClick={onToggleOperators}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-procare-dark-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
     >
       Operators
     </button>
@@ -276,7 +276,7 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
       <button
         type="button"
         onClick={onToggleOperators}
-        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-procare-dark-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
       >
         Operators
       </button>
@@ -302,11 +302,11 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
       <button type="button" className="w-full text-left p-3" onClick={() => setOpen(v => !v)}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <a href={`/attendees/${attendee.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm text-procare-dark-blue hover:underline leading-tight block">{attendee.first_name} {attendee.last_name}</a>
+            <a href={`/attendees/${attendee.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm text-brand-primary hover:underline leading-tight block">{attendee.first_name} {attendee.last_name}</a>
             {attendee.title && <p className="text-xs text-gray-500 mt-0.5">{attendee.title}</p>}
             {attendee.company_name && (
               attendee.company_id
-                ? <a href={`/companies/${attendee.company_id}`} onClick={e => e.stopPropagation()} className="text-xs text-procare-dark-blue hover:underline mt-0.5 block">{attendee.company_name}</a>
+                ? <a href={`/companies/${attendee.company_id}`} onClick={e => e.stopPropagation()} className="text-xs text-brand-primary hover:underline mt-0.5 block">{attendee.company_name}</a>
                 : <p className="text-xs text-gray-600 mt-0.5">{attendee.company_name}</p>
             )}
             <div className="flex flex-wrap items-center gap-1 mt-1.5">
@@ -383,11 +383,11 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   });
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
-      <div className="relative bg-white rounded-t-2xl shadow-2xl border border-procare-gold flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="font-semibold text-procare-dark-blue">Guest List</h3>
+              <h3 className="font-semibold text-brand-primary">Guest List</h3>
               <p className="text-xs text-gray-500">{event.event_type || 'Social Event'}{event.host ? ` · ${event.host}` : ''}</p>
             </div>
             <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
@@ -453,9 +453,9 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
                 const has = (opt: RsvpStatus) => statuses.includes(opt);
                 return (
                   <tr key={att.id} className="hover:bg-white">
-                    <td className="py-2 pr-3 font-medium whitespace-nowrap"><Link href={`/attendees/${att.id}`} className="text-procare-dark-blue hover:underline">{att.first_name} {att.last_name}</Link></td>
+                    <td className="py-2 pr-3 font-medium whitespace-nowrap"><Link href={`/attendees/${att.id}`} className="text-brand-primary hover:underline">{att.first_name} {att.last_name}</Link></td>
                     <td className="py-2 pr-3 text-gray-700 text-sm whitespace-nowrap">{att.title || '—'}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{att.company_id ? <Link href={`/companies/${att.company_id}`} className="text-procare-dark-blue hover:underline">{att.company_name}</Link> : <span className="text-gray-700">{att.company_name || '—'}</span>}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{att.company_id ? <Link href={`/companies/${att.company_id}`} className="text-brand-primary hover:underline">{att.company_name}</Link> : <span className="text-gray-700">{att.company_name || '—'}</span>}</td>
                     <td className="py-2 pr-3">
                       {att.company_type
                         ? <span className={`${getBadgeClass(att.company_type, colorMaps.company_type || {})} text-[10px]`}>{att.company_type}</span>
@@ -543,12 +543,12 @@ function GuestListModal({ attendees, selected, onConfirm, onClose }: {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl border border-procare-gold flex flex-col w-full max-w-2xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-brand-highlight flex flex-col w-full max-w-2xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-base font-semibold text-procare-dark-blue">Build Guest List</h3>
+              <h3 className="text-base font-semibold text-brand-primary">Build Guest List</h3>
               <p className="text-xs text-gray-500 mt-0.5">{draft.length} selected</p>
             </div>
             <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
@@ -560,7 +560,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose }: {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, company, or title..."
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-procare-bright-blue"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
             autoFocus
           />
         </div>
@@ -571,7 +571,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose }: {
             <thead className="sticky top-0 bg-white border-b border-gray-100 z-10">
               <tr>
                 <th className="pl-4 pr-2 py-2.5 w-8">
-                  <button type="button" onClick={toggleAll} className={`w-4 h-4 rounded border flex items-center justify-center ${allVisibleChecked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300 hover:border-gray-400'}`}>
+                  <button type="button" onClick={toggleAll} className={`w-4 h-4 rounded border flex items-center justify-center ${allVisibleChecked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300 hover:border-gray-400'}`}>
                     {allVisibleChecked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </button>
                 </th>
@@ -588,7 +588,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose }: {
                 return (
                   <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
                     <td className="pl-4 pr-2 py-2.5 align-middle">
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                         {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                       </span>
                     </td>
@@ -814,9 +814,9 @@ export function SocialEventsTable({
     <div className="card">
       {/* header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Social Events</h2>
+        <h2 className="text-lg font-semibold text-brand-primary font-serif">Social Events</h2>
         {!showForm && (
-          <button type="button" onClick={() => { setEditingEventId(null); setFormData(p => ({ ...p, entered_by: user?.displayName || '' })); setShowForm(true); }} className="flex items-center gap-1.5 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors">
+          <button type="button" onClick={() => { setEditingEventId(null); setFormData(p => ({ ...p, entered_by: user?.displayName || '' })); setShowForm(true); }} className="flex items-center gap-1.5 text-sm text-brand-secondary hover:text-brand-primary font-medium transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
             Add Social Event
           </button>
@@ -825,8 +825,8 @@ export function SocialEventsTable({
 
       {/* form */}
       {showForm && (
-        <div className="mb-5 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
-          <p className="text-sm font-semibold text-procare-dark-blue mb-3">{editingEventId ? 'Edit Social Event' : 'New Social Event'}</p>
+        <div className="mb-5 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
+          <p className="text-sm font-semibold text-brand-primary mb-3">{editingEventId ? 'Edit Social Event' : 'New Social Event'}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
 
             {/* Entered By */}
@@ -852,7 +852,7 @@ export function SocialEventsTable({
                       const checked = formData.internal_attendees.includes(opt);
                       return (
                         <button key={opt} type="button" onClick={() => setFormData(p => ({ ...p, internal_attendees: checked ? p.internal_attendees.filter(v => v !== opt) : [...p.internal_attendees, opt] }))} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
-                          <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>{checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}</span>
+                          <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>{checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}</span>
                           {opt}
                         </button>
                       );
@@ -863,7 +863,7 @@ export function SocialEventsTable({
               {formData.internal_attendees.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {formData.internal_attendees.map(v => (
-                    <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200">
+                    <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
                       {v}
                       <button type="button" onClick={() => setFormData(p => ({ ...p, internal_attendees: p.internal_attendees.filter(x => x !== v) }))} className="hover:text-red-500"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
                     </span>
@@ -935,12 +935,12 @@ export function SocialEventsTable({
               <button
                 type="button"
                 onClick={() => setShowGuestListModal(true)}
-                className="input-field w-full text-left flex items-center gap-2 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors"
+                className="input-field w-full text-left flex items-center gap-2 text-sm text-brand-secondary hover:text-brand-primary font-medium transition-colors"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 Build Guest List
                 {formData.prospect_attendees.length > 0 && (
-                  <span className="ml-auto px-2 py-0.5 rounded-full bg-procare-bright-blue text-white text-xs font-semibold">
+                  <span className="ml-auto px-2 py-0.5 rounded-full bg-brand-secondary text-white text-xs font-semibold">
                     {formData.prospect_attendees.length}
                   </span>
                 )}
@@ -982,11 +982,11 @@ export function SocialEventsTable({
                 <div key={ev.id} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="text-sm font-semibold text-procare-dark-blue">{ev.event_name || ev.event_type || 'Social Event'}</p>
+                      <p className="text-sm font-semibold text-brand-primary">{ev.event_name || ev.event_type || 'Social Event'}</p>
                       <p className="text-xs text-gray-500">{ev.event_type ? `${ev.event_type} · ` : ''}{ev.host || '—'}</p>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-procare-bright-blue transition-colors p-1" title="Edit">
+                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
                       <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
@@ -1003,9 +1003,9 @@ export function SocialEventsTable({
                     <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal</p><InternalAttendeePill internalAttendees={ev.internal_attendees} /></div>
                   </div>
                   <div className="pt-2 border-t border-gray-100">
-                    <button type="button" onClick={() => setGuestListEventId(ev.id)} className="flex items-center gap-2 text-sm font-medium text-procare-bright-blue hover:text-procare-dark-blue transition-colors">
+                    <button type="button" onClick={() => setGuestListEventId(ev.id)} className="flex items-center gap-2 text-sm font-medium text-brand-secondary hover:text-brand-primary transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      Guest List {invited.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-procare-bright-blue text-white text-xs">{invited.length}</span>}
+                      Guest List {invited.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-brand-secondary text-white text-xs">{invited.length}</span>}
                     </button>
                   </div>
                 </div>
@@ -1056,11 +1056,11 @@ export function SocialEventsTable({
                           <div className="flex items-center gap-1">
                             {invited.length > 0 && (
                               <button type="button" title="Toggle guest list" onClick={() => setExpandedEventId(v => v === ev.id ? null : ev.id)}
-                                className={`transition-colors ${isExpanded ? 'text-procare-bright-blue' : 'text-gray-300 hover:text-procare-bright-blue'}`}>
+                                className={`transition-colors ${isExpanded ? 'text-brand-secondary' : 'text-gray-300 hover:text-brand-secondary'}`}>
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                               </button>
                             )}
-                            <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-procare-bright-blue transition-colors" title="Edit">
+                            <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors" title="Edit">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </button>
                             <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Delete">

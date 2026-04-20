@@ -122,7 +122,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
 
   return (
     <div className="card space-y-5">
-      <h2 className="text-base font-semibold text-procare-dark-blue font-serif">Profile &amp; Identity</h2>
+      <h2 className="text-base font-semibold text-brand-primary font-serif">Profile &amp; Identity</h2>
 
       <form onSubmit={handleSaveProfile} className="space-y-4">
         {/* Display name */}
@@ -176,7 +176,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
             <button
               type="button"
               onClick={() => setShowEmailForm(v => !v)}
-              className="text-xs text-procare-bright-blue font-medium hover:underline flex-shrink-0"
+              className="text-xs text-brand-secondary font-medium hover:underline flex-shrink-0"
             >
               {showEmailForm ? 'Cancel' : 'Change'}
             </button>
@@ -210,7 +210,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
           {emailChangeDevLink && (
             <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
               <span className="font-semibold text-yellow-800">Dev link:</span>{' '}
-              <a href={emailChangeDevLink} className="text-procare-bright-blue underline break-all">{emailChangeDevLink}</a>
+              <a href={emailChangeDevLink} className="text-brand-secondary underline break-all">{emailChangeDevLink}</a>
             </div>
           )}
 
@@ -221,7 +221,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
                 type="button"
                 onClick={handleResendVerification}
                 disabled={resending}
-                className="text-xs text-procare-bright-blue font-medium hover:underline flex-shrink-0"
+                className="text-xs text-brand-secondary font-medium hover:underline flex-shrink-0"
               >
                 {resending ? 'Sending…' : 'Resend'}
               </button>
@@ -231,7 +231,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
           {resendDevLink && (
             <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
               <span className="font-semibold text-yellow-800">Dev link:</span>{' '}
-              <a href={resendDevLink} className="text-procare-bright-blue underline break-all">{resendDevLink}</a>
+              <a href={resendDevLink} className="text-brand-secondary underline break-all">{resendDevLink}</a>
             </div>
           )}
         </div>
@@ -240,7 +240,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Role</p>
           <span className={`inline-flex mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-            user.role === 'administrator' ? 'bg-procare-dark-blue text-white' : 'bg-gray-100 text-gray-600'
+            user.role === 'administrator' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
           }`}>
             {user.role === 'administrator' ? 'Administrator' : 'Standard User'}
           </span>
@@ -300,7 +300,7 @@ function NotificationPrefsSection() {
 
   return (
     <div className="card">
-      <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Notification Preferences</h2>
+      <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Notification Preferences</h2>
       <p className="text-xs text-gray-400 mb-4">Choose which in-app notifications you receive.</p>
       {prefs === null ? (
         <div className="space-y-3">
@@ -320,8 +320,8 @@ function NotificationPrefsSection() {
                 aria-checked={prefs[key]}
                 disabled={saving}
                 onClick={() => toggle(key)}
-                className={`relative flex-shrink-0 w-10 h-5.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-procare-bright-blue ${
-                  prefs[key] ? 'bg-procare-bright-blue' : 'bg-gray-200'
+                className={`relative flex-shrink-0 w-10 h-5.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary ${
+                  prefs[key] ? 'bg-brand-secondary' : 'bg-gray-200'
                 }`}
                 style={{ height: '22px', width: '40px' }}
               >
@@ -370,7 +370,7 @@ function ChangePasswordSection() {
 
   return (
     <div className="card">
-      <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-4">Change Password</h2>
+      <h2 className="text-base font-semibold text-brand-primary font-serif mb-4">Change Password</h2>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="label text-xs">Current Password</label>
@@ -418,7 +418,7 @@ export default function AccountPage() {
     <div className="max-w-lg mx-auto space-y-6">
       <BackButton />
       <div>
-        <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">My Account</h1>
+        <h1 className="text-2xl font-bold text-brand-primary font-serif">My Account</h1>
         <p className="text-sm text-gray-500 mt-1">Manage your profile and security settings.</p>
       </div>
 
@@ -427,7 +427,7 @@ export default function AccountPage() {
       <ChangePasswordSection />
 
       <div className="card">
-        <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">Session</h2>
+        <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">Session</h2>
         <p className="text-sm text-gray-500 mb-4">
           Sign out of {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'} on this device.
         </p>

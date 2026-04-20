@@ -3,7 +3,7 @@ import { LogoImage } from '@/components/LogoImage';
 
 export default function AccessDeniedPage() {
   return (
-    <div className="min-h-screen bg-procare-dark-blue flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
@@ -14,13 +14,13 @@ export default function AccessDeniedPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-procare-dark-blue font-serif mb-2">Access Denied</h1>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif mb-2">Access Denied</h1>
           <p className="text-sm text-gray-500 mb-6">
             This area requires administrator access. Contact your Procare HR administrator to request elevated permissions.
           </p>
           <Link
             href="/"
-            className="inline-block w-full py-3 bg-procare-bright-blue text-white rounded-lg font-semibold text-sm hover:bg-procare-dark-blue transition-colors text-center"
+            className="inline-block w-full py-3 bg-brand-secondary text-white rounded-lg font-semibold text-sm hover:bg-brand-primary transition-colors text-center"
           >
             ← Back to Dashboard
           </Link>

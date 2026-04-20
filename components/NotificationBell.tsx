@@ -40,7 +40,7 @@ function UserInitialsPill({ name, email }: { name: string | null; email: string 
     ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
     : display.slice(0, 2).toUpperCase();
   return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-procare-dark-blue/10 text-procare-dark-blue text-[10px] font-bold flex-shrink-0" title={display}>
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] font-bold flex-shrink-0" title={display}>
       {initials}
     </span>
   );
@@ -162,7 +162,7 @@ export function NotificationBell() {
         aria-label="Notifications"
         aria-expanded={open}
       >
-        <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
@@ -179,7 +179,7 @@ export function NotificationBell() {
           {/* Header */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-procare-dark-blue">Notifications</p>
+              <p className="text-sm font-semibold text-brand-primary">Notifications</p>
               <p className="text-xs text-gray-400">{unreadCount} unread</p>
             </div>
             <div className="flex items-center gap-2">
@@ -187,7 +187,7 @@ export function NotificationBell() {
                 <button
                   type="button"
                   onClick={markAllRead}
-                  className="text-xs text-procare-bright-blue hover:underline font-medium"
+                  className="text-xs text-brand-secondary hover:underline font-medium"
                 >
                   Mark all read
                 </button>
@@ -199,7 +199,7 @@ export function NotificationBell() {
           <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">
             {loading ? (
               <div className="flex justify-center items-center py-8">
-                <div className="animate-spin w-5 h-5 border-2 border-procare-bright-blue border-t-transparent rounded-full" />
+                <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
               </div>
             ) : notifications.length === 0 ? (
               <div className="py-10 text-center">
@@ -220,7 +220,7 @@ export function NotificationBell() {
                   >
                     <TypePill type={n.type} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-procare-dark-blue truncate">{n.record_name}</p>
+                      <p className="text-xs font-semibold text-brand-primary truncate">{n.record_name}</p>
                       <p className="text-xs text-gray-600 leading-snug line-clamp-2 mt-0.5">{n.message}</p>
                       <div className="flex items-center gap-2 mt-1">
                         {(n.changed_by_name || n.changed_by_email) && (
@@ -251,7 +251,7 @@ export function NotificationBell() {
             <Link
               href="/notifications"
               onClick={() => setOpen(false)}
-              className="block text-center text-xs font-medium text-procare-bright-blue hover:underline"
+              className="block text-center text-xs font-medium text-brand-secondary hover:underline"
             >
               View all notifications →
             </Link>

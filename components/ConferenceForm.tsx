@@ -138,7 +138,7 @@ export function ConferenceForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Basic Info */}
       <div className="card">
-        <h2 className="text-lg font-semibold text-procare-dark-blue mb-5 font-serif">Conference Details</h2>
+        <h2 className="text-lg font-semibold text-brand-primary mb-5 font-serif">Conference Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="md:col-span-2">
             <label className="label">Conference Name *</label>
@@ -225,7 +225,7 @@ export function ConferenceForm() {
                           }}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
                         >
-                          <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${isSelected ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                          <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${isSelected ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                             {isSelected && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -245,7 +245,7 @@ export function ConferenceForm() {
                 {selectedInternalAttendees.map((user) => (
                   <span
                     key={user}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
                   >
                     {user}
                     <button
@@ -267,14 +267,14 @@ export function ConferenceForm() {
 
       {/* File Upload */}
       <div className="card">
-        <h2 className="text-lg font-semibold text-procare-dark-blue mb-2 font-serif">Import Attendees</h2>
+        <h2 className="text-lg font-semibold text-brand-primary mb-2 font-serif">Import Attendees</h2>
         <p className="text-sm text-gray-500 mb-4">
           Upload an Excel (.xlsx, .xls) or CSV file. You&apos;ll map your column names to system fields before the conference is created.
         </p>
 
         <div
           className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-            file ? 'border-procare-bright-blue bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+            file ? 'border-brand-secondary bg-blue-50' : 'border-gray-300 hover:border-gray-400'
           }`}
           onDragOver={(e) => e.preventDefault()}
           onDrop={async (e) => {
@@ -304,7 +304,7 @@ export function ConferenceForm() {
         >
           {isLoadingPreview ? (
             <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
-              <svg className="animate-spin w-5 h-5 text-procare-bright-blue" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin w-5 h-5 text-brand-secondary" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -312,11 +312,11 @@ export function ConferenceForm() {
             </div>
           ) : file ? (
             <div className="flex items-center justify-center gap-3">
-              <svg className="w-8 h-8 text-procare-bright-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-8 h-8 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div className="text-left min-w-0">
-                <p className="text-sm font-medium text-procare-dark-blue truncate">{file.name}</p>
+                <p className="text-sm font-medium text-brand-primary truncate">{file.name}</p>
                 <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB &middot; columns mapped</p>
               </div>
               <button
@@ -338,7 +338,7 @@ export function ConferenceForm() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="text-procare-bright-blue hover:underline font-medium"
+                  className="text-brand-secondary hover:underline font-medium"
                 >
                   Click to upload
                 </button>

@@ -119,7 +119,7 @@ function MultiSelectDropdownById({
               return (
                 <button key={option.id} type="button" onClick={() => toggleValue(option.id)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
-                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                     {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </span>
                   {option.value}
@@ -135,7 +135,7 @@ function MultiSelectDropdownById({
             const label = options.find(o => o.id === v)?.value;
             if (!label) return null;
             return (
-              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200">
+              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
                 {label}
                 <button type="button" onClick={() => onChange(values.filter(val => val !== v))} className="hover:text-red-500">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -194,7 +194,7 @@ function AttendeeMultiSelect({
               return (
                 <button key={att.id} type="button" onClick={() => toggleValue(att.id)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
-                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                     {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </span>
                   {att.first_name} {att.last_name}
@@ -210,7 +210,7 @@ function AttendeeMultiSelect({
             const att = attendees.find(a => a.id === v);
             if (!att) return null;
             return (
-              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200">
+              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
                 {att.first_name} {att.last_name}
                 <button type="button" onClick={() => onChange(values.filter(val => val !== v))} className="hover:text-red-500">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -455,14 +455,14 @@ export function InternalRelationshipsSection({
           <svg className={`w-4 h-4 text-gray-400 transition-transform ${sectionExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+          <h2 className="text-base font-semibold text-brand-primary font-serif">
             Internal Relationships ({relationships.length})
           </h2>
         </button>
         {sectionExpanded && (
           <button
             onClick={() => setShowForm(true)}
-            className="text-xs text-procare-bright-blue hover:underline font-medium"
+            className="text-xs text-brand-secondary hover:underline font-medium"
           >
             + Add
           </button>
@@ -682,8 +682,8 @@ export function InternalRelationshipModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl border border-procare-gold p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-1">
+      <div className="bg-white rounded-xl shadow-2xl border border-brand-highlight p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-brand-primary font-serif mb-1">
           Add Rep Relationship
         </h3>
         <p className="text-xs text-gray-500 mb-4">
@@ -694,7 +694,7 @@ export function InternalRelationshipModal({
 
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <div className="animate-spin w-6 h-6 border-2 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="space-y-3">

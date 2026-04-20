@@ -20,7 +20,7 @@ export function RepMultiSelect({
   selectedIds,
   onChange,
   onClose,
-  triggerClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-procare-bright-blue bg-white text-left flex items-center justify-between gap-1',
+  triggerClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white text-left flex items-center justify-between gap-1',
   placeholder = 'Select reps...',
 }: RepMultiSelectProps) {
   const [open, setOpen] = useState(false);
@@ -160,7 +160,7 @@ export function RepMultiSelect({
                     type="checkbox"
                     checked={selectedIds.includes(u.id)}
                     onChange={() => toggle(u.id)}
-                    className="accent-procare-bright-blue flex-shrink-0"
+                    className="accent-brand-secondary flex-shrink-0"
                   />
                   <span>{u.value}</span>
                 </label>

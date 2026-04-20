@@ -86,11 +86,11 @@ function ConferenceCard({ conf }: { conf: Conference }) {
   return (
     <Link
       href={`/conferences/${conf.id}`}
-      className="card p-3 hover:shadow-md transition-all hover:border-procare-bright-blue border border-transparent group flex flex-col"
+      className="card p-3 hover:shadow-md transition-all hover:border-brand-secondary border border-transparent group flex flex-col"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <h4 className="text-md font-semibold text-procare-dark-blue group-hover:text-procare-bright-blue font-serif leading-snug line-clamp-2">
+          <h4 className="text-md font-semibold text-brand-primary group-hover:text-brand-secondary font-serif leading-snug line-clamp-2">
             {conf.name}
           </h4>
           <div className="mt-1.5 space-y-0.5">
@@ -130,9 +130,9 @@ function ConferenceCard({ conf }: { conf: Conference }) {
               <p className="text-[9px] text-amber-600 font-medium text-center leading-tight mt-0.5">Awaiting</p>
             </div>
           ) : (
-            <div className="text-procare-dark-blue rounded-xl px-2 py-1.5 text-center min-w-[44px]">
+            <div className="text-brand-primary rounded-xl px-2 py-1.5 text-center min-w-[44px]">
               <p className="text-base font-bold font-serif leading-none">{conf.attendee_count}</p>
-              <p className="text-[9px] text-procare-dark-blue leading-none mt-0.5">attend.</p>
+              <p className="text-[9px] text-brand-primary leading-none mt-0.5">attend.</p>
             </div>
           )}
         </div>
@@ -154,7 +154,7 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
 
   return (
     <div className="flex-1 min-w-0">
-      <p className="text-xl font-semibold text-procare-dark-blue text-center mb-2 font-serif">
+      <p className="text-xl font-semibold text-brand-primary text-center mb-2 font-serif">
         {MONTH_NAMES[month]} {year}
       </p>
       <div className="grid grid-cols-7">
@@ -173,9 +173,9 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
                 disabled={!isConf}
                 className={[
                   'w-7 h-7 rounded-full text-xs font-medium transition-colors flex items-center justify-center select-none',
-                  isSel   ? 'bg-procare-dark-blue text-white' :
-                  isConf  ? 'bg-procare-bright-blue/20 text-procare-dark-blue hover:bg-procare-bright-blue hover:text-white cursor-pointer' :
-                  isToday ? 'border border-procare-bright-blue text-procare-bright-blue cursor-default' :
+                  isSel   ? 'bg-brand-primary text-white' :
+                  isConf  ? 'bg-brand-secondary/20 text-brand-primary hover:bg-brand-secondary hover:text-white cursor-pointer' :
+                  isToday ? 'border border-brand-secondary text-brand-secondary cursor-default' :
                             'text-gray-500 cursor-default',
                 ].join(' ')}
               >{day}</button>
@@ -341,7 +341,7 @@ export default function ConferencesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Conferences</h1>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif">Conferences</h1>
           <p className="text-sm text-gray-500">
             {totalFiltered} of {conferences.length} conference{conferences.length !== 1 ? 's' : ''}
           </p>
@@ -361,7 +361,7 @@ export default function ConferencesPage() {
             <button
               type="button"
               onClick={() => setCalExpanded((v) => !v)}
-              className="flex items-center gap-1.5 text-sm font-semibold text-procare-dark-blue hover:text-procare-bright-blue transition-colors"
+              className="flex items-center gap-1.5 text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -372,7 +372,7 @@ export default function ConferencesPage() {
               </svg>
             </button>
             {selectedDate && (
-              <button onClick={() => setSelectedDate(null)} className="text-xs text-procare-bright-blue hover:underline">
+              <button onClick={() => setSelectedDate(null)} className="text-xs text-brand-secondary hover:underline">
                 Showing {selectedDate} — clear
               </button>
             )}
@@ -388,7 +388,7 @@ export default function ConferencesPage() {
                 className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
                 aria-label="Previous month"
               >
-                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
                 </svg>
               </button>
@@ -416,7 +416,7 @@ export default function ConferencesPage() {
                 className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
                 aria-label="Next month"
               >
-                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
                 </svg>
               </button>
@@ -431,7 +431,7 @@ export default function ConferencesPage() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setFiltersOpen((v) => !v)}
-              className="flex items-center gap-2 text-sm font-semibold text-procare-dark-blue"
+              className="flex items-center gap-2 text-sm font-semibold text-brand-primary"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
@@ -442,7 +442,7 @@ export default function ConferencesPage() {
               </svg>
             </button>
             {hasFilters && (
-              <button onClick={clearFilters} className="text-xs text-procare-bright-blue hover:underline">Clear all</button>
+              <button onClick={clearFilters} className="text-xs text-brand-secondary hover:underline">Clear all</button>
             )}
           </div>
 
@@ -500,7 +500,7 @@ export default function ConferencesPage() {
       {/* ── Loading ── */}
       {isLoading && (
         <div className="flex items-center justify-center h-48">
-          <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full"/>
+          <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full"/>
         </div>
       )}
 
@@ -520,7 +520,7 @@ export default function ConferencesPage() {
       {!isLoading && conferences.length > 0 && totalFiltered === 0 && (
         <div className="card text-center py-10">
           <p className="text-gray-500 text-sm">No conferences in this period match the current filters.</p>
-          <button onClick={clearFilters} className="mt-3 text-procare-bright-blue text-sm hover:underline">Clear filters</button>
+          <button onClick={clearFilters} className="mt-3 text-brand-secondary text-sm hover:underline">Clear filters</button>
         </div>
       )}
 
@@ -534,7 +534,7 @@ export default function ConferencesPage() {
               onClick={() => toggleMonth(year, month)}
               className="flex items-center gap-3 w-full text-left mb-3"
             >
-              <h2 className="text-lg font-bold text-procare-dark-blue font-serif whitespace-nowrap">
+              <h2 className="text-lg font-bold text-brand-primary font-serif whitespace-nowrap">
                 {MONTH_NAMES[month]} {year}
                 <span className="ml-2 text-sm font-normal text-gray-500">({mc.length})</span>
               </h2>

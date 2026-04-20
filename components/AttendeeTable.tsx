@@ -97,8 +97,8 @@ function ConferenceTooltip({ count, names }: { count: number; names?: string }) 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>;
   return sortDir === 'asc'
-    ? <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-    : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
+    ? <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+    : <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
 const DEFAULT_WIDTHS: Record<string, number> = { name: 220, title: 150, company: 160, company_type: 110, status: 130, seniority: 120, conferences: 100, notes: 70, updated_on: 110, date_added: 110 };
@@ -328,10 +328,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     }
   };
 
-  const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap relative';
+  const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-brand-primary whitespace-nowrap relative';
 
   const ResizeHandle = ({ col }: { col: string }) => (
-    <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+    <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
   );
 
   const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0);
@@ -347,14 +347,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         <button
           type="button"
           onClick={() => setFiltersOpen(o => !o)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
           </svg>
           Filters
           {activeFilterCount > 0 && (
-            <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+            <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
               {activeFilterCount}
             </span>
           )}
@@ -422,7 +422,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <button
                   type="button"
                   onClick={() => setShowConfFilter(v => !v)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white"
                 >
                   <span>{filterConfCounts.size > 0 ? `${filterConfCounts.size} selected` : 'All counts...'}</span>
                   <svg className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${showConfFilter ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -431,7 +431,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 p-2 min-w-[140px]">
                     {CONF_COUNT_OPTIONS.map(opt => (
                       <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
-                        <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-procare-bright-blue" />
+                        <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-brand-secondary" />
                         {opt} conference{opt === '1' ? '' : 's'}
                       </label>
                     ))}
@@ -467,8 +467,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
       {/* Mass Edit Panel */}
       {showMassEdit && (
-        <div className="mb-4 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
-          <p className="text-sm font-semibold text-procare-dark-blue mb-3">Edit fields for {selectedIds.size} selected attendee(s):</p>
+        <div className="mb-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
+          <p className="text-sm font-semibold text-brand-primary mb-3">Edit fields for {selectedIds.size} selected attendee(s):</p>
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <label className="label text-xs">Status</label>
@@ -510,8 +510,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <div key={attendee.id} className={`p-4 ${selectedIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue flex-shrink-0" />
-                    <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm truncate">
+                    <input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
+                    <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm truncate">
                       {attendee.first_name} {attendee.last_name}
                     </Link>
                     {Number(attendee.notes_count) > 0 && (
@@ -533,7 +533,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 {attendee.company_name && (
                   <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
                     {attendee.company_id ? (
-                      <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                      <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-brand-secondary hover:underline">{attendee.company_name}</Link>
                     ) : (
                       <span className="text-xs text-gray-700">{attendee.company_name}</span>
                     )}
@@ -571,7 +571,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-3 py-3 text-left w-10">
-                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(a => a.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary" />
                 </th>
                 {orderedColumns.map(({ key }) => {
                   if (!isVisible(key)) return null;
@@ -603,14 +603,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
                   <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-procare-bright-blue" /></td>
+                    <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-brand-secondary" /></td>
                     {orderedColumns.map(({ key }) => {
                       if (!isVisible(key)) return null;
                       switch (key) {
                         case 'name': return (
                           <td key="name" className="px-3 py-3 overflow-visible">
                             <div className="text-left">
-                              <Link href={`/attendees/${attendee.id}`} className="text-sm text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                              <Link href={`/attendees/${attendee.id}`} className="text-sm text-brand-secondary hover:underline break-words whitespace-normal leading-snug">
                                 {attendee.first_name} {attendee.last_name}
                               </Link>
                             </div>
@@ -642,7 +642,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                             {attendee.company_name ? (
                               <div>
                                 {attendee.company_id ? (
-                                  <Link href={`/companies/${attendee.company_id}`} className="text-sm text-gray-800 hover:text-procare-bright-blue hover:underline break-words whitespace-normal leading-snug">
+                                  <Link href={`/companies/${attendee.company_id}`} className="text-sm text-gray-800 hover:text-brand-secondary hover:underline break-words whitespace-normal leading-snug">
                                     {attendee.company_name}
                                   </Link>
                                 ) : (
@@ -662,7 +662,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                                       autoFocus
                                     />
                                   ) : (
-                                    <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-procare-bright-blue" onClick={() => startInlineEdit(attendee, 'company_wse')} title="Click to edit WSE">
+                                    <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')} title="Click to edit WSE">
                                       WSE: {Number(attendee.company_wse).toLocaleString()}
                                     </button>
                                   )

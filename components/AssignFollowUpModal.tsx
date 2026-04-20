@@ -111,7 +111,7 @@ function SearchableSelect({
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-procare-bright-blue"
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-brand-secondary"
               placeholder="Search companies…"
             />
           </div>
@@ -124,7 +124,7 @@ function SearchableSelect({
                   key={o.id}
                   type="button"
                   onClick={() => { onChange(String(o.id)); setOpen(false); setQuery(''); }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${String(o.id) === value ? 'bg-blue-50 text-procare-bright-blue font-medium' : 'text-gray-800'}`}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${String(o.id) === value ? 'bg-blue-50 text-brand-secondary font-medium' : 'text-gray-800'}`}
                 >
                   {o.name}
                 </button>
@@ -471,9 +471,9 @@ export function AssignFollowUpModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-procare-bright-blue font-serif">
+          <h2 className="text-lg font-semibold text-brand-secondary font-serif">
             Add Follow Up
           </h2>
           <button

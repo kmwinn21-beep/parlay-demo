@@ -174,7 +174,7 @@ export default function AttendeesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Attendees</h1>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif">Attendees</h1>
           <p className="text-sm text-gray-500">{attendees.length} contact{attendees.length !== 1 ? 's' : ''} in your database</p>
         </div>
         <button
@@ -190,8 +190,8 @@ export default function AttendeesPage() {
 
       {/* Add Attendee Form */}
       {showAddForm && (
-        <div className="card border-2 border-procare-bright-blue">
-          <h2 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">Add Attendee</h2>
+        <div className="card border-2 border-brand-secondary">
+          <h2 className="text-lg font-semibold text-brand-primary mb-4 font-serif">Add Attendee</h2>
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

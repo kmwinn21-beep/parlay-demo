@@ -43,7 +43,7 @@ function VerifyEmailChangeContent() {
   }, [token]);
 
   return (
-    <div className="min-h-screen bg-procare-dark-blue flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
@@ -51,7 +51,7 @@ function VerifyEmailChangeContent() {
         <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
           {status === 'loading' && (
             <>
-              <div className="animate-spin w-10 h-10 border-4 border-procare-bright-blue border-t-transparent rounded-full mx-auto mb-4" />
+              <div className="animate-spin w-10 h-10 border-4 border-brand-secondary border-t-transparent rounded-full mx-auto mb-4" />
               <p className="text-gray-600">Confirming your new email address…</p>
             </>
           )}
@@ -62,7 +62,7 @@ function VerifyEmailChangeContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold text-procare-dark-blue font-serif mb-2">Email updated!</h2>
+              <h2 className="text-xl font-bold text-brand-primary font-serif mb-2">Email updated!</h2>
               <p className="text-sm text-gray-500">Redirecting you to your account…</p>
             </>
           )}
@@ -73,10 +73,10 @@ function VerifyEmailChangeContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold text-procare-dark-blue font-serif mb-2">Verification failed</h2>
+              <h2 className="text-xl font-bold text-brand-primary font-serif mb-2">Verification failed</h2>
               <p className="text-sm text-gray-500 mb-5">{message}</p>
               <div className="space-y-2">
-                <Link href="/auth/account" className="block text-procare-bright-blue text-sm font-medium hover:underline">
+                <Link href="/auth/account" className="block text-brand-secondary text-sm font-medium hover:underline">
                   Back to account →
                 </Link>
                 <Link href="/auth/login" className="block text-gray-400 text-sm hover:underline">

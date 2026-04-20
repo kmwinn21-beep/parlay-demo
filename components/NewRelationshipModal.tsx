@@ -80,7 +80,7 @@ function SearchableCompanySelect({
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-procare-bright-blue"
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-brand-secondary"
               placeholder="Search companies…"
             />
           </div>
@@ -93,7 +93,7 @@ function SearchableCompanySelect({
                   key={o.id}
                   type="button"
                   onClick={() => { onChange(String(o.id)); setOpen(false); setQuery(''); }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${String(o.id) === value ? 'bg-blue-50 text-procare-bright-blue font-medium' : 'text-gray-800'}`}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${String(o.id) === value ? 'bg-blue-50 text-brand-secondary font-medium' : 'text-gray-800'}`}
                 >
                   {o.name}
                 </button>
@@ -164,7 +164,7 @@ function ContactMultiSelect({
               return (
                 <button key={att.id} type="button" onClick={() => toggleValue(att.id)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
-                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                     {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </span>
                   {att.first_name} {att.last_name}
@@ -180,7 +180,7 @@ function ContactMultiSelect({
             const att = attendees.find(a => a.id === v);
             if (!att) return null;
             return (
-              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200">
+              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
                 {att.first_name} {att.last_name}
                 <button type="button" onClick={() => onChange(values.filter(val => val !== v))} className="hover:text-red-500">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -245,7 +245,7 @@ function MultiSelectDropdownById({
               return (
                 <button key={option.id} type="button" onClick={() => toggleValue(option.id)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
-                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                  <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                     {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </span>
                   {option.value}
@@ -261,7 +261,7 @@ function MultiSelectDropdownById({
             const label = options.find(o => o.id === v)?.value;
             if (!label) return null;
             return (
-              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200">
+              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
                 {label}
                 <button type="button" onClick={() => onChange(values.filter(val => val !== v))} className="hover:text-red-500">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -392,9 +392,9 @@ export function NewRelationshipModal({ isOpen, onClose }: NewRelationshipModalPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-procare-bright-blue font-serif">
+          <h2 className="text-lg font-semibold text-brand-secondary font-serif">
             Add New Internal Relationship
           </h2>
           <button
@@ -410,7 +410,7 @@ export function NewRelationshipModal({ isOpen, onClose }: NewRelationshipModalPr
 
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <div className="animate-spin w-6 h-6 border-2 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="p-6 space-y-4">

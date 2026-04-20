@@ -89,7 +89,7 @@ function UnhideNavOverlay({ onDismiss }: { onDismiss: () => void }) {
             style={{ position: 'absolute', top: -7, left: arrowLeft }}
             className="w-3.5 h-3.5 bg-white rotate-45 shadow-sm"
           />
-          <p className="text-sm font-semibold text-procare-dark-blue leading-snug">Click Here</p>
+          <p className="text-sm font-semibold text-brand-primary leading-snug">Click Here</p>
           <p className="text-xs text-gray-500 mt-0.5">to Unhide Navigation Menu</p>
         </div>
       )}

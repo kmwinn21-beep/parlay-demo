@@ -365,12 +365,12 @@ export function NotesSection({
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Notes</h2>
+        <h2 className="text-lg font-semibold text-brand-primary font-serif">Notes</h2>
         {!isAdding && (
           <button
             type="button"
             onClick={() => setIsAdding(true)}
-            className="flex items-center gap-1.5 text-sm text-procare-dark-blue hover:text-procare-dark-blue font-medium transition-colors"
+            className="flex items-center gap-1.5 text-sm text-brand-primary hover:text-brand-primary font-medium transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -382,13 +382,13 @@ export function NotesSection({
       </div>
 
       {isAdding && (
-        <div className="mb-5 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
+        <div className="mb-5 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
           <div className="flex flex-wrap gap-3 mb-3">
             {/* Auto-detected entered by */}
             {user?.displayName && (
               <div className="w-full flex items-center gap-2 text-xs text-gray-500">
                 <span className="font-semibold text-gray-600 uppercase tracking-wide">Entered By:</span>
-                <span className="font-medium text-procare-dark-blue">{user.displayName}</span>
+                <span className="font-medium text-brand-primary">{user.displayName}</span>
               </div>
             )}
 
@@ -478,9 +478,9 @@ export function NotesSection({
                 type="checkbox"
                 checked={pinOnSubmit}
                 onChange={e => setPinOnSubmit(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-procare-gold focus:ring-procare-gold"
+                className="w-4 h-4 rounded border-gray-300 text-brand-highlight focus:ring-brand-highlight"
               />
-              <svg className="w-4 h-4 text-procare-gold" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-brand-highlight" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
               </svg>
               <span className="text-sm font-medium text-gray-700">Pin Note?</span>
@@ -545,7 +545,7 @@ export function NotesSection({
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
                     {note.conference_name && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-procare-bright-blue text-xs font-medium border border-blue-100 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap">
                         {note.conference_name}
                       </span>
                     )}
@@ -580,7 +580,7 @@ export function NotesSection({
                       </span>
                     )}
                     {showPinnedIndicator && pinnedNoteIds.has(note.id) && (
-                      <span className="text-procare-gold flex-shrink-0" title="Pinned in Company or Attendee details">
+                      <span className="text-brand-highlight flex-shrink-0" title="Pinned in Company or Attendee details">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                         </svg>
@@ -590,7 +590,7 @@ export function NotesSection({
                       <button
                         type="button"
                         onClick={() => handlePinClick(note.id)}
-                        className={`transition-colors flex-shrink-0 ${pinnedNoteIds.has(note.id) ? 'text-procare-gold' : 'text-gray-300 hover:text-procare-gold'}`}
+                        className={`transition-colors flex-shrink-0 ${pinnedNoteIds.has(note.id) ? 'text-brand-highlight' : 'text-gray-300 hover:text-brand-highlight'}`}
                         title={pinnedNoteIds.has(note.id) ? 'Already pinned' : 'Pin note'}
                         disabled={pinnedNoteIds.has(note.id)}
                       >
@@ -609,7 +609,7 @@ export function NotesSection({
                   <button
                     type="button"
                     onClick={() => toggleExpand(note.id)}
-                    className="mt-2 text-xs text-procare-bright-blue hover:underline font-medium"
+                    className="mt-2 text-xs text-brand-secondary hover:underline font-medium"
                   >
                     {expanded ? 'Show Less' : 'Show Full Note'}
                   </button>
@@ -636,8 +636,8 @@ export function NotesSection({
       {/* Pin modal */}
       {pinModalNoteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => { setPinModalNoteId(null); setPinConference(''); setPinAttendeeId(''); }}>
-          <div className="bg-white rounded-xl shadow-2xl border border-procare-gold p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-brand-highlight p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-brand-primary font-serif mb-4">
               Pin Note
             </h3>
             <div className="space-y-4">

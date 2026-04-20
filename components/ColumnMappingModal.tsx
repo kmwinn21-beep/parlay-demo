@@ -41,12 +41,12 @@ export function ColumnMappingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between flex-shrink-0">
           <div>
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Map Columns</h2>
+            <h2 className="text-lg font-semibold text-brand-primary font-serif">Map Columns</h2>
             <p className="text-sm text-gray-500 mt-0.5 truncate max-w-sm">{fileName} &middot; {totalRows.toLocaleString()} rows</p>
           </div>
           <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 p-1 ml-4 flex-shrink-0">
@@ -87,7 +87,7 @@ export function ColumnMappingModal({
                       <select
                         value={selected ?? ''}
                         onChange={e => setField(key, e.target.value)}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-procare-bright-blue bg-white"
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-secondary bg-white"
                       >
                         <option value="">(not mapped)</option>
                         {headers.map(h => (

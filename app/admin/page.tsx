@@ -10,7 +10,7 @@ import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig, invalidateCustomColumns
 import { AVAILABLE_COLUMNS, DISPLAY_TYPE_LABELS, type DisplayType } from '@/lib/customColumnDefs';
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
-import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
+import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 
@@ -98,7 +98,7 @@ function ColorPicker({ optionId, currentColor, onColorSaved }: { optionId: numbe
           <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1.5 px-1">Pick a color</p>
           <div className="grid grid-cols-4 gap-1.5">
             {COLOR_PRESETS.map(p => (
-              <button key={p.key} type="button" onClick={() => handleSelect(p.key)} className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${currentColor === p.key ? 'border-procare-dark-blue ring-2 ring-procare-bright-blue/30' : 'border-gray-200 hover:border-gray-400'}`} style={{ backgroundColor: p.swatch }} title={p.label} />
+              <button key={p.key} type="button" onClick={() => handleSelect(p.key)} className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${currentColor === p.key ? 'border-brand-primary ring-2 ring-brand-secondary/30' : 'border-gray-200 hover:border-gray-400'}`} style={{ backgroundColor: p.swatch }} title={p.label} />
             ))}
           </div>
           {currentColor && <button type="button" onClick={() => handleSelect(null)} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 py-1">Reset to default</button>}
@@ -219,7 +219,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
         onClick={() => setIsExpanded(prev => !prev)}
         className="w-full flex items-center justify-between text-left"
       >
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">{label}</h2>
+        <h2 className="text-lg font-semibold text-brand-primary font-serif">{label}</h2>
         <svg
           className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
@@ -237,12 +237,12 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                 const isOptionExpanded = expandedOptions.has(opt.id);
                 const isEditing = editingId === opt.id;
                 return (
-                  <li key={opt.id} draggable={!isOptionExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-procare-bright-blue ring-offset-1' : '', isOptionExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
+                  <li key={opt.id} draggable={!isOptionExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-brand-secondary ring-offset-1' : '', isOptionExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
                     <div className="flex items-center gap-2 px-1 py-1">
                       <DragHandle />
                       <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
                       <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded">{opt.value}</span>
-                      <button type="button" onClick={() => handleEdit(opt)} className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium px-2 py-1">Edit</button>
+                      <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
                       <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
                     </div>
                     {isOptionExpanded && (
@@ -266,7 +266,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                               <button
                                 type="button"
                                 onClick={() => setFormPickerOpenId(prev => prev === opt.id ? null : opt.id)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white"
                               >
                                 <span className="truncate">{editVisibleForms.length === 0 ? 'No forms selected' : `${editVisibleForms.length} form(s) selected`}</span>
                                 <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${formPickerOpenId === opt.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,7 +279,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                                     <label key={form.key} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
                                       <input
                                         type="checkbox"
-                                        className="accent-procare-bright-blue"
+                                        className="accent-brand-secondary"
                                         checked={editVisibleForms.includes(form.key)}
                                         onChange={() => toggleForm(form.key)}
                                       />
@@ -334,7 +334,7 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${checked ? 'bg-procare-bright-blue' : 'bg-gray-200'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${checked ? 'bg-brand-secondary' : 'bg-gray-200'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
@@ -398,7 +398,7 @@ function AddColumnModal({ tableName, existingKeys, onClose, onAdd }: {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
         <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
-          <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-2">Add Column</h2>
+          <h2 className="text-base font-semibold text-brand-primary font-serif mb-2">Add Column</h2>
           <p className="text-sm text-gray-500 mb-4">All available columns have already been added to this table.</p>
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Close</button>
         </div>
@@ -410,7 +410,7 @@ function AddColumnModal({ tableName, existingKeys, onClose, onAdd }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-procare-dark-blue font-serif">Add Column</h2>
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Add Column</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -446,8 +446,8 @@ function AddColumnModal({ tableName, existingKeys, onClose, onAdd }: {
                 <label className="label text-xs">Display Format</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(Object.entries(DISPLAY_TYPE_LABELS) as [DisplayType, string][]).map(([key, lbl]) => (
-                    <label key={key} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors text-sm ${displayType === key ? 'border-procare-bright-blue bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <input type="radio" name="displayType" value={key} checked={displayType === key} onChange={() => setDisplayType(key)} className="accent-procare-bright-blue" />
+                    <label key={key} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors text-sm ${displayType === key ? 'border-brand-secondary bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <input type="radio" name="displayType" value={key} checked={displayType === key} onChange={() => setDisplayType(key)} className="accent-brand-secondary" />
                       {lbl}
                     </label>
                   ))}
@@ -478,7 +478,7 @@ function AddColumnModal({ tableName, existingKeys, onClose, onAdd }: {
                   <div className="space-y-2">
                     {([['full', 'Full Name'], ['first_last_initial', 'First Initial + Last Name'], ['initials', 'Initials Only']] as const).map(([val, lbl]) => (
                       <label key={val} className="flex items-center gap-2 cursor-pointer text-sm">
-                        <input type="radio" name="nameFormat" value={val} checked={nameFormat === val} onChange={() => setNameFormat(val)} className="accent-procare-bright-blue" />
+                        <input type="radio" name="nameFormat" value={val} checked={nameFormat === val} onChange={() => setNameFormat(val)} className="accent-brand-secondary" />
                         {lbl}
                       </label>
                     ))}
@@ -547,6 +547,9 @@ export default function AdminPage() {
   const [savedLogoDark, setSavedLogoDark] = useState('');
   const [savedFavicon, setSavedFavicon] = useState('');
   const [savingLogos, setSavingLogos] = useState(false);
+  const [fontKey, setFontKey] = useState(DEFAULT_FONT_KEY);
+  const [savedFontKey, setSavedFontKey] = useState(DEFAULT_FONT_KEY);
+  const [savingFont, setSavingFont] = useState(false);
 
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
@@ -886,8 +889,25 @@ export default function AdminPage() {
       setSavedLogoWhite(lw); setLogoWhiteInput(lw);
       setSavedLogoDark(ld); setLogoDarkInput(ld);
       setSavedFavicon(fav); setFaviconInput(fav);
+      const fk = data['font_key'] ?? DEFAULT_FONT_KEY;
+      setFontKey(fk); setSavedFontKey(fk);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
+  };
+
+  const handleSaveFont = async () => {
+    setSavingFont(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'font_key', value: fontKey }),
+      });
+      if (!res.ok) throw new Error();
+      setSavedFontKey(fontKey);
+      toast.success('Font saved. Reload the page to see the change.');
+    } catch { toast.error('Failed to save font.'); }
+    finally { setSavingFont(false); }
   };
 
   useEffect(() => {
@@ -1035,7 +1055,7 @@ export default function AdminPage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <BackButton />
       <div>
-        <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Admin Settings</h1>
+        <h1 className="text-2xl font-bold text-brand-primary font-serif">Admin Settings</h1>
         <p className="text-sm text-gray-500 mt-1">Manage dropdown options, table column visibility, and user permissions.</p>
       </div>
 
@@ -1047,7 +1067,7 @@ export default function AdminPage() {
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${tab === t ? 'border-procare-bright-blue text-procare-bright-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : 'Permissions'}
             </button>
@@ -1059,7 +1079,7 @@ export default function AdminPage() {
       {tab === 'types' && (
         isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1074,7 +1094,7 @@ export default function AdminPage() {
       {tab === 'tables' && (
         loadingTables ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="space-y-6">
@@ -1093,7 +1113,7 @@ export default function AdminPage() {
                     })}
                     className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
                   >
-                    <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                    <h2 className="text-base font-semibold text-brand-primary font-serif">
                       {TABLE_LABELS[tableName] ?? tableName}
                     </h2>
                     <svg
@@ -1127,7 +1147,7 @@ export default function AdminPage() {
                               if (dragCol?.table === tableName) handleColumnReorder(tableName, dragCol.key, col.key);
                               setDragCol(null); setDragOverKey(null);
                             }}
-                            className={`flex items-center justify-between py-3 transition-colors rounded ${isDragTarget || isMobileDragTarget ? 'bg-blue-50 outline outline-2 outline-procare-bright-blue' : ''} ${isMobileDragSource ? 'opacity-40' : ''}`}
+                            className={`flex items-center justify-between py-3 transition-colors rounded ${isDragTarget || isMobileDragTarget ? 'bg-blue-50 outline outline-2 outline-brand-secondary' : ''} ${isMobileDragSource ? 'opacity-40' : ''}`}
                           >
                             <div className="flex items-center gap-3">
                               <svg
@@ -1160,7 +1180,7 @@ export default function AdminPage() {
                       {(customCols[tableName] ?? []).map(col => (
                         <div key={col.id} className="flex items-center justify-between py-3">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-semibold text-procare-bright-blue uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 flex-shrink-0">Custom</span>
+                            <span className="text-[10px] font-semibold text-brand-secondary uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 flex-shrink-0">Custom</span>
                             <span className="text-sm text-gray-700">{col.label}</span>
                             <span className="text-xs text-gray-400">{DISPLAY_TYPE_LABELS[col.display_type]}</span>
                           </div>
@@ -1187,7 +1207,7 @@ export default function AdminPage() {
                           <button
                             type="button"
                             onClick={() => setAddColTable(tableName)}
-                            className="flex items-center gap-1.5 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors"
+                            className="flex items-center gap-1.5 text-sm text-brand-secondary hover:text-brand-primary font-medium transition-colors"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1219,7 +1239,7 @@ export default function AdminPage() {
       {tab === 'sections' && (
         loadingSections ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="space-y-6">
@@ -1234,7 +1254,7 @@ export default function AdminPage() {
                     onClick={() => toggleSectionPageExpanded(page)}
                     className="w-full flex items-center justify-between gap-3 text-left"
                   >
-                    <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                    <h2 className="text-base font-semibold text-brand-primary font-serif">
                       {SECTION_PAGE_LABELS[page] ?? page}
                     </h2>
                     <svg
@@ -1256,7 +1276,7 @@ export default function AdminPage() {
                                 type="button"
                                 onClick={() => moveSectionItem(page, index, -1)}
                                 disabled={index === 0 || savingSections === page}
-                                className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
+                                className="p-0.5 text-gray-400 hover:text-brand-secondary disabled:opacity-30 disabled:cursor-not-allowed"
                                 title="Move up"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
@@ -1265,7 +1285,7 @@ export default function AdminPage() {
                                 type="button"
                                 onClick={() => moveSectionItem(page, index, 1)}
                                 disabled={index === sections.length - 1 || savingSections === page}
-                                className="p-0.5 text-gray-400 hover:text-procare-bright-blue disabled:opacity-30 disabled:cursor-not-allowed"
+                                className="p-0.5 text-gray-400 hover:text-brand-secondary disabled:opacity-30 disabled:cursor-not-allowed"
                                 title="Move down"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -1292,7 +1312,7 @@ export default function AdminPage() {
                                   <button
                                     type="button"
                                     onClick={() => { setEditingSectionLabel({ page, key: section.key }); setEditLabelValue(section.label); }}
-                                    className="text-procare-bright-blue hover:text-procare-dark-blue text-xs font-medium"
+                                    className="text-brand-secondary hover:text-brand-primary text-xs font-medium"
                                   >
                                     Edit
                                   </button>
@@ -1325,7 +1345,7 @@ export default function AdminPage() {
       {tab === 'brand' && (
         loadingBrand ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="space-y-6">
@@ -1337,12 +1357,12 @@ export default function AdminPage() {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Preview</span>
               </div>
               <div className="px-5 py-4 flex flex-wrap items-center gap-4">
-                <h3 className="text-procare-dark-blue font-serif font-semibold text-lg leading-none">Heading</h3>
+                <h3 className="text-brand-primary font-serif font-semibold text-lg leading-none">Heading</h3>
                 <button type="button" className="btn-primary text-xs py-1.5 px-3 pointer-events-none">Primary Button</button>
                 <button type="button" className="btn-secondary text-xs py-1.5 px-3 pointer-events-none">Secondary Button</button>
                 <button type="button" className="btn-gold text-xs py-1.5 px-3 pointer-events-none">Gold Button</button>
-                <span className="text-procare-bright-blue text-sm font-medium">Link text</span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-procare-bright-blue/10 text-procare-bright-blue">Badge</span>
+                <span className="text-brand-secondary text-sm font-medium">Link text</span>
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-brand-secondary/10 text-brand-secondary">Badge</span>
                 <div className="flex gap-1.5">
                   {(Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]).map(key => (
                     <div key={key} className="w-5 h-5 rounded-full border border-white shadow-sm ring-1 ring-gray-200" style={{ backgroundColor: brandDraft[key] }} title={BRAND_COLOR_META[key].label} />
@@ -1353,7 +1373,7 @@ export default function AdminPage() {
 
             {/* App Name */}
             <div className="card">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">App Name</h2>
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">App Name</h2>
               <p className="text-sm text-gray-500 mb-4">Set the application name shown in the browser tab, header, and emails. Leave blank to use the <code className="bg-gray-100 px-1 rounded text-xs">NEXT_PUBLIC_APP_NAME</code> environment variable, or &quot;Conference Hub&quot; if unset.</p>
               <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                 <input
@@ -1376,7 +1396,7 @@ export default function AdminPage() {
 
             {/* Logos & Favicon */}
             <div className="card">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Logos &amp; Favicon</h2>
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Logos &amp; Favicon</h2>
               <p className="text-sm text-gray-500 mb-5">Provide URLs to your logo images and browser favicon. Leave blank to use the default static files.</p>
               <div className="space-y-5">
                 {([
@@ -1419,7 +1439,7 @@ export default function AdminPage() {
 
             {/* Color pickers */}
             <div className="card">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Brand Colors</h2>
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Brand Colors</h2>
               <p className="text-sm text-gray-500 mb-5">Pick a color or paste a hex code. The preview above updates immediately.</p>
               <div className="divide-y divide-gray-100">
                 {(Object.keys(BRAND_COLOR_DEFAULTS) as BrandColorKey[]).map(key => {
@@ -1452,7 +1472,7 @@ export default function AdminPage() {
                               handleBrandColorChange(key, v.startsWith('#') ? v : `#${v}`);
                             }
                           }}
-                          className="w-24 px-2 py-1.5 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-procare-bright-blue"
+                          className="w-24 px-2 py-1.5 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
                           spellCheck={false}
                         />
                         <label className="cursor-pointer flex-shrink-0 relative" title="Pick color">
@@ -1463,7 +1483,7 @@ export default function AdminPage() {
                             className="sr-only"
                           />
                           <div
-                            className="w-9 h-9 rounded-lg border-2 border-gray-200 hover:border-procare-bright-blue transition-colors"
+                            className="w-9 h-9 rounded-lg border-2 border-gray-200 hover:border-brand-secondary transition-colors"
                             style={{ backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : BRAND_COLOR_DEFAULTS[key] }}
                           />
                         </label>
@@ -1491,6 +1511,50 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+
+            {/* Typography */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Typography</h2>
+              <p className="text-sm text-gray-500 mb-5">Choose a font pairing for headings and body text. Changes take effect after the page reloads.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+                {FONT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setFontKey(opt.key)}
+                    className={`text-left p-4 rounded-xl border-2 transition-colors ${
+                      fontKey === opt.key
+                        ? 'border-brand-secondary bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{opt.label}</span>
+                      {fontKey === opt.key && (
+                        <span className="text-[10px] font-semibold text-brand-secondary uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100">Selected</span>
+                      )}
+                    </div>
+                    <p className="text-base font-bold text-gray-800 leading-tight mb-1" style={{ fontFamily: opt.headingFamily }}>
+                      Heading Style
+                    </p>
+                    <p className="text-xs text-gray-500 leading-relaxed" style={{ fontFamily: opt.bodyFamily }}>
+                      Body text — clear and readable for data-dense screens.
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-2">{opt.previewHeading} / {opt.previewBody}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-end pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleSaveFont}
+                  disabled={savingFont || fontKey === savedFontKey}
+                  className="btn-primary text-sm"
+                >
+                  {savingFont ? 'Saving…' : 'Save Font'}
+                </button>
+              </div>
+            </div>
           </div>
         )
       )}
@@ -1499,12 +1563,12 @@ export default function AdminPage() {
       {tab === 'permissions' && (
         loadingPerms ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
           <div className="space-y-6">
             <div className="card">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Conference Attendee List Upload</h2>
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Conference Attendee List Upload</h2>
               <p className="text-sm text-gray-500 mb-4">Control whether regular users can upload attendee lists to conferences. Administrators can always upload.</p>
               <div className="flex items-center justify-between py-3 border-t border-gray-100">
                 <div>
@@ -1519,7 +1583,7 @@ export default function AdminPage() {
             </div>
 
             <div className="card">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">Email Domain Restriction</h2>
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Email Domain Restriction</h2>
               <p className="text-sm text-gray-500 mb-4">Restrict new account sign-ups to a specific email domain. Leave blank to allow any email address.</p>
               <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                 <span className="text-sm text-gray-500 flex-shrink-0">@</span>

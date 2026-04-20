@@ -272,15 +272,15 @@ export function NewMeetingModal({
 
   if (!isOpen) return null;
 
-  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-procare-bright-blue bg-white';
+  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Schedule New Meeting</h2>
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">Schedule New Meeting</h2>
           <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -423,7 +423,7 @@ export function NewMeetingModal({
             type="submit"
             onClick={handleSubmit}
             disabled={submitting || !selectedAttendeeId || !selectedConferenceId || !meetingDate || !meetingTime}
-            className="px-4 py-2 text-sm font-semibold text-white bg-procare-bright-blue rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Scheduling...' : 'Schedule Meeting'}
           </button>

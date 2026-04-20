@@ -134,7 +134,7 @@ export function GlobalSearchModal({ onClose }: { onClose: () => void }) {
             className="flex-1 text-sm text-gray-900 placeholder-gray-400 bg-transparent outline-none"
           />
           {loading
-            ? <div className="w-4 h-4 border-2 border-procare-bright-blue border-t-transparent rounded-full animate-spin flex-shrink-0" />
+            ? <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin flex-shrink-0" />
             : query && (
               <button
                 type="button"

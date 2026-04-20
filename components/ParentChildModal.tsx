@@ -93,11 +93,11 @@ export function ParentChildModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
         {/* Fixed header */}
         <div className="flex-shrink-0 p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Create Parent/Child Relationship</h2>
+            <h2 className="text-lg font-semibold text-brand-primary font-serif">Create Parent/Child Relationship</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -119,7 +119,7 @@ export function ParentChildModal({
                 key={item.id}
                 className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
                   parentId === item.id
-                    ? 'border-procare-bright-blue bg-blue-50'
+                    ? 'border-brand-secondary bg-blue-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
@@ -129,7 +129,7 @@ export function ParentChildModal({
                   value={item.id}
                   checked={parentId === item.id}
                   onChange={() => setParentId(item.id)}
-                  className="mt-0.5 accent-procare-bright-blue"
+                  className="mt-0.5 accent-brand-secondary"
                 />
                 <div>
                   <p className="text-sm font-medium text-gray-800">{item.label}</p>
@@ -153,7 +153,7 @@ export function ParentChildModal({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               {isSearching && (
-                <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-procare-bright-blue animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-secondary animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
@@ -169,7 +169,7 @@ export function ParentChildModal({
                   }
                 }}
                 placeholder="Search by company name..."
-                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-procare-bright-blue bg-white"
+                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary bg-white"
               />
             </div>
 
@@ -180,7 +180,7 @@ export function ParentChildModal({
                     key={result.id}
                     className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
                       parentId === result.id
-                        ? 'border-procare-bright-blue bg-blue-50'
+                        ? 'border-brand-secondary bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -190,7 +190,7 @@ export function ParentChildModal({
                       value={result.id}
                       checked={parentId === result.id}
                       onChange={() => setParentId(result.id)}
-                      className="mt-0.5 accent-procare-bright-blue"
+                      className="mt-0.5 accent-brand-secondary"
                     />
                     <div>
                       <p className="text-sm font-medium text-gray-800">{result.name}</p>

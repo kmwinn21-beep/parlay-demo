@@ -9,7 +9,7 @@ export default function NewConferencePage() {
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Add New Conference</h1>
+        <h1 className="text-2xl font-bold text-brand-primary font-serif">Add New Conference</h1>
         <p className="text-sm text-gray-500 mt-1">
           Fill in conference details and optionally upload an attendee list.
         </p>

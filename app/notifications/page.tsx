@@ -41,7 +41,7 @@ function UserInitialsPill({ name, email }: { name: string | null; email: string 
     : display.slice(0, 2).toUpperCase();
   return (
     <span
-      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-procare-dark-blue/10 text-procare-dark-blue text-[10px] font-bold flex-shrink-0"
+      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] font-bold flex-shrink-0"
       title={display}
     >
       {initials}
@@ -146,7 +146,7 @@ export default function NotificationsPage() {
       {/* Page header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Notifications</h1>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif">Notifications</h1>
           <p className="text-sm text-gray-500 mt-1">
             {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}` : 'All caught up!'}
           </p>
@@ -156,7 +156,7 @@ export default function NotificationsPage() {
             type="button"
             onClick={markAllRead}
             disabled={markingAll}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-procare-bright-blue text-white text-sm font-medium hover:bg-procare-dark-blue transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-secondary text-white text-sm font-medium hover:bg-brand-primary transition-colors disabled:opacity-60"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -170,7 +170,7 @@ export default function NotificationsPage() {
       {!loading && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="card py-4 text-center">
-            <p className="text-3xl font-bold text-procare-dark-blue font-serif">{notifications.length}</p>
+            <p className="text-3xl font-bold text-brand-primary font-serif">{notifications.length}</p>
             <p className="text-xs text-gray-500 mt-1">Total</p>
           </div>
           <div className="card py-4 text-center">
@@ -196,7 +196,7 @@ export default function NotificationsPage() {
       <div className="card p-0 overflow-hidden">
         {/* Card header with filters */}
         <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">
             All Notifications
             {filtered.length !== notifications.length && (
               <span className="ml-2 text-sm font-normal text-gray-500">
@@ -239,7 +239,7 @@ export default function NotificationsPage() {
         {/* Table */}
         {loading ? (
           <div className="flex justify-center items-center py-16">
-            <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
@@ -270,7 +270,7 @@ export default function NotificationsPage() {
                       {!n.is_read && (
                         <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
                       )}
-                      <span className="flex-1 font-medium text-procare-dark-blue truncate min-w-0">
+                      <span className="flex-1 font-medium text-brand-primary truncate min-w-0">
                         {n.record_name}
                       </span>
                       <svg
@@ -310,7 +310,7 @@ export default function NotificationsPage() {
                           <Link
                             href={entityUrl(n.entity_type, n.entity_id)}
                             onClick={() => { if (!n.is_read) markRead(n.id); }}
-                            className="flex-1 text-center py-2 rounded-lg bg-procare-bright-blue text-white text-xs font-medium hover:bg-procare-dark-blue transition-colors"
+                            className="flex-1 text-center py-2 rounded-lg bg-brand-secondary text-white text-xs font-medium hover:bg-brand-primary transition-colors"
                           >
                             Go to record
                           </Link>
@@ -358,7 +358,7 @@ export default function NotificationsPage() {
                       </td>
                       {/* Record */}
                       <td className="px-4 py-3">
-                        <span className="font-medium text-procare-dark-blue truncate max-w-[140px] block">
+                        <span className="font-medium text-brand-primary truncate max-w-[140px] block">
                           {n.record_name}
                         </span>
                       </td>

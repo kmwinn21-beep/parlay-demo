@@ -78,13 +78,13 @@ export function AddToConferenceModal({ entityType, selectedIds, onClose, onSucce
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-procare-dark-blue font-serif">Add to Conference</h2>
+            <h2 className="text-base font-bold text-brand-primary font-serif">Add to Conference</h2>
             <p className="text-xs text-gray-500 mt-0.5">{entityLabel} selected</p>
           </div>
           <button
@@ -101,7 +101,7 @@ export function AddToConferenceModal({ entityType, selectedIds, onClose, onSucce
         <div className="overflow-y-auto flex-1 p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin w-6 h-6 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+              <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : conferences.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No conferences found.</p>
@@ -112,18 +112,18 @@ export function AddToConferenceModal({ entityType, selectedIds, onClose, onSucce
                   key={conf.id}
                   className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                     selectedConfIds.has(conf.id)
-                      ? 'border-procare-bright-blue bg-blue-50'
-                      : 'border-gray-200 hover:border-procare-bright-blue hover:bg-blue-50/30'
+                      ? 'border-brand-secondary bg-blue-50'
+                      : 'border-gray-200 hover:border-brand-secondary hover:bg-blue-50/30'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={selectedConfIds.has(conf.id)}
                     onChange={() => toggleConf(conf.id)}
-                    className="mt-0.5 w-4 h-4 accent-procare-bright-blue flex-shrink-0"
+                    className="mt-0.5 w-4 h-4 accent-brand-secondary flex-shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-procare-dark-blue leading-snug">{conf.name}</p>
+                    <p className="text-sm font-semibold text-brand-primary leading-snug">{conf.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {formatDate(conf.start_date)} – {formatDate(conf.end_date)}
                     </p>

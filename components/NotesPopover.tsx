@@ -27,7 +27,7 @@ function NoteRowTooltip({ rep, conferenceName }: { rep?: string | null; conferen
 
   return (
     <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)} onClick={handleMouseEnter}>
-      <button type="button" className="text-gray-400 hover:text-procare-bright-blue transition-colors" title="Note Info">
+      <button type="button" className="text-gray-400 hover:text-brand-secondary transition-colors" title="Note Info">
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
@@ -116,7 +116,7 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
         ref={btnRef}
         type="button"
         onClick={handleToggle}
-        className="flex items-center gap-1 text-gray-400 hover:text-procare-bright-blue transition-colors"
+        className="flex items-center gap-1 text-gray-400 hover:text-brand-secondary transition-colors"
         title={`${totalCount} note${totalCount !== 1 ? 's' : ''}`}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,7 +144,7 @@ export function NotesPopover({ attendeeId, notesCount }: { attendeeId: number; n
               </span>
               <Link
                 href={`/attendees/${attendeeId}`}
-                className="text-xs text-procare-bright-blue hover:underline font-medium"
+                className="text-xs text-brand-secondary hover:underline font-medium"
                 onClick={() => setOpen(false)}
               >
                 Open record →
