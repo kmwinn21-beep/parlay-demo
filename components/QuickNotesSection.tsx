@@ -407,12 +407,25 @@ function NoteCard({ note, onDelete, onAssign }: { note: QuickNote; onDelete: (id
 }
 
 // ── Main QuickNotesSection ────────────────────────────────────────────────────
-export function QuickNotesSection() {
+export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [assigningNote, setAssigningNote] = useState<QuickNote | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1023px)');
+    const update = () => {
+      const mobile = media.matches;
+      setIsMobile(mobile);
+      if (!mobile) setExpanded(true);
+    };
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     fetch('/api/quick-notes')
@@ -459,14 +472,18 @@ export function QuickNotesSection() {
     }
   };
 
+  const showBody = !isMobile || expanded;
+
   return (
-    <div className="card">
+    <div className={`card h-full flex flex-col ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <button
           type="button"
-          onClick={() => setExpanded(v => !v)}
-          className="flex items-center gap-2 text-left group"
+          onClick={() => {
+            if (isMobile) setExpanded(v => !v);
+          }}
+          className={`flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
         >
           <svg className="w-5 h-5 text-procare-bright-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -480,7 +497,7 @@ export function QuickNotesSection() {
             </span>
           )}
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -498,8 +515,8 @@ export function QuickNotesSection() {
       </div>
 
       {/* Body */}
-      {expanded && (
-        <div className="mt-4">
+      {showBody && (
+        <div className="mt-4 flex-1 min-h-0">
           {loading ? (
             <div className="space-y-3 animate-pulse">
               {[1, 2].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl" />)}
