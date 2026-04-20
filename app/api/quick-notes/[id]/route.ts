@@ -5,9 +5,16 @@ import { db, dbReady } from '@/lib/db';
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
-    await db.execute({ sql: 'DELETE FROM quick_notes WHERE id = ?', args: [Number(params.id)] });
+    const result = await db.execute({
+      sql: 'DELETE FROM quick_notes WHERE id = ? AND created_by = ?',
+      args: [Number(params.id), user.email],
+    });
+    if (Number(result.rowsAffected ?? 0) === 0) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/quick-notes/[id] error:', error);
@@ -31,7 +38,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       attendee_name?: string | null;
     };
 
-    const noteRow = await db.execute({ sql: 'SELECT content FROM quick_notes WHERE id = ?', args: [Number(params.id)] });
+    const noteRow = await db.execute({
+      sql: 'SELECT content FROM quick_notes WHERE id = ? AND created_by = ?',
+      args: [Number(params.id), user.email],
+    });
     if (noteRow.rows.length === 0) return NextResponse.json({ error: 'Note not found' }, { status: 404 });
     const content = String(noteRow.rows[0].content);
     const rep = user.email ?? null;
@@ -60,7 +70,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       'write'
     );
 
-    await db.execute({ sql: 'DELETE FROM quick_notes WHERE id = ?', args: [Number(params.id)] });
+    await db.execute({
+      sql: 'DELETE FROM quick_notes WHERE id = ? AND created_by = ?',
+      args: [Number(params.id), user.email],
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('PATCH /api/quick-notes/[id] error:', error);
