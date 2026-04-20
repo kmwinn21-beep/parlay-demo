@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { FloatingNav } from './FloatingNav';
 import { BottomNavProvider } from './BottomNavContext';
+import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
 import { UserProvider } from './UserContext';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -17,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <UserProvider>
+      <FloatingNavHiddenProvider>
       <BottomNavProvider>
         <div className="flex h-screen overflow-hidden bg-gray-50">
           {/* Sidebar — desktop only */}
@@ -38,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </BottomNavProvider>
+      </FloatingNavHiddenProvider>
     </UserProvider>
   );
 }

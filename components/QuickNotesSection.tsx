@@ -421,6 +421,17 @@ export function QuickNotesSection() {
       .catch(() => setLoading(false));
   }, []);
 
+  // Optimistically prepend notes saved from FloatingNav's inline modal
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const note = (e as CustomEvent<QuickNote>).detail;
+      setNotes(prev => prev.some(n => n.id === note.id) ? prev : [note, ...prev]);
+      setExpanded(true);
+    };
+    window.addEventListener('quicknote:saved', handler);
+    return () => window.removeEventListener('quicknote:saved', handler);
+  }, []);
+
   const handleSaveNote = async (content: string) => {
     const res = await fetch('/api/quick-notes', {
       method: 'POST',
@@ -544,8 +555,14 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
       body: JSON.stringify({ content: text.trim() }),
     });
     setSaving(false);
-    if (res.ok) { toast.success('Quick note saved!'); onClose(); }
-    else toast.error('Failed to save note.');
+    if (res.ok) {
+      const note = await res.json() as QuickNote;
+      window.dispatchEvent(new CustomEvent('quicknote:saved', { detail: note }));
+      toast.success('Quick note saved!');
+      onClose();
+    } else {
+      toast.error('Failed to save note.');
+    }
   };
 
   return (
