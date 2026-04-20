@@ -323,6 +323,20 @@ export async function initDb(): Promise<void> {
       note_tagged INTEGER NOT NULL DEFAULT 1,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
+    `CREATE TABLE IF NOT EXISTS custom_columns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,
+      column_key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      data_key TEXT NOT NULL,
+      config_category TEXT,
+      is_user_field INTEGER NOT NULL DEFAULT 0,
+      display_type TEXT NOT NULL DEFAULT 'text_value',
+      display_config TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      visible INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(table_name, column_key)
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

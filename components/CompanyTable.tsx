@@ -14,7 +14,8 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { RepMultiSelect } from './RepMultiSelect';
-import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
+import { CustomColumnCell } from './CustomColumnCell';
 
 interface Company {
   id: number;
@@ -169,6 +170,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const configOptions = useConfigOptions('company_table');
   const userOptionsFull = useUserOptions();
   const { isVisible } = useTableColumnConfig(tableName);
+  const customColumns = useCustomColumns(tableName);
 
   // Local copy for optimistic updates — syncs whenever the parent re-fetches
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
@@ -897,12 +899,17 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>}
                 {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
                 {isVisible('relationships') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>}
+                {customColumns.filter(c => c.visible).map(col => (
+                  <th key={`custom_${col.id}`} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 120 }}>
+                    {col.label}
+                  </th>
+                ))}
                 {rowAction && <th className="px-3 py-3 w-20" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
@@ -1030,6 +1037,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       )}
                     </td>
                   )}
+                  {customColumns.filter(c => c.visible).map(col => (
+                    <td key={`custom_${col.id}`} className="px-3 py-3">
+                      <CustomColumnCell column={col} value={(company as unknown as Record<string, unknown>)[col.data_key]} />
+                    </td>
+                  ))}
                   {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
                 </tr>
               ))}
