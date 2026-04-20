@@ -5,6 +5,7 @@ import { PriorityLeads, PriorityLead } from '@/components/PriorityLeads';
 import AttendeesTooltip from '@/components/AttendeesTooltip';
 import AwaitingUploadModal from '@/components/AwaitingUploadModal';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
+import { getServerSessionUser } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -109,11 +110,24 @@ async function getAwaitingUploadConferences(): Promise<RecentConference[]> {
 
 async function getPriorityLeads(): Promise<PriorityLead[]> {
   await dbReady;
+  const sessionUser = await getServerSessionUser();
+  if (!sessionUser) return [];
+
+  const configResult = await db.execute({
+    sql: 'SELECT config_id FROM users WHERE id = ?',
+    args: [sessionUser.id],
+  });
+  const markerConfigId = configResult.rows[0]?.config_id != null
+    ? Number(configResult.rows[0].config_id)
+    : null;
+  if (markerConfigId == null) return [];
+
   const result = await db.execute({
     sql: `SELECT c.id, c.name, c.assigned_user, c.wse,
             COALESCE(conf_agg.conference_count, 0) as conference_count,
             conf_agg.conference_names
           FROM companies c
+          INNER JOIN company_priority_marks cpm ON cpm.company_id = c.id
           LEFT JOIN (
             SELECT a2.company_id,
                    COUNT(DISTINCT ca.conference_id) as conference_count,
@@ -123,10 +137,10 @@ async function getPriorityLeads(): Promise<PriorityLead[]> {
             JOIN conferences conf ON ca.conference_id = conf.id
             GROUP BY a2.company_id
           ) conf_agg ON c.id = conf_agg.company_id
-          WHERE ',' || COALESCE(c.status, '') || ',' LIKE '%,Priority,%'
+          WHERE cpm.marked_by_config_id = ?
           ORDER BY c.name ASC
           LIMIT 10`,
-    args: [],
+    args: [markerConfigId],
   });
   return result.rows.map((r) => ({
     id: Number(r.id),
