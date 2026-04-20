@@ -11,60 +11,42 @@ function parseStatusValues(status: unknown): string[] {
     .filter(Boolean);
 }
 
-async function getPriorityStatusOptionId(): Promise<number | null> {
-  const result = await db.execute({
-    sql: `SELECT id
-          FROM config_options
-          WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
-          ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END, id
-          LIMIT 1`,
-    args: [],
-  });
-  if (result.rows.length === 0 || result.rows[0].id == null) return null;
-  return Number(result.rows[0].id);
-}
-
-async function setPriorityMarkForCompany(opts: {
+/** Sync user-scoped status marks for a company after a PATCH.
+ *  For each user-scoped option, inserts or deletes from company_user_statuses
+ *  based on whether that option's value appears in statusPayload. */
+async function syncUserScopedStatuses(opts: {
   companyId: string;
   actorEmail: string;
-  status: unknown;
+  statusPayload: unknown;
 }): Promise<void> {
   const markerConfigId = await getConfigIdByEmail(opts.actorEmail);
   if (markerConfigId == null) return;
 
-  const priorityOptionId = await getPriorityStatusOptionId();
-  if (priorityOptionId == null) return;
-
-  const statuses = parseStatusValues(opts.status);
-  if (statuses.length === 0) {
-    await db.execute({
-      sql: 'DELETE FROM company_priority_marks WHERE company_id = ? AND marked_by_config_id = ?',
-      args: [opts.companyId, markerConfigId],
-    });
-    return;
-  }
-
-  const placeholders = statuses.map(() => '?').join(',');
-  const selectedStatusOptions = await db.execute({
-    sql: `SELECT id FROM config_options WHERE category = 'status' AND value IN (${placeholders})`,
-    args: statuses,
+  const userScopedResult = await db.execute({
+    sql: `SELECT id, value FROM config_options WHERE category = 'status' AND scope = 'user'`,
+    args: [],
   });
-  const selectedIds = new Set(selectedStatusOptions.rows.map((row) => Number(row.id)));
-  const hasPriority = selectedIds.has(priorityOptionId);
+  if (userScopedResult.rows.length === 0) return;
 
-  if (hasPriority) {
-    await db.execute({
-      sql: `INSERT INTO company_priority_marks (company_id, marked_by_config_id, priority_option_id)
-            VALUES (?, ?, ?)
-            ON CONFLICT(company_id, marked_by_config_id)
-            DO UPDATE SET priority_option_id = excluded.priority_option_id`,
-      args: [opts.companyId, markerConfigId, priorityOptionId],
-    });
-  } else {
-    await db.execute({
-      sql: 'DELETE FROM company_priority_marks WHERE company_id = ? AND marked_by_config_id = ?',
-      args: [opts.companyId, markerConfigId],
-    });
+  const statuses = parseStatusValues(opts.statusPayload);
+  const statusValues = new Set(statuses);
+
+  for (const row of userScopedResult.rows) {
+    const optId = Number(row.id);
+    const optValue = String(row.value);
+    if (statusValues.has(optValue)) {
+      await db.execute({
+        sql: `INSERT OR IGNORE INTO company_user_statuses (company_id, status_option_id, marked_by_config_id)
+              VALUES (?, ?, ?)`,
+        args: [opts.companyId, optId, markerConfigId],
+      });
+    } else {
+      await db.execute({
+        sql: `DELETE FROM company_user_statuses
+              WHERE company_id = ? AND status_option_id = ? AND marked_by_config_id = ?`,
+        args: [opts.companyId, optId, markerConfigId],
+      });
+    }
   }
 }
 
@@ -110,7 +92,26 @@ export async function GET(
 
     const company = companyResult.rows[0];
 
-    const [attendeesResult, confsResult, childCompaniesResult, parentResult, relatedResult, priorityMarkersResult, myPriorityResult, priorityOptResult] = await Promise.all([
+    // Fetch all user-scoped status options
+    const userScopedOptsResult = await db.execute({
+      sql: `SELECT id, value FROM config_options WHERE category = 'status' AND scope = 'user'`,
+      args: [],
+    });
+    const userScopedOptions = userScopedOptsResult.rows.map(r => ({
+      id: Number(r.id),
+      value: String(r.value),
+    }));
+    const userScopedValues = new Set(userScopedOptions.map(o => o.value));
+
+    const [
+      attendeesResult,
+      confsResult,
+      childCompaniesResult,
+      parentResult,
+      relatedResult,
+      statusMarkersResult,
+      myStatusIdsResult,
+    ] = await Promise.all([
       db.execute({
         sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count,
                      GROUP_CONCAT(DISTINCT conf.name) as conference_names
@@ -156,32 +157,27 @@ export async function GET(
               ORDER BY c.name`,
         args: [params.id, params.id],
       }),
-      // All users who have marked this company as Priority
+      // Who has marked each user-scoped status for this company (for global display)
       db.execute({
-        sql: `SELECT COALESCE(u.display_name, uopt.value) as name_or_email
-              FROM company_priority_marks cpm
-              JOIN config_options uopt ON uopt.id = cpm.marked_by_config_id
+        sql: `SELECT cus.status_option_id,
+                     COALESCE(u.display_name, uopt.value) as name_or_email
+              FROM company_user_statuses cus
+              JOIN config_options uopt ON uopt.id = cus.marked_by_config_id
               LEFT JOIN users u ON LOWER(u.email) = LOWER(uopt.value)
-              WHERE cpm.company_id = ?`,
+              WHERE cus.company_id = ?`,
         args: [params.id],
       }),
-      // Whether the current user has marked this company as Priority
+      // Which user-scoped statuses the current user has set for this company
       db.execute({
-        sql: `SELECT 1 FROM company_priority_marks
-              WHERE company_id = ?
-                AND marked_by_config_id = (
+        sql: `SELECT cus.status_option_id
+              FROM company_user_statuses cus
+              WHERE cus.company_id = ?
+                AND cus.marked_by_config_id = (
                   SELECT id FROM config_options
                   WHERE category = 'user' AND LOWER(value) = LOWER(?)
                   LIMIT 1
                 )`,
         args: [params.id, user.email],
-      }),
-      // Priority option value (to strip from global status field)
-      db.execute({
-        sql: `SELECT value FROM config_options
-              WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
-              ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END LIMIT 1`,
-        args: [],
       }),
     ]);
 
@@ -213,23 +209,26 @@ export async function GET(
       company_type: r.company_type ? String(r.company_type) : null,
     }));
 
-    const priorityValue = priorityOptResult.rows[0] ? String(priorityOptResult.rows[0].value) : null;
+    // Strip all user-scoped status values from the global status string
     const rawStatus = String(company.status || '');
-    const cleanStatus = priorityValue
-      ? rawStatus.split(',').map(s => s.trim()).filter(s => s && s !== priorityValue).join(',')
-      : rawStatus;
+    const cleanStatus = rawStatus.split(',').map(s => s.trim()).filter(s => s && !userScopedValues.has(s)).join(',');
 
-    const priority_markers = priorityMarkersResult.rows.map(r => ({
-      initials: getInitials(r.display_name ? String(r.display_name) : null, String(r.name_or_email)),
+    // status_markers: per user-scoped option, who set it (for global display as "StatusName - KW")
+    const statusMarkers: { status_option_id: number; initials: string }[] = statusMarkersResult.rows.map(r => ({
+      status_option_id: Number(r.status_option_id),
+      initials: getInitials(null, String(r.name_or_email)),
     }));
+
+    // my_user_status_ids: option IDs the current user has set
+    const myUserStatusIds = myStatusIdsResult.rows.map(r => Number(r.status_option_id));
 
     return NextResponse.json({
       ...company,
       status: cleanStatus,
       services: parseServices(company.services),
       icp: company.icp ? String(company.icp) : null,
-      my_priority: myPriorityResult.rows.length > 0,
-      priority_markers,
+      my_user_status_ids: myUserStatusIds,
+      status_markers: statusMarkers,
       attendees,
       conferences,
       child_companies,
@@ -331,19 +330,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
 
-    // Determine clean status (Priority stripped out — it's tracked per-user in company_priority_marks)
+    // Determine clean status (user-scoped options stripped — tracked per-user in company_user_statuses)
     let cleanStatus: string | undefined;
-    let priorityOptionValue: string | null = null;
     if ('status' in body) {
-      const priorityOptRes = await db.execute({
-        sql: `SELECT value FROM config_options
-              WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
-              ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END LIMIT 1`,
+      const userScopedOptsResult = await db.execute({
+        sql: `SELECT id, value FROM config_options WHERE category = 'status' AND scope = 'user'`,
         args: [],
       });
-      priorityOptionValue = priorityOptRes.rows[0] ? String(priorityOptRes.rows[0].value) : null;
+      const userScopedValues = new Set(userScopedOptsResult.rows.map(r => String(r.value)));
       const statuses = parseStatusValues(body.status);
-      const stripped = priorityOptionValue ? statuses.filter(s => s !== priorityOptionValue) : statuses;
+      const stripped = statuses.filter(s => !userScopedValues.has(s));
       cleanStatus = stripped.join(',');
     }
 
@@ -361,7 +357,7 @@ export async function PATCH(
       args.push(body.company_type || null);
     }
     if ('status' in body) {
-      // Write the Priority-stripped status globally; Priority is user-specific
+      // Write the user-scoped-stripped status globally
       setClauses.push('status = ?');
       args.push(cleanStatus ?? '');
     }
@@ -386,26 +382,27 @@ export async function PATCH(
     });
 
     if ('status' in body) {
-      // Cascade clean status (no Priority) to all attendees
+      // Cascade clean status (no user-scoped options) to all attendees
       await db.execute({
         sql: 'UPDATE attendees SET status = ? WHERE company_id = ?',
         args: [cleanStatus ?? '', params.id],
       });
 
-      // Handle Priority mark using the original body.status as signal (may contain Priority)
-      await setPriorityMarkForCompany({
+      // Sync user-scoped status marks using the original body.status as signal
+      await syncUserScopedStatuses({
         companyId: params.id,
         actorEmail: user.email,
-        status: body.status,
+        statusPayload: body.status,
       });
     }
 
-    const [result, myPriorityResult] = await Promise.all([
+    const [result, myStatusIdsResult] = await Promise.all([
       db.execute({ sql: 'SELECT * FROM companies WHERE id = ?', args: [params.id] }),
       db.execute({
-        sql: `SELECT 1 FROM company_priority_marks
-              WHERE company_id = ?
-                AND marked_by_config_id = (
+        sql: `SELECT cus.status_option_id
+              FROM company_user_statuses cus
+              WHERE cus.company_id = ?
+                AND cus.marked_by_config_id = (
                   SELECT id FROM config_options
                   WHERE category = 'user' AND LOWER(value) = LOWER(?)
                   LIMIT 1
@@ -415,7 +412,7 @@ export async function PATCH(
     ]);
     return NextResponse.json({
       ...result.rows[0],
-      my_priority: myPriorityResult.rows.length > 0,
+      my_user_status_ids: myStatusIdsResult.rows.map(r => Number(r.status_option_id)),
     });
   } catch (error) {
     console.error('PATCH /api/companies/[id] error:', error);
@@ -440,7 +437,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
 
-    // Unlink attendees from this company, clear child references, remove relationships, then delete the company
     await db.batch(
       [
         { sql: 'UPDATE attendees SET company_id = NULL WHERE company_id = ?', args: [params.id] },

@@ -127,7 +127,7 @@ async function getPriorityLeads(): Promise<PriorityLead[]> {
             COALESCE(conf_agg.conference_count, 0) as conference_count,
             conf_agg.conference_names
           FROM companies c
-          INNER JOIN company_priority_marks cpm ON cpm.company_id = c.id
+          INNER JOIN company_user_statuses cus ON cus.company_id = c.id
           LEFT JOIN (
             SELECT a2.company_id,
                    COUNT(DISTINCT ca.conference_id) as conference_count,
@@ -137,7 +137,8 @@ async function getPriorityLeads(): Promise<PriorityLead[]> {
             JOIN conferences conf ON ca.conference_id = conf.id
             GROUP BY a2.company_id
           ) conf_agg ON c.id = conf_agg.company_id
-          WHERE cpm.marked_by_config_id = ?
+          WHERE cus.marked_by_config_id = ?
+          GROUP BY c.id
           ORDER BY c.name ASC
           LIMIT 10`,
     args: [markerConfigId],

@@ -11,19 +11,6 @@ function parseStatusValues(status: unknown): string[] {
     .filter(Boolean);
 }
 
-async function getPriorityStatusOptionId(): Promise<number | null> {
-  const result = await db.execute({
-    sql: `SELECT id
-          FROM config_options
-          WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
-          ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END, id
-          LIMIT 1`,
-    args: [],
-  });
-  if (result.rows.length === 0 || result.rows[0].id == null) return null;
-  return Number(result.rows[0].id);
-}
-
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -43,10 +30,24 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'fields required' }, { status: 400 });
     }
 
+    // When status is being set, fetch all user-scoped options to strip them from global status
+    let cleanStatus: string | null = null;
+    let userScopedOptions: { id: number; value: string }[] = [];
+    if ('status' in fields) {
+      const userScopedResult = await db.execute({
+        sql: `SELECT id, value FROM config_options WHERE category = 'status' AND scope = 'user'`,
+        args: [],
+      });
+      userScopedOptions = userScopedResult.rows.map(r => ({ id: Number(r.id), value: String(r.value) }));
+      const userScopedValues = new Set(userScopedOptions.map(o => o.value));
+      const statuses = parseStatusValues(fields.status);
+      cleanStatus = statuses.filter(s => !userScopedValues.has(s)).join('');
+    }
+
     const setClauses: string[] = [];
     const baseArgs: (string | null)[] = [];
 
-    if ('status' in fields) { setClauses.push('status = ?'); baseArgs.push(fields.status ?? ''); }
+    if ('status' in fields) { setClauses.push('status = ?'); baseArgs.push(cleanStatus ?? ''); }
     if ('company_type' in fields) { setClauses.push('company_type = ?'); baseArgs.push(fields.company_type || null); }
     if ('profit_type' in fields) { setClauses.push('profit_type = ?'); baseArgs.push(fields.profit_type || null); }
     if ('notes' in fields) { setClauses.push('notes = ?'); baseArgs.push(fields.notes || null); }
@@ -72,36 +73,26 @@ export async function PATCH(request: NextRequest) {
 
     if ('status' in fields) {
       const markerConfigId = await getConfigIdByEmail(user.email);
-      const priorityOptionId = await getPriorityStatusOptionId();
-      if (markerConfigId != null && priorityOptionId != null) {
+      if (markerConfigId != null && userScopedOptions.length > 0) {
         const statuses = parseStatusValues(fields.status);
-        const statusPh = statuses.map(() => '?').join(',');
-        const selectedStatusOptions = statuses.length > 0
-          ? await db.execute({
-              sql: `SELECT id FROM config_options WHERE category = 'status' AND value IN (${statusPh})`,
-              args: statuses,
-            })
-          : { rows: [] as Array<{ id: number }> };
-        const selectedIds = new Set(selectedStatusOptions.rows.map((row) => Number(row.id)));
-        const hasPriority = selectedIds.has(priorityOptionId);
+        const statusValues = new Set(statuses);
 
-        if (hasPriority) {
-          for (const companyId of ids) {
-            await db.execute({
-              sql: `INSERT INTO company_priority_marks (company_id, marked_by_config_id, priority_option_id)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(company_id, marked_by_config_id)
-                    DO UPDATE SET priority_option_id = excluded.priority_option_id`,
-              args: [companyId, markerConfigId, priorityOptionId],
-            });
+        for (const companyId of ids) {
+          for (const opt of userScopedOptions) {
+            if (statusValues.has(opt.value)) {
+              await db.execute({
+                sql: `INSERT OR IGNORE INTO company_user_statuses (company_id, status_option_id, marked_by_config_id)
+                      VALUES (?, ?, ?)`,
+                args: [companyId, opt.id, markerConfigId],
+              });
+            } else {
+              await db.execute({
+                sql: `DELETE FROM company_user_statuses
+                      WHERE company_id = ? AND status_option_id = ? AND marked_by_config_id = ?`,
+                args: [companyId, opt.id, markerConfigId],
+              });
+            }
           }
-        } else {
-          const idPh = ids.map(() => '?').join(',');
-          await db.execute({
-            sql: `DELETE FROM company_priority_marks
-                  WHERE marked_by_config_id = ? AND company_id IN (${idPh})`,
-            args: [markerConfigId, ...ids],
-          });
         }
       }
     }

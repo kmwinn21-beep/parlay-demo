@@ -339,6 +339,26 @@ export async function initDb(): Promise<void> {
       visible INTEGER NOT NULL DEFAULT 1,
       UNIQUE(table_name, column_key)
     )`,
+    // Scope column on config_options — 'global' (default) or 'user' (only visible to the user who set it)
+    `ALTER TABLE config_options ADD COLUMN scope TEXT DEFAULT 'global'`,
+    // Seed scope='user' for the existing Priority status option
+    `UPDATE config_options SET scope = 'user' WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority') AND (scope IS NULL OR scope != 'user')`,
+    // General user-scoped status marks table — replaces company_priority_marks for all user-scoped statuses
+    `CREATE TABLE IF NOT EXISTS company_user_statuses (
+      company_id INTEGER NOT NULL,
+      status_option_id INTEGER NOT NULL,
+      marked_by_config_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (company_id, status_option_id, marked_by_config_id),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+      FOREIGN KEY (status_option_id) REFERENCES config_options(id) ON DELETE CASCADE,
+      FOREIGN KEY (marked_by_config_id) REFERENCES config_options(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_company_user_statuses_marker ON company_user_statuses(marked_by_config_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_company_user_statuses_option ON company_user_statuses(status_option_id)`,
+    // Migrate existing priority marks into the general table
+    `INSERT OR IGNORE INTO company_user_statuses (company_id, status_option_id, marked_by_config_id, created_at)
+     SELECT company_id, priority_option_id, marked_by_config_id, created_at FROM company_priority_marks`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

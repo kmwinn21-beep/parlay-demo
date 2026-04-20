@@ -38,7 +38,7 @@ interface Company {
   pinned_notes_count?: number;
   updated_at?: string;
   relationship_count?: number;
-  my_priority?: boolean;
+  my_user_status_ids?: number[];
 }
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
@@ -177,14 +177,15 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
   useEffect(() => { setLocalCompanies(companies); }, [companies]);
 
-  // Track which status option is the Priority option (identified by status_key, not display value)
-  const [priorityOptionValue, setPriorityOptionValue] = useState<string | null>(null);
+  // Map of status option id → value for all user-scoped status options
+  const [userScopedStatusMap, setUserScopedStatusMap] = useState<Map<number, string>>(new Map());
   useEffect(() => {
     fetch('/api/config?category=status')
       .then(r => r.json())
-      .then((opts: { value: string; status_key: string | null }[]) => {
-        const p = opts.find(o => o.status_key === 'priority');
-        if (p) setPriorityOptionValue(p.value);
+      .then((opts: { id: number; value: string; scope: string | null }[]) => {
+        const map = new Map<number, string>();
+        opts.filter(o => o.scope === 'user').forEach(o => map.set(o.id, o.value));
+        setUserScopedStatusMap(map);
       })
       .catch(() => {});
   }, []);
@@ -296,11 +297,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
       const matchSFOwner = !filterSFOwner || parseRepIds(c.assigned_user).map(String).includes(filterSFOwner);
       const matchType = !filterType || c.company_type === filterType;
-      const matchStatus = !filterStatus || (
-        priorityOptionValue && filterStatus === priorityOptionValue
-          ? !!c.my_priority
-          : (c.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus)
-      );
+      const matchStatus = !filterStatus || (() => {
+        // Check if filterStatus is a user-scoped option — if so, match against my_user_status_ids
+        const userScopedEntry = Array.from(userScopedStatusMap.entries()).find(([, v]) => v === filterStatus);
+        if (userScopedEntry) {
+          return (c.my_user_status_ids || []).includes(userScopedEntry[0]);
+        }
+        return (c.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus);
+      })();
       const matchConf = confCountMatches(Number(c.conference_count));
       const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
       const matchICP = !filterICP || c.icp === filterICP;
@@ -327,7 +331,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, priorityOptionValue]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -799,8 +803,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
                 <span className="flex flex-wrap gap-1">
                   {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
-                  {company.my_priority && priorityOptionValue && <span className={getBadgeClass(priorityOptionValue, colorMaps.status || {})}>{priorityOptionValue}</span>}
-                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && !company.my_priority && <span className="text-gray-400">—</span>}
+                  {(company.my_user_status_ids || []).map(optId => {
+                    const label = userScopedStatusMap.get(optId);
+                    return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
+                  })}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-400">—</span>}
                 </span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
               </div>
@@ -1014,8 +1021,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       <button type="button" onClick={() => startInlineEdit(company, 'status')}>
                         <span className="flex flex-wrap gap-1">
                           {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
-                          {company.my_priority && priorityOptionValue && <span className={getBadgeClass(priorityOptionValue, colorMaps.status || {})}>{priorityOptionValue}</span>}
-                          {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && !company.my_priority && <span className="text-gray-300">—</span>}
+                          {(company.my_user_status_ids || []).map(optId => {
+                            const label = userScopedStatusMap.get(optId);
+                            return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
+                          })}
+                          {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-300">—</span>}
                         </span>
                       </button>
                     )}
