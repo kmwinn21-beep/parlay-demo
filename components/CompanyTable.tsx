@@ -299,7 +299,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       const matchType = !filterType || c.company_type === filterType;
       const matchStatus = !filterStatus || (() => {
         // Check if filterStatus is a user-scoped option — if so, match against my_user_status_ids
-        const userScopedEntry = [...userScopedStatusMap.entries()].find(([, v]) => v === filterStatus);
+        const userScopedEntry = Array.from(userScopedStatusMap.entries()).find(([, v]) => v === filterStatus);
         if (userScopedEntry) {
           return (c.my_user_status_ids || []).includes(userScopedEntry[0]);
         }
