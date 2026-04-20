@@ -65,7 +65,7 @@ export function MultiSelectDropdown({
                     onClick={() => toggleValue(option)}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
                   >
-                    <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-procare-bright-blue border-procare-bright-blue' : 'border-gray-300'}`}>
+                    <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                       {checked && (
                         <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -85,7 +85,7 @@ export function MultiSelectDropdown({
           {values.map((value) => (
             <span
               key={value}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-procare-bright-blue border border-blue-200"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
             >
               {value}
               <button

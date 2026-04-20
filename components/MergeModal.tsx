@@ -47,9 +47,9 @@ export function MergeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold max-w-md w-full mx-4 p-6">
+      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight max-w-md w-full mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">{title}</h2>
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">{title}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -69,7 +69,7 @@ export function MergeModal({
               key={item.id}
               className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
                 masterId === item.id
-                  ? 'border-procare-bright-blue bg-blue-50'
+                  ? 'border-brand-secondary bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -79,7 +79,7 @@ export function MergeModal({
                 value={item.id}
                 checked={masterId === item.id}
                 onChange={() => setMasterId(item.id)}
-                className="mt-0.5 accent-procare-bright-blue"
+                className="mt-0.5 accent-brand-secondary"
               />
               <div>
                 <p className="text-sm font-medium text-gray-800">{item.label}</p>

@@ -527,7 +527,7 @@ export default function CompanyDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -547,7 +547,7 @@ export default function CompanyDetailPage() {
         {isEditing ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Company</h2>
+              <h2 className="text-lg font-semibold text-brand-primary font-serif">Edit Company</h2>
               <div>
                 <label className="label">ICP</label>
                 <div className="inline-flex items-center rounded-lg border border-gray-200 p-1 bg-gray-50">
@@ -556,7 +556,7 @@ export default function CompanyDetailPage() {
                       key={option}
                       type="button"
                       onClick={() => setEditData((p) => ({ ...p, icp: option }))}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${editData.icp === option ? 'bg-procare-bright-blue text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${editData.icp === option ? 'bg-brand-secondary text-white' : 'text-gray-600 hover:text-gray-800'}`}
                     >
                       {option}
                     </button>
@@ -671,13 +671,13 @@ export default function CompanyDetailPage() {
           <div>
             {/* Header: avatar, name, badges, actions */}
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-xl bg-procare-gold flex items-center justify-center text-procare-dark-blue text-xl font-bold font-serif flex-shrink-0">
+              <div className="w-14 h-14 rounded-xl bg-brand-highlight flex items-center justify-center text-brand-primary text-xl font-bold font-serif flex-shrink-0">
                 {company.name[0]}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h1 className="text-2xl font-bold text-procare-dark-blue font-serif flex items-center gap-2">
+                    <h1 className="text-2xl font-bold text-brand-primary font-serif flex items-center gap-2">
                       {company.name}
                       {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
                         <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-green-100 flex-shrink-0">
@@ -690,7 +690,7 @@ export default function CompanyDetailPage() {
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
                         Subsidiary of{' '}
-                        <Link href={`/companies/${company.parent_company.id}`} className="text-procare-bright-blue hover:underline">
+                        <Link href={`/companies/${company.parent_company.id}`} className="text-brand-secondary hover:underline">
                           {company.parent_company.name}
                         </Link>
                       </p>
@@ -748,7 +748,7 @@ export default function CompanyDetailPage() {
                     href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-procare-bright-blue hover:text-blue-700 transition-colors"
+                    className="text-brand-secondary hover:text-blue-700 transition-colors"
                     title={company.website.replace(/^https?:\/\//, '')}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -816,13 +816,13 @@ export default function CompanyDetailPage() {
       {/* Attendees */}
       <div className="card">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">
             Attendees ({company.attendees.length})
           </h2>
           {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
             <button
               onClick={() => setAttendeesExpanded(prev => !prev)}
-              className="text-gray-400 hover:text-procare-bright-blue transition-colors p-1 rounded hover:bg-gray-50"
+              className="text-gray-400 hover:text-brand-secondary transition-colors p-1 rounded hover:bg-gray-50"
               title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
             >
               <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -842,11 +842,11 @@ export default function CompanyDetailPage() {
                 <div key={attendee.id} className="p-4 bg-white">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Link href={`/attendees/${attendee.id}`} className="font-semibold text-procare-bright-blue hover:underline text-sm">
+                      <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm">
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                       {attendee.email && (
-                        <a href={`mailto:${attendee.email}`} title={attendee.email} className="text-gray-400 hover:text-procare-bright-blue">
+                        <a href={`mailto:${attendee.email}`} title={attendee.email} className="text-gray-400 hover:text-brand-secondary">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
@@ -887,7 +887,7 @@ export default function CompanyDetailPage() {
                     return (
                     <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
-                        <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                        <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                           {attendee.first_name} {attendee.last_name}
                         </Link>
                       </td>
@@ -903,7 +903,7 @@ export default function CompanyDetailPage() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         {attendee.email ? (
-                          <a href={`mailto:${attendee.email}`} title={attendee.email} className="inline-flex items-center justify-center text-gray-400 hover:text-procare-bright-blue transition-colors">
+                          <a href={`mailto:${attendee.email}`} title={attendee.email} className="inline-flex items-center justify-center text-gray-400 hover:text-brand-secondary transition-colors">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                             </svg>
@@ -936,7 +936,7 @@ export default function CompanyDetailPage() {
                         ) : (
                           <button
                             onClick={() => setEditingCompanyAttendeeId(attendee.id)}
-                            className="text-xs text-gray-500 hover:text-procare-bright-blue hover:underline cursor-pointer"
+                            className="text-xs text-gray-500 hover:text-brand-secondary hover:underline cursor-pointer"
                             title="Click to change company"
                           >
                             {company.name}
@@ -960,7 +960,7 @@ export default function CompanyDetailPage() {
           {/* Meetings */}
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+              <h2 className="text-base font-semibold text-brand-primary font-serif">
                 Meetings
                 {companyMeetings.length > 0 && (
                   <span className="ml-2 text-sm font-normal text-gray-500">
@@ -974,10 +974,10 @@ export default function CompanyDetailPage() {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
                 title=" Meeting"
               >
-                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <span className="text-sm font-medium text-procare-dark-blue">Schedule</span>
+                <span className="text-sm font-medium text-brand-primary">Schedule</span>
               </button>
             </div>
             <MeetingsTable
@@ -1033,7 +1033,7 @@ export default function CompanyDetailPage() {
           {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+              <h2 className="text-base font-semibold text-brand-primary font-serif">
                 Follow Ups
                 {companyFollowUps.length > 0 && (
                   <span className="ml-2 text-sm font-normal text-gray-500">
@@ -1046,10 +1046,10 @@ export default function CompanyDetailPage() {
                 onClick={() => setShowAssignFollowUp(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                <span className="text-sm font-medium text-procare-dark-blue">Follow Up</span>
+                <span className="text-sm font-medium text-brand-primary">Follow Up</span>
               </button>
             </div>
             <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
@@ -1077,7 +1077,7 @@ export default function CompanyDetailPage() {
             const sectionMap: Record<string, React.ReactNode> = {
               status: (
                 <div key="status" className="card">
-                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-1">{getSectionLabel('status')}</h2>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">{getSectionLabel('status')}</h2>
                   <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
                   <div className="flex flex-wrap gap-2">
                     {statusOptions.map(val => {
@@ -1110,7 +1110,7 @@ export default function CompanyDetailPage() {
                           onClick={() => setConferencesExpanded(prev => !prev)}
                           className="flex items-center justify-between w-full text-left"
                         >
-                          <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                          <h2 className="text-base font-semibold text-brand-primary font-serif">
                             {getSectionLabel('conferences')} ({confs.length})
                           </h2>
                           <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -1118,10 +1118,10 @@ export default function CompanyDetailPage() {
                         {!conferencesExpanded && inProgressConfs.length > 0 && (
                           <div className="space-y-2 mt-3">
                             {inProgressConfs.map(conf => (
-                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
+                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-brand-secondary hover:bg-blue-50 transition-all">
                                 <div className="min-w-0">
-                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                                    <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
+                                    <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
                                     In Progress
                                   </span>
                                   <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
@@ -1144,11 +1144,11 @@ export default function CompanyDetailPage() {
                                 {confs.map(conf => {
                                   const isActive = conf.start_date <= today && conf.end_date >= today;
                                   return (
-                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-brand-secondary' : 'border-gray-100 hover:border-brand-secondary'}`}>
                                       <div className="min-w-0">
                                         {isActive && (
-                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                                            <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
+                                            <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
                                             In Progress
                                           </span>
                                         )}
@@ -1173,12 +1173,12 @@ export default function CompanyDetailPage() {
               ),
               communities: (company.child_companies && company.child_companies.length > 0) ? (
                 <div key="communities" className="card">
-                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">
+                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">
                     {getSectionLabel('communities')} ({company.child_companies.length})
                   </h2>
                   <div className="space-y-2">
                     {company.child_companies.map(child => (
-                      <Link key={child.id} href={`/companies/${child.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all">
+                      <Link key={child.id} href={`/companies/${child.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800 truncate">{child.name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -1211,14 +1211,14 @@ export default function CompanyDetailPage() {
                     className="flex items-center justify-between w-full text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-semibold text-procare-dark-blue font-serif">
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
                         {getSectionLabel('operator_capital')}
                       </h2>
                       {opCapRelExpanded && (
                         <span
                           role="button"
                           onClick={(e) => { e.stopPropagation(); setShowRelateModal(true); }}
-                          className="text-xs text-procare-bright-blue hover:underline font-medium"
+                          className="text-xs text-brand-secondary hover:underline font-medium"
                         >
                           + Add
                         </span>
@@ -1233,7 +1233,7 @@ export default function CompanyDetailPage() {
                       ) : (
                         <div className="space-y-2 mt-3">
                           {company.related_companies.map(rel => (
-                            <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-procare-bright-blue hover:bg-blue-50 transition-all group">
+                            <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all group">
                               <Link href={`/companies/${rel.id}`} className="min-w-0 flex-1">
                                 <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
                                 {rel.company_type && (
@@ -1266,8 +1266,8 @@ export default function CompanyDetailPage() {
                   )}
                   {showRelateModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => { setShowRelateModal(false); setRelateSearch(''); setRelateResults([]); }}>
-                      <div className="bg-white rounded-xl shadow-2xl border border-procare-gold p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-lg font-semibold text-procare-dark-blue font-serif mb-4">
+                      <div className="bg-white rounded-xl shadow-2xl border border-brand-highlight p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-semibold text-brand-primary font-serif mb-4">
                           Add Related Company
                         </h3>
                         <input

@@ -68,16 +68,16 @@ export function PinnedNotesSection({
   };
 
   return (
-    <div className="card border-l-4 border-l-procare-gold">
+    <div className="card border-l-4 border-l-brand-highlight">
       <button
         type="button"
         onClick={() => setSectionCollapsed(prev => !prev)}
         className="flex items-center gap-2 w-full text-left"
       >
-        <svg className="w-5 h-5 text-procare-gold flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-brand-highlight flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
           <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
         </svg>
-        <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+        <h2 className="text-lg font-semibold text-brand-primary font-serif">
           Pinned Notes ({pinnedNotes.length})
         </h2>
         <svg className={`w-5 h-5 text-gray-400 ml-auto transition-transform ${sectionCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,7 +96,7 @@ export function PinnedNotesSection({
               <div className="px-4 py-3 flex items-center justify-between gap-2 bg-gray-50 border-b border-gray-100">
                 <div className="flex flex-wrap items-center gap-2 min-w-0">
                   {/* Pinned by pill with user icon */}
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-procare-dark-blue text-white text-xs font-medium" title={`Pinned by ${pin.pinned_by}`}>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-primary text-white text-xs font-medium" title={`Pinned by ${pin.pinned_by}`}>
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
                     </svg>
@@ -104,7 +104,7 @@ export function PinnedNotesSection({
                   </span>
                   {/* Conference pill */}
                   {pin.conference_name ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-procare-bright-blue text-xs font-medium border border-blue-100 whitespace-nowrap">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap">
                       {pin.conference_name}
                     </span>
                   ) : (
@@ -125,7 +125,7 @@ export function PinnedNotesSection({
                   <button
                     type="button"
                     onClick={() => toggleExpand(pin.id)}
-                    className="p-1 text-gray-400 hover:text-procare-bright-blue transition-colors rounded"
+                    className="p-1 text-gray-400 hover:text-brand-secondary transition-colors rounded"
                     title={expanded ? 'Collapse' : 'Expand'}
                   >
                     <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,7 +154,7 @@ export function PinnedNotesSection({
                   <button
                     type="button"
                     onClick={() => toggleExpand(pin.id)}
-                    className="mt-1 text-xs text-procare-bright-blue hover:underline font-medium"
+                    className="mt-1 text-xs text-brand-secondary hover:underline font-medium"
                   >
                     Show Full Note
                   </button>

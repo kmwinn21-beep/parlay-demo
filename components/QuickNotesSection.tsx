@@ -56,7 +56,7 @@ function SearchableSelect<T extends { id: number }>({
         type="button"
         disabled={disabled}
         onClick={() => { setOpen(v => !v); setSearch(''); }}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <span className={value ? 'text-gray-800' : 'text-gray-400'}>{value ? getLabel(value) : placeholder}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -80,7 +80,7 @@ function SearchableSelect<T extends { id: number }>({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search…"
-              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-procare-bright-blue"
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-secondary"
             />
           </div>
           <div className="overflow-y-auto">
@@ -91,7 +91,7 @@ function SearchableSelect<T extends { id: number }>({
                 key={o.id}
                 type="button"
                 onClick={() => { onChange(o); setOpen(false); setSearch(''); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-procare-bright-blue transition-colors ${value?.id === o.id ? 'bg-blue-50 text-procare-bright-blue font-medium' : 'text-gray-700'}`}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-brand-secondary transition-colors ${value?.id === o.id ? 'bg-blue-50 text-brand-secondary font-medium' : 'text-gray-700'}`}
               >
                 {getLabel(o)}
               </button>
@@ -119,7 +119,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-procare-dark-blue font-serif">Quick Note</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">Quick Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -130,7 +130,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
           onChange={e => setText(e.target.value)}
           placeholder="Write your note here…"
           rows={5}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue resize-none"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }}
         />
         <p className="text-xs text-gray-400 mt-1 mb-4">⌘+Enter to save</p>
@@ -304,7 +304,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-          <h3 className="text-base font-semibold text-procare-dark-blue font-serif">Assign Note</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">Assign Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -313,7 +313,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
           <p className="text-xs text-gray-500 mb-4 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 line-clamp-3">{note.content}</p>
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin w-6 h-6 border-2 border-procare-bright-blue border-t-transparent rounded-full" />
+              <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : (
             <div className="space-y-4">
@@ -379,7 +379,7 @@ function NoteCard({ note, onDelete, onAssign }: { note: QuickNote; onDelete: (id
           <button
             type="button"
             onClick={onAssign}
-            className="flex items-center gap-1.5 text-xs font-medium text-procare-bright-blue hover:text-procare-dark-blue border border-procare-bright-blue/30 hover:border-procare-bright-blue px-2.5 py-1 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:text-brand-primary border border-brand-secondary/30 hover:border-brand-secondary px-2.5 py-1 rounded-lg transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" /></svg>
             Assign Note
@@ -398,7 +398,7 @@ function NoteCard({ note, onDelete, onAssign }: { note: QuickNote; onDelete: (id
         {note.content}
       </p>
       {isLong && (
-        <button type="button" onClick={() => setExpanded(v => !v)} className="text-xs text-procare-bright-blue hover:underline mt-1.5">
+        <button type="button" onClick={() => setExpanded(v => !v)} className="text-xs text-brand-secondary hover:underline mt-1.5">
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}
@@ -498,14 +498,14 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
           }}
           className={`flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
         >
-          <svg className="w-5 h-5 text-procare-bright-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
-          <span className="text-lg font-semibold text-procare-dark-blue font-serif group-hover:text-procare-bright-blue transition-colors">
+          <span className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">
             Quick Notes
           </span>
           {notes.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-procare-bright-blue text-white text-[10px] font-bold leading-none">
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-secondary text-white text-[10px] font-bold leading-none">
               {notes.length}
             </span>
           )}
@@ -520,7 +520,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 text-sm font-medium text-procare-bright-blue hover:text-procare-dark-blue border border-procare-bright-blue/30 hover:border-procare-bright-blue hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-sm font-medium text-brand-secondary hover:text-brand-primary border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           Quick Note
@@ -540,7 +540,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               <p className="text-sm text-gray-400">Add a note now and assign it later. Quick Notes can only be seen by you until you assign it to an Attendee, Company, and/or Conference record.</p>
-              <button type="button" onClick={() => setShowAddModal(true)} className="text-procare-bright-blue text-sm hover:underline mt-1">
+              <button type="button" onClick={() => setShowAddModal(true)} className="text-brand-secondary text-sm hover:underline mt-1">
                 Add note →
               </button>
             </div>
@@ -565,7 +565,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
                 <div className="absolute bottom-0 inset-x-0 h-14 bg-gradient-to-t from-white via-white/70 to-transparent pointer-events-none flex items-end justify-center pb-2">
                   <button
                     type="button"
-                    className="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-white shadow-md border border-gray-200 text-gray-400 hover:text-procare-bright-blue hover:border-procare-bright-blue transition-colors"
+                    className="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-white shadow-md border border-gray-200 text-gray-400 hover:text-brand-secondary hover:border-brand-secondary transition-colors"
                     onClick={() => scrollRef.current?.scrollBy({ top: 180, behavior: 'smooth' })}
                     aria-label="Scroll for more notes"
                   >
@@ -620,7 +620,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-procare-dark-blue font-serif">Quick Note</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">Quick Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -631,7 +631,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
           onChange={e => setText(e.target.value)}
           placeholder="Write a quick note…"
           rows={4}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue resize-none"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }}
         />
         <div className="flex justify-end gap-2 mt-3">

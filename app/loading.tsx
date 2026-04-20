@@ -2,11 +2,11 @@ export default function DashboardLoading() {
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-pulse">
       {/* Welcome Header skeleton */}
-      <div className="bg-procare-dark-blue rounded-2xl p-8 relative overflow-hidden">
+      <div className="bg-brand-primary rounded-2xl p-8 relative overflow-hidden">
         <div className="relative z-10">
           <div className="h-8 w-64 bg-blue-800 rounded mb-2" />
         </div>
-        <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-procare-bright-blue opacity-20" />
+        <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-brand-secondary opacity-20" />
       </div>
 
       {/* Stats Cards skeleton */}

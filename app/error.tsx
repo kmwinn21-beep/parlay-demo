@@ -16,7 +16,7 @@ export default function Error({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
         </svg>
       </div>
-      <h2 className="text-xl font-semibold text-procare-dark-blue font-serif mb-2">
+      <h2 className="text-xl font-semibold text-brand-primary font-serif mb-2">
         Something went wrong
       </h2>
       <p className="text-sm text-gray-500 mb-6">

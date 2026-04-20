@@ -265,8 +265,8 @@ export function FloatingNav() {
         {ordered.map((item, i) => {
           const isActive = item.active;
           const pillCls = isActive
-            ? 'bg-procare-gold text-procare-dark-blue border-yellow-500/40 font-semibold'
-            : 'bg-procare-dark-blue/90 text-blue-100 border-blue-700/40 hover:bg-procare-bright-blue/90';
+            ? 'bg-brand-highlight text-brand-primary border-yellow-500/40 font-semibold'
+            : 'bg-brand-primary/90 text-blue-100 border-blue-700/40 hover:bg-brand-secondary/90';
 
           // Opening: stagger from FAB outward (i=0 nearest FAB → fires first)
           // Closing: reverse stagger so items fold back toward FAB last
@@ -336,7 +336,7 @@ export function FloatingNav() {
             setOpen(false);
             setNavHidden(true);
           }}
-          className="text-xs font-medium text-white/75 hover:text-white bg-procare-dark-blue/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+          className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
         >
           Hide
         </button>
@@ -362,13 +362,13 @@ export function FloatingNav() {
         onPointerCancel={onUp}
         className={[
           'rounded-full flex items-center justify-center select-none',
-          'bg-procare-dark-blue/85 backdrop-blur-sm',
+          'bg-brand-primary/85 backdrop-blur-sm',
           'border border-blue-700/50 shadow-2xl',
           'transition-all duration-200',
           dragging
             ? 'scale-110 shadow-black/40'
             : open
-              ? 'ring-2 ring-procare-gold ring-offset-1 ring-offset-transparent scale-95'
+              ? 'ring-2 ring-brand-highlight ring-offset-1 ring-offset-transparent scale-95'
               : 'active:scale-90',
         ].join(' ')}
         role="button"

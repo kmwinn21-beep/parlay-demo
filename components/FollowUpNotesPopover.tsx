@@ -29,7 +29,7 @@ function NoteRowTooltip({ rep, conferenceName }: { rep?: string | null; conferen
 
   return (
     <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)} onClick={handleMouseEnter}>
-      <button type="button" className="text-gray-400 hover:text-procare-bright-blue transition-colors" title="Note Info">
+      <button type="button" className="text-gray-400 hover:text-brand-secondary transition-colors" title="Note Info">
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
@@ -204,7 +204,7 @@ export function FollowUpNotesPopover({
         ref={btnRef}
         type="button"
         onClick={handleToggle}
-        className="flex items-center gap-1 text-gray-400 hover:text-procare-bright-blue transition-colors"
+        className="flex items-center gap-1 text-gray-400 hover:text-brand-secondary transition-colors"
         title={`${totalCount} note${totalCount !== 1 ? 's' : ''}`}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,7 +234,7 @@ export function FollowUpNotesPopover({
                 <button
                   type="button"
                   onClick={() => setIsAdding(v => !v)}
-                  className="text-xs text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors flex items-center gap-1"
+                  className="text-xs text-brand-secondary hover:text-brand-primary font-medium transition-colors flex items-center gap-1"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -244,7 +244,7 @@ export function FollowUpNotesPopover({
                 </button>
                 <Link
                   href={`/attendees/${attendeeId}`}
-                  className="text-xs text-procare-bright-blue hover:underline font-medium"
+                  className="text-xs text-brand-secondary hover:underline font-medium"
                   onClick={() => setOpen(false)}
                 >
                   Open record →
@@ -295,9 +295,9 @@ export function FollowUpNotesPopover({
                     type="checkbox"
                     checked={pinOnSubmit}
                     onChange={e => setPinOnSubmit(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-procare-gold focus:ring-procare-gold"
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-brand-highlight focus:ring-brand-highlight"
                   />
-                  <svg className="w-3.5 h-3.5 text-procare-gold" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 text-brand-highlight" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
                   <span className="text-xs font-medium text-gray-700">Pin Note?</span>
@@ -307,7 +307,7 @@ export function FollowUpNotesPopover({
                     type="button"
                     onClick={handleSubmitNote}
                     disabled={isSubmitting}
-                    className="px-3 py-1 bg-procare-bright-blue text-white text-xs font-medium rounded hover:bg-procare-dark-blue transition-colors disabled:opacity-50"
+                    className="px-3 py-1 bg-brand-secondary text-white text-xs font-medium rounded hover:bg-brand-primary transition-colors disabled:opacity-50"
                   >
                     {isSubmitting ? 'Saving...' : 'Submit'}
                   </button>

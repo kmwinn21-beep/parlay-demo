@@ -9,15 +9,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // CSS variable channels — supports opacity modifiers (e.g. bg-procare-bright-blue/50)
-        'procare-dark-blue':   'rgb(var(--procare-dark-blue-rgb)   / <alpha-value>)',
-        'procare-bright-blue': 'rgb(var(--procare-bright-blue-rgb) / <alpha-value>)',
-        'procare-beige':       'rgb(var(--procare-beige-rgb)       / <alpha-value>)',
-        'procare-gold':        'rgb(var(--procare-gold-rgb)        / <alpha-value>)',
+        // CSS variable channels — supports opacity modifiers (e.g. bg-brand-secondary/50)
+        'brand-primary':   'rgb(var(--brand-primary-rgb)   / <alpha-value>)',
+        'brand-secondary': 'rgb(var(--brand-secondary-rgb) / <alpha-value>)',
+        'brand-accent':    'rgb(var(--brand-accent-rgb)    / <alpha-value>)',
+        'brand-highlight': 'rgb(var(--brand-highlight-rgb) / <alpha-value>)',
       },
       fontFamily: {
-        serif: ['"DM Serif Display"', 'serif'],
-        sans:  ['Poppins', 'sans-serif'],
+        serif: ['var(--font-heading)', 'serif'],
+        sans:  ['var(--font-body)', 'sans-serif'],
       },
     },
   },

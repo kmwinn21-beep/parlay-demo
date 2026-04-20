@@ -40,7 +40,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-procare-dark-blue flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
@@ -49,7 +49,7 @@ function LoginForm() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h1 className="text-2xl font-bold text-procare-dark-blue font-serif mb-1">Welcome back</h1>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif mb-1">Welcome back</h1>
           <p className="text-sm text-gray-500 mb-6">Sign in to {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'}</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -64,7 +64,7 @@ function LoginForm() {
                 placeholder={`you@${process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? 'yourcompany.com'}`}
                 required
                 autoComplete="email"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-transparent"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent"
               />
             </div>
             <div>
@@ -72,7 +72,7 @@ function LoginForm() {
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
                   Password
                 </label>
-                <Link href="/auth/forgot-password" className="text-xs text-procare-bright-blue hover:underline">
+                <Link href="/auth/forgot-password" className="text-xs text-brand-secondary hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -83,13 +83,13 @@ function LoginForm() {
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-procare-bright-blue focus:border-transparent"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-procare-bright-blue text-white rounded-lg font-semibold text-sm hover:bg-procare-dark-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-brand-secondary text-white rounded-lg font-semibold text-sm hover:bg-brand-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2"
             >
               {loading && (
                 <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -103,7 +103,7 @@ function LoginForm() {
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Don&apos;t have an account?{' '}
-            <Link href="/auth/signup" className="text-procare-bright-blue font-medium hover:underline">
+            <Link href="/auth/signup" className="text-brand-secondary font-medium hover:underline">
               Sign up
             </Link>
           </p>

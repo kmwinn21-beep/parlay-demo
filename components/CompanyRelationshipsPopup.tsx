@@ -162,11 +162,11 @@ export function CompanyRelationshipsPopup({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-base font-bold text-procare-dark-blue font-serif">{companyName} Relationships</h2>
+          <h2 className="text-base font-bold text-brand-primary font-serif">{companyName} Relationships</h2>
           <button
             onClick={onClose}
             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
@@ -179,7 +179,7 @@ export function CompanyRelationshipsPopup({
         <div className="overflow-y-auto p-4 space-y-3 flex-1">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin w-6 h-6 border-4 border-procare-bright-blue border-t-transparent rounded-full" />
+              <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : relationships.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No relationships found.</p>

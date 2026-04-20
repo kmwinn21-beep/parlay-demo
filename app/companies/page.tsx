@@ -134,7 +134,7 @@ export default function CompaniesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">Companies</h1>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif">Companies</h1>
           <p className="text-sm text-gray-500">{companies.length} compan{companies.length !== 1 ? 'ies' : 'y'} in your database</p>
         </div>
         <button
@@ -150,8 +150,8 @@ export default function CompaniesPage() {
 
       {/* Add Company Form */}
       {showAddForm && (
-        <div className="card border-2 border-procare-bright-blue">
-          <h2 className="text-lg font-semibold text-procare-dark-blue mb-4 font-serif">Add New Company</h2>
+        <div className="card border-2 border-brand-secondary">
+          <h2 className="text-lg font-semibold text-brand-primary mb-4 font-serif">Add New Company</h2>
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
@@ -207,7 +207,7 @@ export default function CompaniesPage() {
                       key={option}
                       type="button"
                       onClick={() => setValue('icp', option)}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${icp === option ? 'bg-procare-bright-blue text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${icp === option ? 'bg-brand-secondary text-white' : 'text-gray-600 hover:text-gray-800'}`}
                     >
                       {option}
                     </button>

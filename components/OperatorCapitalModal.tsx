@@ -42,11 +42,11 @@ export function OperatorCapitalModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl border border-procare-gold max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
         {/* Fixed header */}
         <div className="flex-shrink-0 p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Create Operator / Capital Relationships</h2>
+            <h2 className="text-lg font-semibold text-brand-primary font-serif">Create Operator / Capital Relationships</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -68,7 +68,7 @@ export function OperatorCapitalModal({
                 key={item.id}
                 className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50"
               >
-                <svg className="w-4 h-4 mt-0.5 text-procare-bright-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 mt-0.5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
                 <div>

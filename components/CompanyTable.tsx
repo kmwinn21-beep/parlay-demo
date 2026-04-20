@@ -151,8 +151,8 @@ function conferenceBadgeClass(count: number) {
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>;
   return sortDir === 'asc'
-    ? <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-    : <svg className="w-3 h-3 ml-1 text-procare-bright-blue inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
+    ? <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+    : <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
 const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110 };
@@ -456,10 +456,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     }
   };
 
-  const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-procare-dark-blue whitespace-nowrap relative';
+  const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-brand-primary whitespace-nowrap relative';
 
   const ResizeHandle = ({ col }: { col: string }) => (
-    <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-procare-bright-blue opacity-0 hover:opacity-30" />
+    <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
   );
 
   const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterHierarchy ? 1 : 0);
@@ -475,14 +475,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <button
           type="button"
           onClick={() => setFiltersOpen(o => !o)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-procare-bright-blue text-procare-bright-blue bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
           </svg>
           Filters
           {activeFilterCount > 0 && (
-            <span className="bg-procare-bright-blue text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+            <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
               {activeFilterCount}
             </span>
           )}
@@ -586,7 +586,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <button
                   type="button"
                   onClick={() => setShowConfFilter(v => !v)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-procare-bright-blue transition-colors bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white"
                 >
                   <span>{filterConfCounts.size > 0 ? `${filterConfCounts.size} selected` : 'All counts...'}</span>
                   <svg className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${showConfFilter ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -595,7 +595,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 p-2 min-w-[140px]">
                     {CONF_COUNT_OPTIONS.map(opt => (
                       <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
-                        <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-procare-bright-blue" />
+                        <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-brand-secondary" />
                         {opt} conference{opt === '1' ? '' : 's'}
                       </label>
                     ))}
@@ -649,7 +649,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <div className="relative h-5 flex items-center">
                   <div className="absolute inset-x-0 h-1.5 bg-gray-200 rounded-full" />
                   <div
-                    className="absolute h-1.5 bg-procare-bright-blue rounded-full pointer-events-none"
+                    className="absolute h-1.5 bg-brand-secondary rounded-full pointer-events-none"
                     style={{
                       left: `${wseGlobalRange === 0 ? 0 : ((effectiveWseMin - wseGlobalMin) / wseGlobalRange) * 100}%`,
                       right: `${wseGlobalRange === 0 ? 0 : ((wseGlobalMax - effectiveWseMax) / wseGlobalRange) * 100}%`,
@@ -696,8 +696,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
       {/* Mass Edit Panel */}
       {showMassEdit && (
-        <div className="mb-4 p-4 bg-blue-50 border border-procare-bright-blue rounded-xl">
-          <p className="text-sm font-semibold text-procare-dark-blue mb-3">Edit fields for {selectedIds.size} selected company/companies:</p>
+        <div className="mb-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
+          <p className="text-sm font-semibold text-brand-primary mb-3">Edit fields for {selectedIds.size} selected company/companies:</p>
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <label className="label text-xs">Status</label>
@@ -741,13 +741,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               {/* Top row: name (left) | rep pills (upper-right) */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue flex-shrink-0" />
-                  <Link href={`/companies/${company.id}`} className="font-semibold text-procare-bright-blue hover:underline text-xs break-words whitespace-normal leading-snug">
+                  <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary flex-shrink-0" />
+                  <Link href={`/companies/${company.id}`} className="font-semibold text-brand-secondary hover:underline text-xs break-words whitespace-normal leading-snug">
                     {company.name}
                   </Link>
                   {company.parent_company_name && (
                     <span className="text-[10px] text-gray-400 ml-1">
-                      (<Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">{company.parent_company_name}</Link>)
+                      (<Link href={`/companies/${company.parent_company_id}`} className="hover:text-brand-secondary">{company.parent_company_name}</Link>)
                     </span>
                   )}
                   {Number(company.pinned_notes_count) > 0 && (
@@ -800,7 +800,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       type="button"
                       onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
                       title="View relationships"
-                      className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
+                      className="p-1.5 rounded-lg text-brand-secondary hover:bg-blue-50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -834,7 +834,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             >
               {/* Sheet header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                <h3 className="font-semibold text-sm text-procare-dark-blue">Assign Reps</h3>
+                <h3 className="font-semibold text-sm text-brand-primary">Assign Reps</h3>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -846,7 +846,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   <button
                     type="button"
                     onClick={() => closeRepModal(true)}
-                    className="text-xs font-semibold text-white bg-procare-bright-blue px-3 py-1.5 rounded-lg"
+                    className="text-xs font-semibold text-white bg-brand-secondary px-3 py-1.5 rounded-lg"
                   >
                     Done
                   </button>
@@ -872,7 +872,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       onChange={() => setEditingRepIds(prev =>
                         prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id]
                       )}
-                      className="w-5 h-5 accent-procare-bright-blue flex-shrink-0"
+                      className="w-5 h-5 accent-brand-secondary flex-shrink-0"
                     />
                     <span className="text-sm text-gray-700">{u.value}</span>
                   </label>
@@ -888,7 +888,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-3 py-3 text-left w-10">
-                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-procare-bright-blue" />
+                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary" />
                 </th>
                 {isVisible('name') && <th className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>}
                 {isVisible('type') && <th className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>}
@@ -912,16 +912,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => (
                 <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
-                  <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-procare-bright-blue" /></td>
+                  <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary" /></td>
                   {isVisible('name') && <td className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
                     <div className="text-left">
-                      <Link href={`/companies/${company.id}`} className="font-medium text-procare-bright-blue hover:underline text-sm break-words whitespace-normal leading-snug">
+                      <Link href={`/companies/${company.id}`} className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug">
                         {company.name}
                       </Link>
                     </div>
                     {company.parent_company_name && (
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        <Link href={`/companies/${company.parent_company_id}`} className="hover:text-procare-bright-blue">
+                        <Link href={`/companies/${company.parent_company_id}`} className="hover:text-brand-secondary">
                           {company.parent_company_name}
                         </Link>
                       </p>
@@ -1028,7 +1028,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           type="button"
                           onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
                           title="View relationships"
-                          className="p-1.5 rounded-lg text-procare-bright-blue hover:bg-blue-50 transition-colors"
+                          className="p-1.5 rounded-lg text-brand-secondary hover:bg-blue-50 transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />

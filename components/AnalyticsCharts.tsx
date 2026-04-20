@@ -274,13 +274,13 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
         {/* Company Type Breakdown */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
+            <h3 className="text-base font-semibold text-brand-primary font-serif">
               Company Type Breakdown
             </h3>
             <button
               type="button"
               onClick={() => setShowCompanyTypeFilter(!showCompanyTypeFilter)}
-              className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+              className="text-sm text-brand-secondary hover:text-brand-primary flex items-center gap-1"
               title="Filter visible company types"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -297,7 +297,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                     type="checkbox"
                     checked={effectiveVisibleCompanyTypes.has(name)}
                     onChange={() => toggleCompanyType(name)}
-                    className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                    className="rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary h-3.5 w-3.5"
                   />
                   {name}
                 </label>
@@ -339,13 +339,13 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
         {/* Seniority Distribution */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
+            <h3 className="text-base font-semibold text-brand-primary font-serif">
               Attendee Seniority
             </h3>
             <button
               type="button"
               onClick={() => setShowSeniorityFilter(!showSeniorityFilter)}
-              className="text-sm text-procare-bright-blue hover:text-procare-dark-blue flex items-center gap-1"
+              className="text-sm text-brand-secondary hover:text-brand-primary flex items-center gap-1"
               title="Filter visible seniority levels"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -362,7 +362,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                     type="checkbox"
                     checked={effectiveVisibleSeniorities.has(name)}
                     onChange={() => toggleSeniority(name)}
-                    className="rounded border-gray-300 text-procare-bright-blue focus:ring-procare-bright-blue h-3.5 w-3.5"
+                    className="rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary h-3.5 w-3.5"
                   />
                   {name}
                 </label>
@@ -406,7 +406,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
       {/* Horizontal Stacked Bar Chart — Meetings Summary */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-procare-dark-blue font-serif">
+          <h3 className="text-base font-semibold text-brand-primary font-serif">
             {meetingsChartTitle}
           </h3>
           <span className="text-sm text-gray-500">
@@ -465,7 +465,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
       {/* Attendee Activity Table */}
       {activityRows.length > 0 && (
         <div className="card">
-          <h3 className="text-base font-semibold text-procare-dark-blue mb-4 font-serif">
+          <h3 className="text-base font-semibold text-brand-primary mb-4 font-serif">
             Attendee Activity
           </h3>
           <div className="overflow-x-auto">
@@ -484,7 +484,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                 {activityRows.map(({ attendee, detail }) => (
                   <tr key={attendee.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
-                      <Link href={`/attendees/${attendee.id}`} className="text-procare-bright-blue hover:underline block break-word" title={`${attendee.first_name} ${attendee.last_name}`}>
+                      <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block break-word" title={`${attendee.first_name} ${attendee.last_name}`}>
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                     </td>
@@ -494,7 +494,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
                     <td className="px-4 py-3 max-w-[140px] break-word">
                       {attendee.company_name ? (
                         attendee.company_id ? (
-                          <Link href={`/companies/${attendee.company_id}`} className="text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                          <Link href={`/companies/${attendee.company_id}`} className="text-brand-secondary hover:underline">{attendee.company_name}</Link>
                         ) : <span className="text-gray-600">{attendee.company_name}</span>
                       ) : <span className="text-gray-300">—</span>}
                     </td>

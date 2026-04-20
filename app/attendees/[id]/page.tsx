@@ -591,7 +591,7 @@ export default function AttendeeDetailPage() {
   };
 
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-procare-bright-blue border-t-transparent rounded-full" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" /></div>;
   if (!attendee) return null;
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
@@ -606,7 +606,7 @@ export default function AttendeeDetailPage() {
           <div className="card">
             {isEditing ? (
               <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">Edit Attendee</h2>
+                <h2 className="text-lg font-semibold text-brand-primary font-serif">Edit Attendee</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><label className="label">First Name *</label><input value={editData.first_name || ''} onChange={e => setEditData(p => ({ ...p, first_name: e.target.value }))} className="input-field" /></div>
                   <div><label className="label">Last Name *</label><input value={editData.last_name || ''} onChange={e => setEditData(p => ({ ...p, last_name: e.target.value }))} className="input-field" /></div>
@@ -637,11 +637,11 @@ export default function AttendeeDetailPage() {
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 rounded-full bg-procare-dark-blue flex items-center justify-center text-white text-2xl font-bold font-serif flex-shrink-0">
+                    <div className="w-16 h-16 rounded-full bg-brand-primary flex items-center justify-center text-white text-2xl font-bold font-serif flex-shrink-0">
                       {attendee.first_name[0]}{attendee.last_name[0]}
                     </div>
                     <div>
-                      <h1 className="text-2xl font-bold text-procare-dark-blue font-serif">{attendee.first_name} {attendee.last_name}</h1>
+                      <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
                       {attendee.title && <p className="text-gray-600 mt-1">{attendee.title}</p>}
                       <div className="flex flex-wrap gap-2 mt-2">
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
@@ -653,7 +653,7 @@ export default function AttendeeDetailPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => setIsEditing(true)} className="text-sm text-procare-dark-blue font-medium flex items-center gap-2">
+                    <button onClick={() => setIsEditing(true)} className="text-sm text-brand-primary font-medium flex items-center gap-2">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       <span className="hidden sm:inline">Edit</span>
                     </button>
@@ -664,7 +664,7 @@ export default function AttendeeDetailPage() {
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
                     {attendee.company_name ? (
                       attendee.company_id ? (
-                        <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-procare-bright-blue hover:underline">{attendee.company_name}</Link>
+                        <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-brand-secondary hover:underline">{attendee.company_name}</Link>
                       ) : (
                         <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
                       )
@@ -691,7 +691,7 @@ export default function AttendeeDetailPage() {
                     {attendee.email ? (
                       <a
                         href={`mailto:${attendee.email}`}
-                        className="text-sm text-procare-bright-blue hover:underline block truncate"
+                        className="text-sm text-brand-secondary hover:underline block truncate"
                         title={attendee.email}
                       >
                         {attendee.email}
@@ -713,7 +713,7 @@ export default function AttendeeDetailPage() {
           {/* Meetings */}
           <div className="card p-0 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+              <h2 className="text-lg font-semibold text-brand-primary font-serif">
                 Meetings
                 {meetings.length > 0 && (
                   <span className="ml-2 text-sm font-normal text-gray-500">
@@ -727,10 +727,10 @@ export default function AttendeeDetailPage() {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
                 title="Schedule Meeting"
               >
-                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <span className="text-sm font-medium text-procare-dark-blue">Schedule</span>
+                <span className="text-sm font-medium text-brand-primary">Schedule</span>
               </button>
             </div>
             <MeetingsTable meetings={meetings} actionOptions={actionOptions.map(o => o.value)} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
@@ -753,7 +753,7 @@ export default function AttendeeDetailPage() {
           {/* Follow Ups */}
           <div className="card p-0 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">
+              <h2 className="text-lg font-semibold text-brand-primary font-serif">
                 Follow Ups
                 {followUps.length > 0 && (
                   <span className="ml-2 text-sm font-normal text-gray-500">
@@ -767,10 +767,10 @@ export default function AttendeeDetailPage() {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
             title="Follow Up"
               >
-                <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
             </svg>
-                <span className="text-sm font-medium text-procare-dark-blue">Follow Up</span>
+                <span className="text-sm font-medium text-brand-primary">Follow Up</span>
             </button>
             </div>
             <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
@@ -796,7 +796,7 @@ export default function AttendeeDetailPage() {
             const sectionMap: Record<string, React.ReactNode> = {
               status: (
                 <div key="status" className="card">
-                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">{getSectionLabel('status')}</h2>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('status')}</h2>
                   <div className="flex flex-wrap gap-2">
                     {statusOptions.map(val => (
                       <button key={val} onClick={() => handleStatus(val)}
@@ -818,16 +818,16 @@ export default function AttendeeDetailPage() {
                           onClick={() => setConferencesExpanded(prev => !prev)}
                           className="flex items-center justify-between w-full text-left"
                         >
-                          <h2 className="text-lg font-semibold text-procare-dark-blue font-serif">{getSectionLabel('conferences')} ({attendee.conferences.length})</h2>
+                          <h2 className="text-lg font-semibold text-brand-primary font-serif">{getSectionLabel('conferences')} ({attendee.conferences.length})</h2>
                           <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                         </button>
                         {!conferencesExpanded && inProgressConfs.length > 0 && (
                           <div className="space-y-2 mt-4">
                             {inProgressConfs.map(conf => (
-                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-procare-bright-blue hover:bg-blue-50 transition-all">
+                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-brand-secondary hover:bg-blue-50 transition-all">
                                 <div className="min-w-0">
-                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                                    <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
+                                    <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
                                     In Progress
                                   </span>
                                   <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
@@ -847,11 +847,11 @@ export default function AttendeeDetailPage() {
                                 {attendee.conferences.map(conf => {
                                   const isActive = conf.start_date <= today && conf.end_date >= today;
                                   return (
-                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-procare-bright-blue' : 'border-gray-100 hover:border-procare-bright-blue'}`}>
+                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-brand-secondary' : 'border-gray-100 hover:border-brand-secondary'}`}>
                                       <div className="min-w-0">
                                         {isActive && (
-                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-procare-bright-blue mb-1">
-                                            <span className="w-2 h-2 rounded-full bg-procare-bright-blue animate-pulse" />
+                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
+                                            <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
                                             In Progress
                                           </span>
                                         )}
@@ -890,13 +890,13 @@ export default function AttendeeDetailPage() {
                       onClick={() => setEventsExpanded(v => !v)}
                       className="flex items-center gap-2 text-left flex-1"
                     >
-                      <h2 className="text-base font-semibold text-procare-dark-blue font-serif">{getSectionLabel('events')}</h2>
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">{getSectionLabel('events')}</h2>
                       <svg className={`w-4 h-4 text-gray-400 transition-transform ${eventsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowInviteModal(true)}
-                      className="flex items-center gap-1 text-xs font-medium text-procare-bright-blue hover:text-procare-dark-blue transition-colors flex-shrink-0"
+                      className="flex items-center gap-1 text-xs font-medium text-brand-secondary hover:text-brand-primary transition-colors flex-shrink-0"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                       Invite
@@ -915,7 +915,7 @@ export default function AttendeeDetailPage() {
                               <div className="px-3 pt-3 pb-2">
                                 <Link
                                   href={`/conferences/${ev.conference_id}?tab=social&event_id=${ev.event_id}`}
-                                  className="inline-block text-sm font-semibold text-procare-dark-blue leading-tight hover:text-procare-bright-blue hover:underline"
+                                  className="inline-block text-sm font-semibold text-brand-primary leading-tight hover:text-brand-secondary hover:underline"
                                 >
                                   {ev.event_name || ev.event_type || 'Social Event'}
                                 </Link>
@@ -951,7 +951,7 @@ export default function AttendeeDetailPage() {
               ),
               conference_activity: isAdminUser ? (
                 <div key="conference_activity" className="card">
-                  <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-3">{getSectionLabel('conference_activity')}</h2>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('conference_activity')}</h2>
             <div className="mb-4">
               <label className="label text-xs">Select a conference to log activity</label>
               <select
@@ -972,7 +972,7 @@ export default function AttendeeDetailPage() {
 
             {selectedConferenceId && isLoadingDetail && (
               <div className="flex justify-center py-4">
-                <div className="animate-spin w-5 h-5 border-2 border-procare-bright-blue border-t-transparent rounded-full" />
+                <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
               </div>
             )}
 
@@ -984,7 +984,7 @@ export default function AttendeeDetailPage() {
                   {!showMeetingForm ? (
                     <button
                       onClick={() => setShowMeetingForm(true)}
-                      className="w-full px-3 py-2 rounded-lg text-xs font-medium border-2 border-dashed border-gray-300 text-gray-500 hover:border-procare-bright-blue hover:text-procare-bright-blue transition-all flex items-center justify-center gap-1.5"
+                      className="w-full px-3 py-2 rounded-lg text-xs font-medium border-2 border-dashed border-gray-300 text-gray-500 hover:border-brand-secondary hover:text-brand-secondary transition-all flex items-center justify-center gap-1.5"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                       Schedule Meeting
@@ -1052,7 +1052,7 @@ export default function AttendeeDetailPage() {
                           const pillCls = isActive ? getPillClass(opt.value, colorMaps.action ?? {}) : '';
                           return (
                             <button key={opt.id} onClick={() => handleAction(opt.value)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-procare-bright-blue hover:text-procare-bright-blue'}`}>
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all flex items-center gap-1.5 ${isActive ? `${pillCls} shadow-md` : 'bg-white text-gray-600 border-gray-200 hover:border-brand-secondary hover:text-brand-secondary'}`}>
                               {isActive && <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                               {opt.value}
                             </button>
@@ -1095,9 +1095,9 @@ export default function AttendeeDetailPage() {
       {/* Add to Guest List Modal */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { setShowInviteModal(false); setInviteForm({ rep: '', conference_id: '', event_id: '' }); setInviteConferenceEvents([]); }}>
-          <div className="bg-white rounded-2xl shadow-2xl border border-procare-gold w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-md" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-procare-dark-blue font-serif">Add to Guest List</h3>
+              <h3 className="text-base font-semibold text-brand-primary font-serif">Add to Guest List</h3>
               <button type="button" onClick={() => { setShowInviteModal(false); setInviteForm({ rep: '', conference_id: '', event_id: '' }); setInviteConferenceEvents([]); }} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>

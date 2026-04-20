@@ -3,7 +3,7 @@ import './globals.css';
 import { AppShell } from '@/components/AppShell';
 import { ToastProvider } from '@/components/Toast';
 import { db, dbReady } from '@/lib/db';
-import { BRAND_COLOR_DEFAULTS, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
+import { BRAND_COLOR_DEFAULTS, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 
 const DEFAULT_APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 
@@ -43,6 +43,33 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+async function getFontKey(): Promise<string> {
+  try {
+    await dbReady;
+    const row = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'font_key'", args: [] });
+    return row.rows[0] ? String(row.rows[0].value).trim() : DEFAULT_FONT_KEY;
+  } catch {
+    return DEFAULT_FONT_KEY;
+  }
+}
+
+async function FontStyles() {
+  const fontKey = await getFontKey();
+  const font = FONT_OPTIONS.find(f => f.key === fontKey) ?? FONT_OPTIONS[0];
+  const vars = `:root{--font-heading:${font.headingFamily};--font-body:${font.bodyFamily}}`;
+  return (
+    <>
+      <link
+        rel="stylesheet"
+        href={`https://fonts.googleapis.com/css2?family=${font.googleFontsParam}&display=swap`}
+      />
+      {font.key !== DEFAULT_FONT_KEY && (
+        <style dangerouslySetInnerHTML={{ __html: vars }} />
+      )}
+    </>
+  );
+}
+
 async function BrandStyles() {
   try {
     await dbReady;
@@ -75,10 +102,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Poppins:wght@300;400;500;600;700&display=swap"
-        />
+        <FontStyles />
         <BrandStyles />
       </head>
       <body className="font-sans">

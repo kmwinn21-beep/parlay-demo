@@ -130,7 +130,7 @@ export function FollowUpsTable({
                   <div className="flex items-center gap-2 flex-wrap">
                     <Link
                       href={`/attendees/${fu.attendee_id}`}
-                      className="text-sm font-semibold text-procare-bright-blue hover:underline"
+                      className="text-sm font-semibold text-brand-secondary hover:underline"
                     >
                       {fu.first_name} {fu.last_name}
                     </Link>
@@ -206,7 +206,7 @@ export function FollowUpsTable({
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
+                <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
                   {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                 </span>
                 {fu.next_steps_notes && (
@@ -214,7 +214,7 @@ export function FollowUpsTable({
                 )}
               </div>
               <div className="mt-1.5 flex items-center gap-2">
-                <Link href={`/conferences/${fu.conference_id}`} className="text-xs text-procare-bright-blue hover:underline">
+                <Link href={`/conferences/${fu.conference_id}`} className="text-xs text-brand-secondary hover:underline">
                   {fu.conference_name}
                 </Link>
                 <span className="text-xs text-gray-400">· {formatDate(fu.start_date)}</span>
@@ -255,7 +255,7 @@ export function FollowUpsTable({
                   className={`transition-colors align-top ${fu.completed ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}
                 >
                   {isVisible('name') && <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                    <Link href={`/attendees/${fu.attendee_id}`} className="text-procare-bright-blue hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
+                    <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
                       {fu.first_name} {fu.last_name}
                     </Link>
                   </td>}
@@ -268,7 +268,7 @@ export function FollowUpsTable({
                     </span>
                   </td>}
                   {isVisible('next_step') && <td className="px-3 py-2">
-                    <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-procare-dark-blue text-white'}`}>
+                    <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
                       {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                     </span>
                     {fu.next_steps_notes && (
@@ -276,7 +276,7 @@ export function FollowUpsTable({
                     )}
                   </td>}
                   {isVisible('conference') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <Link href={`/conferences/${fu.conference_id}`} className="text-procare-bright-blue hover:underline">
+                    <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">
                       {fu.conference_name}
                     </Link>
                     <p className="text-gray-400">{formatDate(fu.start_date)}</p>
