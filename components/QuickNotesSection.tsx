@@ -247,7 +247,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       : compAtts
     );
     // Filter conferences to those with attendees from this company
-    if (!selConference) {
+    if (!selConference && confAttendeesRef.current.size > 0) {
       const confIds = new Set<number>();
       confAttendeesRef.current.forEach((attIds, confId) => {
         if (compAtts.some(a => attIds.has(a.id))) confIds.add(confId);
@@ -268,7 +268,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       }
     }
     // Filter conferences to those this attendee is in
-    if (!selConference) {
+    if (!selConference && confAttendeesRef.current.size > 0) {
       const confIds = new Set<number>();
       confAttendeesRef.current.forEach((attIds, confId) => { if (attIds.has(att.id)) confIds.add(confId); });
       setFilteredConferences(conferences.filter(c => confIds.has(c.id)));
