@@ -270,6 +270,7 @@ export async function PATCH(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const body = await request.json();
