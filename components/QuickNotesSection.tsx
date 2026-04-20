@@ -413,7 +413,15 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [assigningNote, setAssigningNote] = useState<QuickNote | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) { setHasMore(false); return; }
+    setHasMore(el.scrollHeight - el.scrollTop > el.clientHeight + 4);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1023px)');
@@ -433,6 +441,11 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       .then(data => { setNotes(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  // Re-check overflow whenever notes or expanded state changes
+  useEffect(() => {
+    if (expanded) requestAnimationFrame(checkScroll);
+  }, [notes, expanded, loading, checkScroll]);
 
   // Optimistically prepend notes saved from FloatingNav's inline modal
   useEffect(() => {
@@ -475,9 +488,9 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const showBody = !isMobile || expanded;
 
   return (
-    <div className={`card h-full flex flex-col ${className}`}>
+    <div className={`card h-full flex flex-col overflow-hidden ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 flex-shrink-0">
         <button
           type="button"
           onClick={() => {
@@ -516,7 +529,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
 
       {/* Body */}
       {showBody && (
-        <div className="mt-4 flex-1 min-h-0">
+        <div className="mt-4 flex-1 min-h-0 flex flex-col overflow-hidden">
           {loading ? (
             <div className="space-y-3 animate-pulse">
               {[1, 2].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl" />)}
@@ -532,15 +545,36 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
               </button>
             </div>
           ) : (
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-              {notes.map(note => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  onDelete={handleDelete}
-                  onAssign={() => setAssigningNote(note)}
-                />
-              ))}
+            <div className="relative flex-1 min-h-0 overflow-hidden">
+              <div
+                ref={scrollRef}
+                onScroll={checkScroll}
+                className="h-full overflow-y-auto space-y-3 pr-1 [&::-webkit-scrollbar]:hidden"
+                style={{ scrollbarWidth: 'none' } as React.CSSProperties}
+              >
+                {notes.map(note => (
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    onDelete={handleDelete}
+                    onAssign={() => setAssigningNote(note)}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <div className="absolute bottom-0 inset-x-0 h-14 bg-gradient-to-t from-white via-white/70 to-transparent pointer-events-none flex items-end justify-center pb-2">
+                  <button
+                    type="button"
+                    className="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-white shadow-md border border-gray-200 text-gray-400 hover:text-procare-bright-blue hover:border-procare-bright-blue transition-colors"
+                    onClick={() => scrollRef.current?.scrollBy({ top: 180, behavior: 'smooth' })}
+                    aria-label="Scroll for more notes"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
