@@ -496,11 +496,11 @@ export default function DashboardPage() {
       </Suspense>
 
       {/* Quick Notes + Current & Upcoming — side by side, same height, max 489px */}
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6 items-stretch">
-        <div className="max-h-[489px] flex flex-col min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="lg:col-span-1 max-h-[489px] flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
-        <div className="max-h-[489px] flex flex-col min-h-0">
+        <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
           <Suspense fallback={<UpcomingSkeleton />}>
             <UpcomingSection />
           </Suspense>
