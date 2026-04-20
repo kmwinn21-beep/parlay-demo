@@ -6,6 +6,8 @@ import { db } from './db';
 
 export type NotifType = 'company' | 'attendee' | 'conference';
 
+type NotifPrefKey = 'company_status_change' | 'follow_up_assigned' | 'note_tagged';
+
 interface CreateNotificationsInput {
   userIds: number[];
   type: NotifType;
@@ -16,6 +18,7 @@ interface CreateNotificationsInput {
   changedByConfigId?: number | null;
   entityType: string;   // 'company' | 'attendee' | 'conference'
   entityId: number;
+  prefKey?: NotifPrefKey;
 }
 
 /** Parse a comma-separated numeric ID string into an array of positive integers. */
@@ -65,11 +68,21 @@ export async function getConfigIdByEmail(email: string): Promise<number | null> 
   }
 }
 
-/** Insert notification rows — one per user. Errors are swallowed. */
+/** Insert notification rows — one per user. Respects notification_preferences opt-outs. Errors are swallowed. */
 export async function createNotifications(p: CreateNotificationsInput): Promise<void> {
   if (p.userIds.length === 0) return;
   try {
-    for (const uid of p.userIds) {
+    let eligibleIds = p.userIds;
+    if (p.prefKey) {
+      const ph = p.userIds.map(() => '?').join(',');
+      const prefRows = await db.execute({
+        sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph}) AND ${p.prefKey} = 0`,
+        args: p.userIds,
+      });
+      const optedOut = new Set(prefRows.rows.map(r => Number(r.user_id)));
+      eligibleIds = p.userIds.filter(id => !optedOut.has(id));
+    }
+    for (const uid of eligibleIds) {
       await db.execute({
         sql: `INSERT INTO notifications
               (user_id, type, record_id, record_name, message,
@@ -122,6 +135,7 @@ export async function notifyCompanyAssignees(opts: {
       changedByConfigId: opts.changedByConfigId,
       entityType: opts.entityType ?? 'company',
       entityId: opts.entityId ?? opts.companyId,
+      prefKey: 'company_status_change',
     });
   } catch (err) {
     console.error('[notifications] notifyCompanyAssignees error:', err);
@@ -193,6 +207,7 @@ export async function notifyMentionedUsers(opts: {
       changedByConfigId: opts.mentionerConfigId,
       entityType: opts.entityType,
       entityId: opts.entityId,
+      prefKey: 'note_tagged',
     });
   } catch (err) {
     console.error('[notifications] notifyMentionedUsers error:', err);

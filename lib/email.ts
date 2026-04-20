@@ -84,3 +84,38 @@ export async function sendPasswordResetEmail(
     </div>`
   );
 }
+
+export async function sendEmailChangeVerification(
+  newEmail: string,
+  token: string
+): Promise<{ devLink?: string }> {
+  const link = `${BASE_URL}/auth/verify-email-change?token=${encodeURIComponent(token)}`;
+  return sendEmail(
+    newEmail,
+    `Confirm your new email address — ${APP_NAME}`,
+    `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">Confirm Email Change</h2>
+      <p>We received a request to change the email address on your ${APP_NAME} account to <strong>${newEmail}</strong>.</p>
+      <p>Click the button below to confirm this change. The link expires in 1 hour.</p>
+      <p style="margin:24px 0"><a href="${link}" style="${btnStyle}">Confirm New Email</a></p>
+      <p style="${footerStyle}">Or copy this link into your browser:<br>${link}</p>
+      <p style="${footerStyle}">If you didn't request this change, you can safely ignore this email — your current email address will remain unchanged.</p>
+    </div>`
+  );
+}
+
+export async function sendEmailChangeNotification(
+  oldEmail: string,
+  newEmail: string
+): Promise<void> {
+  await sendEmail(
+    oldEmail,
+    `Your ${APP_NAME} email address is being changed`,
+    `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">Email Change Requested</h2>
+      <p>A request was made to change the email address on your ${APP_NAME} account from <strong>${oldEmail}</strong> to <strong>${newEmail}</strong>.</p>
+      <p>A confirmation link has been sent to your new address. Your email will only change once that link is clicked.</p>
+      <p style="${footerStyle}">If you didn't request this change, please contact your administrator immediately.</p>
+    </div>`
+  ).catch(() => {}); // best-effort — don't fail the flow if old-email notification fails
+}

@@ -339,7 +339,7 @@ export function Header() {
                 </span>
               </div>
               <span className="text-sm font-medium text-procare-dark-blue hidden md:block max-w-[140px] truncate">
-                {user.email.split('@')[0]}
+                {user.displayName ?? user.repName ?? user.email.split('@')[0]}
               </span>
             </Link>
             <button
