@@ -13,6 +13,7 @@ import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
+import { invalidateTagline } from '@/lib/useTagline';
 
 interface ConfigOption {
   id: number;
@@ -550,6 +551,9 @@ export default function AdminPage() {
   const [fontKey, setFontKey] = useState(DEFAULT_FONT_KEY);
   const [savedFontKey, setSavedFontKey] = useState(DEFAULT_FONT_KEY);
   const [savingFont, setSavingFont] = useState(false);
+  const [taglineInput, setTaglineInput] = useState('');
+  const [savedTagline, setSavedTagline] = useState('');
+  const [savingTagline, setSavingTagline] = useState(false);
 
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
@@ -891,6 +895,8 @@ export default function AdminPage() {
       setSavedFavicon(fav); setFaviconInput(fav);
       const fk = data['font_key'] ?? DEFAULT_FONT_KEY;
       setFontKey(fk); setSavedFontKey(fk);
+      const tl = data['tagline'] ?? '';
+      setTaglineInput(tl); setSavedTagline(tl);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
   };
@@ -908,6 +914,22 @@ export default function AdminPage() {
       toast.success('Font saved. Reload the page to see the change.');
     } catch { toast.error('Failed to save font.'); }
     finally { setSavingFont(false); }
+  };
+
+  const handleSaveTagline = async () => {
+    setSavingTagline(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'tagline', value: taglineInput.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      setSavedTagline(taglineInput.trim());
+      invalidateTagline();
+      toast.success(taglineInput.trim() ? 'Tagline saved.' : 'Tagline reset to default.');
+    } catch { toast.error('Failed to save tagline.'); }
+    finally { setSavingTagline(false); }
   };
 
   useEffect(() => {
@@ -1390,6 +1412,30 @@ export default function AdminPage() {
                   className="btn-primary text-sm flex-shrink-0"
                 >
                   {savingAppName ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+
+            {/* Tagline */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Sidebar Tagline</h2>
+              <p className="text-sm text-gray-500 mb-4">Set the italic tagline shown beneath the logo in the sidebar. Leave blank to use the default: <span className="italic text-gray-600">&quot;Relationships Matter&quot;</span></p>
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                <input
+                  type="text"
+                  value={taglineInput}
+                  onChange={e => setTaglineInput(e.target.value)}
+                  placeholder="Relationships Matter"
+                  className="input-field text-sm flex-1"
+                  maxLength={80}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveTagline}
+                  disabled={savingTagline || taglineInput.trim() === savedTagline}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingTagline ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>
