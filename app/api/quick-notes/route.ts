@@ -5,11 +5,12 @@ import { db, dbReady } from '@/lib/db';
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const result = await db.execute({
-      sql: 'SELECT id, content, created_at, created_by FROM quick_notes ORDER BY created_at DESC',
-      args: [],
+      sql: 'SELECT id, content, created_at, created_by FROM quick_notes WHERE created_by = ? ORDER BY created_at DESC',
+      args: [user.email],
     });
     return NextResponse.json(result.rows.map(r => ({
       id: Number(r.id),

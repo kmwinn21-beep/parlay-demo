@@ -407,7 +407,7 @@ function NoteCard({ note, onDelete, onAssign }: { note: QuickNote; onDelete: (id
 }
 
 // ── Main QuickNotesSection ────────────────────────────────────────────────────
-export function QuickNotesSection() {
+export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -415,11 +415,24 @@ export function QuickNotesSection() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   const checkScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) { setHasMore(false); return; }
     setHasMore(el.scrollHeight - el.scrollTop > el.clientHeight + 4);
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1023px)');
+    const update = () => {
+      const mobile = media.matches;
+      setIsMobile(mobile);
+      if (!mobile) setExpanded(true);
+    };
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
   }, []);
 
   useEffect(() => {
@@ -472,14 +485,18 @@ export function QuickNotesSection() {
     }
   };
 
+  const showBody = !isMobile || expanded;
+
   return (
-    <div className="card h-full flex flex-col overflow-hidden">
+    <div className={`card h-full flex flex-col overflow-hidden ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-1 flex-shrink-0">
         <button
           type="button"
-          onClick={() => setExpanded(v => !v)}
-          className="flex items-center gap-2 text-left group"
+          onClick={() => {
+            if (isMobile) setExpanded(v => !v);
+          }}
+          className={`flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
         >
           <svg className="w-5 h-5 text-procare-bright-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -493,7 +510,7 @@ export function QuickNotesSection() {
             </span>
           )}
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -511,7 +528,7 @@ export function QuickNotesSection() {
       </div>
 
       {/* Body */}
-      {expanded && (
+      {showBody && (
         <div className="mt-4 flex-1 min-h-0 flex flex-col overflow-hidden">
           {loading ? (
             <div className="space-y-3 animate-pulse">
@@ -522,9 +539,9 @@ export function QuickNotesSection() {
               <svg className="w-10 h-10 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
-              <p className="text-sm text-gray-400">No quick notes yet.</p>
+              <p className="text-sm text-gray-400">Add a note now and assign it later. Quick Notes can only be seen by you until you assign it to an Attendee, Company, and/or Conference record.</p>
               <button type="button" onClick={() => setShowAddModal(true)} className="text-procare-bright-blue text-sm hover:underline mt-1">
-                Add your first note →
+                Add note →
               </button>
             </div>
           ) : (
