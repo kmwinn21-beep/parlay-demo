@@ -10,6 +10,7 @@ import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
+import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
 const pageTitles: Record<string, string> = {
@@ -77,6 +78,7 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const appName = useAppName();
+  const { navHidden, setNavHidden } = useFloatingNavHidden();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -142,6 +144,20 @@ export function Header() {
         <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
       </div>
       <div className="flex items-center gap-2">
+        {/* Hamburger — mobile only, shown when floating nav is hidden */}
+        {navHidden && (
+          <button
+            id="header-unhide-nav-btn"
+            type="button"
+            onClick={() => setNavHidden(false)}
+            title="Show navigation menu"
+            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <svg className="w-5 h-5 text-procare-dark-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
         {/* Notification Bell */}
         <NotificationBell />
         {/* Global Search — desktop only; mobile uses FloatingNav */}

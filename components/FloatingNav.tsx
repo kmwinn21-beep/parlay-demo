@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBottomNav } from './BottomNavContext';
+import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { GlobalSearchModal } from './GlobalSearch';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
@@ -88,6 +89,7 @@ function safeClamp(p: { x: number; y: number }): { x: number; y: number } {
 export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
+  const { navHidden, setNavHidden } = useFloatingNavHidden();
   const unreadCount = useUnreadNotificationCount();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [open, setOpen] = useState(false);
@@ -171,7 +173,7 @@ export function FloatingNav() {
     }
   }, []);
 
-  if (!pos || hidden) return null;
+  if (!pos || hidden || navHidden) return null;
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -318,6 +320,27 @@ export function FloatingNav() {
           );
         })}
       </div>
+
+      {/* Hide button — appears to the left of FAB when menu is open */}
+      {open && (
+        <button
+          type="button"
+          style={{
+            position: 'fixed',
+            left: Math.max(PAD, pos.x - 68),
+            top: pos.y + Math.round((BTN - 28) / 2),
+            zIndex: 62,
+            whiteSpace: 'nowrap',
+          }}
+          onClick={() => {
+            setOpen(false);
+            setNavHidden(true);
+          }}
+          className="text-xs font-medium text-white/75 hover:text-white bg-procare-dark-blue/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+        >
+          Hide
+        </button>
+      )}
 
       {/* FAB button */}
       <div
