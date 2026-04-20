@@ -541,7 +541,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       {/* Collapsible filter pane */}
       {filtersOpen && (
         <div className="mb-4 px-6 py-4 bg-gray-50 border border-gray-200 rounded-xl">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">SF Owner</p>
               <select value={filterSFOwner} onChange={e => setFilterSFOwner(e.target.value)} className="input-field w-full text-sm">
