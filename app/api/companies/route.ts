@@ -21,6 +21,7 @@ function serializeServices(services: unknown): string | null {
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
 
@@ -42,58 +43,84 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const result = await db.execute({
-      sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
-              co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at, co.updated_at,
-              COALESCE(att_agg.attendee_count, 0) as attendee_count,
-              COALESCE(conf_agg.conference_count, 0) as conference_count,
-              conf_agg.conference_names,
-              parent.name as parent_company_name,
-              att_summary.attendee_summary,
-              COALESCE(pn.pinned_count, 0) as pinned_notes_count,
-              COALESCE(rel_agg.relationship_count, 0) as relationship_count
-            FROM companies co
-            LEFT JOIN (
-              SELECT company_id, COUNT(*) as attendee_count
-              FROM attendees
-              GROUP BY company_id
-            ) att_agg ON co.id = att_agg.company_id
-            LEFT JOIN (
-              SELECT a2.company_id,
-                     COUNT(DISTINCT ca.conference_id) as conference_count,
-                     GROUP_CONCAT(DISTINCT conf.name) as conference_names
-              FROM attendees a2
-              JOIN conference_attendees ca ON a2.id = ca.attendee_id
-              JOIN conferences conf ON ca.conference_id = conf.id
-              GROUP BY a2.company_id
-            ) conf_agg ON co.id = conf_agg.company_id
-            LEFT JOIN companies parent ON co.parent_company_id = parent.id
-            LEFT JOIN (
-              SELECT company_id,
-                     GROUP_CONCAT(first_name || ' ' || last_name || '|' || COALESCE(title, ''), '~~~') as attendee_summary
-              FROM (SELECT DISTINCT company_id, first_name, last_name, title FROM attendees)
-              GROUP BY company_id
-            ) att_summary ON co.id = att_summary.company_id
-            LEFT JOIN (
-              SELECT entity_id, COUNT(*) as pinned_count
-              FROM pinned_notes
-              WHERE entity_type = 'company'
-              GROUP BY entity_id
-            ) pn ON co.id = pn.entity_id
-            LEFT JOIN (
-              SELECT company_id, COUNT(*) as relationship_count
-              FROM internal_relationships
-              GROUP BY company_id
-            ) rel_agg ON co.id = rel_agg.company_id
-            ORDER BY co.name`,
-      args: [],
-    });
+    // Fetch the Priority option value so we can strip it from global status fields
+    const [result, priorityOptResult] = await Promise.all([
+      db.execute({
+        sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
+                co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at, co.updated_at,
+                COALESCE(att_agg.attendee_count, 0) as attendee_count,
+                COALESCE(conf_agg.conference_count, 0) as conference_count,
+                conf_agg.conference_names,
+                parent.name as parent_company_name,
+                att_summary.attendee_summary,
+                COALESCE(pn.pinned_count, 0) as pinned_notes_count,
+                COALESCE(rel_agg.relationship_count, 0) as relationship_count,
+                CASE WHEN my_mark.company_id IS NOT NULL THEN 1 ELSE 0 END as my_priority
+              FROM companies co
+              LEFT JOIN (
+                SELECT company_id, COUNT(*) as attendee_count
+                FROM attendees
+                GROUP BY company_id
+              ) att_agg ON co.id = att_agg.company_id
+              LEFT JOIN (
+                SELECT a2.company_id,
+                       COUNT(DISTINCT ca.conference_id) as conference_count,
+                       GROUP_CONCAT(DISTINCT conf.name) as conference_names
+                FROM attendees a2
+                JOIN conference_attendees ca ON a2.id = ca.attendee_id
+                JOIN conferences conf ON ca.conference_id = conf.id
+                GROUP BY a2.company_id
+              ) conf_agg ON co.id = conf_agg.company_id
+              LEFT JOIN companies parent ON co.parent_company_id = parent.id
+              LEFT JOIN (
+                SELECT company_id,
+                       GROUP_CONCAT(first_name || ' ' || last_name || '|' || COALESCE(title, ''), '~~~') as attendee_summary
+                FROM (SELECT DISTINCT company_id, first_name, last_name, title FROM attendees)
+                GROUP BY company_id
+              ) att_summary ON co.id = att_summary.company_id
+              LEFT JOIN (
+                SELECT entity_id, COUNT(*) as pinned_count
+                FROM pinned_notes
+                WHERE entity_type = 'company'
+                GROUP BY entity_id
+              ) pn ON co.id = pn.entity_id
+              LEFT JOIN (
+                SELECT company_id, COUNT(*) as relationship_count
+                FROM internal_relationships
+                GROUP BY company_id
+              ) rel_agg ON co.id = rel_agg.company_id
+              LEFT JOIN (
+                SELECT cpm.company_id
+                FROM company_priority_marks cpm
+                JOIN config_options uopt ON uopt.id = cpm.marked_by_config_id
+                WHERE LOWER(uopt.value) = LOWER(?)
+              ) my_mark ON co.id = my_mark.company_id
+              ORDER BY co.name`,
+        args: [user.email],
+      }),
+      db.execute({
+        sql: `SELECT value FROM config_options
+              WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
+              ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END LIMIT 1`,
+        args: [],
+      }),
+    ]);
 
-    const companies = result.rows.map((r) => ({
-      ...r,
-      services: parseServices(r.services),
-      icp: r.icp ? String(r.icp) : null,
-    }));
+    const priorityValue = priorityOptResult.rows[0] ? String(priorityOptResult.rows[0].value) : null;
+
+    const companies = result.rows.map((r) => {
+      const rawStatus = String(r.status || '');
+      const cleanStatus = priorityValue
+        ? rawStatus.split(',').map(s => s.trim()).filter(s => s && s !== priorityValue).join(',')
+        : rawStatus;
+      return {
+        ...r,
+        status: cleanStatus,
+        services: parseServices(r.services),
+        icp: r.icp ? String(r.icp) : null,
+        my_priority: r.my_priority === 1,
+      };
+    });
     return NextResponse.json(companies, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
     });
