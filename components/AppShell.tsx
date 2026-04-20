@@ -12,7 +12,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   // Auth pages render without the shell (no sidebar/header/nav)
-  if (pathname.startsWith('/auth/')) {
+  // Exception: /auth/account is a protected app page that needs the full shell
+  if (pathname.startsWith('/auth/') && pathname !== '/auth/account') {
     return <>{children}</>;
   }
 
