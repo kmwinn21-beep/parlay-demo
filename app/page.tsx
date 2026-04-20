@@ -148,6 +148,14 @@ function formatDate(dateStr: string) {
   });
 }
 
+function formatMonthDay(dateStr: string) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+  });
+}
+
 /* ---------- Skeleton components for Suspense fallbacks ---------- */
 
 function StatsSkeleton() {
@@ -180,18 +188,41 @@ function StatsSkeleton() {
   );
 }
 
-function UpcomingSkeleton() {
+function QuickNotesAndUpcomingSkeleton() {
   return (
-    <div className="card animate-pulse">
-      <div className="h-6 w-48 bg-gray-200 rounded mb-5" />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="p-4 rounded-xl border border-gray-100">
-            <div className="h-5 w-40 bg-gray-200 rounded mb-2" />
-            <div className="h-3 w-32 bg-gray-200 rounded mb-1" />
-            <div className="h-3 w-24 bg-gray-200 rounded" />
-          </div>
-        ))}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
+      <div className="card lg:col-span-1">
+        <div className="h-6 w-28 bg-gray-200 rounded mb-5" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-gray-100 rounded-xl" />
+          ))}
+        </div>
+      </div>
+      <div className="card lg:col-span-2">
+        <div className="h-6 w-48 bg-gray-200 rounded mb-5" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-4 rounded-xl border border-gray-100">
+              <div className="h-5 w-40 bg-gray-200 rounded mb-2" />
+              <div className="h-3 w-32 bg-gray-200 rounded mb-1" />
+              <div className="h-3 w-24 bg-gray-200 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function QuickNotesAndUpcomingSection() {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="lg:col-span-1 h-full">
+        <QuickNotesSection className="h-full" />
+      </div>
+      <div className="lg:col-span-2 h-full">
+        <UpcomingSection />
       </div>
     </div>
   );
@@ -225,7 +256,7 @@ function RecentAndPrioritySkeleton() {
 
 /* ---------- Async section components for Suspense ---------- */
 
-async function StatsAndQuickNotesSection() {
+async function StatsSection() {
   const stats = await getStats();
   return (
     <div className="space-y-6">
@@ -280,8 +311,6 @@ async function StatsAndQuickNotesSection() {
         </div>
       </div>
 
-      {/* Quick Notes — full width below */}
-      <QuickNotesSection />
     </div>
   );
 }
@@ -328,8 +357,7 @@ async function UpcomingSection() {
                       )}
                       <p className="font-semibold text-gray-800 group-hover:text-procare-bright-blue transition-colors leading-tight">{conf.name}</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {formatDate(conf.start_date)}
-                        {conf.end_date && conf.end_date !== conf.start_date ? ` – ${formatDate(conf.end_date)}` : ''}
+                        {formatMonthDay(conf.start_date)} - {formatMonthDay(conf.end_date || conf.start_date)}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
                     </div>
@@ -452,14 +480,14 @@ async function RecentAndPrioritySection() {
 export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      {/* Overview stats + Conference Tracking banner + Quick Notes */}
+      {/* Overview stats + Conference Tracking banner */}
       <Suspense fallback={<StatsSkeleton />}>
-        <StatsAndQuickNotesSection />
+        <StatsSection />
       </Suspense>
 
-      {/* Current & Upcoming Conferences */}
-      <Suspense fallback={<UpcomingSkeleton />}>
-        <UpcomingSection />
+      {/* Quick Notes + Current & Upcoming Conferences */}
+      <Suspense fallback={<QuickNotesAndUpcomingSkeleton />}>
+        <QuickNotesAndUpcomingSection />
       </Suspense>
 
       {/* Recent Conferences + Priority Leads */}
