@@ -1,6 +1,21 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { DisplayType } from './customColumnDefs';
+
+export interface CustomColumnDef {
+  id: number;
+  table_name: string;
+  column_key: string;
+  label: string;
+  data_key: string;
+  config_category: string | null;
+  is_user_field: boolean;
+  display_type: DisplayType;
+  display_config: { prefix?: string; icon_color?: string; name_format?: 'full' | 'initials' | 'first_last_initial' } | null;
+  sort_order: number;
+  visible: boolean;
+}
 
 export interface ColumnDef {
   key: string;
@@ -141,4 +156,39 @@ export function useTableColumnConfig(tableName: string) {
   }, [tableName, config]);
 
   return { isVisible, orderedColumns };
+}
+
+// ── Custom columns ────────────────────────────────────────────────────────────
+
+const _customCache: Record<string, CustomColumnDef[] | undefined> = {};
+const _customPending: Record<string, Promise<CustomColumnDef[]> | undefined> = {};
+
+function fetchCustomColumns(tableName: string): Promise<CustomColumnDef[]> {
+  if (_customCache[tableName]) return Promise.resolve(_customCache[tableName]!);
+  if (_customPending[tableName]) return _customPending[tableName]!;
+  _customPending[tableName] = fetch(`/api/admin/custom-columns?table=${tableName}`, { credentials: 'include' })
+    .then(r => (r.ok ? r.json() : []))
+    .then((data: CustomColumnDef[]) => {
+      _customCache[tableName] = data;
+      delete _customPending[tableName];
+      return data;
+    })
+    .catch(() => []);
+  return _customPending[tableName]!;
+}
+
+export function invalidateCustomColumns(tableName?: string) {
+  if (tableName) {
+    delete _customCache[tableName];
+  } else {
+    for (const k of Object.keys(_customCache)) delete _customCache[k];
+  }
+}
+
+export function useCustomColumns(tableName: string): CustomColumnDef[] {
+  const [columns, setColumns] = useState<CustomColumnDef[]>(_customCache[tableName] ?? []);
+  useEffect(() => {
+    fetchCustomColumns(tableName).then(setColumns);
+  }, [tableName]);
+  return columns;
 }

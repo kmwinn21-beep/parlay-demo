@@ -11,7 +11,8 @@ import { NotesPopover } from './NotesPopover';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
-import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
+import { CustomColumnCell } from './CustomColumnCell';
 
 interface Attendee {
   id: number;
@@ -22,6 +23,12 @@ interface Attendee {
   company_type?: string;
   company_id?: number;
   company_wse?: number;
+  company_icp?: string;
+  company_services?: string;
+  company_profit_type?: string;
+  company_entity_structure?: string;
+  company_assigned_user?: string;
+  company_website?: string;
   email?: string;
   notes?: string;
   status?: string;
@@ -106,6 +113,7 @@ function fmtDate(dateStr?: string): string {
 
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const { isVisible, orderedColumns } = useTableColumnConfig('attendees');
+  const customColumns = useCustomColumns('attendees');
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('attendee_table');
   const statusOptions = configOptions.status ?? [];
@@ -581,11 +589,16 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     default: return null;
                   }
                 })}
+                {customColumns.filter(c => c.visible).map(col => (
+                  <th key={`custom_${col.id}`} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 120 }}>
+                    {col.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={1 + orderedColumns.filter(c => isVisible(c.key)).length} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
+                <tr><td colSpan={1 + orderedColumns.filter(c => isVisible(c.key)).length + customColumns.filter(c => c.visible).length} className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</td></tr>
               ) : paginated.map(attendee => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
@@ -725,6 +738,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         default: return null;
                       }
                     })}
+                    {customColumns.filter(c => c.visible).map(col => (
+                      <td key={`custom_${col.id}`} className="px-3 py-3">
+                        <CustomColumnCell column={col} value={(attendee as unknown as Record<string, unknown>)[col.data_key]} />
+                      </td>
+                    ))}
                   </tr>
                 );
               })}

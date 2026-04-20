@@ -6,7 +6,8 @@ import { BackButton } from '@/components/BackButton';
 import { COLOR_PRESETS, getPreset } from '@/lib/colors';
 import { invalidateConfigColors } from '@/lib/useConfigColors';
 import { invalidateConfigOptions } from '@/lib/useConfigOptions';
-import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { TABLE_COLUMN_DEFS, invalidateTableColumnConfig, invalidateCustomColumns, type CustomColumnDef } from '@/lib/useTableColumnConfig';
+import { AVAILABLE_COLUMNS, DISPLAY_TYPE_LABELS, type DisplayType } from '@/lib/customColumnDefs';
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, type BrandColorKey } from '@/lib/brand';
@@ -321,6 +322,163 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
+// ─── Add Column Modal ─────────────────────────────────────────────────────────
+
+interface AddColumnPayload {
+  column_key: string;
+  label: string;
+  data_key: string;
+  config_category: string | null;
+  is_user_field: boolean;
+  display_type: DisplayType;
+  display_config: { prefix?: string; icon_color?: string; name_format?: 'full' | 'initials' | 'first_last_initial' } | null;
+}
+
+function AddColumnModal({ tableName, existingKeys, onClose, onAdd }: {
+  tableName: string;
+  existingKeys: string[];
+  onClose: () => void;
+  onAdd: (col: AddColumnPayload) => void;
+}) {
+  const available = (AVAILABLE_COLUMNS[tableName] ?? []).filter(c => !existingKeys.includes(c.key));
+  const [selectedKey, setSelectedKey] = useState('');
+  const [displayType, setDisplayType] = useState<DisplayType>('text_value');
+  const [label, setLabel] = useState('');
+  const [prefix, setPrefix] = useState('');
+  const [iconColor, setIconColor] = useState('#6b7280');
+  const [nameFormat, setNameFormat] = useState<'full' | 'initials' | 'first_last_initial'>('full');
+
+  const selectedDef = available.find(c => c.key === selectedKey);
+
+  useEffect(() => {
+    if (selectedDef) {
+      setLabel(selectedDef.label);
+      setDisplayType(selectedDef.default_display_type);
+    }
+  }, [selectedKey]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDef) return;
+    let display_config: AddColumnPayload['display_config'] = null;
+    if (displayType === 'text_value' && prefix.trim()) display_config = { prefix: prefix.trim() };
+    if (displayType === 'icon_tooltip') display_config = { icon_color: iconColor };
+    if (displayType === 'user_icon_pill') display_config = { name_format: nameFormat };
+    onAdd({
+      column_key: selectedDef.key,
+      label: label.trim() || selectedDef.label,
+      data_key: selectedDef.data_key,
+      config_category: selectedDef.config_category,
+      is_user_field: selectedDef.is_user_field,
+      display_type: displayType,
+      display_config,
+    });
+  };
+
+  if (available.length === 0) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
+          <h2 className="text-base font-semibold text-procare-dark-blue font-serif mb-2">Add Column</h2>
+          <p className="text-sm text-gray-500 mb-4">All available columns have already been added to this table.</p>
+          <button type="button" onClick={onClose} className="btn-secondary text-sm">Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-procare-dark-blue font-serif">Add Column</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Step 1: Pick column */}
+          <div>
+            <label className="label text-xs">Column</label>
+            <select
+              value={selectedKey}
+              onChange={e => setSelectedKey(e.target.value)}
+              className="input-field"
+              required
+            >
+              <option value="">— Select a column —</option>
+              {available.map(c => (
+                <option key={c.key} value={c.key}>{c.label} <span className="text-gray-400">({c.source})</span></option>
+              ))}
+            </select>
+          </div>
+
+          {selectedDef && (
+            <>
+              {/* Label */}
+              <div>
+                <label className="label text-xs">Display Label</label>
+                <input type="text" value={label} onChange={e => setLabel(e.target.value)} required className="input-field" placeholder={selectedDef.label} />
+              </div>
+
+              {/* Display Type */}
+              <div>
+                <label className="label text-xs">Display Format</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.entries(DISPLAY_TYPE_LABELS) as [DisplayType, string][]).map(([key, lbl]) => (
+                    <label key={key} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors text-sm ${displayType === key ? 'border-procare-bright-blue bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <input type="radio" name="displayType" value={key} checked={displayType === key} onChange={() => setDisplayType(key)} className="accent-procare-bright-blue" />
+                      {lbl}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Conditional config */}
+              {displayType === 'text_value' && (
+                <div>
+                  <label className="label text-xs">Prefix <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input type="text" value={prefix} onChange={e => setPrefix(e.target.value)} className="input-field" placeholder='e.g. "Emp: "' />
+                </div>
+              )}
+
+              {displayType === 'icon_tooltip' && (
+                <div>
+                  <label className="label text-xs">Icon Color</label>
+                  <div className="flex items-center gap-3">
+                    <input type="color" value={iconColor} onChange={e => setIconColor(e.target.value)} className="w-10 h-10 rounded border border-gray-200 cursor-pointer p-0.5" />
+                    <input type="text" value={iconColor} onChange={e => setIconColor(e.target.value)} className="input-field w-32 font-mono text-sm" placeholder="#6b7280" />
+                  </div>
+                </div>
+              )}
+
+              {displayType === 'user_icon_pill' && (
+                <div>
+                  <label className="label text-xs">Name Format</label>
+                  <div className="space-y-2">
+                    {([['full', 'Full Name'], ['first_last_initial', 'First Initial + Last Name'], ['initials', 'Initials Only']] as const).map(([val, lbl]) => (
+                      <label key={val} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="radio" name="nameFormat" value={val} checked={nameFormat === val} onChange={() => setNameFormat(val)} className="accent-procare-bright-blue" />
+                        {lbl}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+            <button type="submit" disabled={!selectedDef} className="btn-primary text-sm">Add Column</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -339,6 +497,8 @@ export default function AdminPage() {
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [mobileDragFrom, setMobileDragFrom] = useState<{ table: string; key: string } | null>(null);
   const [mobileDragOver, setMobileDragOver] = useState<string | null>(null);
+  const [customCols, setCustomCols] = useState<Record<string, CustomColumnDef[]>>({});
+  const [addColTable, setAddColTable] = useState<string | null>(null);
   const _mDragFrom = useRef<{ table: string; key: string } | null>(null);
   const _mDragOver = useRef<string | null>(null);
   const _mActivated = useRef(false);
@@ -570,6 +730,63 @@ export default function AdminPage() {
     } catch {
       toast.error('Failed to save column order.');
     }
+  };
+
+  // ── Custom columns ────────────────────────────────────────────────────────────
+
+  const loadCustomCols = async (tableName: string) => {
+    try {
+      const res = await fetch(`/api/admin/custom-columns?table=${tableName}`);
+      if (!res.ok) throw new Error();
+      const data: CustomColumnDef[] = await res.json();
+      setCustomCols(prev => ({ ...prev, [tableName]: data }));
+    } catch { toast.error('Failed to load custom columns.'); }
+  };
+
+  const handleCustomColToggle = async (id: number, tableName: string, visible: boolean) => {
+    setCustomCols(prev => ({
+      ...prev,
+      [tableName]: (prev[tableName] ?? []).map(c => c.id === id ? { ...c, visible } : c),
+    }));
+    try {
+      const res = await fetch(`/api/admin/custom-columns/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible }),
+      });
+      if (!res.ok) throw new Error();
+      invalidateCustomColumns(tableName);
+    } catch {
+      toast.error('Failed to update custom column.');
+      setCustomCols(prev => ({
+        ...prev,
+        [tableName]: (prev[tableName] ?? []).map(c => c.id === id ? { ...c, visible: !visible } : c),
+      }));
+    }
+  };
+
+  const handleDeleteCustomCol = async (id: number, tableName: string) => {
+    if (!confirm('Remove this custom column? This cannot be undone.')) return;
+    setCustomCols(prev => ({ ...prev, [tableName]: (prev[tableName] ?? []).filter(c => c.id !== id) }));
+    try {
+      const res = await fetch(`/api/admin/custom-columns/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      invalidateCustomColumns(tableName);
+    } catch { toast.error('Failed to remove custom column.'); loadCustomCols(tableName); }
+  };
+
+  const handleAddCustomCol = async (tableName: string, col: Omit<CustomColumnDef, 'id' | 'table_name' | 'sort_order' | 'visible'>) => {
+    try {
+      const res = await fetch('/api/admin/custom-columns', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table_name: tableName, ...col }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const created: CustomColumnDef = await res.json();
+      setCustomCols(prev => ({ ...prev, [tableName]: [...(prev[tableName] ?? []), created] }));
+      invalidateCustomColumns(tableName);
+      setAddColTable(null);
+      toast.success('Column added.');
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed to add column.'); }
   };
 
   // ── Mobile long-press drag for Edit Tables ───────────────────────────────────
@@ -852,7 +1069,7 @@ export default function AdminPage() {
                     type="button"
                     onClick={() => setExpandedTables(prev => {
                       const next = new Set(prev);
-                      if (next.has(tableName)) next.delete(tableName); else next.add(tableName);
+                      if (next.has(tableName)) { next.delete(tableName); } else { next.add(tableName); loadCustomCols(tableName); }
                       return next;
                     })}
                     className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
@@ -870,6 +1087,7 @@ export default function AdminPage() {
                   {isExpanded && (
                     <div className="divide-y divide-gray-100 border-t border-gray-100 px-6 pb-2">
                       {orderedCols.map(col => {
+
                         const visible = isColVisible(tableName, col.key);
                         const saveKey = `${tableName}:${col.key}`;
                         const isDragTarget = dragCol?.table === tableName && dragOverKey === col.key && dragCol.key !== col.key;
@@ -918,6 +1136,47 @@ export default function AdminPage() {
                           </div>
                         );
                       })}
+
+                      {/* Custom columns */}
+                      {(customCols[tableName] ?? []).map(col => (
+                        <div key={col.id} className="flex items-center justify-between py-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-semibold text-procare-bright-blue uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 flex-shrink-0">Custom</span>
+                            <span className="text-sm text-gray-700">{col.label}</span>
+                            <span className="text-xs text-gray-400">{DISPLAY_TYPE_LABELS[col.display_type]}</span>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomCol(col.id, tableName)}
+                              className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                              title="Remove column"
+                            >
+                              Remove
+                            </button>
+                            <Toggle
+                              checked={col.visible}
+                              onChange={v => handleCustomColToggle(col.id, tableName, v)}
+                            />
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Add Column button */}
+                      {AVAILABLE_COLUMNS[tableName]?.length > 0 && (
+                        <div className="py-3">
+                          <button
+                            type="button"
+                            onClick={() => setAddColTable(tableName)}
+                            className="flex items-center gap-1.5 text-sm text-procare-bright-blue hover:text-procare-dark-blue font-medium transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Column
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -925,6 +1184,16 @@ export default function AdminPage() {
             })}
           </div>
         )
+      )}
+
+      {/* Add Column Modal */}
+      {addColTable && (
+        <AddColumnModal
+          tableName={addColTable}
+          existingKeys={(customCols[addColTable] ?? []).map(c => c.column_key)}
+          onClose={() => setAddColTable(null)}
+          onAdd={col => handleAddCustomCol(addColTable, col)}
+        />
       )}
 
       {/* ── Section Management tab ── */}
