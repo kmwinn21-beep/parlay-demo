@@ -152,7 +152,7 @@ function formatDate(dateStr: string) {
 
 function StatsSkeleton() {
   return (
-    <div className="space-y-6 animate-pulse">
+    <div className="animate-pulse">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         <div className="lg:col-span-2 rounded-2xl bg-gray-300 h-36" />
         <div className="card">
@@ -168,12 +168,6 @@ function StatsSkeleton() {
               </div>
             ))}
           </div>
-        </div>
-      </div>
-      <div className="card">
-        <div className="h-6 w-28 bg-gray-200 rounded mb-4" />
-        <div className="space-y-3">
-          {[1, 2].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
         </div>
       </div>
     </div>
@@ -225,12 +219,10 @@ function RecentAndPrioritySkeleton() {
 
 /* ---------- Async section components for Suspense ---------- */
 
-async function StatsAndQuickNotesSection() {
+async function StatsSection() {
   const stats = await getStats();
   return (
-    <div className="space-y-6">
-      {/* Overview + Conference Tracking banner row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
       {/* Conference Tracking banner — col 1-2 */}
         <div className="lg:col-span-2 bg-procare-dark-blue rounded-2xl p-8 text-white relative overflow-hidden flex items-center">
           <div className="relative z-10">
@@ -279,10 +271,6 @@ async function StatsAndQuickNotesSection() {
             </Link>
           </div>
         </div>
-      </div>
-
-      {/* Quick Notes — full width below */}
-      <QuickNotesSection />
     </div>
   );
 }
@@ -293,8 +281,8 @@ async function UpcomingSection() {
     getAwaitingUploadConferences(),
   ]);
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-5">
+    <div className="card h-full flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h2 className="text-lg font-semibold text-procare-dark-blue font-serif flex items-center gap-2">
           <svg className="w-5 h-5 text-procare-bright-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -307,7 +295,10 @@ async function UpcomingSection() {
       {upcomingConferences.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No current or upcoming conferences. <Link href="/conferences/new" className="text-procare-bright-blue hover:underline">Add one →</Link></p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div
+          className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none', alignContent: 'start' }}
+        >
           {upcomingConferences.map((conf) => {
             const today = new Date().toISOString().slice(0, 10);
             const isActive = conf.start_date <= today && conf.end_date >= today;
@@ -315,10 +306,10 @@ async function UpcomingSection() {
               <Link
                 key={conf.id}
                 href={`/conferences/${conf.id}`}
-                className="flex p-4 rounded-xl border hover:shadow-md transition-all hover:border-procare-bright-blue group"
+                className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-procare-bright-blue group"
                 style={{ borderColor: isActive ? '#1B76BC' : undefined }}
               >
-                <div className="flex-1 min-w-0 pr-2">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       {isActive && (
@@ -349,7 +340,7 @@ async function UpcomingSection() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center flex-shrink-0">
+                <div className="flex justify-end mt-2 flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-300 group-hover:text-procare-bright-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
@@ -453,15 +444,22 @@ async function RecentAndPrioritySection() {
 export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      {/* Overview stats + Conference Tracking banner + Quick Notes */}
+      {/* Conference Tracking banner + Overview stats */}
       <Suspense fallback={<StatsSkeleton />}>
-        <StatsAndQuickNotesSection />
+        <StatsSection />
       </Suspense>
 
-      {/* Current & Upcoming Conferences */}
-      <Suspense fallback={<UpcomingSkeleton />}>
-        <UpcomingSection />
-      </Suspense>
+      {/* Quick Notes + Current & Upcoming — side by side, same height, max 489px */}
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6 items-stretch">
+        <div className="max-h-[489px] flex flex-col min-h-0">
+          <QuickNotesSection />
+        </div>
+        <div className="max-h-[489px] flex flex-col min-h-0">
+          <Suspense fallback={<UpcomingSkeleton />}>
+            <UpcomingSection />
+          </Suspense>
+        </div>
+      </div>
 
       {/* Recent Conferences + Priority Leads */}
       <Suspense fallback={<RecentAndPrioritySkeleton />}>
