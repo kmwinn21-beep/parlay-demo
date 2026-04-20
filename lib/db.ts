@@ -299,6 +299,18 @@ export async function initDb(): Promise<void> {
     // Rename 'Procare Hosted' event type to generic 'Company Hosted'
     `UPDATE config_options SET value = 'Company Hosted' WHERE category = 'event_type' AND value = 'Procare Hosted'`,
     `CREATE TABLE IF NOT EXISTS quick_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), created_by TEXT)`,
+    // Account management additions
+    `ALTER TABLE users ADD COLUMN display_name TEXT`,
+    `ALTER TABLE users ADD COLUMN email_pending TEXT`,
+    `ALTER TABLE users ADD COLUMN email_change_token TEXT`,
+    `ALTER TABLE users ADD COLUMN email_change_expires INTEGER`,
+    `CREATE TABLE IF NOT EXISTS notification_preferences (
+      user_id INTEGER PRIMARY KEY,
+      company_status_change INTEGER NOT NULL DEFAULT 1,
+      follow_up_assigned INTEGER NOT NULL DEFAULT 1,
+      note_tagged INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

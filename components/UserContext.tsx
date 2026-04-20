@@ -9,6 +9,8 @@ export interface AuthUser {
   emailVerified: boolean;
   configId: number | null;
   displayName: string | null;
+  repName: string | null;
+  createdAt: string | null;
 }
 
 interface UserContextValue {
