@@ -242,7 +242,6 @@ async function StatsAndQuickNotesSection() {
 
         {/* Overview card — col 3 */}
         <div className="card flex flex-col justify-center">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Overview</p>
           <div className="flex flex-row gap-1">
             <Link href="/conferences" className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group">
               <div className="flex items-center gap-1.5">
