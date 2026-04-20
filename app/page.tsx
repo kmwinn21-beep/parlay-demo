@@ -148,6 +148,14 @@ function formatDate(dateStr: string) {
   });
 }
 
+function formatMonthDay(dateStr: string) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+  });
+}
+
 /* ---------- Skeleton components for Suspense fallbacks ---------- */
 
 function StatsSkeleton() {
@@ -209,11 +217,11 @@ function QuickNotesAndUpcomingSkeleton() {
 
 async function QuickNotesAndUpcomingSection() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-      <div className="lg:col-span-1">
-        <QuickNotesSection />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="lg:col-span-1 h-full">
+        <QuickNotesSection className="h-full" />
       </div>
-      <div className="lg:col-span-2">
+      <div className="lg:col-span-2 h-full">
         <UpcomingSection />
       </div>
     </div>
@@ -349,8 +357,7 @@ async function UpcomingSection() {
                       )}
                       <p className="font-semibold text-gray-800 group-hover:text-procare-bright-blue transition-colors leading-tight">{conf.name}</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {formatDate(conf.start_date)}
-                        {conf.end_date && conf.end_date !== conf.start_date ? ` – ${formatDate(conf.end_date)}` : ''}
+                        {formatMonthDay(conf.start_date)} - {formatMonthDay(conf.end_date || conf.start_date)}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
                     </div>
