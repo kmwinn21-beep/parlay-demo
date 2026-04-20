@@ -152,19 +152,25 @@ function formatDate(dateStr: string) {
 
 function StatsSkeleton() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
-      <div className="card">
-        <div className="h-4 w-28 bg-gray-200 rounded mb-4" />
-        <div className="grid grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex flex-col items-center gap-2">
-              <div className="h-8 w-12 bg-gray-200 rounded" />
-              <div className="h-3 w-16 bg-gray-200 rounded" />
-            </div>
-          ))}
+    <div className="space-y-6 animate-pulse">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="lg:col-span-2 rounded-2xl bg-gray-300 h-36" />
+        <div className="card">
+          <div className="h-4 w-28 bg-gray-200 rounded mb-4" />
+          <div className="flex flex-col gap-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex items-center gap-3 p-2">
+                <div className="w-9 h-9 rounded-full bg-gray-200 flex-shrink-0" />
+                <div className="space-y-1.5">
+                  <div className="h-5 w-10 bg-gray-200 rounded" />
+                  <div className="h-3 w-16 bg-gray-200 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-      <div className="lg:col-span-2 card">
+      <div className="card">
         <div className="h-6 w-28 bg-gray-200 rounded mb-4" />
         <div className="space-y-3">
           {[1, 2].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
@@ -222,45 +228,61 @@ function RecentAndPrioritySkeleton() {
 async function StatsAndQuickNotesSection() {
   const stats = await getStats();
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Combined stats card */}
-      <div className="card">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Overview</p>
-        <div className="grid grid-cols-3 gap-2">
-          <Link href="/conferences" className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-blue-50 transition-colors group text-center">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-procare-bright-blue transition-colors flex-shrink-0">
-              <svg className="w-5 h-5 text-procare-bright-blue group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <p className="text-2xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalConferences}</p>
-            <p className="text-xs text-gray-500 leading-tight">Conferences</p>
-          </Link>
-          <Link href="/attendees" className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-yellow-50 transition-colors group text-center">
-            <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center group-hover:bg-procare-gold transition-colors flex-shrink-0">
-              <svg className="w-5 h-5 text-yellow-600 group-hover:text-procare-dark-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <p className="text-2xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalAttendees}</p>
-            <p className="text-xs text-gray-500 leading-tight">Attendees</p>
-          </Link>
-          <Link href="/companies" className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-green-50 transition-colors group text-center">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
-              <svg className="w-5 h-5 text-green-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <p className="text-2xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalCompanies}</p>
-            <p className="text-xs text-gray-500 leading-tight">Companies</p>
-          </Link>
+    <div className="space-y-6">
+      {/* Overview + Conference Tracking banner row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      {/* Conference Tracking banner — col 1-2 */}
+        <div className="lg:col-span-2 bg-procare-dark-blue rounded-2xl p-8 text-white relative overflow-hidden flex items-center">
+          <div className="relative z-10">
+            <h1 className="text-3xl font-bold font-serif mb-2">Conference Tracking</h1>
+          </div>
+          <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-procare-bright-blue opacity-20" />
+          <div className="absolute right-16 top-12 w-20 h-20 rounded-full bg-procare-gold opacity-10" />
+        </div>
+
+        {/* Overview card — col 3 */}
+        <div className="card flex flex-col justify-center">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Overview</p>
+          <div className="flex flex-row gap-1">
+            <Link href="/conferences" className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group">
+              <div className="flex items-center gap-1.5">
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-procare-bright-blue transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-procare-bright-blue group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <p className="text-xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalConferences}</p>
+              </div>
+              <p className="text-xs text-gray-500 leading-tight">Conferences</p>
+            </Link>
+            <Link href="/attendees" className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group">
+              <div className="flex items-center gap-1.5">
+                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center group-hover:bg-procare-gold transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-yellow-600 group-hover:text-procare-dark-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <p className="text-xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalAttendees}</p>
+              </div>
+              <p className="text-xs text-gray-500 leading-tight">Attendees</p>
+            </Link>
+            <Link href="/companies" className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-colors group">
+              <div className="flex items-center gap-1.5">
+                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-green-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <p className="text-xl font-bold text-procare-dark-blue font-serif leading-none">{stats.totalCompanies}</p>
+              </div>
+              <p className="text-xs text-gray-500 leading-tight">Companies</p>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Quick Notes — client component, col-span-2 */}
-      <div className="lg:col-span-2">
-        <QuickNotesSection />
-      </div>
+      {/* Quick Notes — full width below */}
+      <QuickNotesSection />
     </div>
   );
 }
@@ -431,19 +453,7 @@ async function RecentAndPrioritySection() {
 export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      {/* Welcome Header — renders instantly, no data needed */}
-      <div className="bg-procare-dark-blue rounded-2xl p-8 text-white relative overflow-hidden">
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold font-serif mb-2">
-            Conference Tracking
-          </h1>
-        </div>
-        {/* Decorative element */}
-        <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-procare-bright-blue opacity-20" />
-        <div className="absolute right-16 top-12 w-20 h-20 rounded-full bg-procare-gold opacity-10" />
-      </div>
-
-      {/* Stats + Quick Notes */}
+      {/* Overview stats + Conference Tracking banner + Quick Notes */}
       <Suspense fallback={<StatsSkeleton />}>
         <StatsAndQuickNotesSection />
       </Suspense>
