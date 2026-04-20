@@ -35,6 +35,15 @@ interface Attendee {
   conference_names?: string;
 }
 
+interface StatusOptionMeta {
+  value: string;
+  status_key: string | null;
+}
+
+interface PriorityMarker {
+  initials: string;
+}
+
 interface Company {
   id: number;
   name: string;
@@ -50,6 +59,8 @@ interface Company {
   services?: string[];
   icp?: string;
   created_at: string;
+  my_priority?: boolean;
+  priority_markers?: PriorityMarker[];
   attendees: Attendee[];
   conferences?: ConferenceItem[];
   parent_company?: { id: number; name: string } | null;
@@ -127,6 +138,8 @@ export default function CompanyDetailPage() {
 
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [statusOptionObjects, setStatusOptionObjects] = useState<StatusOptionMeta[]>([]);
+  const [myPriority, setMyPriority] = useState(false);
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
@@ -180,6 +193,7 @@ export default function CompanyDetailPage() {
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
       setCompany(data);
+      setMyPriority(!!data.my_priority);
       setEditData({
         name: data.name,
         website: data.website || '',
@@ -192,7 +206,11 @@ export default function CompanyDetailPage() {
         services: Array.isArray(data.services) ? data.services : [],
         icp: data.icp || null,
       });
-      if (statusRes.ok) setStatusOptions((await statusRes.json()).map((o: { value: string }) => o.value));
+      if (statusRes.ok) {
+        const statusData = await statusRes.json() as StatusOptionMeta[];
+        setStatusOptionObjects(statusData);
+        setStatusOptions(statusData.map(o => o.value));
+      }
       if (compTypeRes.ok) {
         const compTypeData = await compTypeRes.json();
         setCompanyTypeOptions(compTypeData.map((o: { value: string }) => o.value));
@@ -319,6 +337,32 @@ export default function CompanyDetailPage() {
   };
 
   const handleStatus = async (value: string) => {
+    const priorityMeta = statusOptionObjects.find(o => o.status_key === 'priority');
+    const isPriority = !!priorityMeta && value === priorityMeta.value;
+
+    if (isPriority) {
+      const newPriority = !myPriority;
+      setMyPriority(newPriority);
+      try {
+        // Include/exclude priority value in status payload as a signal to the backend.
+        // The backend strips it from companies.status and routes it through company_priority_marks.
+        const currentStatuses = new Set((company?.status || '').split(',').map(s => s.trim()).filter(Boolean));
+        if (newPriority) { currentStatuses.add(value); } else { currentStatuses.delete(value); }
+        const res = await fetch(`/api/companies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: Array.from(currentStatuses).join(',') }),
+        });
+        if (!res.ok) throw new Error();
+        fetchCompany();
+        toast.success(newPriority ? 'Marked as priority.' : 'Priority removed.');
+      } catch {
+        setMyPriority(!newPriority);
+        toast.error('Failed to update priority.');
+      }
+      return;
+    }
+
     const currentStatuses = new Set((company?.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
     if (currentStatuses.has(value)) { currentStatuses.delete(value); } else { currentStatuses.add(value); }
     const newStatus = Array.from(currentStatuses).join(',');
@@ -767,7 +811,17 @@ export default function CompanyDetailPage() {
                   {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
                     <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
                   ))}
-                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-sm text-gray-400">—</span>}
+                  {(company.priority_markers || []).map((m, i) => {
+                    const priorityLabel = statusOptionObjects.find(o => o.status_key === 'priority')?.value || 'Priority';
+                    return (
+                      <span key={`priority-${i}`} className={getBadgeClass(priorityLabel, colorMaps.status || {})}>
+                        {priorityLabel} - {m.initials}
+                      </span>
+                    );
+                  })}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 &&
+                    (company.priority_markers || []).length === 0 &&
+                    <span className="text-sm text-gray-400">—</span>}
                 </span>
               </div>
               <div>
@@ -1081,8 +1135,11 @@ export default function CompanyDetailPage() {
                   <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
                   <div className="flex flex-wrap gap-2">
                     {statusOptions.map(val => {
-                      const activeStatuses = new Set((company.status || '').split(',').map(s => s.trim()).filter(Boolean));
-                      const isActive = activeStatuses.has(val);
+                      const priorityMeta = statusOptionObjects.find(o => o.status_key === 'priority');
+                      const isPriorityOpt = !!priorityMeta && val === priorityMeta.value;
+                      const isActive = isPriorityOpt
+                        ? myPriority
+                        : new Set((company.status || '').split(',').map(s => s.trim()).filter(Boolean)).has(val);
                       return (
                         <button
                           key={val}

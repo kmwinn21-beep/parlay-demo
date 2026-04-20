@@ -16,13 +16,13 @@ export async function GET(request: NextRequest) {
     let result;
     if (category) {
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key FROM config_options WHERE category = ? ORDER BY sort_order, value',
+        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key FROM config_options WHERE category = ? ORDER BY sort_order, value',
         args: [category],
       });
     } else {
       // Return all options (used for color lookups across the app)
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key FROM config_options ORDER BY category, sort_order, value',
+        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key FROM config_options ORDER BY category, sort_order, value',
         args: [],
       });
     }
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       sort_order: Number(r.sort_order ?? 0),
       color: r.color ? String(r.color) : null,
       action_key: r.action_key ? String(r.action_key) : null,
+      status_key: r.status_key ? String(r.status_key) : null,
     }));
 
     if (!form && !includeVisibility) {

@@ -68,6 +68,14 @@ async function setPriorityMarkForCompany(opts: {
   }
 }
 
+function getInitials(displayName: string | null, emailFallback: string): string {
+  const name = (displayName?.trim() || emailFallback.split('@')[0]).trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function parseServices(value: unknown): string[] {
   if (!value) return [];
   return String(value)
@@ -88,6 +96,7 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
   try {
     await dbReady;
     const companyResult = await db.execute({
@@ -101,7 +110,7 @@ export async function GET(
 
     const company = companyResult.rows[0];
 
-    const [attendeesResult, confsResult, childCompaniesResult, parentResult, relatedResult] = await Promise.all([
+    const [attendeesResult, confsResult, childCompaniesResult, parentResult, relatedResult, priorityMarkersResult, myPriorityResult, priorityOptResult] = await Promise.all([
       db.execute({
         sql: `SELECT a.*, COUNT(DISTINCT ca.conference_id) as conference_count,
                      GROUP_CONCAT(DISTINCT conf.name) as conference_names
@@ -147,6 +156,33 @@ export async function GET(
               ORDER BY c.name`,
         args: [params.id, params.id],
       }),
+      // All users who have marked this company as Priority
+      db.execute({
+        sql: `SELECT COALESCE(u.display_name, uopt.value) as name_or_email
+              FROM company_priority_marks cpm
+              JOIN config_options uopt ON uopt.id = cpm.marked_by_config_id
+              LEFT JOIN users u ON LOWER(u.email) = LOWER(uopt.value)
+              WHERE cpm.company_id = ?`,
+        args: [params.id],
+      }),
+      // Whether the current user has marked this company as Priority
+      db.execute({
+        sql: `SELECT 1 FROM company_priority_marks
+              WHERE company_id = ?
+                AND marked_by_config_id = (
+                  SELECT id FROM config_options
+                  WHERE category = 'user' AND LOWER(value) = LOWER(?)
+                  LIMIT 1
+                )`,
+        args: [params.id, user.email],
+      }),
+      // Priority option value (to strip from global status field)
+      db.execute({
+        sql: `SELECT value FROM config_options
+              WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
+              ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END LIMIT 1`,
+        args: [],
+      }),
     ]);
 
     const attendees = attendeesResult.rows.map((r) => ({ ...r }));
@@ -177,10 +213,23 @@ export async function GET(
       company_type: r.company_type ? String(r.company_type) : null,
     }));
 
+    const priorityValue = priorityOptResult.rows[0] ? String(priorityOptResult.rows[0].value) : null;
+    const rawStatus = String(company.status || '');
+    const cleanStatus = priorityValue
+      ? rawStatus.split(',').map(s => s.trim()).filter(s => s && s !== priorityValue).join(',')
+      : rawStatus;
+
+    const priority_markers = priorityMarkersResult.rows.map(r => ({
+      initials: getInitials(r.display_name ? String(r.display_name) : null, String(r.name_or_email)),
+    }));
+
     return NextResponse.json({
       ...company,
+      status: cleanStatus,
       services: parseServices(company.services),
       icp: company.icp ? String(company.icp) : null,
+      my_priority: myPriorityResult.rows.length > 0,
+      priority_markers,
       attendees,
       conferences,
       child_companies,
@@ -282,6 +331,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
 
+    // Determine clean status (Priority stripped out — it's tracked per-user in company_priority_marks)
+    let cleanStatus: string | undefined;
+    let priorityOptionValue: string | null = null;
+    if ('status' in body) {
+      const priorityOptRes = await db.execute({
+        sql: `SELECT value FROM config_options
+              WHERE category = 'status' AND (status_key = 'priority' OR LOWER(value) = 'priority')
+              ORDER BY CASE WHEN status_key = 'priority' THEN 0 ELSE 1 END LIMIT 1`,
+        args: [],
+      });
+      priorityOptionValue = priorityOptRes.rows[0] ? String(priorityOptRes.rows[0].value) : null;
+      const statuses = parseStatusValues(body.status);
+      const stripped = priorityOptionValue ? statuses.filter(s => s !== priorityOptionValue) : statuses;
+      cleanStatus = stripped.join(',');
+    }
+
     const setClauses: string[] = [];
     const args: (string | number | null)[] = [];
 
@@ -296,8 +361,9 @@ export async function PATCH(
       args.push(body.company_type || null);
     }
     if ('status' in body) {
+      // Write the Priority-stripped status globally; Priority is user-specific
       setClauses.push('status = ?');
-      args.push(body.status ?? '');
+      args.push(cleanStatus ?? '');
     }
     if ('wse' in body) {
       const wseRaw = body.wse;
@@ -320,11 +386,13 @@ export async function PATCH(
     });
 
     if ('status' in body) {
+      // Cascade clean status (no Priority) to all attendees
       await db.execute({
         sql: 'UPDATE attendees SET status = ? WHERE company_id = ?',
-        args: [body.status ?? '', params.id],
+        args: [cleanStatus ?? '', params.id],
       });
 
+      // Handle Priority mark using the original body.status as signal (may contain Priority)
       await setPriorityMarkForCompany({
         companyId: params.id,
         actorEmail: user.email,
@@ -332,8 +400,23 @@ export async function PATCH(
       });
     }
 
-    const result = await db.execute({ sql: 'SELECT * FROM companies WHERE id = ?', args: [params.id] });
-    return NextResponse.json(result.rows[0]);
+    const [result, myPriorityResult] = await Promise.all([
+      db.execute({ sql: 'SELECT * FROM companies WHERE id = ?', args: [params.id] }),
+      db.execute({
+        sql: `SELECT 1 FROM company_priority_marks
+              WHERE company_id = ?
+                AND marked_by_config_id = (
+                  SELECT id FROM config_options
+                  WHERE category = 'user' AND LOWER(value) = LOWER(?)
+                  LIMIT 1
+                )`,
+        args: [params.id, user.email],
+      }),
+    ]);
+    return NextResponse.json({
+      ...result.rows[0],
+      my_priority: myPriorityResult.rows.length > 0,
+    });
   } catch (error) {
     console.error('PATCH /api/companies/[id] error:', error);
     return NextResponse.json({ error: 'Failed to update company' }, { status: 500 });

@@ -38,6 +38,7 @@ interface Company {
   pinned_notes_count?: number;
   updated_at?: string;
   relationship_count?: number;
+  my_priority?: boolean;
 }
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
@@ -175,6 +176,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // Local copy for optimistic updates — syncs whenever the parent re-fetches
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
   useEffect(() => { setLocalCompanies(companies); }, [companies]);
+
+  // Track which status option is the Priority option (identified by status_key, not display value)
+  const [priorityOptionValue, setPriorityOptionValue] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/config?category=status')
+      .then(r => r.json())
+      .then((opts: { value: string; status_key: string | null }[]) => {
+        const p = opts.find(o => o.status_key === 'priority');
+        if (p) setPriorityOptionValue(p.value);
+      })
+      .catch(() => {});
+  }, []);
+
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
   const [search, setSearch] = useState('');
@@ -282,7 +296,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
       const matchSFOwner = !filterSFOwner || parseRepIds(c.assigned_user).map(String).includes(filterSFOwner);
       const matchType = !filterType || c.company_type === filterType;
-      const matchStatus = !filterStatus || (c.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus);
+      const matchStatus = !filterStatus || (
+        priorityOptionValue && filterStatus === priorityOptionValue
+          ? !!c.my_priority
+          : (c.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus)
+      );
       const matchConf = confCountMatches(Number(c.conference_count));
       const matchConference = !filterConference || (c.conference_names || '').split(',').map(s => s.trim()).includes(filterConference);
       const matchICP = !filterICP || c.icp === filterICP;
@@ -309,7 +327,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, priorityOptionValue]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -779,7 +797,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 </button>
               </div>
               <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-400">—</span>}</span>
+                <span className="flex flex-wrap gap-1">
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
+                  {company.my_priority && priorityOptionValue && <span className={getBadgeClass(priorityOptionValue, colorMaps.status || {})}>{priorityOptionValue}</span>}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && !company.my_priority && <span className="text-gray-400">—</span>}
+                </span>
                 {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
               </div>
               {/* Bottom row: stats (left) | WSE (bottom-right) */}
@@ -990,7 +1012,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </select>
                     ) : (
                       <button type="button" onClick={() => startInlineEdit(company, 'status')}>
-                        <span className="flex flex-wrap gap-1">{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-300">—</span>}</span>
+                        <span className="flex flex-wrap gap-1">
+                          {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
+                          {company.my_priority && priorityOptionValue && <span className={getBadgeClass(priorityOptionValue, colorMaps.status || {})}>{priorityOptionValue}</span>}
+                          {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && !company.my_priority && <span className="text-gray-300">—</span>}
+                        </span>
                       </button>
                     )}
                   </td>}
