@@ -359,6 +359,22 @@ export async function initDb(): Promise<void> {
     // Migrate existing priority marks into the general table
     `INSERT OR IGNORE INTO company_user_statuses (company_id, status_option_id, marked_by_config_id, created_at)
      SELECT company_id, priority_option_id, marked_by_config_id, created_at FROM company_priority_marks`,
+    // Configurable ICP rules engine
+    `CREATE TABLE IF NOT EXISTS icp_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS icp_rule_conditions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_id INTEGER NOT NULL,
+      option_value TEXT NOT NULL,
+      operator TEXT NOT NULL DEFAULT 'OR',
+      FOREIGN KEY (rule_id) REFERENCES icp_rules(id) ON DELETE CASCADE
+    )`,
+    // Unit type label (replaces hardcoded "WSE" everywhere)
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('unit_type', 'WSE', 0)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
