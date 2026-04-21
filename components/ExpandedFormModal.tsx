@@ -26,6 +26,9 @@ export interface ConferenceForm {
   image_url: string | null;
   image_max_width: number | null;
   html_content: string | null;
+  image_offset_y: number | null;
+  html_offset_y: number | null;
+  form_width: number | null;
   created_by: string | null;
   created_at: string;
   fields: FormField[];
@@ -120,6 +123,13 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Lock body scroll and cover full viewport while form is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, []);
 
   useEffect(() => {
@@ -218,7 +228,12 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       if (!res.ok) throw new Error('Submission failed');
       toast.success('Form submitted!');
       onSubmitted();
-      onClose();
+      // Reset form for next attendee — keep form open at the booth
+      setValues({});
+      setAttendeeSearch('');
+      setIsOther(false);
+      setManualFirst('');
+      setManualLast('');
     } catch {
       toast.error('Failed to submit form');
     } finally {
@@ -239,6 +254,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const accentBg = buildAccentBackground(accentColor, form.accent_gradient);
   const accentIsLight = isColorLight(accentColor);
   const imageMaxWidth = form.image_max_width ?? 80;
+  const imageOffsetY = form.image_offset_y ?? 0;
+  const htmlOffsetY = form.html_offset_y ?? 0;
+  const formWidth = form.form_width ?? 420;
 
   const renderField = (field: FormField) => {
     if (field.field_key === 'attendee_name') {
@@ -470,14 +488,21 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
   return (
     <div
-      className="fixed inset-0 z-[100] overflow-auto"
-      style={{ background: accentBg, transition: 'background 0.3s ease' }}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        width: '100vw', height: '100vh',
+        zIndex: 9999,
+        overflow: 'auto',
+        background: accentBg,
+        transition: 'background 0.3s ease',
+      }}
     >
       {/* Floating close button */}
       <button
         type="button"
         onClick={onClose}
-        className="fixed top-4 right-4 z-[110] rounded-full w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70 shadow-md"
+        style={{ position: 'fixed', top: 16, right: 16, zIndex: 10000 }}
+        className="rounded-full w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70 shadow-md"
         style={{
           background: accentIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)',
           color: accentIsLight ? '#1a1a1a' : '#ffffff',
@@ -500,7 +525,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
               </div>
             )}
             {/* Image element */}
-            <div className="flex-1 flex items-center justify-center mb-6 min-h-0">
+            <div className="flex-1 flex items-center justify-center mb-6 min-h-0" style={{ marginTop: imageOffsetY }}>
               {form.image_url && !imgError ? (
                 <img
                   src={form.image_url}
@@ -522,7 +547,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
               )}
             </div>
             {/* HTML text element */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0" style={{ marginTop: htmlOffsetY }}>
               {form.html_content ? (
                 <div
                   className="prose prose-sm max-w-none"
@@ -543,8 +568,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
             </div>
           </div>
 
-          {/* Right panel: form card */}
-          <div className="w-[420px] min-w-[320px] flex-shrink-0 p-6 flex items-center justify-center">
+          {/* Right panel: form card — width configurable in landscape only */}
+          <div className="flex-shrink-0 p-6 flex items-center justify-center" style={{ width: formWidth, minWidth: 280 }}>
             <div className="w-full rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor }}>
               {formCardInterior}
             </div>

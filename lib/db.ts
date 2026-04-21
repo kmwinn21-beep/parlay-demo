@@ -440,6 +440,9 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE conference_forms ADD COLUMN image_url TEXT`,
     `ALTER TABLE conference_forms ADD COLUMN image_max_width INTEGER`,
     `ALTER TABLE conference_forms ADD COLUMN html_content TEXT`,
+    `ALTER TABLE conference_forms ADD COLUMN image_offset_y INTEGER`,
+    `ALTER TABLE conference_forms ADD COLUMN html_offset_y INTEGER`,
+    `ALTER TABLE conference_forms ADD COLUMN form_width INTEGER`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

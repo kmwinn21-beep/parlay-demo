@@ -101,7 +101,10 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
     image_url: string;
     image_max_width: string;
     html_content: string;
-  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '' });
+    image_offset_y: number;
+    html_offset_y: number;
+    form_width: number;
+  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '', image_offset_y: 0, html_offset_y: 0, form_width: 420 });
 
   const loadForms = useCallback(async () => {
     try {
@@ -254,6 +257,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           image_url: editDraft.image_url.trim() || null,
           image_max_width: editDraft.image_max_width ? parseInt(editDraft.image_max_width, 10) : null,
           html_content: editDraft.html_content.trim() || null,
+          image_offset_y: editDraft.image_offset_y,
+          html_offset_y: editDraft.html_offset_y,
+          form_width: editDraft.form_width,
         }),
       });
       if (!res.ok) throw new Error();
@@ -416,8 +422,19 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                   </div>
                 </div>
 
-                {/* Row 4: Image element */}
+                {/* Row 4: Form width (landscape only) */}
                 <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-semibold text-gray-500 mb-2">Form Width <span className="font-normal text-gray-400">(landscape/desktop only — portrait stays full-width)</span></label>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_width: Math.max(280, d.form_width - 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Narrower">‹</button>
+                    <span className="w-16 text-center text-sm font-medium tabular-nums">{editDraft.form_width} px</span>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_width: Math.min(700, d.form_width + 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Wider">›</button>
+                    <span className="text-xs text-gray-400 ml-1">range: 280–700 px</span>
+                  </div>
+                </div>
+
+                {/* Row 5: Image element */}
+                <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Image Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
                   <div className="flex gap-3 items-start">
                     <div className="flex-1">
@@ -425,14 +442,20 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <label className="text-xs text-gray-500 whitespace-nowrap">Max width</label>
-                      <input
-                        type="number" min={10} max={100}
-                        value={editDraft.image_max_width}
-                        onChange={e => setEditDraft(d => ({ ...d, image_max_width: e.target.value }))}
-                        className="input-field text-sm w-16 text-center"
-                      />
+                      <input type="number" min={10} max={100} value={editDraft.image_max_width} onChange={e => setEditDraft(d => ({ ...d, image_max_width: e.target.value }))} className="input-field text-sm w-16 text-center" />
                       <span className="text-xs text-gray-400">%</span>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
+                    </button>
+                    <span className="w-16 text-center text-xs font-medium tabular-nums text-gray-700">{editDraft.image_offset_y} px</span>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset</button>
                   </div>
                   {editDraft.image_url && (
                     <div className="mt-2">
@@ -441,10 +464,21 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                   )}
                 </div>
 
-                {/* Row 5: HTML text editor */}
+                {/* Row 6: HTML text editor */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">HTML Text Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
                   <HtmlEditor value={editDraft.html_content} onChange={v => setEditDraft(d => ({ ...d, html_content: v }))} />
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
+                    </button>
+                    <span className="w-16 text-center text-xs font-medium tabular-nums text-gray-700">{editDraft.html_offset_y} px</span>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset</button>
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-1">
@@ -486,6 +520,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                         image_url: form.image_url || '',
                         image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
                         html_content: form.html_content || '',
+                        image_offset_y: form.image_offset_y ?? 0,
+                        html_offset_y: form.html_offset_y ?? 0,
+                        form_width: form.form_width ?? 420,
                       });
                     }}
                     title="Edit form settings"
