@@ -71,15 +71,30 @@ export async function POST(
     }
 
     // Fetch live admin config options for classifiers
-    const [companyTypeOptions, icpOptions, userRows] = await Promise.all([
+    const [companyTypeOptions, icpOptions, userRows, usersWithConfig] = await Promise.all([
       getConfigOptionValues('company_type'),
       getConfigOptionValues('icp'),
       db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
+      db.execute({ sql: 'SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL', args: [] }),
     ]);
     const userOptions: Array<{ id: number; value: string }> = userRows.rows.map(r => ({
       id: Number(r.id),
       value: String(r.value),
     }));
+
+    // Build a map from lowercase display name (or email) → config_options.id so that
+    // CSV files with human-readable names resolve correctly even though config_options.value
+    // stores the user's email address.
+    const userDisplayNameMap = new Map<string, number>();
+    for (const r of usersWithConfig.rows) {
+      const configId = Number(r.config_id);
+      if (r.display_name && String(r.display_name).trim()) {
+        userDisplayNameMap.set(String(r.display_name).trim().toLowerCase(), configId);
+      }
+      if (r.email && String(r.email).trim()) {
+        userDisplayNameMap.set(String(r.email).trim().toLowerCase(), configId);
+      }
+    }
 
     // Resolve a name/ID string from the file to the stored numeric ID string.
     // Returns null if the value is blank or doesn't match any known user.
@@ -89,10 +104,14 @@ export async function POST(
       // Already a numeric ID that exists in the user list → keep as-is
       const num = parseInt(trimmed, 10);
       if (!isNaN(num) && userOptions.some(u => u.id === num)) return String(num);
-      // Case-insensitive name match
       const lower = trimmed.toLowerCase();
+      // Case-insensitive match against config_options.value (stores email addresses)
       const match = userOptions.find(u => u.value.toLowerCase() === lower);
-      return match ? String(match.id) : null;
+      if (match) return String(match.id);
+      // Fall back to matching against users.display_name or users.email
+      const displayId = userDisplayNameMap.get(lower);
+      if (displayId != null) return String(displayId);
+      return null;
     };
     // Identify which company_type values represent "Operator" for ICP classification
     const operatorTypeValues = new Set(
