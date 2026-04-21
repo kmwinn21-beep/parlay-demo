@@ -14,6 +14,7 @@ import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannel
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 import { invalidateTagline } from '@/lib/useTagline';
+import { invalidateUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface ConfigOption {
   id: number;
@@ -681,6 +682,7 @@ export default function AdminPage() {
         const data = await res.json();
         setUnitTypeId(data.id);
       }
+      invalidateUnitTypeLabel();
       toast.success('Unit type saved!');
     } catch { toast.error('Failed to save unit type.'); }
     finally { setUnitTypeSaving(false); }

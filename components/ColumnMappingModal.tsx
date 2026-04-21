@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { SYSTEM_FIELD_LABELS, FIELD_ORDER, type ColumnMapping, type SystemFieldKey } from '@/lib/columnMapping';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface Props {
   fileName: string;
@@ -23,6 +24,7 @@ export function ColumnMappingModal({
   onCancel,
 }: Props) {
   const [mapping, setMapping] = useState<ColumnMapping>({ ...suggestions });
+  const unitTypeLabel = useUnitTypeLabel();
 
   const hasName = !!(mapping.first_name || mapping.last_name || mapping.full_name);
 
@@ -72,16 +74,18 @@ export function ColumnMappingModal({
             <tbody>
               {FIELD_ORDER.map((key, i) => {
                 const meta = SYSTEM_FIELD_LABELS[key];
+                const label = key === 'wse' ? unitTypeLabel : meta.label;
+                const description = key === 'wse' ? `Numeric count of ${unitTypeLabel} for this company` : meta.description;
                 const selected = mapping[key];
                 const sample = getSample(selected);
                 return (
                   <tr key={key} className={i % 2 === 0 ? 'bg-gray-50/60' : ''}>
                     <td className="py-2 pr-4 align-top">
                       <div className="font-medium text-gray-800 leading-tight">
-                        {meta.label}
+                        {label}
                         {meta.required && <span className="text-red-400 ml-0.5 text-xs">*</span>}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5 leading-snug">{meta.description}</div>
+                      <div className="text-xs text-gray-400 mt-0.5 leading-snug">{description}</div>
                     </td>
                     <td className="py-2 pr-4 align-top">
                       <select
