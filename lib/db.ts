@@ -374,6 +374,67 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (rule_id) REFERENCES icp_rules(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE meetings ADD COLUMN meeting_type TEXT`,
+    // Form Builder tables
+    `CREATE TABLE IF NOT EXISTS form_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS form_fields (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER REFERENCES form_templates(id) ON DELETE CASCADE,
+      conference_form_id INTEGER REFERENCES conference_forms(id) ON DELETE CASCADE,
+      field_type TEXT NOT NULL,
+      field_key TEXT,
+      label TEXT NOT NULL,
+      placeholder TEXT,
+      required INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      options_source TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS form_field_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      field_id INTEGER NOT NULL REFERENCES form_fields(id) ON DELETE CASCADE,
+      value TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS conference_forms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      template_id INTEGER REFERENCES form_templates(id),
+      name TEXT NOT NULL,
+      conference_logo_url TEXT,
+      background_color TEXT,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS form_submissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      attendee_id INTEGER REFERENCES attendees(id),
+      submitted_at TEXT DEFAULT (datetime('now')),
+      status_option_id INTEGER REFERENCES config_options(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS form_submission_values (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      submission_id INTEGER NOT NULL REFERENCES form_submissions(id) ON DELETE CASCADE,
+      field_id INTEGER,
+      field_label TEXT NOT NULL,
+      field_value TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS form_template_permissions (
+      template_id INTEGER NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+      user_config_id INTEGER NOT NULL REFERENCES config_options(id) ON DELETE CASCADE,
+      PRIMARY KEY (template_id, user_config_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_form_fields_template ON form_fields(template_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_form_fields_conf_form ON form_fields(conference_form_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_conference_forms_conf ON conference_forms(conference_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_form_submissions_form ON form_submissions(conference_form_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_form_submission_values_sub ON form_submission_values(submission_id)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
@@ -491,6 +552,31 @@ export async function initDb(): Promise<void> {
       args: [seed.category, seed.value, seed.sort_order],
     }).catch(() => {})
   ));
+
+  // Seed default Lead Capture form template if no templates exist
+  try {
+    const tmplCount = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM form_templates', args: [] });
+    if (Number(tmplCount.rows[0].cnt) === 0) {
+      const tmplResult = await db.execute({
+        sql: `INSERT INTO form_templates (name, created_by) VALUES ('Lead Capture', 'system') RETURNING id`,
+        args: [],
+      });
+      const tmplId = Number(tmplResult.rows[0].id);
+      const defaultFields = [
+        { field_type: 'attendee_picker', field_key: 'attendee_name', label: 'Name', sort_order: 1, required: 1 },
+        { field_type: 'text_single', field_key: 'title', label: 'Title', sort_order: 2, required: 0 },
+        { field_type: 'text_single', field_key: 'company', label: 'Company', sort_order: 3, required: 0 },
+        { field_type: 'text_single', field_key: 'email', label: 'Email Address', sort_order: 4, required: 0 },
+        { field_type: 'text_paragraph', field_key: 'notes', label: 'Notes', sort_order: 5, required: 0 },
+      ];
+      for (const f of defaultFields) {
+        await db.execute({
+          sql: `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required) VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [tmplId, f.field_type, f.field_key, f.label, f.sort_order, f.required],
+        });
+      }
+    }
+  } catch { /* ignore if tables not yet created on first run — will seed on next startup */ }
 
   // Remove legacy "True"/"False" ICP config options if they exist
   try {
