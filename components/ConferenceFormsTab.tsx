@@ -489,86 +489,93 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4 px-5 py-4 border-b border-gray-100">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-gray-800">{form.name}</h3>
-                    <span className="text-xs text-gray-400">by {form.created_by || '—'}</span>
-                    <span className="text-xs text-gray-400">· {fmtDate(form.created_at)}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">{form.submission_count ?? 0} submissions</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Export */}
-                  <button
-                    type="button"
-                    onClick={() => { loadSubmissions(form.id); setTimeout(() => handleExport(form), 300); }}
-                    title="Export to Excel"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h4a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
-                  </button>
-                  {/* Edit form settings */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingFormId(form.id);
-                      setEditDraft({
-                        name: form.name,
-                        conference_logo_url: form.conference_logo_url || '',
-                        background_color: form.background_color || getCssVarHex('--brand-primary-rgb', '#0B3C62'),
-                        accent_color: form.accent_color || getCssVarHex('--brand-highlight-rgb', '#FFCB3F'),
-                        accent_gradient: form.accent_gradient || 'none',
-                        image_url: form.image_url || '',
-                        image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
-                        html_content: form.html_content || '',
-                        image_offset_y: form.image_offset_y ?? 0,
-                        html_offset_y: form.html_offset_y ?? 0,
-                        form_width: form.form_width ?? 420,
-                      });
-                    }}
-                    title="Edit form settings"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  </button>
-                  {/* Build / add fields */}
-                  <button
-                    type="button"
-                    onClick={() => setBuilderFormId(form.id)}
-                    title="Add/edit fields"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                  </button>
-                  {/* Delete */}
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteForm(form.id)}
-                    title="Delete form"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  </button>
-                  {/* Expand form */}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedForm(form)}
-                    className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-                    Expand Form
-                  </button>
-                  {/* Toggle submissions */}
+              <div className="px-4 py-4 border-b border-gray-100 space-y-3">
+                {/* Row 1: form name + collapse toggle */}
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-bold text-gray-800 leading-snug flex-1 min-w-0">{form.name}</h3>
                   <button
                     type="button"
                     onClick={() => toggleRow(form.id)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 transition-colors"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 mt-0.5"
                     title={isExpanded ? 'Collapse' : 'Show submissions'}
                   >
                     <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
+                  </button>
+                </div>
+
+                {/* Row 2: metadata */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">{form.submission_count ?? 0} submissions</span>
+                  <span className="text-xs text-gray-400 truncate max-w-[160px]">by {form.created_by || '—'}</span>
+                  <span className="text-xs text-gray-400">{fmtDate(form.created_at)}</span>
+                </div>
+
+                {/* Row 3: action bar */}
+                <div className="flex items-center justify-between gap-2">
+                  {/* Utility icons — left cluster */}
+                  <div className="flex items-center gap-1">
+                    {/* Export */}
+                    <button
+                      type="button"
+                      onClick={() => { loadSubmissions(form.id); setTimeout(() => handleExport(form), 300); }}
+                      title="Export to Excel"
+                      className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h4a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                    </button>
+                    {/* Edit form settings */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingFormId(form.id);
+                        setEditDraft({
+                          name: form.name,
+                          conference_logo_url: form.conference_logo_url || '',
+                          background_color: form.background_color || getCssVarHex('--brand-primary-rgb', '#0B3C62'),
+                          accent_color: form.accent_color || getCssVarHex('--brand-highlight-rgb', '#FFCB3F'),
+                          accent_gradient: form.accent_gradient || 'none',
+                          image_url: form.image_url || '',
+                          image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
+                          html_content: form.html_content || '',
+                          image_offset_y: form.image_offset_y ?? 0,
+                          html_offset_y: form.html_offset_y ?? 0,
+                          form_width: form.form_width ?? 420,
+                        });
+                      }}
+                      title="Edit form settings"
+                      className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    </button>
+                    {/* Build / add fields */}
+                    <button
+                      type="button"
+                      onClick={() => setBuilderFormId(form.id)}
+                      title="Add/edit fields"
+                      className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    </button>
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteForm(form.id)}
+                      title="Delete form"
+                      className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
+                  {/* Expand Form — primary CTA, right side */}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedForm(form)}
+                    className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                    Expand Form
                   </button>
                 </div>
               </div>
