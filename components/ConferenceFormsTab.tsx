@@ -451,7 +451,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
                     </button>
-                    <input type="number" value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-16 text-center input-field text-xs tabular-nums" />
+                    <input type="number" value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-20 text-center input-field text-xs tabular-nums" />
                     <span className="text-xs text-gray-400">px</span>
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
@@ -474,7 +474,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
                     </button>
-                    <input type="number" value={editDraft.html_offset_y} onChange={e => setEditDraft(d => ({ ...d, html_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-16 text-center input-field text-xs tabular-nums" />
+                    <input type="number" value={editDraft.html_offset_y} onChange={e => setEditDraft(d => ({ ...d, html_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-20 text-center input-field text-xs tabular-nums" />
                     <span className="text-xs text-gray-400">px</span>
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>

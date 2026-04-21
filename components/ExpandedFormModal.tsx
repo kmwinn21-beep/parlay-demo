@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 
 export interface FormField {
@@ -129,7 +130,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const [attendeeDropOpen, setAttendeeDropOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const attendeeDropRef = useRef<HTMLDivElement>(null);
+
+  // Portal SSR safety — document.body is only available client-side
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(orientation: landscape) and (min-width: 768px)');
@@ -505,7 +510,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     </form>
   );
 
-  return (
+  if (!mounted) return null;
+
+  const overlay = (
     <div
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -535,55 +542,70 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       {isLandscape ? (
         /* ── Landscape: 2-column layout ── */
         <div className="flex h-full">
-          {/* Left panel */}
-          <div className="flex-1 flex flex-col p-8 overflow-y-auto" style={{ height: '100%' }}>
-            {/* Company logo */}
+
+          {/* Left panel — grid: logo (auto) + image (1fr) + html (3fr), no scrollbar */}
+          <div className="flex-1 flex flex-col overflow-hidden p-8" style={{ height: '100%' }}>
+            {/* Company logo — auto height row */}
             {brandLogoUrl && (
-              <div className="mb-6 flex-shrink-0">
+              <div className="mb-4 flex-shrink-0">
                 <img src={brandLogoUrl} alt="Company Logo" className="h-12 w-auto object-contain" />
               </div>
             )}
-            {/* Image element */}
-            <div className="flex-1 flex items-center justify-center mb-6 min-h-0" style={{ marginTop: imageOffsetY }}>
-              {form.image_url && !imgError ? (
-                <img
-                  src={form.image_url}
-                  alt=""
-                  onError={() => setImgError(true)}
-                  className="rounded-lg shadow-lg"
-                  style={{ maxWidth: `${imageMaxWidth}%`, height: 'auto', objectFit: 'contain' }}
-                />
-              ) : (
-                <div
-                  className="w-full rounded-xl flex items-center justify-center py-16"
-                  style={{
-                    border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
-                    color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
-                  }}
-                >
-                  <span className="text-lg font-semibold tracking-wide">Image Element</span>
+            {/* 4-row grid: image (1fr) + html text (3fr) */}
+            <div style={{ display: 'grid', gridTemplateRows: '1fr 3fr', flex: 1, minHeight: 0, gap: '1rem' }}>
+
+              {/* Image cell — row 1 (1fr = 25%) */}
+              <div style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {form.image_url && !imgError ? (
+                  <img
+                    src={form.image_url}
+                    alt=""
+                    onError={() => setImgError(true)}
+                    className="rounded-lg shadow-lg"
+                    style={{
+                      maxWidth: `${imageMaxWidth}%`,
+                      height: 'auto',
+                      objectFit: 'contain',
+                      transform: `translateY(${imageOffsetY}px)`,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full rounded-xl flex items-center justify-center"
+                    style={{
+                      border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
+                      color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
+                      transform: `translateY(${imageOffsetY}px)`,
+                    }}
+                  >
+                    <span className="text-lg font-semibold tracking-wide">Image Element</span>
+                  </div>
+                )}
+              </div>
+
+              {/* HTML text cell — rows 2-4 (3fr = 75%) */}
+              <div style={{ overflow: 'hidden', position: 'relative' }}>
+                <div style={{ transform: `translateY(${htmlOffsetY}px)` }}>
+                  {form.html_content ? (
+                    <div
+                      className="prose prose-sm max-w-none"
+                      style={{ color: accentIsLight ? '#1a1a1a' : '#ffffff' }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(form.html_content) }}
+                    />
+                  ) : (
+                    <div
+                      className="rounded-xl flex items-center justify-center py-12"
+                      style={{
+                        border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
+                        color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
+                      }}
+                    >
+                      <span className="text-lg font-semibold tracking-wide">HTML Text Element</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            {/* HTML text element */}
-            <div className="flex-shrink-0" style={{ marginTop: htmlOffsetY }}>
-              {form.html_content ? (
-                <div
-                  className="prose prose-sm max-w-none"
-                  style={{ color: accentIsLight ? '#1a1a1a' : '#ffffff' }}
-                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(form.html_content) }}
-                />
-              ) : (
-                <div
-                  className="rounded-xl flex items-center justify-center py-12"
-                  style={{
-                    border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
-                    color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
-                  }}
-                >
-                  <span className="text-lg font-semibold tracking-wide">HTML Text Element</span>
-                </div>
-              )}
+              </div>
+
             </div>
           </div>
 
@@ -607,6 +629,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       )}
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
 
 function SearchableDropdownField({
