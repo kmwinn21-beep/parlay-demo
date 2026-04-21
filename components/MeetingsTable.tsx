@@ -499,7 +499,7 @@ export function MeetingsTable({
   userOptions?: UserOption[];
   hideCompany?: boolean;
 }) {
-  const { isVisible } = useTableColumnConfig('meetings');
+  const { isVisible, orderedColumns } = useTableColumnConfig('meetings');
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -658,15 +658,21 @@ export function MeetingsTable({
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              {isVisible('name') && <SortHeader label="Name" col="name" />}
-              {isVisible('title') && <SortHeader label="Title" col="title" />}
-              {isVisible('rep') && <SortHeader label="Rep" col="scheduled_by" />}
-              {isVisible('company') && !hideCompany && <SortHeader label="Company" col="company" />}
-              {isVisible('datetime') && <SortHeader label="Date/Time" col="datetime" />}
-              {isVisible('conference') && <SortHeader label="Conference" col="conference" />}
-              {isVisible('meeting_type') && <SortHeader label="Meeting Type" col="meeting_type" />}
-              {isVisible('outcome') && <SortHeader label="Outcome" col="outcome" />}
-              {isVisible('info') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>}
+              {orderedColumns.map(col => {
+                if (!isVisible(col.key)) return null;
+                switch (col.key) {
+                  case 'name': return <SortHeader key="name" label="Name" col="name" />;
+                  case 'title': return <SortHeader key="title" label="Title" col="title" />;
+                  case 'rep': return <SortHeader key="rep" label="Rep" col="scheduled_by" />;
+                  case 'company': return !hideCompany ? <SortHeader key="company" label="Company" col="company" /> : null;
+                  case 'datetime': return <SortHeader key="datetime" label="Date/Time" col="datetime" />;
+                  case 'conference': return <SortHeader key="conference" label="Conference" col="conference" />;
+                  case 'meeting_type': return <SortHeader key="meeting_type" label="Meeting Type" col="meeting_type" />;
+                  case 'outcome': return <SortHeader key="outcome" label="Outcome" col="outcome" />;
+                  case 'info': return <th key="info" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>;
+                  default: return null;
+                }
+              })}
               {hasActions && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -685,56 +691,38 @@ export function MeetingsTable({
                 />
               ) : (
                 <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
-                  {isVisible('name') && <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                    <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
-                      {m.first_name} {m.last_name}
-                    </Link>
-                  </td>}
-                  {isVisible('title') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span>
-                  </td>}
-                  {isVisible('rep') && <td className="px-3 py-2 leading-snug">
-                    <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} />
-                  </td>}
-                  {isVisible('company') && !hideCompany && (
-                    <td className="px-3 py-2 text-gray-600 leading-snug">
-                      {m.company_name && m.company_id ? (
-                        <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">
-                          {m.company_name}
+                  {orderedColumns.map(col => {
+                    if (!isVisible(col.key)) return null;
+                    switch (col.key) {
+                      case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                        <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
+                          {m.first_name} {m.last_name}
                         </Link>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                  )}
-                  {isVisible('datetime') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
-                    <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
-                  </td>}
-                  {isVisible('conference') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">
-                      {m.conference_name}
-                    </Link>
-                  </td>}
-                  {isVisible('meeting_type') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    {m.meeting_type || <span className="text-gray-300">—</span>}
-                  </td>}
-                  {isVisible('outcome') && <td className="px-3 py-2">
-                    <OutcomeButton
-                      value={m.outcome}
-                      options={actionOptions}
-                      colorMap={colorMap}
-                      onChange={(val) => onOutcomeChange(m.id, val)}
-                    />
-                  </td>}
-                  {isVisible('info') && <td className="px-3 py-2">
-                    <MeetingInfoTooltip
-                      scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
-                      location={m.location}
-                      attendees={m.additional_attendees}
-                      companyWse={m.company_wse}
-                    />
-                  </td>}
+                      </td>;
+                      case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug"><span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span></td>;
+                      case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} /></td>;
+                      case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
+                        {m.company_name && m.company_id ? (
+                          <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{m.company_name}</Link>
+                        ) : (<span className="text-gray-300">—</span>)}
+                      </td> : null;
+                      case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug">
+                        <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
+                        <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
+                      </td>;
+                      case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
+                        <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">{m.conference_name}</Link>
+                      </td>;
+                      case 'meeting_type': return <td key="meeting_type" className="px-3 py-2 text-gray-600 leading-snug">{m.meeting_type || <span className="text-gray-300">—</span>}</td>;
+                      case 'outcome': return <td key="outcome" className="px-3 py-2">
+                        <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
+                      </td>;
+                      case 'info': return <td key="info" className="px-3 py-2">
+                        <MeetingInfoTooltip scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
+                      </td>;
+                      default: return null;
+                    }
+                  })}
                   {hasActions && (
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
