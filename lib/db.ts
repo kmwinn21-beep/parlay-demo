@@ -373,6 +373,7 @@ export async function initDb(): Promise<void> {
       operator TEXT NOT NULL DEFAULT 'OR',
       FOREIGN KEY (rule_id) REFERENCES icp_rules(id) ON DELETE CASCADE
     )`,
+    `ALTER TABLE meetings ADD COLUMN meeting_type TEXT`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
