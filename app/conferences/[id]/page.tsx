@@ -25,6 +25,9 @@ import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
 import { ColumnMappingModal } from '@/components/ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
+import { useUser } from '@/components/UserContext';
+import { useLogoConfig } from '@/lib/useLogoConfig';
 
 interface Attendee {
   id: number;
@@ -110,9 +113,9 @@ interface ConferenceDetail {
   assigned_rep?: string;
 }
 
-type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes';
+type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes' | 'forms';
 
-const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes'];
+const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes', 'forms'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -238,6 +241,9 @@ export default function ConferenceDetailPage() {
   const configOptions = useConfigOptions('conference_detail');
   const { isVisible: isConfAttendeeColVisible } = useTableColumnConfig('conference_attendees');
   const conferenceTabConfig = useSectionConfig('conference_details');
+  const { user: currentUser } = useUser();
+  const logoConfig = useLogoConfig();
+  const isAdminUser = currentUser?.role === 'administrator';
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -1912,6 +1918,24 @@ export default function ConferenceDetailPage() {
           eventTypeOptions={eventTypeOptions}
           companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name, assigned_user: c.assigned_user }))}
           attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, company_id: a.company_id, company_name: a.company_name, company_type: a.company_type }))}
+        />
+      )}
+
+      {activeTab === 'forms' && (
+        <ConferenceFormsTab
+          conferenceId={Number(id)}
+          conferenceName={conference?.name || ''}
+          attendees={(conference?.attendees || []).map(a => ({
+            id: a.id,
+            first_name: a.first_name,
+            last_name: a.last_name,
+            title: a.title,
+            company_name: a.company_name,
+            email: a.email,
+          }))}
+          brandLogoUrl={logoConfig.logoDarkUrl}
+          isAdmin={isAdminUser}
+          currentUserEmail={currentUser?.email || ''}
         />
       )}
     </div>

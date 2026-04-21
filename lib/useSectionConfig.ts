@@ -29,6 +29,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'social', label: 'Social' },
     { key: 'analytics', label: 'Insights' },
     { key: 'notes', label: 'Notes' },
+    { key: 'forms', label: 'Conference Forms' },
   ],
 };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { BackButton } from '@/components/BackButton';
 import { COLOR_PRESETS, getPreset } from '@/lib/colors';
@@ -52,7 +52,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_companies:  'Conference Company Table',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1258,14 +1258,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-6">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : 'ICP'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : 'Custom Forms'}
             </button>
           ))}
         </nav>
@@ -2097,6 +2097,466 @@ export default function AdminPage() {
           </div>
         )
       )}
+
+      {/* ── Custom Forms tab ── */}
+      {tab === 'forms' && <AdminFormsTab />}
+    </div>
+  );
+}
+
+// ─── Admin Forms Tab ────────────────────────────────────────────────────────────
+
+const ADMIN_FIELD_TYPES = [
+  { value: 'text_single', label: 'Text (Single Line)' },
+  { value: 'text_paragraph', label: 'Text (Paragraph)' },
+  { value: 'number', label: 'Number' },
+  { value: 'datetime', label: 'Date / Time' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'single_select', label: 'Single Select' },
+  { value: 'multi_select', label: 'Multi Select' },
+  { value: 'dropdown', label: 'Dropdown' },
+  { value: 'searchable_dropdown', label: 'Searchable Dropdown' },
+  { value: 'attendee_picker', label: 'Attendee Name Picker' },
+];
+
+const ADMIN_OPTIONS_SOURCES = [
+  { value: '', label: 'Custom options' },
+  { value: 'attendee_name', label: 'Attendee Name' },
+  { value: 'company_name', label: 'Company Name' },
+  { value: 'conference_name', label: 'Conference Name' },
+  { value: 'assigned_user', label: 'Assigned User' },
+];
+
+const HAS_FIELD_OPTIONS = ['dropdown', 'single_select', 'multi_select', 'searchable_dropdown'];
+
+interface AdminFormField {
+  id: number;
+  field_type: string;
+  field_key: string | null;
+  label: string;
+  placeholder: string | null;
+  required: boolean;
+  sort_order: number;
+  options_source: string | null;
+  options: { id: number; value: string; sort_order: number }[];
+}
+
+interface AdminFormTemplate {
+  id: number;
+  name: string;
+  created_by: string | null;
+  created_at: string;
+  fields: AdminFormField[];
+}
+
+interface AdminPermission {
+  user_config_id: number;
+  display_name: string;
+}
+
+interface UserOption {
+  id: number;
+  value: string;
+}
+
+function AdminFormsTab() {
+  const [templates, setTemplates] = useState<AdminFormTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [builderOpenId, setBuilderOpenId] = useState<number | null>(null);
+  const [permOpenId, setPermOpenId] = useState<number | null>(null);
+  const [permissions, setPermissions] = useState<Record<number, AdminPermission[]>>({});
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [addingTemplate, setAddingTemplate] = useState(false);
+  const [newTmplName, setNewTmplName] = useState('');
+  const [savingNew, setSavingNew] = useState(false);
+  const [editingTmplId, setEditingTmplId] = useState<number | null>(null);
+  const [editTmplName, setEditTmplName] = useState('');
+
+  // Field builder state for selected template
+  const [addingField, setAddingField] = useState(false);
+  const [fieldDraft, setFieldDraft] = useState({ field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''] });
+  const [savingField, setSavingField] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
+  const [editFieldDraft, setEditFieldDraft] = useState<Partial<typeof fieldDraft>>({});
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/form-templates');
+      if (res.ok) setTemplates(await res.json());
+    } catch { toast.error('Failed to load templates'); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadTemplates(); }, [loadTemplates]);
+
+  useEffect(() => {
+    fetch('/api/config?category=user').then(r => r.json()).then(data =>
+      setUserOptions(data.map((u: { id: number; value: string }) => ({ id: u.id, value: u.value })))
+    ).catch(() => {});
+  }, []);
+
+  const loadPermissions = async (templateId: number) => {
+    try {
+      const res = await fetch(`/api/form-templates/${templateId}/permissions`);
+      if (res.ok) {
+        const data = await res.json();
+        setPermissions(prev => ({ ...prev, [templateId]: data }));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!newTmplName.trim()) { toast.error('Name required'); return; }
+    setSavingNew(true);
+    try {
+      const res = await fetch('/api/form-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newTmplName.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Template created');
+      setAddingTemplate(false);
+      setNewTmplName('');
+      await loadTemplates();
+    } catch { toast.error('Failed to create template'); }
+    finally { setSavingNew(false); }
+  };
+
+  const handleDeleteTemplate = async (id: number, name: string) => {
+    if (!confirm(`Delete template "${name}"? This will also remove it from any conferences using it.`)) return;
+    try {
+      const res = await fetch(`/api/form-templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('Deleted');
+      setTemplates(prev => prev.filter(t => t.id !== id));
+    } catch { toast.error('Failed to delete'); }
+  };
+
+  const handleSaveTemplateName = async (id: number) => {
+    if (!editTmplName.trim()) { toast.error('Name required'); return; }
+    try {
+      const res = await fetch(`/api/form-templates/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editTmplName.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Saved');
+      setEditingTmplId(null);
+      await loadTemplates();
+    } catch { toast.error('Failed to save'); }
+  };
+
+  const handleAddField = async (templateId: number) => {
+    if (!fieldDraft.label.trim()) { toast.error('Label required'); return; }
+    setSavingField(true);
+    try {
+      const tmpl = templates.find(t => t.id === templateId);
+      const res = await fetch(`/api/form-templates/${templateId}/fields`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...fieldDraft, sort_order: (tmpl?.fields.length || 0) + 1 }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Field added');
+      setAddingField(false);
+      setFieldDraft({ field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''] });
+      await loadTemplates();
+    } catch { toast.error('Failed to add field'); }
+    finally { setSavingField(false); }
+  };
+
+  const handleDeleteField = async (templateId: number, fieldId: number) => {
+    if (!confirm('Delete this field?')) return;
+    try {
+      const res = await fetch(`/api/form-templates/${templateId}/fields/${fieldId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('Field removed');
+      await loadTemplates();
+    } catch { toast.error('Failed to delete field'); }
+  };
+
+  const handleSaveField = async (templateId: number, fieldId: number) => {
+    try {
+      const res = await fetch(`/api/form-templates/${templateId}/fields/${fieldId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFieldDraft),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Saved');
+      setEditingFieldId(null);
+      await loadTemplates();
+    } catch { toast.error('Failed to save field'); }
+  };
+
+  const handleAddPermission = async (templateId: number, userConfigId: number) => {
+    try {
+      await fetch(`/api/form-templates/${templateId}/permissions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_config_id: userConfigId }),
+      });
+      await loadPermissions(templateId);
+    } catch { toast.error('Failed to add permission'); }
+  };
+
+  const handleRemovePermission = async (templateId: number, userConfigId: number) => {
+    try {
+      await fetch(`/api/form-templates/${templateId}/permissions`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_config_id: userConfigId }),
+      });
+      await loadPermissions(templateId);
+    } catch { toast.error('Failed to remove permission'); }
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-48">
+      <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Custom Form Templates</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Build global templates that can be added to any conference. Administrators control which users can edit each template.</p>
+        </div>
+        {!addingTemplate && (
+          <button type="button" onClick={() => setAddingTemplate(true)} className="btn-primary text-sm flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            New Template
+          </button>
+        )}
+      </div>
+
+      {/* New template form */}
+      {addingTemplate && (
+        <div className="card border border-brand-secondary/30 bg-blue-50/20 space-y-3">
+          <h3 className="text-sm font-bold text-brand-primary">New Template</h3>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Template Name *</label>
+              <input type="text" value={newTmplName} onChange={e => setNewTmplName(e.target.value)} className="input-field text-sm w-full" placeholder="e.g. Lead Capture" onKeyDown={e => { if (e.key === 'Enter') handleCreateTemplate(); }} />
+            </div>
+            <button type="button" onClick={handleCreateTemplate} disabled={savingNew} className="btn-primary text-sm">{savingNew ? 'Creating…' : 'Create'}</button>
+            <button type="button" onClick={() => { setAddingTemplate(false); setNewTmplName(''); }} className="btn-secondary text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {templates.length === 0 && !addingTemplate && (
+        <div className="card text-center py-10">
+          <p className="text-sm text-gray-400">No templates yet. Click &quot;New Template&quot; to create one.</p>
+        </div>
+      )}
+
+      {templates.map(tmpl => {
+        const isOpen = expandedId === tmpl.id;
+        const isBuilderOpen = builderOpenId === tmpl.id;
+        const isPermOpen = permOpenId === tmpl.id;
+        const tmplPerms = permissions[tmpl.id] || [];
+
+        return (
+          <div key={tmpl.id} className="card p-0 overflow-hidden">
+            {/* Template header row */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+              {editingTmplId === tmpl.id ? (
+                <div className="flex gap-2 flex-1 items-center">
+                  <input type="text" value={editTmplName} onChange={e => setEditTmplName(e.target.value)} className="input-field text-sm flex-1" onKeyDown={e => { if (e.key === 'Enter') handleSaveTemplateName(tmpl.id); }} />
+                  <button type="button" onClick={() => handleSaveTemplateName(tmpl.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                  <button type="button" onClick={() => setEditingTmplId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-gray-800">{tmpl.name}</span>
+                    {tmpl.created_by === 'system' && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-600 font-medium">Default</span>}
+                    <span className="text-xs text-gray-400">{tmpl.fields.length} fields</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button type="button" onClick={() => { setEditingTmplId(tmpl.id); setEditTmplName(tmpl.name); }} title="Rename" className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                </button>
+                <button type="button" onClick={() => { setBuilderOpenId(isBuilderOpen ? null : tmpl.id); setAddingField(false); }} title="Manage fields" className={`p-1.5 rounded-lg transition-colors ${isBuilderOpen ? 'text-brand-secondary bg-blue-50' : 'text-gray-400 hover:text-brand-secondary hover:bg-blue-50'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                </button>
+                <button type="button" onClick={() => { setPermOpenId(isPermOpen ? null : tmpl.id); if (!permissions[tmpl.id]) loadPermissions(tmpl.id); }} title="Manage permissions" className={`p-1.5 rounded-lg transition-colors ${isPermOpen ? 'text-brand-secondary bg-blue-50' : 'text-gray-400 hover:text-brand-secondary hover:bg-blue-50'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                </button>
+                <button type="button" onClick={() => handleDeleteTemplate(tmpl.id, tmpl.name)} title="Delete template" className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Fields builder */}
+            {isBuilderOpen && (
+              <div className="px-5 py-4 bg-gray-50/50 border-b border-gray-100 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Template Fields</p>
+                {tmpl.fields.length === 0 && !addingField && <p className="text-xs text-gray-400">No fields. Add one below.</p>}
+                {tmpl.fields.map(f => (
+                  <div key={f.id} className={`rounded-xl border p-3 bg-white ${editingFieldId === f.id ? 'border-brand-secondary' : 'border-gray-200'}`}>
+                    {editingFieldId === f.id ? (
+                      <div className="space-y-2.5">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-0.5">Label</label>
+                            <input type="text" value={editFieldDraft.label || ''} onChange={e => setEditFieldDraft(d => ({ ...d, label: e.target.value }))} className="input-field text-xs w-full" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-0.5">Placeholder</label>
+                            <input type="text" value={editFieldDraft.placeholder || ''} onChange={e => setEditFieldDraft(d => ({ ...d, placeholder: e.target.value }))} className="input-field text-xs w-full" />
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-gray-700">
+                          <input type="checkbox" checked={!!editFieldDraft.required} onChange={e => setEditFieldDraft(d => ({ ...d, required: e.target.checked }))} className="accent-brand-secondary" />
+                          Required
+                        </label>
+                        {HAS_FIELD_OPTIONS.includes(f.field_type) && (
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-0.5">Options Source</label>
+                            <select value={editFieldDraft.options_source || ''} onChange={e => setEditFieldDraft(d => ({ ...d, options_source: e.target.value }))} className="input-field text-xs w-full mb-1.5">
+                              {ADMIN_OPTIONS_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                            {!editFieldDraft.options_source && (
+                              <div className="space-y-1">
+                                {(editFieldDraft.options || []).map((opt, idx) => (
+                                  <div key={idx} className="flex gap-1">
+                                    <input type="text" value={opt} onChange={e => { const opts = [...(editFieldDraft.options || [])]; opts[idx] = e.target.value; setEditFieldDraft(d => ({ ...d, options: opts })); }} className="input-field text-xs flex-1" />
+                                    <button type="button" onClick={() => setEditFieldDraft(d => ({ ...d, options: (d.options || []).filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                                  </div>
+                                ))}
+                                <button type="button" onClick={() => setEditFieldDraft(d => ({ ...d, options: [...(d.options || []), ''] }))} className="text-xs text-brand-secondary hover:underline">+ Add option</button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => handleSaveField(tmpl.id, f.id)} className="btn-primary text-xs px-2.5 py-1">Save</button>
+                          <button type="button" onClick={() => setEditingFieldId(null)} className="btn-secondary text-xs px-2.5 py-1">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-800">{f.label}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{ADMIN_FIELD_TYPES.find(t => t.value === f.field_type)?.label || f.field_type}</span>
+                            {f.required && <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-500">Required</span>}
+                          </div>
+                          {f.options_source && <p className="text-xs text-gray-400 mt-0.5">Source: {ADMIN_OPTIONS_SOURCES.find(s => s.value === f.options_source)?.label}</p>}
+                          {!f.options_source && f.options.length > 0 && <p className="text-xs text-gray-400 mt-0.5">Options: {f.options.map(o => o.value).join(', ')}</p>}
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button type="button" onClick={() => { setEditingFieldId(f.id); setEditFieldDraft({ label: f.label, placeholder: f.placeholder || '', required: f.required, options_source: f.options_source || '', options: f.options.length > 0 ? f.options.map(o => o.value) : [''] }); }} className="p-1 text-gray-400 hover:text-brand-secondary transition-colors">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                          <button type="button" onClick={() => handleDeleteField(tmpl.id, f.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add field form */}
+                {addingField && builderOpenId === tmpl.id ? (
+                  <div className="rounded-xl border border-brand-secondary bg-blue-50/10 p-3 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">Field Type</label>
+                        <select value={fieldDraft.field_type} onChange={e => setFieldDraft(d => ({ ...d, field_type: e.target.value }))} className="input-field text-xs w-full">
+                          {ADMIN_FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">Label *</label>
+                        <input type="text" value={fieldDraft.label} onChange={e => setFieldDraft(d => ({ ...d, label: e.target.value }))} className="input-field text-xs w-full" placeholder="Field label" />
+                      </div>
+                    </div>
+                    <input type="text" value={fieldDraft.placeholder} onChange={e => setFieldDraft(d => ({ ...d, placeholder: e.target.value }))} className="input-field text-xs w-full" placeholder="Placeholder (optional)" />
+                    <label className="flex items-center gap-2 text-xs text-gray-700">
+                      <input type="checkbox" checked={fieldDraft.required} onChange={e => setFieldDraft(d => ({ ...d, required: e.target.checked }))} className="accent-brand-secondary" />
+                      Required
+                    </label>
+                    {HAS_FIELD_OPTIONS.includes(fieldDraft.field_type) && (
+                      <div>
+                        <select value={fieldDraft.options_source} onChange={e => setFieldDraft(d => ({ ...d, options_source: e.target.value }))} className="input-field text-xs w-full mb-1.5">
+                          {ADMIN_OPTIONS_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                        {!fieldDraft.options_source && (
+                          <div className="space-y-1">
+                            {fieldDraft.options.map((opt, idx) => (
+                              <div key={idx} className="flex gap-1">
+                                <input type="text" value={opt} onChange={e => { const opts = [...fieldDraft.options]; opts[idx] = e.target.value; setFieldDraft(d => ({ ...d, options: opts })); }} className="input-field text-xs flex-1" placeholder={`Option ${idx + 1}`} />
+                                {fieldDraft.options.length > 1 && <button type="button" onClick={() => setFieldDraft(d => ({ ...d, options: d.options.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>}
+                              </div>
+                            ))}
+                            <button type="button" onClick={() => setFieldDraft(d => ({ ...d, options: [...d.options, ''] }))} className="text-xs text-brand-secondary hover:underline">+ Add option</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => handleAddField(tmpl.id)} disabled={savingField} className="btn-primary text-xs px-2.5 py-1">{savingField ? 'Adding…' : 'Add Field'}</button>
+                      <button type="button" onClick={() => { setAddingField(false); setFieldDraft({ field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''] }); }} className="btn-secondary text-xs px-2.5 py-1">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => { setAddingField(true); setBuilderOpenId(tmpl.id); }} className="btn-secondary text-xs flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add Field
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Permissions panel */}
+            {isPermOpen && (
+              <div className="px-5 py-4 border-b border-gray-100 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Edit Permissions</p>
+                <p className="text-xs text-gray-400">Grant users the ability to edit this template&apos;s fields.</p>
+                {tmplPerms.length === 0 ? (
+                  <p className="text-xs text-gray-400">No users have edit access yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {tmplPerms.map(p => (
+                      <span key={p.user_config_id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                        {p.display_name}
+                        <button type="button" onClick={() => handleRemovePermission(tmpl.id, p.user_config_id)} className="hover:text-red-500 transition-colors">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 items-center">
+                  <select
+                    defaultValue=""
+                    onChange={e => { if (e.target.value) { handleAddPermission(tmpl.id, Number(e.target.value)); e.target.value = ''; } }}
+                    className="input-field text-xs flex-1"
+                  >
+                    <option value="">— Grant access to user… —</option>
+                    {userOptions
+                      .filter(u => !tmplPerms.some(p => p.user_config_id === u.id))
+                      .map(u => <option key={u.id} value={u.id}>{u.value}</option>)
+                    }
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
