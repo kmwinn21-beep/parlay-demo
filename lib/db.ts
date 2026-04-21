@@ -481,6 +481,8 @@ export async function initDb(): Promise<void> {
     { category: 'rep_relationship_type', value: 'Strong', sort_order: 1 },
     { category: 'rep_relationship_type', value: 'Former Client', sort_order: 2 },
     { category: 'rep_relationship_type', value: 'Other', sort_order: 3 },
+    { category: 'meeting_type', value: 'Pre-Scheduled', sort_order: 1 },
+    { category: 'meeting_type', value: 'Speed', sort_order: 2 },
   ];
   await Promise.all(newCategorySeeds.map(seed =>
     db.execute({
