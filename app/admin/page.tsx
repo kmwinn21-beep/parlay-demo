@@ -36,6 +36,7 @@ const CATEGORIES = [
   { key: 'profit_type', label: 'Profit Types' },
   { key: 'services', label: 'Services' },
   { key: 'icp', label: 'ICP' },
+  { key: 'meeting_type', label: 'Meeting Type' },
   { key: 'event_type', label: 'Event Type' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'user', label: 'Users' },
