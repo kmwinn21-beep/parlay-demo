@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 const DEFAULT_VALUE = 'Units';
 
 export async function GET(_request: NextRequest) {
