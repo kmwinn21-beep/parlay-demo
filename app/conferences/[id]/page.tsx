@@ -24,6 +24,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
 import { ColumnMappingModal } from '@/components/ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
 
 interface Attendee {
   id: number;
@@ -261,6 +262,8 @@ export default function ConferenceDetailPage() {
   const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
   const [meetingCompanyTypeOpts, setMeetingCompanyTypeOpts] = useState<string[]>([]);
   const [meetingSeniorityOpts, setMeetingSeniorityOpts] = useState<string[]>([]);
+
+  const [newMeetingOpen, setNewMeetingOpen] = useState(false);
 
   // Meeting filter state
   const [meetingFiltersOpen, setMeetingFiltersOpen] = useState(false);
@@ -1666,7 +1669,17 @@ export default function ConferenceDetailPage() {
                 </h2>
                 {/* Desktop: pills inline between count and Filters button — full rep names */}
                 {anyFilters && <div className="hidden lg:block flex-1 min-w-0"><PillList useShortLabel={false} /></div>}
-                <div className="ml-auto flex-shrink-0">
+                <div className="ml-auto flex-shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewMeetingOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary text-sm font-medium hover:bg-blue-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Meeting
+                  </button>
                   <button
                     type="button"
                     onClick={() => setMeetingFiltersOpen(o => !o)}
@@ -1802,6 +1815,14 @@ export default function ConferenceDetailPage() {
           </div>
         );
       })()}
+
+      <NewMeetingModal
+        isOpen={newMeetingOpen}
+        onClose={() => setNewMeetingOpen(false)}
+        availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date }] : []}
+        defaultConferenceId={conference?.id}
+        onSuccess={m => setConfMeetings(prev => [m, ...prev])}
+      />
 
       {activeTab === 'follow-ups' && (
         <div className="card p-0 overflow-hidden">
