@@ -675,13 +675,20 @@ export default function AdminPage() {
     if (!unitTypeLabel.trim()) return;
     setUnitTypeSaving(true);
     try {
+      let savedValue = unitTypeLabel.trim();
       if (unitTypeId) {
-        await fetch(`/api/config/${unitTypeId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: unitTypeLabel.trim() }) });
-      } else {
-        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'unit_type', value: unitTypeLabel.trim() }) });
+        const res = await fetch(`/api/config/${unitTypeId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: savedValue }) });
+        if (!res.ok) throw new Error('Failed to update');
         const data = await res.json();
-        setUnitTypeId(data.id);
+        savedValue = String(data.value ?? savedValue);
+      } else {
+        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'unit_type', value: savedValue }) });
+        if (!res.ok) throw new Error('Failed to create');
+        const data = await res.json();
+        setUnitTypeId(Number(data.id));
+        savedValue = String(data.value ?? savedValue);
       }
+      setUnitTypeLabel(savedValue);
       invalidateUnitTypeLabel();
       toast.success('Unit type saved!');
     } catch { toast.error('Failed to save unit type.'); }
