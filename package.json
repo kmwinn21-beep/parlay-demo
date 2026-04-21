@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@libsql/client": "^0.14.0",
     "bcryptjs": "^3.0.3",
     "fuse.js": "^7.0.0",
