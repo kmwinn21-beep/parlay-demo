@@ -188,6 +188,8 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
 
   // Follow-up picker: which submission row is showing the picker
   const [followUpOpenId, setFollowUpOpenId] = useState<number | null>(null);
+  // Optimistic: submission IDs that have had a follow-up assigned this session
+  const [followUpAssigned, setFollowUpAssigned] = useState<Set<number>>(new Set());
 
   // Builder
   const [builderFormId, setBuilderFormId] = useState<number | null>(null);
@@ -317,6 +319,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
       if (!res.ok) throw new Error();
       toast.success('Follow-up assigned!');
       setFollowUpOpenId(null);
+      setFollowUpAssigned(prev => new Set(prev).add(submissionId));
     } catch { toast.error('Failed to assign follow-up'); }
   };
 
@@ -566,6 +569,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                       {subs.map(sub => {
                         const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '—';
                         const isFollowUpOpen = followUpOpenId === sub.id;
+                        const isAssigned = followUpAssigned.has(sub.id);
                         const defaultUsers = currentUserConfigId ? [currentUserConfigId] : [];
 
                         return (
@@ -592,7 +596,14 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                               </select>
                             </td>
                             <td className="px-4 py-2.5 min-w-[200px]">
-                              {isFollowUpOpen ? (
+                              {isAssigned ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold whitespace-nowrap">
+                                  Follow Up
+                                  <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </span>
+                              ) : isFollowUpOpen ? (
                                 <FollowUpPicker
                                   sub={sub}
                                   userOptions={userOptions}
