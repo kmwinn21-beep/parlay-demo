@@ -435,6 +435,14 @@ export async function initDb(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_conference_forms_conf ON conference_forms(conference_id)`,
     `CREATE INDEX IF NOT EXISTS idx_form_submissions_form ON form_submissions(conference_form_id)`,
     `CREATE INDEX IF NOT EXISTS idx_form_submission_values_sub ON form_submission_values(submission_id)`,
+    `ALTER TABLE conference_forms ADD COLUMN accent_color TEXT`,
+    `ALTER TABLE conference_forms ADD COLUMN accent_gradient TEXT`,
+    `ALTER TABLE conference_forms ADD COLUMN image_url TEXT`,
+    `ALTER TABLE conference_forms ADD COLUMN image_max_width INTEGER`,
+    `ALTER TABLE conference_forms ADD COLUMN html_content TEXT`,
+    `ALTER TABLE conference_forms ADD COLUMN image_offset_y INTEGER`,
+    `ALTER TABLE conference_forms ADD COLUMN html_offset_y INTEGER`,
+    `ALTER TABLE conference_forms ADD COLUMN form_width INTEGER`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
