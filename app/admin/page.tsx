@@ -1867,7 +1867,7 @@ export default function AdminPage() {
             {/* Unit Type requirement row */}
             <div className="card">
               <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">{unitTypeLabel || 'Unit Type'} Requirement</h2>
-              <p className="text-sm text-gray-500 mb-4">Set a numeric threshold for the {unitTypeLabel || 'unit type'} value. Prospects that don't meet this requirement will not be marked as ICP.</p>
+              <p className="text-sm text-gray-500 mb-4">Set a numeric threshold for the {unitTypeLabel || 'unit type'} value. Prospects that don&apos;t meet this requirement will not be marked as ICP.</p>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-medium text-gray-700 flex-shrink-0">{unitTypeLabel || 'Unit Type'}</span>
                 <select
