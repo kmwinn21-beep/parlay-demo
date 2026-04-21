@@ -712,6 +712,26 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
             toast.success('Field removed');
             await loadForms();
           }}
+          onReorderFields={async (updates) => {
+            await Promise.all(updates.map(({ id, sort_order }) => {
+              const field = builderForm.fields.find(f => f.id === id);
+              if (field?.is_template_field && isAdmin) {
+                return fetch(`/api/form-templates/${builderForm.template_id}/fields/${id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ sort_order }),
+                });
+              } else if (!field?.is_template_field) {
+                return fetch(`/api/conference-forms/${builderForm.id}/fields/${id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ sort_order }),
+                });
+              }
+              return Promise.resolve();
+            }));
+            loadForms(); // background refresh — no await so UI stays responsive
+          }}
           onClose={() => setBuilderFormId(null)}
         />
       )}
