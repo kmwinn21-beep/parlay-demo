@@ -246,9 +246,17 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   };
 
   const handleMerge = async (masterId: number, duplicateIds: number[]) => {
-    const res = await fetch('/api/attendees/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }) });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
-    toast.success('Attendees merged!'); setSelectedIds(new Set()); onRefresh();
+    const dupSet = new Set(duplicateIds);
+    const snapshot = localAttendees;
+    setLocalAttendees((as) => as.filter((a) => !dupSet.has(a.id)));
+    try {
+      const res = await fetch('/api/attendees/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }) });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
+      toast.success('Attendees merged!'); setSelectedIds(new Set()); onRefresh();
+    } catch (e) {
+      setLocalAttendees(snapshot);
+      throw e;
+    }
   };
 
   const handleMassEdit = async () => {
@@ -765,7 +773,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedAttendees.map(a => ({ id: a.id, label: `${a.first_name} ${a.last_name}`, sublabel: [a.title, a.company_name].filter(Boolean).join(' · ') }))}
-        title="Merge Attendees" description="Select the master record. All conference associations will be merged into master. Duplicates will be deleted." />
+        title="Merge Attendees" description="Select the master record. All conference associations will be merged into master. Duplicates will be deleted."
+        searchType="attendee" />
 
       <InternalRelationshipModal
         isOpen={showRepRelModal}

@@ -353,9 +353,17 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   };
 
   const handleMerge = async (masterId: number, duplicateIds: number[]) => {
-    const res = await fetch('/api/companies/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }) });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
-    toast.success('Companies merged!'); setSelectedIds(new Set()); onRefresh();
+    const dupSet = new Set(duplicateIds);
+    const snapshot = localCompanies;
+    setLocalCompanies((cs) => cs.filter((c) => !dupSet.has(c.id)));
+    try {
+      const res = await fetch('/api/companies/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }) });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
+      toast.success('Companies merged!'); setSelectedIds(new Set()); onRefresh();
+    } catch (e) {
+      setLocalCompanies(snapshot);
+      throw e;
+    }
   };
 
   const handleParentChild = async (parentId: number, childIds: number[]) => {
@@ -365,9 +373,20 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   };
 
   const handleOperatorCapital = async (companyIds: number[]) => {
-    const res = await fetch('/api/companies/relationships/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: companyIds }) });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationships'); }
-    toast.success('Operator/Capital relationships created!'); setSelectedIds(new Set()); onRefresh();
+    const idsSet = new Set(companyIds);
+    const increment = companyIds.length - 1;
+    const snapshot = localCompanies;
+    setLocalCompanies((cs) => cs.map((c) =>
+      idsSet.has(c.id) ? { ...c, relationship_count: (c.relationship_count ?? 0) + increment } : c
+    ));
+    try {
+      const res = await fetch('/api/companies/relationships/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: companyIds }) });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationships'); }
+      toast.success('Operator/Capital relationships created!'); setSelectedIds(new Set()); onRefresh();
+    } catch (e) {
+      setLocalCompanies(snapshot);
+      throw e;
+    }
   };
 
   const handleMassEdit = async () => {
@@ -1100,7 +1119,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
-        title="Merge Companies" description="Select the master record. All attendees from duplicates will be reassigned to master. Duplicates will be deleted." />
+        title="Merge Companies" description="Select the master record. All attendees from duplicates will be reassigned to master. Duplicates will be deleted."
+        searchType="company" />
 
       <ParentChildModal
         isOpen={showParentChildModal}
