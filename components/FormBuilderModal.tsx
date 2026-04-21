@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import type { FormField } from './ExpandedFormModal';
 
@@ -43,7 +43,7 @@ interface Props {
   onAddField: (field: NewField) => Promise<void>;
   onUpdateField: (fieldId: number, updates: Partial<NewField>) => Promise<void>;
   onDeleteField: (fieldId: number, isTemplate: boolean) => Promise<void>;
-  onReorderField?: (fieldId: number, newOrder: number) => Promise<void>;
+  onReorderFields?: (updates: { id: number; sort_order: number }[]) => Promise<void>;
   onClose: () => void;
 }
 
@@ -54,12 +54,39 @@ export function FormBuilderModal({
   onAddField,
   onUpdateField,
   onDeleteField,
+  onReorderFields,
   onClose,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [savingAdd, setSavingAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Local ordered state for drag-and-drop — syncs when fields prop changes
+  const [orderedFields, setOrderedFields] = useState<FormField[]>(() =>
+    [...fields].sort((a, b) => a.sort_order - b.sort_order)
+  );
+  useEffect(() => {
+    setOrderedFields([...fields].sort((a, b) => a.sort_order - b.sort_order));
+  }, [fields]);
+
+  // Drag state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDrop = useCallback((toIndex: number) => {
+    if (dragIndex === null) return;
+    setDragIndex(null);
+    setDragOverIndex(null);
+    if (dragIndex === toIndex) return;
+    const next = [...orderedFields];
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setOrderedFields(next);
+    // Persist new sort_orders for every field
+    const updates = next.map((f, i) => ({ id: f.id, sort_order: i + 1 }));
+    onReorderFields?.(updates);
+  }, [dragIndex, orderedFields, onReorderFields]);
 
   const emptyNew: NewField = { field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''] };
   const [newField, setNewField] = useState<NewField>(emptyNew);
@@ -119,12 +146,29 @@ export function FormBuilderModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-          {fields.length === 0 && !adding && (
+          {orderedFields.length === 0 && !adding && (
             <p className="text-sm text-gray-400 py-4 text-center">No fields yet. Add one below.</p>
           )}
 
-          {fields.map(f => (
-            <div key={f.id} className={`rounded-xl border p-4 ${editingId === f.id ? 'border-brand-secondary bg-blue-50/30' : 'border-gray-200 bg-white'}`}>
+          {orderedFields.map((f, i) => (
+            <div
+              key={f.id}
+              draggable={editingId !== f.id}
+              onDragStart={() => setDragIndex(i)}
+              onDragOver={e => { e.preventDefault(); setDragOverIndex(i); }}
+              onDrop={() => handleDrop(i)}
+              onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+              className={[
+                'rounded-xl border p-4 transition-all select-none',
+                editingId === f.id
+                  ? 'border-brand-secondary bg-blue-50/30 cursor-default select-text'
+                  : 'border-gray-200 bg-white cursor-grab hover:border-gray-300',
+                dragOverIndex === i && dragIndex !== i
+                  ? 'ring-2 ring-brand-secondary border-brand-secondary shadow-md'
+                  : '',
+                dragIndex === i ? 'opacity-40' : '',
+              ].join(' ')}
+            >
               {editingId === f.id ? (
                 <div className="space-y-3">
                   <div className="flex gap-2">
@@ -193,7 +237,13 @@ export function FormBuilderModal({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2.5">
+                  {/* Drag grip */}
+                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="8" cy="5" r="1.5" /><circle cx="16" cy="5" r="1.5" />
+                    <circle cx="8" cy="12" r="1.5" /><circle cx="16" cy="12" r="1.5" />
+                    <circle cx="8" cy="19" r="1.5" /><circle cx="16" cy="19" r="1.5" />
+                  </svg>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-gray-800">{f.label}</span>
