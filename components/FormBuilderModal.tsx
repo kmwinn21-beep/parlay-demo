@@ -83,10 +83,20 @@ export function FormBuilderModal({
     const [moved] = next.splice(dragIndex, 1);
     next.splice(toIndex, 0, moved);
     setOrderedFields(next);
-    // Persist new sort_orders for every field
     const updates = next.map((f, i) => ({ id: f.id, sort_order: i + 1 }));
     onReorderFields?.(updates);
   }, [dragIndex, orderedFields, onReorderFields]);
+
+  const handleMoveField = useCallback((fromIndex: number, direction: 'up' | 'down') => {
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= orderedFields.length) return;
+    const next = [...orderedFields];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setOrderedFields(next);
+    const updates = next.map((f, i) => ({ id: f.id, sort_order: i + 1 }));
+    onReorderFields?.(updates);
+  }, [orderedFields, onReorderFields]);
 
   const emptyNew: NewField = { field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''] };
   const [newField, setNewField] = useState<NewField>(emptyNew);
@@ -238,12 +248,33 @@ export function FormBuilderModal({
                 </div>
               ) : (
                 <div className="flex items-start gap-2.5">
-                  {/* Drag grip */}
-                  <svg className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  {/* Drag grip — desktop only */}
+                  <svg className="hidden md:block w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <circle cx="8" cy="5" r="1.5" /><circle cx="16" cy="5" r="1.5" />
                     <circle cx="8" cy="12" r="1.5" /><circle cx="16" cy="12" r="1.5" />
                     <circle cx="8" cy="19" r="1.5" /><circle cx="16" cy="19" r="1.5" />
                   </svg>
+                  {/* Up / down chevrons — mobile only */}
+                  <div className="flex md:hidden flex-col gap-0.5 flex-shrink-0 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveField(i, 'up')}
+                      disabled={i === 0}
+                      className="p-0.5 rounded text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Move field up"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveField(i, 'down')}
+                      disabled={i === orderedFields.length - 1}
+                      className="p-0.5 rounded text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Move field down"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-gray-800">{f.label}</span>
