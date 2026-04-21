@@ -651,7 +651,7 @@ export default function AdminPage() {
               .then(data => ({ key: cat.key, options: data }))
           )
         ),
-        fetch('/api/config?category=unit_type', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/admin/unit-type', { cache: 'no-store' }).then(r => r.json()),
       ]);
       const map: Record<string, ConfigOption[]> = {};
       for (const r of catResults) {
@@ -660,11 +660,9 @@ export default function AdminPage() {
           : r.options;
       }
       setOptionsByCategory(map);
-      const utOpts = unitTypeRes as ConfigOption[];
-      if (utOpts.length > 0) {
-        setUnitTypeId(utOpts[0].id);
-        setUnitTypeLabel(utOpts[0].value);
-      }
+      const utData = unitTypeRes as { id: number | null; value: string };
+      if (utData.id != null) setUnitTypeId(utData.id);
+      setUnitTypeLabel(utData.value || 'WSE');
     } catch { toast.error('Failed to load config options.'); }
     finally { setIsLoading(false); }
   };
@@ -675,23 +673,18 @@ export default function AdminPage() {
     if (!unitTypeLabel.trim()) return;
     setUnitTypeSaving(true);
     try {
-      let savedValue = unitTypeLabel.trim();
-      if (unitTypeId) {
-        const res = await fetch(`/api/config/${unitTypeId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: savedValue }) });
-        if (!res.ok) throw new Error('Failed to update');
-        const data = await res.json();
-        savedValue = String(data.value ?? savedValue);
-      } else {
-        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'unit_type', value: savedValue }) });
-        if (!res.ok) throw new Error('Failed to create');
-        const data = await res.json();
-        setUnitTypeId(Number(data.id));
-        savedValue = String(data.value ?? savedValue);
-      }
-      setUnitTypeLabel(savedValue);
+      const res = await fetch('/api/admin/unit-type', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: unitTypeLabel.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setUnitTypeId(data.id);
+      setUnitTypeLabel(String(data.value));
       invalidateUnitTypeLabel();
       toast.success('Unit type saved!');
-    } catch { toast.error('Failed to save unit type.'); }
+    } catch (err) { toast.error(`Failed to save unit type: ${err instanceof Error ? err.message : err}`); }
     finally { setUnitTypeSaving(false); }
   };
 

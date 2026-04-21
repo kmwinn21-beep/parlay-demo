@@ -13,10 +13,10 @@ export function invalidateUnitTypeLabel() {
 
 async function fetchUnitTypeLabel(): Promise<string> {
   try {
-    const res = await fetch('/api/config?category=unit_type', { cache: 'no-store' });
+    const res = await fetch('/api/admin/unit-type', { cache: 'no-store' });
     if (!res.ok) return DEFAULT;
-    const data = await res.json() as { value: string }[];
-    return data[0]?.value || DEFAULT;
+    const data = await res.json() as { value: string };
+    return data.value || DEFAULT;
   } catch {
     return DEFAULT;
   }
