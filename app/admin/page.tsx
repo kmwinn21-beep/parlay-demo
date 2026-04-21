@@ -636,6 +636,7 @@ export default function AdminPage() {
   const [icpUnitTypeV1, setIcpUnitTypeV1] = useState('');
   const [icpUnitTypeV2, setIcpUnitTypeV2] = useState('');
   const [icpUnitTypeSaving, setIcpUnitTypeSaving] = useState(false);
+  const [icpUnitTypeConnector, setIcpUnitTypeConnector] = useState<'AND' | 'OR'>('AND');
 
   // ── Types tab ────────────────────────────────────────────────────────────────
 
@@ -696,11 +697,12 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/icp-rules', { cache: 'no-store' });
       if (!res.ok) throw new Error();
-      const data = await res.json() as { rules: { id: number; category: string; conditions: { option_value: string; operator: 'AND' | 'OR' }[] }[]; unitTypeReq: { operator: IcpUnitTypeOperator | null; value1: number | null; value2: number | null } };
+      const data = await res.json() as { rules: { id: number; category: string; conditions: { option_value: string; operator: 'AND' | 'OR' }[] }[]; unitTypeReq: { operator: IcpUnitTypeOperator | null; value1: number | null; value2: number | null; connector?: 'AND' | 'OR' } };
       setIcpRules(data.rules.map(r => ({ ...r, isEditing: false, isSaving: false })));
       setIcpUnitTypeOp(data.unitTypeReq.operator ?? '');
       setIcpUnitTypeV1(data.unitTypeReq.value1 != null ? String(data.unitTypeReq.value1) : '');
       setIcpUnitTypeV2(data.unitTypeReq.value2 != null ? String(data.unitTypeReq.value2) : '');
+      setIcpUnitTypeConnector(data.unitTypeReq.connector ?? 'AND');
     } catch { toast.error('Failed to load ICP configuration.'); }
     finally { setIcpLoading(false); }
   };
@@ -730,6 +732,14 @@ export default function AdminPage() {
       fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_value2', value: '' }) }),
     ]);
     toast.success('Unit type requirement cleared.');
+  };
+
+  const handleToggleConnector = async (val: 'AND' | 'OR') => {
+    setIcpUnitTypeConnector(val);
+    try {
+      await fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_connector', value: val }) });
+      toast.success('Connector updated.');
+    } catch { toast.error('Failed to update connector.'); }
   };
 
   const handleAddIcpRule = () => {
@@ -1935,6 +1945,32 @@ export default function AdminPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Connector between WSE and ICP Parameters */}
+            <div className="flex items-center gap-3 justify-center py-1">
+              <div className="h-px flex-1 bg-gray-200" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 uppercase tracking-wide">Combined with</span>
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleConnector('AND')}
+                    className={icpUnitTypeConnector === 'AND'
+                      ? 'px-3 py-1 bg-brand-secondary text-white'
+                      : 'px-3 py-1 bg-white text-gray-500 hover:bg-gray-50'}
+                  >AND</button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleConnector('OR')}
+                    className={icpUnitTypeConnector === 'OR'
+                      ? 'px-3 py-1 bg-brand-secondary text-white'
+                      : 'px-3 py-1 bg-white text-gray-500 hover:bg-gray-50'}
+                  >OR</button>
+                </div>
+                <span className="text-xs text-gray-400 uppercase tracking-wide">ICP Parameters</span>
+              </div>
+              <div className="h-px flex-1 bg-gray-200" />
             </div>
 
             {/* Category rules */}

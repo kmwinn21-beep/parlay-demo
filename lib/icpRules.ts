@@ -9,7 +9,7 @@ export async function getIcpConfig(): Promise<IcpConfig> {
   const [rulesResult, settingsResult] = await Promise.all([
     db.execute({ sql: 'SELECT id, category, sort_order FROM icp_rules ORDER BY sort_order, id', args: [] }),
     db.execute({
-      sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_unit_type_operator','icp_unit_type_value1','icp_unit_type_value2')",
+      sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_unit_type_operator','icp_unit_type_value1','icp_unit_type_value2','icp_unit_type_connector')",
       args: [],
     }),
   ]);
@@ -50,6 +50,7 @@ export async function getIcpConfig(): Promise<IcpConfig> {
     operator: (s['icp_unit_type_operator'] as IcpUnitTypeOperator) || null,
     value1: s['icp_unit_type_value1'] ? Number(s['icp_unit_type_value1']) : null,
     value2: s['icp_unit_type_value2'] ? Number(s['icp_unit_type_value2']) : null,
+    connector: (s['icp_unit_type_connector'] as 'AND' | 'OR') || 'AND',
   };
 
   return { rules, unitTypeReq };
