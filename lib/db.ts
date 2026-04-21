@@ -373,8 +373,6 @@ export async function initDb(): Promise<void> {
       operator TEXT NOT NULL DEFAULT 'OR',
       FOREIGN KEY (rule_id) REFERENCES icp_rules(id) ON DELETE CASCADE
     )`,
-    // Unit type label (replaces hardcoded "WSE" everywhere)
-    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('unit_type', 'WSE', 0)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
@@ -382,6 +380,12 @@ export async function initDb(): Promise<void> {
   const dmlMigrations = migrations.filter(sql => /^\s*(UPDATE|INSERT|DELETE)/i.test(sql));
   await Promise.all(ddlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
   await Promise.all(dmlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
+
+  // Ensure unit_type config option exists (can't use INSERT OR IGNORE without a unique constraint)
+  const utCheck = await db.execute({ sql: "SELECT COUNT(*) as cnt FROM config_options WHERE category = 'unit_type'", args: [] });
+  if (Number(utCheck.rows[0].cnt) === 0) {
+    await db.execute({ sql: "INSERT INTO config_options (category, value, sort_order) VALUES ('unit_type', 'WSE', 0)", args: [] });
+  }
 
   // Migrate existing follow-up data from conference_attendee_details to follow_ups table
   try {
