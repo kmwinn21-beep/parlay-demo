@@ -95,6 +95,11 @@ export function MergeModal({
   const searchPlaceholder = searchType === 'company' ? 'Search by company name...' : 'Search by attendee name...';
   const noResultsLabel = searchType === 'company' ? 'No companies found' : 'No attendees found';
 
+  // Valid only when at least one duplicate exists: master from search means all items are duplicates;
+  // master from items means the remaining items are duplicates (requires items.length >= 2).
+  const masterIsFromSearch = masterId !== null && !items.some((i) => i.id === masterId);
+  const canMerge = masterId !== null && (masterIsFromSearch || items.filter((i) => i.id !== masterId).length > 0);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
@@ -208,7 +213,14 @@ export function MergeModal({
             )}
           </div>
 
-          {masterId && (
+          {masterId && !canMerge && (
+            <div className="mb-5 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs text-gray-500">
+                Search above to find a record to merge this into, or select an additional {searchType === 'company' ? 'company' : 'attendee'} from the table first.
+              </p>
+            </div>
+          )}
+          {canMerge && (
             <div className="mb-5 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
               <p className="text-xs text-yellow-800">
                 <strong>Warning:</strong> The non-selected records will be deleted. All associated data (conferences, attendees) will be moved to the master record.
@@ -225,7 +237,7 @@ export function MergeModal({
             </button>
             <button
               onClick={handleMerge}
-              disabled={!masterId || isLoading}
+              disabled={!canMerge || isLoading}
               className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Merging...' : 'Merge Records'}

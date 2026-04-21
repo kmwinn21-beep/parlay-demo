@@ -391,7 +391,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             </button>
           </>
         )}
-        {selectedIds.size >= 2 && (
+        {selectedIds.size >= 1 && (
           <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2 text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
             Merge ({selectedIds.size})
