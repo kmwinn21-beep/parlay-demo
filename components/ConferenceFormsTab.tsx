@@ -693,8 +693,7 @@ function HtmlEditor({ value, onChange }: { value: string; onChange: (v: string) 
 
   const exec = (cmd: string, val?: string) => {
     editorRef.current?.focus();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    document.execCommand(cmd, false, val);
+    document.execCommand(cmd, false, val); // execCommand deprecated but broadly supported for basic editing
     if (editorRef.current) onChange(editorRef.current.innerHTML);
   };
 
