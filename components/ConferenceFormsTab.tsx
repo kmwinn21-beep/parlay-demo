@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { ExpandedFormModal, type FormField, type ConferenceForm } from './ExpandedFormModal';
@@ -39,11 +39,6 @@ interface StatusOption {
   value: string;
 }
 
-interface UserOption {
-  id: number;   // config_options.id
-  value: string; // display name
-}
-
 interface Props {
   conferenceId: number;
   conferenceName: string;
@@ -60,115 +55,10 @@ function fmtDate(d?: string) {
   } catch { return '—'; }
 }
 
-// Inline user multi-select for follow-up assignment
-function FollowUpPicker({
-  sub,
-  userOptions,
-  defaultUserIds,
-  onAssign,
-  onCancel,
-}: {
-  sub: Submission;
-  userOptions: UserOption[];
-  defaultUserIds: number[];
-  onAssign: (userConfigIds: number[]) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [selected, setSelected] = useState<number[]>(defaultUserIds);
-  const [open, setOpen] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
-
-  const attName = sub.values.find(v => v.field_label === 'Name')?.field_value || 'this attendee';
-  const attTitle = sub.values.find(v => v.field_label === 'Title')?.field_value || '';
-  const attCo = sub.values.find(v => v.field_label === 'Company')?.field_value || '';
-  const label = [attName, attTitle || null, attCo || null].filter(Boolean).join(' – ');
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (id: number) =>
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
-  const displayLabel = selected.length === 0
-    ? 'Select user…'
-    : selected.length === 1
-      ? (userOptions.find(u => u.id === selected[0])?.value ?? 'Unknown')
-      : `${selected.length} users`;
-
-  const handleAssign = async () => {
-    if (selected.length === 0) { toast.error('Select at least one user'); return; }
-    setAssigning(true);
-    try {
-      await onAssign(selected);
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-gray-500 whitespace-nowrap">Assign to:</span>
-      <div ref={dropRef} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(o => !o)}
-          className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 hover:border-brand-secondary transition-colors flex items-center gap-1.5 whitespace-nowrap"
-        >
-          {displayLabel}
-          <svg className={`w-3 h-3 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {open && (
-          <div className="absolute z-50 bottom-full mb-1 left-0 min-w-[180px] bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-            {userOptions.map(u => (
-              <label key={u.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(u.id)}
-                  onChange={() => toggle(u.id)}
-                  className="accent-brand-secondary"
-                />
-                <span>{u.value}</span>
-              </label>
-            ))}
-            {userOptions.length === 0 && (
-              <div className="px-3 py-2 text-xs text-gray-400">No users configured</div>
-            )}
-          </div>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={handleAssign}
-        disabled={assigning || selected.length === 0}
-        className="text-xs px-2.5 py-1.5 rounded-lg bg-brand-secondary text-white hover:opacity-90 transition-opacity disabled:opacity-50 whitespace-nowrap font-medium"
-      >
-        {assigning ? 'Assigning…' : 'Assign Follow Up'}
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-      >
-        Cancel
-      </button>
-    </div>
-  );
-}
-
 export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, brandLogoUrl, isAdmin, currentUserEmail }: Props) {
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
-  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
-  const [currentUserConfigId, setCurrentUserConfigId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Add Form state
@@ -187,10 +77,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
   const [loadedSubmissions, setLoadedSubmissions] = useState<Set<number>>(new Set());
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
-  // Follow-up picker: which submission row is showing the picker
-  const [followUpOpenId, setFollowUpOpenId] = useState<number | null>(null);
-  // Optimistic: submission IDs that have had a follow-up assigned this session
-  const [followUpAssigned, setFollowUpAssigned] = useState<Set<number>>(new Set());
 
   // Builder
   const [builderFormId, setBuilderFormId] = useState<number | null>(null);
@@ -201,11 +87,10 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
 
   const loadForms = useCallback(async () => {
     try {
-      const [formsRes, templatesRes, statusRes, userRes] = await Promise.all([
+      const [formsRes, templatesRes, statusRes] = await Promise.all([
         fetch(`/api/conference-forms?conference_id=${conferenceId}`),
         fetch('/api/form-templates'),
         fetch('/api/config?category=status'),
-        fetch('/api/config?category=user'),
       ]);
       if (formsRes.ok) setForms(await formsRes.json());
       if (templatesRes.ok) setTemplates(await templatesRes.json());
@@ -213,25 +98,11 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
         const data = await statusRes.json();
         setStatusOptions(data.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
       }
-      if (userRes.ok) {
-        const data = await userRes.json();
-        setUserOptions(data.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
-      }
     } catch { toast.error('Failed to load forms'); }
     finally { setLoading(false); }
   }, [conferenceId]);
 
   useEffect(() => { loadForms(); }, [loadForms]);
-
-  // Fetch current user's config_id for follow-up default selection
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(r => r.json())
-      .then(data => {
-        if (data?.user?.configId) setCurrentUserConfigId(Number(data.user.configId));
-      })
-      .catch(() => {});
-  }, []);
 
   const loadSubmissions = useCallback(async (formId: number) => {
     if (loadedSubmissions.has(formId)) return;
@@ -293,35 +164,38 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
     } catch { toast.error('Failed to delete form'); }
   };
 
-  const handleStatusChange = async (submissionId: number, formId: number, optionId: number | null) => {
+  const handleStatusChange = async (sub: Submission, formId: number, optionId: number | null) => {
+    const statusOpt = statusOptions.find(s => s.id === optionId);
+    const statusValue = statusOpt?.value || '';
     try {
-      await fetch(`/api/form-submissions/${submissionId}`, {
+      await fetch(`/api/form-submissions/${sub.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status_option_id: optionId }),
       });
-      const statusOpt = statusOptions.find(s => s.id === optionId);
+      // Propagate status to the linked company (cascades to attendees) or directly to attendee
+      if (statusValue) {
+        if (sub.company_id) {
+          fetch(`/api/companies/${sub.company_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: statusValue }),
+          }).catch(() => {});
+        } else if (sub.attendee_id) {
+          fetch(`/api/attendees/${sub.attendee_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: statusValue }),
+          }).catch(() => {});
+        }
+      }
       setSubmissions(prev => ({
         ...prev,
         [formId]: (prev[formId] || []).map(s =>
-          s.id === submissionId ? { ...s, status_option_id: optionId, status_value: statusOpt?.value || null } : s
+          s.id === sub.id ? { ...s, status_option_id: optionId, status_value: statusOpt?.value || null } : s
         ),
       }));
     } catch { toast.error('Failed to update status'); }
-  };
-
-  const handleAssignFollowUp = async (submissionId: number, userConfigIds: number[]) => {
-    try {
-      const res = await fetch(`/api/form-submissions/${submissionId}/follow-up`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assigned_user_config_ids: userConfigIds }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success('Follow-up assigned!');
-      setFollowUpOpenId(null);
-      setFollowUpAssigned(prev => new Set(prev).add(submissionId));
-    } catch { toast.error('Failed to assign follow-up'); }
   };
 
   const handleExport = (form: ConferenceForm) => {
@@ -563,16 +437,11 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                         ))}
                         <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
                         <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Status</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Follow Up</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {subs.map(sub => {
                         const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '—';
-                        const isFollowUpOpen = followUpOpenId === sub.id;
-                        const isAssigned = followUpAssigned.has(sub.id);
-                        const defaultUsers = currentUserConfigId ? [currentUserConfigId] : [];
-
                         return (
                           <tr key={sub.id} className="hover:bg-gray-50/70 transition-colors">
                             <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{sub.conference_name}</td>
@@ -602,38 +471,12 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                             <td className="px-4 py-2.5">
                               <select
                                 value={sub.status_option_id ?? ''}
-                                onChange={e => handleStatusChange(sub.id, form.id, e.target.value ? Number(e.target.value) : null)}
+                                onChange={e => handleStatusChange(sub, form.id, e.target.value ? Number(e.target.value) : null)}
                                 className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
                               >
                                 <option value="">— Status —</option>
                                 {statusOptions.map(s => <option key={s.id} value={s.id}>{s.value}</option>)}
                               </select>
-                            </td>
-                            <td className="px-4 py-2.5 min-w-[200px]">
-                              {isAssigned ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold whitespace-nowrap">
-                                  Follow Up
-                                  <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                </span>
-                              ) : isFollowUpOpen ? (
-                                <FollowUpPicker
-                                  sub={sub}
-                                  userOptions={userOptions}
-                                  defaultUserIds={defaultUsers}
-                                  onAssign={ids => handleAssignFollowUp(sub.id, ids)}
-                                  onCancel={() => setFollowUpOpenId(null)}
-                                />
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setFollowUpOpenId(sub.id)}
-                                  className="text-xs px-2.5 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary hover:bg-blue-50 transition-colors whitespace-nowrap font-medium"
-                                >
-                                  + Follow Up
-                                </button>
-                              )}
                             </td>
                           </tr>
                         );

@@ -163,13 +163,17 @@ export async function POST(request: NextRequest) {
       .filter(v => v.field_value)
       .map(v => `${v.field_label}: ${v.field_value}`)
       .join('\n');
-    const noteContent = `Form Submission - ${(await db.execute({ sql: `SELECT name FROM conference_forms WHERE id = ?`, args: [conference_form_id] })).rows[0]?.name || 'Form'}\n\n${noteLines}`;
+    const formNameRow = await db.execute({ sql: `SELECT name FROM conference_forms WHERE id = ?`, args: [conference_form_id] });
+    const formName = formNameRow.rows.length > 0 ? String(formNameRow.rows[0].name) : 'Form';
+    const noteContent = `Form Submission - ${formName}\n\n${noteLines}`;
 
-    // Get rep display name
+    // Get rep display name and config_id
     let repName = user.email;
+    let repConfigId: string | null = null;
     try {
       const configId = await getConfigIdByEmail(user.email);
       if (configId) {
+        repConfigId = String(configId);
         const nameRow = await db.execute({ sql: `SELECT value FROM config_options WHERE id = ?`, args: [configId] });
         if (nameRow.rows.length > 0) repName = String(nameRow.rows[0].value);
       }
@@ -198,6 +202,29 @@ export async function POST(request: NextRequest) {
               VALUES ('company', ?, ?, ?, ?, ?)`,
         args: [resolvedCompanyId, noteContent, conferenceName, repName, nameVal || null],
       }).catch(() => {});
+    }
+
+    // Auto-create follow-up for the attendee on every form submission
+    if (resolvedAttendeeId) {
+      try {
+        const nextStepRow = await db.execute({
+          sql: `SELECT value FROM config_options WHERE category = 'next_steps' AND LOWER(value) = 'form' LIMIT 1`,
+          args: [],
+        });
+        const fallbackRow = await db.execute({
+          sql: `SELECT value FROM config_options WHERE category = 'next_steps' ORDER BY sort_order LIMIT 1`,
+          args: [],
+        });
+        const nextStepValue = nextStepRow.rows.length > 0
+          ? String(nextStepRow.rows[0].value)
+          : fallbackRow.rows.length > 0 ? String(fallbackRow.rows[0].value) : 'Form';
+
+        await db.execute({
+          sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+                VALUES (?, ?, ?, ?, ?, 0)`,
+          args: [resolvedAttendeeId, conference_id, nextStepValue, `Follow up from form: ${formName}`, repConfigId],
+        });
+      } catch { /* non-fatal */ }
     }
 
     return NextResponse.json({
