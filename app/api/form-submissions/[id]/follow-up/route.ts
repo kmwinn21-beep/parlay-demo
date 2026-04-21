@@ -35,14 +35,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const nextStepOpt = nextStepRow.rows.length > 0 ? nextStepRow.rows[0] : fallbackRow.rows[0];
     const nextStepValue = nextStepOpt ? String(nextStepOpt.value) : 'Form';
 
-    // Get rep config_id for assignment
+    // Use client-supplied config IDs; fall back to session user's config_id
     let assignedRep: string | null = null;
     try {
-      const configRow = await db.execute({
-        sql: `SELECT config_id FROM users WHERE email = ? AND config_id IS NOT NULL`,
-        args: [user.email],
-      });
-      if (configRow.rows.length > 0) assignedRep = String(configRow.rows[0].config_id);
+      const body = await request.json().catch(() => ({}));
+      const clientIds: number[] = Array.isArray(body.assigned_user_config_ids) ? body.assigned_user_config_ids : [];
+      if (clientIds.length > 0) {
+        assignedRep = clientIds.join(',');
+      } else {
+        const configRow = await db.execute({
+          sql: `SELECT config_id FROM users WHERE email = ? AND config_id IS NOT NULL`,
+          args: [user.email],
+        });
+        if (configRow.rows.length > 0) assignedRep = String(configRow.rows[0].config_id);
+      }
     } catch { /* non-fatal */ }
 
     await db.execute({

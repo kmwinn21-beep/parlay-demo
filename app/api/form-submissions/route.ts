@@ -14,10 +14,12 @@ export async function GET(request: NextRequest) {
     const subsRes = await db.execute({
       sql: `SELECT fs.id, fs.conference_form_id, fs.conference_id, fs.attendee_id, fs.submitted_at,
                    fs.status_option_id, co.value as status_value,
-                   c.name as conference_name
+                   c.name as conference_name,
+                   a.company_id
             FROM form_submissions fs
             LEFT JOIN config_options co ON fs.status_option_id = co.id
             JOIN conferences c ON fs.conference_id = c.id
+            LEFT JOIN attendees a ON fs.attendee_id = a.id
             WHERE fs.conference_form_id = ?
             ORDER BY fs.submitted_at DESC`,
       args: [conferenceFormId],
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
         conference_form_id: Number(s.conference_form_id),
         conference_id: Number(s.conference_id),
         attendee_id: s.attendee_id ? Number(s.attendee_id) : null,
+        company_id: s.company_id ? Number(s.company_id) : null,
         submitted_at: String(s.submitted_at),
         status_option_id: s.status_option_id ? Number(s.status_option_id) : null,
         status_value: s.status_value ? String(s.status_value) : null,
