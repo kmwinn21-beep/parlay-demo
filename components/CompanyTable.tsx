@@ -353,9 +353,17 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   };
 
   const handleMerge = async (masterId: number, duplicateIds: number[]) => {
-    const res = await fetch('/api/companies/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }) });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
-    toast.success('Companies merged!'); setSelectedIds(new Set()); onRefresh();
+    const dupSet = new Set(duplicateIds);
+    const snapshot = localCompanies;
+    setLocalCompanies((cs) => cs.filter((c) => !dupSet.has(c.id)));
+    try {
+      const res = await fetch('/api/companies/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }) });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
+      toast.success('Companies merged!'); setSelectedIds(new Set()); onRefresh();
+    } catch (e) {
+      setLocalCompanies(snapshot);
+      throw e;
+    }
   };
 
   const handleParentChild = async (parentId: number, childIds: number[]) => {
@@ -365,9 +373,20 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   };
 
   const handleOperatorCapital = async (companyIds: number[]) => {
-    const res = await fetch('/api/companies/relationships/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: companyIds }) });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationships'); }
-    toast.success('Operator/Capital relationships created!'); setSelectedIds(new Set()); onRefresh();
+    const idsSet = new Set(companyIds);
+    const increment = companyIds.length - 1;
+    const snapshot = localCompanies;
+    setLocalCompanies((cs) => cs.map((c) =>
+      idsSet.has(c.id) ? { ...c, relationship_count: (c.relationship_count ?? 0) + increment } : c
+    ));
+    try {
+      const res = await fetch('/api/companies/relationships/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: companyIds }) });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationships'); }
+      toast.success('Operator/Capital relationships created!'); setSelectedIds(new Set()); onRefresh();
+    } catch (e) {
+      setLocalCompanies(snapshot);
+      throw e;
+    }
   };
 
   const handleMassEdit = async () => {
@@ -544,21 +563,23 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             </button>
           </>
         )}
-        {selectedIds.size >= 2 && (
+        {selectedIds.size >= 1 && (
           <>
           <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2 text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
             Merge ({selectedIds.size})
-          </button>
-          <button onClick={() => setShowParentChildModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-            Create Parent/Child Relationship
           </button>
           <button onClick={() => setShowOperatorCapitalModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
             Create Operator/Capital Relationship
           </button>
           </>
+        )}
+        {selectedIds.size >= 2 && (
+          <button onClick={() => setShowParentChildModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+            Create Parent/Child Relationship
+          </button>
         )}
       </div>
 
@@ -1100,7 +1121,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
-        title="Merge Companies" description="Select the master record. All attendees from duplicates will be reassigned to master. Duplicates will be deleted." />
+        title="Merge Companies" description="Select the master record. All attendees from duplicates will be reassigned to master. Duplicates will be deleted."
+        searchType="company" />
 
       <ParentChildModal
         isOpen={showParentChildModal}
