@@ -399,7 +399,7 @@ export function NewMeetingModal({
 
           {/* Location */}
           <div>
-            <label className={labelClass}>Location</label>
+            <label className={labelClass}>Location / Meeting Type</label>
             <input type="text" className={inputClass} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 201, Lobby Bar" />
           </div>
 
