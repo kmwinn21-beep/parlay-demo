@@ -39,6 +39,8 @@ interface NewMeetingModalProps {
   onSuccess?: (meeting: Meeting) => void;
   /** When provided, restrict the conference dropdown to only these conferences (skips global fetch) */
   availableConferences?: Array<{ id: number; name: string; start_date: string }>;
+  /** Auto-select this conference id when the modal opens */
+  defaultConferenceId?: number;
 }
 
 export function NewMeetingModal({
@@ -48,6 +50,7 @@ export function NewMeetingModal({
   prefillAttendeeId,
   onSuccess,
   availableConferences,
+  defaultConferenceId,
 }: NewMeetingModalProps) {
   useHideBottomNav(isOpen);
   const { user } = useUser();
@@ -98,6 +101,9 @@ export function NewMeetingModal({
         .then(r => r.json())
         .then((data: ConferenceOption[]) => setConferences(data))
         .catch(() => {});
+    }
+    if (defaultConferenceId) {
+      setSelectedConferenceId(String(defaultConferenceId));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
