@@ -26,6 +26,7 @@ export interface Meeting {
   scheduled_by: string | null;
   additional_attendees: string | null;
   outcome: string | null;
+  meeting_type: string | null;
   created_at: string;
   first_name: string;
   last_name: string;
@@ -36,7 +37,7 @@ export interface Meeting {
   conference_name: string;
 }
 
-type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'outcome';
+type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'meeting_type' | 'outcome';
 
 function formatMeetingDate(d: string) {
   if (!d) return '';
@@ -254,6 +255,7 @@ export interface EditFormData {
   location: string;
   scheduled_by: string;
   additional_attendees: string;
+  meeting_type: string;
 }
 
 function EditMeetingRow({
@@ -262,18 +264,21 @@ function EditMeetingRow({
   onCancel,
   onDelete,
   userOptions = [],
+  meetingTypeOptions = [],
 }: {
   meeting: Meeting;
   onSave: (meetingId: number, data: EditFormData) => void;
   onCancel: () => void;
   onDelete?: (meetingId: number) => void;
   userOptions?: UserOption[];
+  meetingTypeOptions?: string[];
 }) {
   const [form, setForm] = useState({
     meeting_date: meeting.meeting_date,
     meeting_time: meeting.meeting_time,
     location: meeting.location || '',
     additional_attendees: meeting.additional_attendees || '',
+    meeting_type: meeting.meeting_type || '',
   });
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(meeting.scheduled_by)
@@ -309,6 +314,13 @@ function EditMeetingRow({
           <input type="text" className={inputClass} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Room 201, Lobby" />
         </div>
         <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Meeting Type</label>
+          <select className={inputClass} value={form.meeting_type} onChange={e => setForm(f => ({ ...f, meeting_type: e.target.value }))}>
+            <option value="">— None —</option>
+            {meetingTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+        <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Scheduled By</label>
           <RepMultiSelect
             options={userOptions}
@@ -317,7 +329,7 @@ function EditMeetingRow({
             placeholder="Select reps..."
           />
         </div>
-        <div className="sm:col-span-2">
+        <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
           <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated names" />
         </div>
@@ -361,6 +373,7 @@ function EditMeetingTableRow({
   onDelete,
   colSpan,
   userOptions = [],
+  meetingTypeOptions = [],
 }: {
   meeting: Meeting;
   onSave: (meetingId: number, data: EditFormData) => void;
@@ -368,12 +381,14 @@ function EditMeetingTableRow({
   onDelete?: (meetingId: number) => void;
   colSpan: number;
   userOptions?: UserOption[];
+  meetingTypeOptions?: string[];
 }) {
   const [form, setForm] = useState({
     meeting_date: meeting.meeting_date,
     meeting_time: meeting.meeting_time,
     location: meeting.location || '',
     additional_attendees: meeting.additional_attendees || '',
+    meeting_type: meeting.meeting_type || '',
   });
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(meeting.scheduled_by)
@@ -397,7 +412,7 @@ function EditMeetingTableRow({
               Editing meeting with {meeting.first_name} {meeting.last_name}
             </span>
           </div>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-6 gap-2">
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Date *</label>
               <input type="date" className={inputClass} value={form.meeting_date} onChange={e => setForm(f => ({ ...f, meeting_date: e.target.value }))} />
@@ -405,6 +420,13 @@ function EditMeetingTableRow({
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Time *</label>
               <input type="time" className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Meeting Type</label>
+              <select className={inputClass} value={form.meeting_type} onChange={e => setForm(f => ({ ...f, meeting_type: e.target.value }))}>
+                <option value="">— None —</option>
+                {meetingTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Location</label>
@@ -481,7 +503,15 @@ export function MeetingsTable({
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const hasActions = !!onEdit;
+
+  useEffect(() => {
+    fetch('/api/config?category=meeting_type', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((data: { value: string }[]) => setMeetingTypeOptions(data.map(d => d.value)))
+      .catch(() => {});
+  }, []);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -510,6 +540,9 @@ export function MeetingsTable({
         break;
       case 'conference':
         cmp = a.conference_name.localeCompare(b.conference_name);
+        break;
+      case 'meeting_type':
+        cmp = (a.meeting_type || '').localeCompare(b.meeting_type || '');
         break;
       case 'outcome':
         cmp = (a.outcome || '').localeCompare(b.outcome || '');
@@ -560,6 +593,7 @@ export function MeetingsTable({
                 onCancel={() => setEditingId(null)}
                 onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
                 userOptions={userOptions}
+                meetingTypeOptions={meetingTypeOptions}
               />
             ) : (
               <>
@@ -595,6 +629,9 @@ export function MeetingsTable({
                   <span className="text-xs text-gray-600">
                     {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
                   </span>
+                  {m.meeting_type && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
+                  )}
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
                   <Link href={`/conferences/${m.conference_id}`} className="text-xs text-brand-secondary hover:underline">
@@ -627,6 +664,7 @@ export function MeetingsTable({
               {isVisible('company') && !hideCompany && <SortHeader label="Company" col="company" />}
               {isVisible('datetime') && <SortHeader label="Date/Time" col="datetime" />}
               {isVisible('conference') && <SortHeader label="Conference" col="conference" />}
+              {isVisible('meeting_type') && <SortHeader label="Meeting Type" col="meeting_type" />}
               {isVisible('outcome') && <SortHeader label="Outcome" col="outcome" />}
               {isVisible('info') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>}
               {hasActions && <th className="px-3 py-2"></th>}
@@ -641,8 +679,9 @@ export function MeetingsTable({
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
                   onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                  colSpan={(hideCompany ? 7 : 8) + (hasActions ? 1 : 0)}
+                  colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0)}
                   userOptions={userOptions}
+                  meetingTypeOptions={meetingTypeOptions}
                 />
               ) : (
                 <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
@@ -676,6 +715,9 @@ export function MeetingsTable({
                     <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">
                       {m.conference_name}
                     </Link>
+                  </td>}
+                  {isVisible('meeting_type') && <td className="px-3 py-2 text-gray-600 leading-snug">
+                    {m.meeting_type || <span className="text-gray-300">—</span>}
                   </td>}
                   {isVisible('outcome') && <td className="px-3 py-2">
                     <OutcomeButton

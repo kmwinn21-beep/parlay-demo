@@ -9,7 +9,7 @@ export async function PUT(
     await dbReady;
     const { id } = params;
     const body = await request.json();
-    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees } = body;
+    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees, meeting_type } = body;
 
     if (!meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'meeting_date and meeting_time are required' }, { status: 400 });
@@ -25,8 +25,8 @@ export async function PUT(
     }
 
     await db.execute({
-      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, additional_attendees = ? WHERE id = ?`,
-      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, additional_attendees ?? null, id],
+      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, additional_attendees = ?, meeting_type = ? WHERE id = ?`,
+      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, additional_attendees ?? null, meeting_type ?? null, id],
     });
 
     return NextResponse.json({ success: true });

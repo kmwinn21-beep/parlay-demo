@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
           m.scheduled_by,
           m.additional_attendees,
           m.outcome,
+          m.meeting_type,
           m.created_at,
           a.first_name,
           a.last_name,
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
         scheduled_by: r.scheduled_by != null ? String(r.scheduled_by) : null,
         additional_attendees: r.additional_attendees != null ? String(r.additional_attendees) : null,
         outcome: r.outcome != null ? String(r.outcome) : null,
+        meeting_type: r.meeting_type != null ? String(r.meeting_type) : null,
         created_at: String(r.created_at ?? ''),
         first_name: String(r.first_name ?? ''),
         last_name: String(r.last_name ?? ''),
@@ -101,7 +103,7 @@ export async function POST(request: NextRequest) {
   try {
     await dbReady;
     const body = await request.json();
-    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees } = body;
+    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, meeting_type } = body;
 
     if (!attendee_id || !conference_id || !meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
@@ -117,8 +119,8 @@ export async function POST(request: NextRequest) {
       : 'Meeting Scheduled';
 
     const result = await db.execute({
-      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome, meeting_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
@@ -129,6 +131,7 @@ export async function POST(request: NextRequest) {
         scheduled_by ?? null,
         additional_attendees ?? null,
         meetingScheduledName,
+        meeting_type ?? null,
       ],
     });
 

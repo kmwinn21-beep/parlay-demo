@@ -62,6 +62,8 @@ export function NewMeetingModal({
   const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
   const [meetingTime, setMeetingTime] = useState('');
+  const [meetingType, setMeetingType] = useState('');
+  const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [additionalAttendees, setAdditionalAttendees] = useState('');
   const [companySearch, setCompanySearch] = useState('');
@@ -84,6 +86,10 @@ export function NewMeetingModal({
       .then((data: { id: number; value: string }[]) =>
         setUserOptions(data.map(d => ({ id: Number(d.id), value: String(d.value) })))
       )
+      .catch(() => {});
+    fetch('/api/config?category=meeting_type')
+      .then(r => r.json())
+      .then((data: { value: string }[]) => setMeetingTypeOptions(data.map(d => d.value)))
       .catch(() => {});
     if (availableConferences) {
       setConferences(availableConferences);
@@ -196,6 +202,7 @@ export function NewMeetingModal({
     setSelectedAttendeeId('');
     setMeetingDate('');
     setMeetingTime('');
+    setMeetingType('');
     setLocation('');
     setAdditionalAttendees('');
     setCompanySearch('');
@@ -224,6 +231,7 @@ export function NewMeetingModal({
           conference_id: Number(selectedConferenceId),
           meeting_date: meetingDate,
           meeting_time: meetingTime,
+          meeting_type: meetingType || null,
           location: location || null,
           scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
           additional_attendees: additionalAttendees || null,
@@ -247,6 +255,7 @@ export function NewMeetingModal({
           conference_id: Number(selectedConferenceId),
           meeting_date: meetingDate,
           meeting_time: meetingTime,
+          meeting_type: meetingType || null,
           location: location || null,
           scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
           additional_attendees: additionalAttendees || null,
@@ -395,6 +404,15 @@ export function NewMeetingModal({
               <label className={labelClass}>Time *</label>
               <input type="time" className={inputClass} value={meetingTime} onChange={e => setMeetingTime(e.target.value)} required />
             </div>
+          </div>
+
+          {/* Meeting Type */}
+          <div>
+            <label className={labelClass}>Meeting Type</label>
+            <select className={inputClass} value={meetingType} onChange={e => setMeetingType(e.target.value)}>
+              <option value="">— None —</option>
+              {meetingTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
           </div>
 
           {/* Location */}
