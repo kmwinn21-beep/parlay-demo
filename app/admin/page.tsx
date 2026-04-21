@@ -625,8 +625,7 @@ export default function AdminPage() {
   const [savingDomain, setSavingDomain] = useState(false);
 
   // ── Unit Type (Types tab) ─────────────────────────────────────────────────────
-  const [unitTypeId, setUnitTypeId] = useState<number | null>(null);
-  const [unitTypeLabel, setUnitTypeLabel] = useState('WSE');
+  const [unitTypeLabel, setUnitTypeLabel] = useState('Units');
   const [unitTypeSaving, setUnitTypeSaving] = useState(false);
 
   // ── ICP tab ──────────────────────────────────────────────────────────────────
@@ -660,9 +659,8 @@ export default function AdminPage() {
           : r.options;
       }
       setOptionsByCategory(map);
-      const utData = unitTypeRes as { id: number | null; value: string };
-      if (utData.id != null) setUnitTypeId(utData.id);
-      setUnitTypeLabel(utData.value || 'WSE');
+      const utData = unitTypeRes as { value: string };
+      setUnitTypeLabel(utData.value || 'Units');
     } catch { toast.error('Failed to load config options.'); }
     finally { setIsLoading(false); }
   };
@@ -680,7 +678,6 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
-      setUnitTypeId(data.id);
       setUnitTypeLabel(String(data.value));
       invalidateUnitTypeLabel();
       toast.success('Unit type saved!');

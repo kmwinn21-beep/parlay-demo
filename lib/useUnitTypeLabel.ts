@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-const DEFAULT = 'WSE';
+const DEFAULT = 'Units';
 
 let _cache: string | null = null;
 let _pending: Promise<string> | undefined;

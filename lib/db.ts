@@ -381,10 +381,16 @@ export async function initDb(): Promise<void> {
   await Promise.all(ddlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
   await Promise.all(dmlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
 
-  // Ensure unit_type config option exists (can't use INSERT OR IGNORE without a unique constraint)
-  const utCheck = await db.execute({ sql: "SELECT COUNT(*) as cnt FROM config_options WHERE category = 'unit_type'", args: [] });
-  if (Number(utCheck.rows[0].cnt) === 0) {
-    await db.execute({ sql: "INSERT INTO config_options (category, value, sort_order) VALUES ('unit_type', 'WSE', 0)", args: [] });
+  // Ensure exactly one unit_type row exists; seed with 'Units' for new installs
+  const utCheck = await db.execute({ sql: "SELECT id FROM config_options WHERE category = 'unit_type' ORDER BY id", args: [] });
+  if (utCheck.rows.length === 0) {
+    await db.execute({ sql: "INSERT INTO config_options (category, value, sort_order) VALUES ('unit_type', 'Units', 0)", args: [] });
+  } else if (utCheck.rows.length > 1) {
+    // Remove duplicates, keep oldest row
+    const dupeIds = utCheck.rows.slice(1).map(r => Number(r.id));
+    for (const id of dupeIds) {
+      await db.execute({ sql: 'DELETE FROM config_options WHERE id = ?', args: [id] }).catch(() => {});
+    }
   }
 
   // Migrate existing follow-up data from conference_attendee_details to follow_ups table
