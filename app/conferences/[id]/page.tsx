@@ -239,7 +239,7 @@ export default function ConferenceDetailPage() {
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('conference_detail');
-  const { isVisible: isConfAttendeeColVisible } = useTableColumnConfig('conference_attendees');
+  const { isVisible: isConfAttendeeColVisible, orderedColumns: confAttendeeColumns } = useTableColumnConfig('conference_attendees');
   const conferenceTabConfig = useSectionConfig('conference_details');
   const { user: currentUser } = useUser();
   const logoConfig = useLogoConfig();
@@ -1367,47 +1367,23 @@ export default function ConferenceDetailPage() {
                         className="accent-brand-secondary"
                       />
                     </th>
-                    {isConfAttendeeColVisible('name') && (
-                      <th onClick={() => handleSort('name')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.name }}>
-                        Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'name')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
-                      </th>
-                    )}
-                    {isConfAttendeeColVisible('title') && (
-                      <th onClick={() => handleSort('title')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.title }}>
-                        Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'title')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
-                      </th>
-                    )}
-                    {isConfAttendeeColVisible('company') && (
-                      <th onClick={() => handleSort('company')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.company }}>
-                        Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'company')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
-                      </th>
-                    )}
-                    {isConfAttendeeColVisible('type') && (
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.type }}>
-                        Type
-                        <div onMouseDown={e => startResize(e, 'type')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
-                      </th>
-                    )}
-                    {isConfAttendeeColVisible('seniority') && (
-                      <th onClick={() => handleSort('seniority')} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary" style={{ width: colWidths.seniority }}>
-                        Seniority{sortKey === 'seniority' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                        <div onMouseDown={e => startResize(e, 'seniority')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
-                      </th>
-                    )}
-                    {isConfAttendeeColVisible('conferences') && (
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.conferences }}># Conf
-                        <div onMouseDown={e => startResize(e, 'conferences')} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
-                      </th>
-                    )}
-                    {isConfAttendeeColVisible('notes') && (
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
-                    )}
-                    {isConfAttendeeColVisible('date_added') && (
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date Added</th>
-                    )}
+                    {confAttendeeColumns.map(col => {
+                      if (!isConfAttendeeColVisible(col.key)) return null;
+                      const rh = (c: string) => <div key={c} onMouseDown={e => startResize(e, c)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />;
+                      const sortThCls = "px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary";
+                      const plainThCls = "px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative";
+                      switch (col.key) {
+                        case 'name': return <th key="name" onClick={() => handleSort('name')} className={sortThCls} style={{ width: colWidths.name }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>;
+                        case 'title': return <th key="title" onClick={() => handleSort('title')} className={sortThCls} style={{ width: colWidths.title }}>Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('title')}</th>;
+                        case 'company': return <th key="company" onClick={() => handleSort('company')} className={sortThCls} style={{ width: colWidths.company }}>Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('company')}</th>;
+                        case 'type': return <th key="type" className={plainThCls} style={{ width: colWidths.type }}>Type{rh('type')}</th>;
+                        case 'seniority': return <th key="seniority" onClick={() => handleSort('seniority')} className={sortThCls} style={{ width: colWidths.seniority }}>Seniority{sortKey === 'seniority' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('seniority')}</th>;
+                        case 'conferences': return <th key="conferences" className={plainThCls} style={{ width: colWidths.conferences }}># Conf{rh('conferences')}</th>;
+                        case 'notes': return <th key="notes" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>;
+                        case 'date_added': return <th key="date_added" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date Added</th>;
+                        default: return null;
+                      }
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1421,123 +1397,93 @@ export default function ConferenceDetailPage() {
                           className="accent-brand-secondary"
                         />
                       </td>
-                      {isConfAttendeeColVisible('name') && (
-                        <td className="px-4 py-3 font-medium overflow-visible">
-                          <div className="text-left">
-                            <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
-                              {attendee.first_name} {attendee.last_name}
-                            </Link>
-                          </div>
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('title') && (
-                        <td className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
-                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
-                            <input
-                              className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md"
-                              value={cellDraft}
-                              onChange={(e) => setCellDraft(e.target.value)}
-                              onBlur={() => saveInlineEdit(attendee, 'title')}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveInlineEdit(attendee, 'title');
-                                if (e.key === 'Escape') setEditingCell(null);
-                              }}
-                              autoFocus
-                            />
-                          ) : (
-                            <button type="button" className="text-left w-full" onClick={() => startInlineEdit(attendee, 'title')}>
-                              <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
-                            </button>
-                          )}
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('company') && (
-                        <td className="px-4 py-3 overflow-visible relative">
-                          {attendee.company_name ? (
-                            <div>
-                              {attendee.company_id ? (
-                                <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                      {confAttendeeColumns.map(col => {
+                        if (!isConfAttendeeColVisible(col.key)) return null;
+                        switch (col.key) {
+                          case 'name': return (
+                            <td key="name" className="px-4 py-3 font-medium overflow-visible">
+                              <div className="text-left">
+                                <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                                  {attendee.first_name} {attendee.last_name}
+                                </Link>
+                              </div>
+                            </td>
+                          );
+                          case 'title': return (
+                            <td key="title" className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
+                              {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
+                                <input className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'title')} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(attendee, 'title'); if (e.key === 'Escape') setEditingCell(null); }} autoFocus />
                               ) : (
-                                <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
+                                <button type="button" className="text-left w-full" onClick={() => startInlineEdit(attendee, 'title')}>
+                                  <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                                </button>
                               )}
-                              {attendee.company_wse != null && (
-                                editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
-                                  <input
-                                    className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md"
-                                    value={cellDraft}
-                                    onChange={(e) => setCellDraft(e.target.value)}
-                                    onBlur={() => saveInlineEdit(attendee, 'company_wse')}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse');
-                                      if (e.key === 'Escape') setEditingCell(null);
-                                    }}
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')}>
-                                    WSE: {Number(attendee.company_wse).toLocaleString()}
-                                  </button>
-                                )
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('type') && (
-                        <td className="px-4 py-3 overflow-visible relative">
-                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
-                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
-                              <option value="">—</option>
-                              {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                          ) : (
-                            <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
-                              {attendee.company_type ? (
-                                <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                            </td>
+                          );
+                          case 'company': return (
+                            <td key="company" className="px-4 py-3 overflow-visible relative">
+                              {attendee.company_name ? (
+                                <div>
+                                  {attendee.company_id ? (
+                                    <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                                  ) : (
+                                    <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
+                                  )}
+                                  {attendee.company_wse != null && (
+                                    editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
+                                      <input className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_wse')} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse'); if (e.key === 'Escape') setEditingCell(null); }} autoFocus />
+                                    ) : (
+                                      <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')}>
+                                        WSE: {Number(attendee.company_wse).toLocaleString()}
+                                      </button>
+                                    )
+                                  )}
+                                </div>
                               ) : (
                                 <span className="text-gray-300">—</span>
                               )}
-                            </button>
-                          )}
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('seniority') && (
-                        <td className="px-4 py-3 overflow-visible relative">
-                          {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                            <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
-                              <option value="">Auto-detect</option>
-                              {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          ) : (
-                            (() => {
-                              const s = effectiveSeniority(attendee.seniority, attendee.title);
-                              return (
-                                <button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}>
-                                  <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span>
+                            </td>
+                          );
+                          case 'type': return (
+                            <td key="type" className="px-4 py-3 overflow-visible relative">
+                              {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
+                                <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
+                                  <option value="">—</option>
+                                  {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                              ) : (
+                                <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
+                                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>) : (<span className="text-gray-300">—</span>)}
                                 </button>
-                              );
-                            })()
-                          )}
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('conferences') && (
-                        <td className="px-4 py-3">
-                          <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('notes') && (
-                        <td className="px-4 py-3">
-                          {Number(attendee.entity_notes_count ?? 0) > 0
-                            ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
-                            : <span className="text-gray-300">—</span>
-                          }
-                        </td>
-                      )}
-                      {isConfAttendeeColVisible('date_added') && (
-                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
-                      )}
+                              )}
+                            </td>
+                          );
+                          case 'seniority': return (
+                            <td key="seniority" className="px-4 py-3 overflow-visible relative">
+                              {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
+                                <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
+                                  <option value="">Auto-detect</option>
+                                  {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              ) : ((() => { const s = effectiveSeniority(attendee.seniority, attendee.title); return (<button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}><span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span></button>); })())}
+                            </td>
+                          );
+                          case 'conferences': return (
+                            <td key="conferences" className="px-4 py-3">
+                              <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                            </td>
+                          );
+                          case 'notes': return (
+                            <td key="notes" className="px-4 py-3">
+                              {Number(attendee.entity_notes_count ?? 0) > 0 ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} /> : <span className="text-gray-300">—</span>}
+                            </td>
+                          );
+                          case 'date_added': return (
+                            <td key="date_added" className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
+                          );
+                          default: return null;
+                        }
+                      })}
                     </tr>
                   ))}
                 </tbody>

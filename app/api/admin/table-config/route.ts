@@ -65,7 +65,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'table, column, and visible are required' }, { status: 400 });
     }
     await db.execute({
-      sql: 'INSERT OR REPLACE INTO table_column_config (table_name, column_key, visible) VALUES (?, ?, ?)',
+      sql: `INSERT INTO table_column_config (table_name, column_key, visible, sort_order)
+            VALUES (?, ?, ?, NULL)
+            ON CONFLICT (table_name, column_key) DO UPDATE SET visible = excluded.visible`,
       args: [table, column, visible ? 1 : 0],
     });
     return NextResponse.json({ success: true });

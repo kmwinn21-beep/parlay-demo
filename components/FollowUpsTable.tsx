@@ -87,7 +87,7 @@ export function FollowUpsTable({
   onRepChange?: (id: number, rep: string | null) => void;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
-  const { isVisible } = useTableColumnConfig('follow_ups');
+  const { isVisible, orderedColumns } = useTableColumnConfig('follow_ups');
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
 
@@ -234,14 +234,21 @@ export function FollowUpsTable({
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              {isVisible('name') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Name</th>}
-              {isVisible('title') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Title</th>}
-              {isVisible('company') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Company</th>}
-              {isVisible('next_step') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Next Step</th>}
-              {isVisible('conference') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Conference</th>}
-              {isVisible('rep') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Rep</th>}
-              {isVisible('notes') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>}
-              {isVisible('status') && <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Status</th>}
+              {orderedColumns.map(col => {
+                if (!isVisible(col.key)) return null;
+                const thCls = "px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider";
+                switch (col.key) {
+                  case 'name': return <th key="name" className={thCls}>Name</th>;
+                  case 'title': return <th key="title" className={thCls}>Title</th>;
+                  case 'company': return <th key="company" className={thCls}>Company</th>;
+                  case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                  case 'conference': return <th key="conference" className={thCls}>Conference</th>;
+                  case 'rep': return <th key="rep" className={thCls}>Rep</th>;
+                  case 'notes': return <th key="notes" className={thCls}>Notes</th>;
+                  case 'status': return <th key="status" className={thCls}>Status</th>;
+                  default: return null;
+                }
+              })}
               {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -254,92 +261,50 @@ export function FollowUpsTable({
                   key={fu.id}
                   className={`transition-colors align-top ${fu.completed ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}
                 >
-                  {isVisible('name') && <td className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                    <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
-                      {fu.first_name} {fu.last_name}
-                    </Link>
-                  </td>}
-                  {isVisible('title') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    {fu.title || <span className="text-gray-300">—</span>}
-                  </td>}
-                  {isVisible('company') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <span className="text-xs break-words whitespace-normal leading-snug">
-                      {fu.company_name || <span className="text-gray-300">—</span>}
-                    </span>
-                  </td>}
-                  {isVisible('next_step') && <td className="px-3 py-2">
-                    <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
-                      {resolveConfigValue(fu.next_steps, nextStepsOpts)}
-                    </span>
-                    {fu.next_steps_notes && (
-                      <p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>
-                    )}
-                  </td>}
-                  {isVisible('conference') && <td className="px-3 py-2 text-gray-600 leading-snug">
-                    <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">
-                      {fu.conference_name}
-                    </Link>
-                    <p className="text-gray-400">{formatDate(fu.start_date)}</p>
-                  </td>}
-                  {isVisible('rep') && <td className="px-3 py-2">
-                    {canEditRep && isEditingRep ? (
-                      <div className="w-36">
-                        <RepMultiSelect
-                          options={userOptions}
-                          selectedIds={editingRepIds}
-                          onChange={setEditingRepIds}
-                          onClose={(ids) => finishEditRep(fu.id, ids)}
-                          placeholder="Select reps..."
-                        />
-                      </div>
-                    ) : canEditRep ? (
-                      <button
-                        type="button"
-                        onClick={() => startEditRep(fu)}
-                        className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
-                        title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}
-                      >
-                        {fu.assigned_rep ? (
-                          <RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} />
+                  {orderedColumns.map(col => {
+                    if (!isVisible(col.key)) return null;
+                    switch (col.key) {
+                      case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+                        <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
+                          {fu.first_name} {fu.last_name}
+                        </Link>
+                      </td>;
+                      case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{fu.title || <span className="text-gray-300">—</span>}</td>;
+                      case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug"><span className="text-xs break-words whitespace-normal leading-snug">{fu.company_name || <span className="text-gray-300">—</span>}</span></td>;
+                      case 'next_step': return <td key="next_step" className="px-3 py-2">
+                        <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
+                          {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+                        </span>
+                        {fu.next_steps_notes && (<p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>)}
+                      </td>;
+                      case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
+                        <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">{fu.conference_name}</Link>
+                        <p className="text-gray-400">{formatDate(fu.start_date)}</p>
+                      </td>;
+                      case 'rep': return <td key="rep" className="px-3 py-2">
+                        {canEditRep && isEditingRep ? (
+                          <div className="w-36">
+                            <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu.id, ids)} placeholder="Select reps..." />
+                          </div>
+                        ) : canEditRep ? (
+                          <button type="button" onClick={() => startEditRep(fu)} className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}>
+                            {fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
+                          </button>
                         ) : (
-                          <span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>
+                          fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} />) : (<span className="text-gray-300">—</span>)
                         )}
-                      </button>
-                    ) : (
-                      fu.assigned_rep ? (
-                        <RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} />
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )
-                    )}
-                  </td>}
-                  {isVisible('notes') && <td className="px-3 py-2">
-                    <FollowUpNotesPopover
-                      attendeeId={fu.attendee_id}
-                      notesCount={Number(fu.entity_notes_count)}
-                      conferenceName={fu.conference_name}
-                    />
-                  </td>}
-                  {isVisible('status') && <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggle(fu.id, !fu.completed)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${
-                        fu.completed
-                          ? 'bg-green-500 text-white border-green-600 hover:bg-green-600'
-                          : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600'
-                      }`}
-                    >
-                      {fu.completed ? (
-                        <>
-                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Done
-                        </>
-                      ) : 'Done'}
-                    </button>
-                  </td>}
+                      </td>;
+                      case 'notes': return <td key="notes" className="px-3 py-2">
+                        <FollowUpNotesPopover attendeeId={fu.attendee_id} notesCount={Number(fu.entity_notes_count)} conferenceName={fu.conference_name} />
+                      </td>;
+                      case 'status': return <td key="status" className="px-3 py-2">
+                        <button type="button" onClick={() => onToggle(fu.id, !fu.completed)} className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${fu.completed ? 'bg-green-500 text-white border-green-600 hover:bg-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600'}`}>
+                          {fu.completed ? (<><svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Done</>) : 'Done'}
+                        </button>
+                      </td>;
+                      default: return null;
+                    }
+                  })}
                   {onDelete && (
                     <td className="px-3 py-2">
                       <button

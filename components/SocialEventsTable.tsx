@@ -634,7 +634,7 @@ export function SocialEventsTable({
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
   const { user } = useUser();
-  const { isVisible } = useTableColumnConfig('social_events');
+  const { isVisible, orderedColumns } = useTableColumnConfig('social_events');
 
   /* form state */
   const [showForm, setShowForm] = useState(false);
@@ -1018,16 +1018,23 @@ export function SocialEventsTable({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  {isVisible('entered_by') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Entered By</th>}
-                  {isVisible('internal') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Internal</th>}
-                  {isVisible('event_name') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Name</th>}
-                  {isVisible('event_type') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Type</th>}
-                  {isVisible('host') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Host</th>}
-                  {isVisible('location') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Location</th>}
-                  {isVisible('date') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Date</th>}
-                  {isVisible('time') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Time</th>}
-                  {isVisible('invite_only') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Invite Only</th>}
-                  {isVisible('guest_list') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Guest List</th>}
+                  {orderedColumns.map(col => {
+                    if (!isVisible(col.key)) return null;
+                    const thCls = "px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap";
+                    switch (col.key) {
+                      case 'entered_by': return <th key="entered_by" className={thCls}>Entered By</th>;
+                      case 'internal': return <th key="internal" className={thCls}>Internal</th>;
+                      case 'event_name': return <th key="event_name" className={thCls}>Name</th>;
+                      case 'event_type': return <th key="event_type" className={thCls}>Type</th>;
+                      case 'host': return <th key="host" className={thCls}>Host</th>;
+                      case 'location': return <th key="location" className={thCls}>Location</th>;
+                      case 'date': return <th key="date" className={thCls}>Date</th>;
+                      case 'time': return <th key="time" className={thCls}>Time</th>;
+                      case 'invite_only': return <th key="invite_only" className={thCls}>Invite Only</th>;
+                      case 'guest_list': return <th key="guest_list" className={thCls}>Guest List</th>;
+                      default: return null;
+                    }
+                  })}
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"></th>
                 </tr>
               </thead>
@@ -1038,20 +1045,26 @@ export function SocialEventsTable({
                   return (
                     <Fragment key={ev.id}>
                       <tr className="hover:bg-gray-50 align-top">
-                        {isVisible('entered_by') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>}
-                        {isVisible('internal') && <td className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>}
-                        {isVisible('event_name') && <td className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>}
-                        {isVisible('event_type') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>}
-                        {isVisible('host') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>}
-                        {isVisible('location') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>}
-                        {isVisible('date') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(ev.event_date)}</td>}
-                        {isVisible('time') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(ev.event_time)}</td>}
-                        {isVisible('invite_only') && <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</td>}
-                        {isVisible('guest_list') && <td className="px-3 py-3">
-                          {invited.length > 0
-                            ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">{invited.length}</span>
-                            : <span className="text-gray-400">—</span>}
-                        </td>}
+                        {orderedColumns.map(col => {
+                          if (!isVisible(col.key)) return null;
+                          switch (col.key) {
+                            case 'entered_by': return <td key="entered_by" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>;
+                            case 'internal': return <td key="internal" className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>;
+                            case 'event_name': return <td key="event_name" className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>;
+                            case 'event_type': return <td key="event_type" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>;
+                            case 'host': return <td key="host" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>;
+                            case 'location': return <td key="location" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>;
+                            case 'date': return <td key="date" className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(ev.event_date)}</td>;
+                            case 'time': return <td key="time" className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(ev.event_time)}</td>;
+                            case 'invite_only': return <td key="invite_only" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</td>;
+                            case 'guest_list': return <td key="guest_list" className="px-3 py-3">
+                              {invited.length > 0
+                                ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">{invited.length}</span>
+                                : <span className="text-gray-400">—</span>}
+                            </td>;
+                            default: return null;
+                          }
+                        })}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             {invited.length > 0 && (
