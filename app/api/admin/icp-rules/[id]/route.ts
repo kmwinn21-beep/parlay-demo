@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
-  if (!auth.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
     await dbReady;
@@ -35,9 +34,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
-  if (!auth.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
     await dbReady;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, requireAdmin } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig } from '@/lib/icpRules';
 
@@ -18,9 +18,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
-  if (!auth.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
     await dbReady;
