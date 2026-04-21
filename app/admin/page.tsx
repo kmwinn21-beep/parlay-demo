@@ -50,7 +50,34 @@ const TABLE_LABELS: Record<string, string> = {
   conference_companies:  'Conference Company Table',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp';
+
+interface IcpRuleDraft {
+  id?: number;
+  category: string;
+  conditions: { option_value: string; operator: 'AND' | 'OR' }[];
+  isEditing: boolean;
+  isSaving: boolean;
+}
+
+type IcpUnitTypeOperator = 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'between';
+
+const ICP_OPERATOR_LABELS: Record<IcpUnitTypeOperator, string> = {
+  eq: '=',
+  gt: '>',
+  lt: '<',
+  gte: '≥',
+  lte: '≤',
+  between: 'between',
+};
+
+const ICP_RULE_CATEGORIES = [
+  { key: 'company_type', label: 'Company Types' },
+  { key: 'entity_structure', label: 'Entity Structure' },
+  { key: 'profit_type', label: 'Profit Types' },
+  { key: 'services', label: 'Services' },
+  { key: 'status', label: 'Status Options' },
+];
 
 const SECTION_PAGE_LABELS: Record<string, string> = {
   attendee: 'Attendee Page',
@@ -596,31 +623,140 @@ export default function AdminPage() {
   const [savingPerms, setSavingPerms] = useState(false);
   const [savingDomain, setSavingDomain] = useState(false);
 
+  // ── Unit Type (Types tab) ─────────────────────────────────────────────────────
+  const [unitTypeId, setUnitTypeId] = useState<number | null>(null);
+  const [unitTypeLabel, setUnitTypeLabel] = useState('WSE');
+  const [unitTypeSaving, setUnitTypeSaving] = useState(false);
+
+  // ── ICP tab ──────────────────────────────────────────────────────────────────
+  const [icpRules, setIcpRules] = useState<IcpRuleDraft[]>([]);
+  const [icpLoading, setIcpLoading] = useState(false);
+  const [icpUnitTypeOp, setIcpUnitTypeOp] = useState<IcpUnitTypeOperator | ''>('');
+  const [icpUnitTypeV1, setIcpUnitTypeV1] = useState('');
+  const [icpUnitTypeV2, setIcpUnitTypeV2] = useState('');
+  const [icpUnitTypeSaving, setIcpUnitTypeSaving] = useState(false);
+
   // ── Types tab ────────────────────────────────────────────────────────────────
 
   const fetchAll = async () => {
     invalidateConfigColors();
     invalidateConfigOptions();
     try {
-      const results = await Promise.all(
-        CATEGORIES.map(cat =>
-          fetch(`/api/config?category=${cat.key}&include_visibility=1`, { cache: 'no-store' })
-            .then(r => r.json())
-            .then(data => ({ key: cat.key, options: data }))
-        )
-      );
+      const [catResults, unitTypeRes] = await Promise.all([
+        Promise.all(
+          CATEGORIES.map(cat =>
+            fetch(`/api/config?category=${cat.key}&include_visibility=1`, { cache: 'no-store' })
+              .then(r => r.json())
+              .then(data => ({ key: cat.key, options: data }))
+          )
+        ),
+        fetch('/api/config?category=unit_type', { cache: 'no-store' }).then(r => r.json()),
+      ]);
       const map: Record<string, ConfigOption[]> = {};
-      for (const r of results) {
+      for (const r of catResults) {
         map[r.key] = r.key === 'icp'
           ? r.options.filter((o: ConfigOption) => o.value !== 'True' && o.value !== 'False')
           : r.options;
       }
       setOptionsByCategory(map);
+      const utOpts = unitTypeRes as ConfigOption[];
+      if (utOpts.length > 0) {
+        setUnitTypeId(utOpts[0].id);
+        setUnitTypeLabel(utOpts[0].value);
+      }
     } catch { toast.error('Failed to load config options.'); }
     finally { setIsLoading(false); }
   };
 
   useEffect(() => { fetchAll(); }, []);
+
+  const handleSaveUnitType = async () => {
+    if (!unitTypeLabel.trim()) return;
+    setUnitTypeSaving(true);
+    try {
+      if (unitTypeId) {
+        await fetch(`/api/config/${unitTypeId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: unitTypeLabel.trim() }) });
+      } else {
+        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'unit_type', value: unitTypeLabel.trim() }) });
+        const data = await res.json();
+        setUnitTypeId(data.id);
+      }
+      toast.success('Unit type saved!');
+    } catch { toast.error('Failed to save unit type.'); }
+    finally { setUnitTypeSaving(false); }
+  };
+
+  const fetchIcpConfig = async () => {
+    setIcpLoading(true);
+    try {
+      const res = await fetch('/api/admin/icp-rules', { cache: 'no-store' });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { rules: { id: number; category: string; conditions: { option_value: string; operator: 'AND' | 'OR' }[] }[]; unitTypeReq: { operator: IcpUnitTypeOperator | null; value1: number | null; value2: number | null } };
+      setIcpRules(data.rules.map(r => ({ ...r, isEditing: false, isSaving: false })));
+      setIcpUnitTypeOp(data.unitTypeReq.operator ?? '');
+      setIcpUnitTypeV1(data.unitTypeReq.value1 != null ? String(data.unitTypeReq.value1) : '');
+      setIcpUnitTypeV2(data.unitTypeReq.value2 != null ? String(data.unitTypeReq.value2) : '');
+    } catch { toast.error('Failed to load ICP configuration.'); }
+    finally { setIcpLoading(false); }
+  };
+
+  useEffect(() => { if (tab === 'icp') fetchIcpConfig(); }, [tab]);
+
+  const handleSaveIcpUnitType = async () => {
+    setIcpUnitTypeSaving(true);
+    try {
+      await Promise.all([
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_operator', value: icpUnitTypeOp || '' }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_value1', value: icpUnitTypeV1 }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_value2', value: icpUnitTypeOp === 'between' ? icpUnitTypeV2 : '' }) }),
+      ]);
+      toast.success('Unit type requirement saved!');
+    } catch { toast.error('Failed to save unit type requirement.'); }
+    finally { setIcpUnitTypeSaving(false); }
+  };
+
+  const handleClearIcpUnitType = async () => {
+    setIcpUnitTypeOp('');
+    setIcpUnitTypeV1('');
+    setIcpUnitTypeV2('');
+    await Promise.all([
+      fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_operator', value: '' }) }),
+      fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_value1', value: '' }) }),
+      fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_value2', value: '' }) }),
+    ]);
+    toast.success('Unit type requirement cleared.');
+  };
+
+  const handleAddIcpRule = () => {
+    setIcpRules(prev => [...prev, { category: '', conditions: [], isEditing: true, isSaving: false }]);
+  };
+
+  const handleSaveIcpRule = async (idx: number) => {
+    const draft = icpRules[idx];
+    if (!draft.category || draft.conditions.length === 0) { toast.error('Select a category and at least one option.'); return; }
+    setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, isSaving: true } : r));
+    try {
+      if (draft.id) {
+        await fetch(`/api/admin/icp-rules/${draft.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: draft.category, conditions: draft.conditions }) });
+        setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, isEditing: false, isSaving: false } : r));
+      } else {
+        const res = await fetch('/api/admin/icp-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: draft.category, conditions: draft.conditions }) });
+        const saved = await res.json() as { id: number };
+        setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, id: saved.id, isEditing: false, isSaving: false } : r));
+      }
+      toast.success('ICP parameter saved!');
+    } catch { toast.error('Failed to save ICP parameter.'); setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, isSaving: false } : r)); }
+  };
+
+  const handleDeleteIcpRule = async (idx: number) => {
+    const draft = icpRules[idx];
+    if (!draft.id) { setIcpRules(prev => prev.filter((_, i) => i !== idx)); return; }
+    try {
+      await fetch(`/api/admin/icp-rules/${draft.id}`, { method: 'DELETE' });
+      setIcpRules(prev => prev.filter((_, i) => i !== idx));
+      toast.success('ICP parameter deleted.');
+    } catch { toast.error('Failed to delete ICP parameter.'); }
+  };
 
   // ── Edit Tables tab ──────────────────────────────────────────────────────────
 
@@ -1117,14 +1253,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-6">
-          {(['types', 'tables', 'sections', 'brand', 'permissions'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : 'Permissions'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : 'ICP'}
             </button>
           ))}
         </nav>
@@ -1137,10 +1273,36 @@ export default function AdminPage() {
             <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {CATEGORIES.map(cat => (
-              <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} />
-            ))}
+          <div className="space-y-6">
+            {/* Unit Type field */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Unit Type</h2>
+              <p className="text-sm text-gray-500 mb-4">Define the global unit used to measure the size of a prospect (e.g. WSE, beds, units).</p>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 flex-shrink-0">Unit Type =</span>
+                <input
+                  type="text"
+                  value={unitTypeLabel}
+                  onChange={e => setUnitTypeLabel(e.target.value)}
+                  className="input-field text-sm flex-1 max-w-xs"
+                  placeholder="e.g. WSE"
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveUnitType(); }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveUnitType}
+                  disabled={unitTypeSaving || !unitTypeLabel.trim()}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {unitTypeSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {CATEGORIES.map(cat => (
+                <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} />
+              ))}
+            </div>
           </div>
         )
       )}
@@ -1689,6 +1851,243 @@ export default function AdminPage() {
               {!allowedDomain && (
                 <p className="text-xs text-gray-400 mt-2">No restriction — any email address may sign up.</p>
               )}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* ── ICP tab ── */}
+      {tab === 'icp' && (
+        icpLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Unit Type requirement row */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">{unitTypeLabel || 'Unit Type'} Requirement</h2>
+              <p className="text-sm text-gray-500 mb-4">Set a numeric threshold for the {unitTypeLabel || 'unit type'} value. Prospects that don't meet this requirement will not be marked as ICP.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 flex-shrink-0">{unitTypeLabel || 'Unit Type'}</span>
+                <select
+                  value={icpUnitTypeOp}
+                  onChange={e => setIcpUnitTypeOp(e.target.value as IcpUnitTypeOperator | '')}
+                  className="input-field text-sm w-36"
+                >
+                  <option value="">— no requirement —</option>
+                  {(Object.entries(ICP_OPERATOR_LABELS) as [IcpUnitTypeOperator, string][]).map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                {icpUnitTypeOp && icpUnitTypeOp !== 'between' && (
+                  <input
+                    type="number"
+                    value={icpUnitTypeV1}
+                    onChange={e => setIcpUnitTypeV1(e.target.value)}
+                    className="input-field text-sm w-28"
+                    placeholder="value"
+                    min={0}
+                  />
+                )}
+                {icpUnitTypeOp === 'between' && (
+                  <>
+                    <input
+                      type="number"
+                      value={icpUnitTypeV1}
+                      onChange={e => setIcpUnitTypeV1(e.target.value)}
+                      className="input-field text-sm w-28"
+                      placeholder="min"
+                      min={0}
+                    />
+                    <span className="text-sm text-gray-500">and</span>
+                    <input
+                      type="number"
+                      value={icpUnitTypeV2}
+                      onChange={e => setIcpUnitTypeV2(e.target.value)}
+                      className="input-field text-sm w-28"
+                      placeholder="max"
+                      min={0}
+                    />
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveIcpUnitType}
+                  disabled={icpUnitTypeSaving || !icpUnitTypeOp}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {icpUnitTypeSaving ? 'Saving…' : 'Save'}
+                </button>
+                {icpUnitTypeOp && (
+                  <button
+                    type="button"
+                    onClick={handleClearIcpUnitType}
+                    disabled={icpUnitTypeSaving}
+                    className="btn-secondary text-sm flex-shrink-0"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Category rules */}
+            <div className="card space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif">ICP Parameters</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">Each parameter must pass for a company to be marked as ICP. Within a parameter, AND conditions all must match; OR conditions at least one must match.</p>
+                </div>
+              </div>
+
+              {icpRules.length === 0 && (
+                <p className="text-sm text-gray-400 py-2">No ICP parameters configured yet. Add one below.</p>
+              )}
+
+              {icpRules.map((rule, idx) => {
+                const categoryOptions = optionsByCategory[rule.category] ?? [];
+                return (
+                  <div key={rule.id ?? `new-${idx}`} className={`rounded-lg border p-4 space-y-3 ${rule.isEditing ? 'border-brand-secondary bg-blue-50/30' : 'border-gray-200'}`}>
+                    {rule.isEditing ? (
+                      <>
+                        {/* Category selector */}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <select
+                            value={rule.category}
+                            onChange={e => setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, category: e.target.value, conditions: [] } : r))}
+                            className="input-field text-sm w-52"
+                          >
+                            <option value="">— select category —</option>
+                            {ICP_RULE_CATEGORIES.map(c => (
+                              <option key={c.key} value={c.key}>{c.label}</option>
+                            ))}
+                          </select>
+                          <span className="text-sm text-gray-500">must match:</span>
+                        </div>
+
+                        {/* Options list with AND/OR toggles */}
+                        {rule.category && categoryOptions.length === 0 && (
+                          <p className="text-xs text-gray-400">No options configured for this category yet.</p>
+                        )}
+                        {rule.category && categoryOptions.length > 0 && (
+                          <div className="space-y-2 pl-2">
+                            {categoryOptions.map(opt => {
+                              const existing = rule.conditions.find(c => c.option_value === opt.value);
+                              return (
+                                <div key={opt.id} className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    id={`icp-opt-${idx}-${opt.id}`}
+                                    className="accent-brand-secondary"
+                                    checked={!!existing}
+                                    onChange={e => {
+                                      if (e.target.checked) {
+                                        setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, conditions: [...r.conditions, { option_value: opt.value, operator: 'OR' }] } : r));
+                                      } else {
+                                        setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, conditions: r.conditions.filter(c => c.option_value !== opt.value) } : r));
+                                      }
+                                    }}
+                                  />
+                                  <label htmlFor={`icp-opt-${idx}-${opt.id}`} className="text-sm text-gray-700 flex-1">{opt.value}</label>
+                                  {existing && (
+                                    <div className="inline-flex items-center rounded-lg border border-gray-200 p-0.5 bg-white">
+                                      {(['AND', 'OR'] as const).map(op => (
+                                        <button
+                                          key={op}
+                                          type="button"
+                                          onClick={() => setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, conditions: r.conditions.map(c => c.option_value === opt.value ? { ...c, operator: op } : c) } : r))}
+                                          className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${existing.operator === op ? 'bg-brand-secondary text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                        >
+                                          {op}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveIcpRule(idx)}
+                            disabled={rule.isSaving}
+                            className="btn-primary text-xs px-3 py-1.5"
+                          >
+                            {rule.isSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (rule.id) {
+                                setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, isEditing: false } : r));
+                              } else {
+                                setIcpRules(prev => prev.filter((_, i) => i !== idx));
+                              }
+                            }}
+                            className="btn-secondary text-xs px-3 py-1.5"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteIcpRule(idx)}
+                            className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1.5 ml-auto"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      /* Read-only view */
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800">
+                            {ICP_RULE_CATEGORIES.find(c => c.key === rule.category)?.label ?? rule.category}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {rule.conditions.map((c, ci) => (
+                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                <span className={`text-[10px] font-bold ${c.operator === 'AND' ? 'text-blue-600' : 'text-green-600'}`}>{c.operator}</span>
+                                {c.option_value}
+                              </span>
+                            ))}
+                            {rule.conditions.length === 0 && <span className="text-xs text-gray-400">No conditions</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setIcpRules(prev => prev.map((r, i) => i === idx ? { ...r, isEditing: true } : r))}
+                            className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteIcpRule(idx)}
+                            className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={handleAddIcpRule}
+                className="btn-secondary text-sm w-full"
+              >
+                + ICP Parameter
+              </button>
             </div>
           </div>
         )

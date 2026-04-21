@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, parseFileWithMapping, classifyCompanyType, parseServicesValue, classifyICP, type ColumnMapping } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, type ColumnMapping } from '@/lib/parsers';
+import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -71,9 +72,10 @@ export async function POST(
     }
 
     // Fetch live admin config options for classifiers
-    const [companyTypeOptions, icpOptions, userRows, usersWithConfig] = await Promise.all([
+    const [companyTypeOptions, icpOptions, icpConfig, userRows, usersWithConfig] = await Promise.all([
       getConfigOptionValues('company_type'),
       getConfigOptionValues('icp'),
+      getIcpConfig(),
       db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
       db.execute({ sql: 'SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL', args: [] }),
     ]);
@@ -113,12 +115,6 @@ export async function POST(
       if (displayId != null) return String(displayId);
       return null;
     };
-    // Identify which company_type values represent "Operator" for ICP classification
-    const operatorTypeValues = new Set(
-      companyTypeOptions.filter((v) => v.toLowerCase().includes('operator') || v.toLowerCase() === 'opco' || v.toLowerCase() === 'own/op')
-    );
-    if (operatorTypeValues.size === 0) operatorTypeValues.add('Operator'); // safe fallback
-
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
 
@@ -355,7 +351,7 @@ export async function POST(
     if (affectedCompanyIds.length > 0) {
       const placeholders = affectedCompanyIds.map(() => '?').join(',');
       const freshRows = await db.execute({
-        sql: `SELECT id, company_type, wse, services FROM companies WHERE id IN (${placeholders})`,
+        sql: `SELECT id, company_type, wse, services, profit_type, entity_structure FROM companies WHERE id IN (${placeholders})`,
         args: affectedCompanyIds,
       });
       const falseValue = icpOptions[1] ?? 'No';
@@ -377,13 +373,16 @@ export async function POST(
             icp = fileIcp;
           }
         } else {
-          // No file ICP — calculate from rules
-          icp = classifyICP(
-            row.wse ? Number(row.wse) : null,
-            row.company_type ? String(row.company_type) : null,
-            row.services ? String(row.services) : null,
+          icp = evaluateIcpRules(
+            {
+              company_type: row.company_type ? String(row.company_type) : null,
+              services: row.services ? String(row.services) : null,
+              wse: row.wse ? String(row.wse) : null,
+              profit_type: row.profit_type ? String(row.profit_type) : null,
+              entity_structure: row.entity_structure ? String(row.entity_structure) : null,
+            },
+            icpConfig,
             icpOptions,
-            operatorTypeValues
           );
         }
         icpUpdates.push({ id: companyId, icp });

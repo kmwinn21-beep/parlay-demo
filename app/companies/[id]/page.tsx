@@ -13,7 +13,8 @@ import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
-import { effectiveSeniority, classifyICP } from '@/lib/parsers';
+import { effectiveSeniority } from '@/lib/parsers';
+import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRules';
 import { type UserOption, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
@@ -149,6 +150,7 @@ export default function CompanyDetailPage() {
   const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
+  const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
 
   // Operator / Capital relationship state
   const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
@@ -180,7 +182,7 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
@@ -192,6 +194,7 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=icp&form=company_detail'),
         fetch('/api/companies'),
         fetch('/api/config?category=rep_relationship_type&form=company_detail'),
+        fetch('/api/admin/icp-rules'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -238,6 +241,7 @@ export default function CompanyDetailPage() {
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
       if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value).filter((v: string) => v !== 'True' && v !== 'False'));
+      if (icpConfigRes.ok) setIcpConfig(await icpConfigRes.json() as IcpConfig);
       if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
 
@@ -287,11 +291,20 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!isEditing) return;
     const services = Array.isArray(editData.services) ? editData.services.join(',') : '';
-    const wse = editData.wse != null ? Number(editData.wse) : null;
-    const icp = classifyICP(wse, editData.company_type || null, services || null, icpOptions, operatorTypeValues);
+    const icp = evaluateIcpRules(
+      {
+        company_type: editData.company_type || null,
+        services: services || null,
+        wse: editData.wse != null ? String(editData.wse) : null,
+        profit_type: editData.profit_type || null,
+        entity_structure: editData.entity_structure || null,
+      },
+      icpConfig,
+      icpOptions,
+    );
     setEditData((p) => ({ ...p, icp }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing, editData.wse, editData.company_type, editData.services]);
+  }, [isEditing, editData.wse, editData.company_type, editData.services, editData.profit_type, editData.entity_structure]);
 
   // Search companies for relate modal
   useEffect(() => {
