@@ -16,6 +16,7 @@ import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from 
 import { RepMultiSelect } from './RepMultiSelect';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface Company {
   id: number;
@@ -169,6 +170,7 @@ function fmtDate(dateStr?: string): string {
 export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
+  const unitTypeLabel = useUnitTypeLabel();
   const userOptionsFull = useUserOptions();
   const { isVisible } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
@@ -441,7 +443,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     if (field === 'wse') {
       const trimmed = cellDraft.trim();
       const parsed = trimmed === '' ? null : Number(trimmed);
-      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error(`${unitTypeLabel} must be a non-negative number.`); return; }
       if ((company.wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
       payload.wse = parsed == null ? null : Math.round(parsed);
     } else {
@@ -677,7 +679,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               `}</style>
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">WSE Range</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{unitTypeLabel} Range</p>
                   <div className="flex items-center gap-1.5 text-xs text-gray-600">
                     <span className="px-2 py-0.5 bg-white border border-gray-200 rounded font-medium">{effectiveWseMin.toLocaleString()}</span>
                     <span className="text-gray-400">–</span>
@@ -946,7 +948,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 {isVisible('status') && <th className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>}
                 {isVisible('attendees') && <th className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>}
                 {isVisible('conferences') && <th className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>}
-                {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>WSE&apos;s</th>}
+                {isVisible('wse') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>{unitTypeLabel}&apos;s</th>}
                 {isVisible('updated_on') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>}
                 {isVisible('relationships') && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>}
                 {customColumns.filter(c => c.visible).map(col => (

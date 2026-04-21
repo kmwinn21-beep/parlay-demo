@@ -13,6 +13,7 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass } from '@/lib/colors';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface Attendee {
   id: number;
@@ -114,6 +115,7 @@ function fmtDate(dateStr?: string): string {
 export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const { isVisible, orderedColumns } = useTableColumnConfig('attendees');
   const customColumns = useCustomColumns('attendees');
+  const unitTypeLabel = useUnitTypeLabel();
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('attendee_table');
   const statusOptions = configOptions.status ?? [];
@@ -292,7 +294,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     if (field === 'company_wse') {
       const trimmed = cellDraft.trim();
       const parsed = trimmed === '' ? null : Number(trimmed);
-      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error('WSE must be a non-negative number.'); return; }
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error(`${unitTypeLabel} must be a non-negative number.`); return; }
       if ((attendee.company_wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
       payload.company_wse = parsed == null ? null : Math.round(parsed);
     } else {
@@ -670,8 +672,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                                       autoFocus
                                     />
                                   ) : (
-                                    <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')} title="Click to edit WSE">
-                                      WSE: {Number(attendee.company_wse).toLocaleString()}
+                                    <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')} title={`Click to edit ${unitTypeLabel}`}>
+                                      {unitTypeLabel}: {Number(attendee.company_wse).toLocaleString()}
                                     </button>
                                   )
                                 )}

@@ -7,6 +7,7 @@ import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions, parseRepIds } from '@/lib/useUserOptions';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface CompanyOption {
   id: number;
@@ -102,6 +103,7 @@ function RepPill({ name }: { name: string }) {
 }
 
 export default function RelationshipsPage() {
+  const unitTypeLabel = useUnitTypeLabel();
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [companySearch, setCompanySearch] = useState('');
@@ -587,7 +589,7 @@ export default function RelationshipsPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">WSE</p>
+                      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{unitTypeLabel}</p>
                       {companyDetails.wse != null ? (
                         <span className="text-sm text-gray-600 inline-flex items-center gap-1">
                           <svg className="w-4 h-4 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>

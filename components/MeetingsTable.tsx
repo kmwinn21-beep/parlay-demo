@@ -14,6 +14,7 @@ import {
   getRepInitials,
 } from '@/lib/useUserOptions';
 import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 export interface Meeting {
   id: number;
@@ -93,6 +94,7 @@ function MeetingInfoTooltip({
 }) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const unitTypeLabel = useUnitTypeLabel();
   const attendeeList = attendees ? attendees.split(',').map(n => n.trim()).filter(Boolean) : [];
   const hasContent = scheduledByDisplay || location || attendeeList.length > 0 || companyWse != null;
 
@@ -144,7 +146,7 @@ function MeetingInfoTooltip({
             )}
             {companyWse != null && (
               <div>
-                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">WSE</p>
+                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">{unitTypeLabel}</p>
                 <p className="flex items-center gap-1">
                   <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" />
