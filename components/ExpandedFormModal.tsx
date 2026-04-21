@@ -501,9 +501,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       <button
         type="button"
         onClick={onClose}
-        style={{ position: 'fixed', top: 16, right: 16, zIndex: 10000 }}
         className="rounded-full w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70 shadow-md"
         style={{
+          position: 'fixed', top: 16, right: 16, zIndex: 10000,
           background: accentIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)',
           color: accentIsLight ? '#1a1a1a' : '#ffffff',
         }}
