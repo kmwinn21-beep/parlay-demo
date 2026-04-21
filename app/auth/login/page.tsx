@@ -5,10 +5,14 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { LogoImage } from '@/components/LogoImage';
+import { useTagline } from '@/lib/useTagline';
+import { useAppName } from '@/lib/useAppName';
 
 function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/';
+  const tagline = useTagline();
+  const appName = useAppName();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,12 +49,12 @@ function LoginForm() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
-          <p className="text-blue-300 text-sm italic">Caring for people who care for people.</p>
+          {tagline && <p className="text-blue-300 text-sm italic">{tagline}</p>}
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h1 className="text-2xl font-bold text-brand-primary font-serif mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-500 mb-6">Sign in to {process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub'}</p>
+          <p className="text-sm text-gray-500 mb-6">Sign in to {appName}</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
