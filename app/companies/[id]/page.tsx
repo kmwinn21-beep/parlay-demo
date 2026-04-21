@@ -14,7 +14,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
-import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRules';
+import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRulesEval';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { type UserOption, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
