@@ -131,7 +131,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const [isLandscape, setIsLandscape] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanBanner, setScanBanner] = useState(false);
+  const [scanCompanyMatches, setScanCompanyMatches] = useState<{ id: number; name: string }[]>([]);
   const attendeeDropRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
@@ -192,6 +196,70 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       if (f.field_key === 'company' && attendee.company_name) setValue(f.id, attendee.company_name);
       if (f.field_key === 'email' && attendee.email) setValue(f.id, attendee.email);
     });
+  }, [form.fields, setValue]);
+
+  const handleScanFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = ''; // reset so same photo can be retried
+    setScanLoading(true);
+    setScanBanner(false);
+    setScanCompanyMatches([]);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch('/api/scan-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: base64, media_type: file.type }),
+      });
+      if (!res.ok) throw new Error('scan failed');
+      const data: {
+        first_name: string | null; last_name: string | null; title: string | null;
+        company: string | null; email: string | null; phone: string | null; extra_text: string | null;
+      } = await res.json();
+
+      // ── Name → populate attendee search + default to "Other" path ──
+      if (data.first_name || data.last_name) {
+        const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ');
+        setAttendeeSearch(fullName);
+        setAttendeeDropOpen(true);
+        setIsOther(true); // fallback — user can pick a match to override
+        setManualFirst(data.first_name || '');
+        setManualLast(data.last_name || '');
+      }
+
+      // ── Map detected values to matching form fields by field_key ──
+      form.fields.forEach(f => {
+        if (f.field_key === 'title' && data.title) setValue(f.id, data.title);
+        if (f.field_key === 'company' && data.company) setValue(f.id, data.company);
+        if (f.field_key === 'email' && data.email) setValue(f.id, data.email);
+        if (f.field_key === 'phone' && data.phone) setValue(f.id, data.phone);
+        // Extra text → first notes field found
+        if (data.extra_text && (f.field_key === 'notes' || f.label.toLowerCase().includes('note'))) {
+          setValue(f.id, data.extra_text);
+        }
+      });
+
+      // ── Company name search → inline suggestions ──
+      if (data.company) {
+        const srRes = await fetch(`/api/search?q=${encodeURIComponent(data.company)}`);
+        if (srRes.ok) {
+          const sr = await srRes.json();
+          if (sr.companies?.length) setScanCompanyMatches(sr.companies.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+        }
+      }
+
+      setScanBanner(true);
+    } catch {
+      toast.error('Could not read card — try again with better lighting');
+    } finally {
+      setScanLoading(false);
+    }
   }, [form.fields, setValue]);
 
   const filteredAttendees = attendees.filter(a => {
@@ -350,14 +418,43 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     }
 
     if (field.field_type === 'text_single') {
+      const isCompanyField = field.field_key === 'company';
+      const showCompanySuggestions = isCompanyField && scanCompanyMatches.length > 0;
       return (
         <div key={field.id}>
           <label className="block text-sm font-semibold mb-1.5" style={{ color: textColor }}>
             {field.label}{field.required && <span className="ml-1 text-red-400">*</span>}
           </label>
-          <input type="text" value={(values[field.id] as string) || ''} onChange={e => setValue(field.id, e.target.value)}
-            placeholder={field.placeholder || ''} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-            style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: inputText }} />
+          <div className="relative">
+            <input type="text" value={(values[field.id] as string) || ''} onChange={e => setValue(field.id, e.target.value)}
+              placeholder={field.placeholder || ''} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
+              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: inputText }} />
+            {showCompanySuggestions && (
+              <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
+                <p className="px-3 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">
+                  Companies in system — tap to confirm
+                </p>
+                {scanCompanyMatches.slice(0, 5).map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-blue-50 flex items-center gap-2"
+                    onClick={() => { setValue(field.id, c.name); setScanCompanyMatches([]); }}
+                  >
+                    <svg className="w-3.5 h-3.5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                    {c.name}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100"
+                  onClick={() => setScanCompanyMatches([])}
+                >
+                  Keep scanned value — will be created on submit if new
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -492,6 +589,59 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
         )}
       </div>
       <div className="h-px mx-6 mb-1 opacity-20" style={{ background: textColor }} />
+
+      {/* ── Card / Badge scanner ── */}
+      <div className="px-6 pt-3 pb-1">
+        <button
+          type="button"
+          disabled={scanLoading}
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-opacity hover:opacity-80 disabled:opacity-50"
+          style={{
+            background: cardIsLight ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.13)',
+            color: textColor,
+            border: `1px solid ${inputBorder}`,
+          }}
+        >
+          {scanLoading ? (
+            <>
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Scanning…
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Scan Business Card / Badge
+            </>
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleScanFile}
+        />
+        {scanBanner && (
+          <div
+            className="mt-2 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-xs"
+            style={{ background: cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)', color: textColor }}
+          >
+            <span className="opacity-80">✓ Card scanned — review fields and select any matches below</span>
+            <button type="button" onClick={() => setScanBanner(false)} className="opacity-50 hover:opacity-100 flex-shrink-0">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Fields */}
       <div className="px-6 py-4 space-y-5">
         {form.fields.map(renderField)}
