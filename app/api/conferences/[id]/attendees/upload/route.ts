@@ -128,6 +128,16 @@ export async function POST(
       : await parseFile(buffer, file.name);
     const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
 
+    // Null out any company_type value from the file that doesn't match a configured option
+    if (companyTypeOptions.length > 0) {
+      const validTypeSet = new Set(companyTypeOptions.map((v) => v.toLowerCase()));
+      for (const p of valid) {
+        if (p.company_type && !validTypeSet.has(p.company_type.toLowerCase())) {
+          p.company_type = undefined;
+        }
+      }
+    }
+
     if (valid.length === 0) {
       return NextResponse.json({ error: 'No valid attendees found in file' }, { status: 400 });
     }
