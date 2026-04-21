@@ -88,11 +88,25 @@ export function buildAccentBackground(color: string, gradient: string | null): s
 }
 
 function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\s+on\w+="[^"]*"/gi, '')
-    .replace(/\s+on\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '');
+  if (typeof window === 'undefined') {
+    return html
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/\s+on\w+="[^"]*"/gi, '')
+      .replace(/\s+on\w+='[^']*'/gi, '')
+      .replace(/javascript:/gi, '');
+  }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script').forEach(el => el.remove());
+  doc.querySelectorAll<HTMLElement>('*').forEach(el => {
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name.startsWith('on') || attr.value.toLowerCase().includes('javascript:')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+    el.style.background = '';
+    el.style.backgroundColor = '';
+  });
+  return doc.body.innerHTML;
 }
 
 function isColorLight(hex: string): boolean {
@@ -125,11 +139,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // Lock body scroll and cover full viewport while form is open
+  // Lock body + html scroll to cover full viewport while form is open
   useEffect(() => {
-    const prev = document.body.style.overflow;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
   }, []);
 
   useEffect(() => {
@@ -492,7 +511,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         width: '100vw', height: '100vh',
         zIndex: 9999,
-        overflow: 'auto',
+        overflow: 'hidden',
         background: accentBg,
         transition: 'background 0.3s ease',
       }}
@@ -515,9 +534,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
       {isLandscape ? (
         /* ── Landscape: 2-column layout ── */
-        <div className="flex min-h-screen">
+        <div className="flex h-full">
           {/* Left panel */}
-          <div className="flex-1 flex flex-col p-8 overflow-y-auto" style={{ maxHeight: '100vh' }}>
+          <div className="flex-1 flex flex-col p-8 overflow-y-auto" style={{ height: '100%' }}>
             {/* Company logo */}
             {brandLogoUrl && (
               <div className="mb-6 flex-shrink-0">
@@ -569,17 +588,17 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
           </div>
 
           {/* Right panel: form card — width configurable in landscape only */}
-          <div className="flex-shrink-0 p-6 flex items-center justify-center" style={{ width: formWidth, minWidth: 280 }}>
-            <div className="w-full rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor }}>
+          <div className="flex-shrink-0 px-6 py-6 flex flex-col overflow-y-auto" style={{ width: formWidth, minWidth: 280, height: '100%' }}>
+            <div className="my-auto w-full rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor }}>
               {formCardInterior}
             </div>
           </div>
         </div>
       ) : (
         /* ── Portrait: centered card ── */
-        <div className="min-h-screen flex items-center justify-center p-6 py-12">
+        <div className="flex flex-col p-6 py-12 overflow-y-auto" style={{ height: '100%' }}>
           <div
-            className="w-full max-w-[480px] rounded-2xl shadow-2xl overflow-hidden"
+            className="my-auto mx-auto w-full max-w-[480px] rounded-2xl shadow-2xl overflow-hidden"
             style={{ background: bgColor, border: '2px solid rgba(255,255,255,0.2)' }}
           >
             {formCardInterior}

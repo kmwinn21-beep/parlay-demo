@@ -451,7 +451,8 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
                     </button>
-                    <span className="w-16 text-center text-xs font-medium tabular-nums text-gray-700">{editDraft.image_offset_y} px</span>
+                    <input type="number" value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-16 text-center input-field text-xs tabular-nums" />
+                    <span className="text-xs text-gray-400">px</span>
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
                     </button>
@@ -473,7 +474,8 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
                     </button>
-                    <span className="w-16 text-center text-xs font-medium tabular-nums text-gray-700">{editDraft.html_offset_y} px</span>
+                    <input type="number" value={editDraft.html_offset_y} onChange={e => setEditDraft(d => ({ ...d, html_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-16 text-center input-field text-xs tabular-nums" />
+                    <span className="text-xs text-gray-400">px</span>
                     <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
                     </button>
@@ -734,6 +736,23 @@ function HtmlEditor({ value, onChange }: { value: string; onChange: (v: string) 
     if (editorRef.current) onChange(editorRef.current.innerHTML);
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+    if (html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll<HTMLElement>('*').forEach(el => {
+        el.style.background = '';
+        el.style.backgroundColor = '';
+      });
+      document.execCommand('insertHTML', false, doc.body.innerHTML);
+    } else {
+      document.execCommand('insertText', false, text);
+    }
+    if (editorRef.current) onChange(editorRef.current.innerHTML);
+  };
+
   const toolbarBtn = (label: string, cmd: string, val?: string, title?: string) => (
     <button
       key={cmd + (val || '')}
@@ -773,6 +792,7 @@ function HtmlEditor({ value, onChange }: { value: string; onChange: (v: string) 
         contentEditable
         suppressContentEditableWarning
         onInput={() => { if (editorRef.current) onChange(editorRef.current.innerHTML); }}
+        onPaste={handlePaste}
         className="min-h-[140px] p-3 text-sm outline-none"
         style={{ lineHeight: 1.6 }}
         data-placeholder="Type and format your text here. This content appears in the left panel on landscape/desktop screens."
