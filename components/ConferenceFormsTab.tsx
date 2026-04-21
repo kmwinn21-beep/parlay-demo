@@ -1,10 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import { ExpandedFormModal, type FormField, type ConferenceForm } from './ExpandedFormModal';
+import { ExpandedFormModal, buildAccentBackground, type FormField, type ConferenceForm } from './ExpandedFormModal';
 import { FormBuilderModal } from './FormBuilderModal';
+
+function getCssVarHex(varName: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const rgb = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  const parts = rgb.split(' ').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return fallback;
+  return '#' + parts.map(n => n.toString(16).padStart(2, '0')).join('');
+}
 
 interface AttendeeOption {
   id: number;
@@ -67,6 +75,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
   const [newFormTemplate, setNewFormTemplate] = useState<number | null>(null);
   const [newFormLogo, setNewFormLogo] = useState('');
   const [newFormBgColor, setNewFormBgColor] = useState('');
+  const [newFormAccentColor, setNewFormAccentColor] = useState('');
   const [savingNewForm, setSavingNewForm] = useState(false);
 
   // Expanded form
@@ -83,7 +92,16 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
 
   // Edit form settings
   const [editingFormId, setEditingFormId] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<{ name: string; conference_logo_url: string; background_color: string }>({ name: '', conference_logo_url: '', background_color: '' });
+  const [editDraft, setEditDraft] = useState<{
+    name: string;
+    conference_logo_url: string;
+    background_color: string;
+    accent_color: string;
+    accent_gradient: string;
+    image_url: string;
+    image_max_width: string;
+    html_content: string;
+  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '' });
 
   const loadForms = useCallback(async () => {
     try {
@@ -140,6 +158,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           name: newFormName.trim(),
           conference_logo_url: newFormLogo.trim() || null,
           background_color: newFormBgColor.trim() || null,
+          accent_color: newFormAccentColor.trim() || null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -149,6 +168,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
       setNewFormTemplate(null);
       setNewFormLogo('');
       setNewFormBgColor('');
+      setNewFormAccentColor('');
       await loadForms();
     } catch { toast.error('Failed to create form'); }
     finally { setSavingNewForm(false); }
@@ -229,6 +249,11 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           name: editDraft.name.trim(),
           conference_logo_url: editDraft.conference_logo_url.trim() || null,
           background_color: editDraft.background_color.trim() || null,
+          accent_color: editDraft.accent_color.trim() || null,
+          accent_gradient: editDraft.accent_gradient || null,
+          image_url: editDraft.image_url.trim() || null,
+          image_max_width: editDraft.image_max_width ? parseInt(editDraft.image_max_width, 10) : null,
+          html_content: editDraft.html_content.trim() || null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -289,15 +314,17 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
               <input type="url" value={newFormLogo} onChange={e => setNewFormLogo(e.target.value)} className="input-field text-sm w-full" placeholder="https://..." />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Background Color (hex)</label>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Form Card Color</label>
               <div className="flex gap-2 items-center">
-                <input
-                  type="color"
-                  value={newFormBgColor || '#0B3C62'}
-                  onChange={e => setNewFormBgColor(e.target.value)}
-                  className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white"
-                />
-                <input type="text" value={newFormBgColor} onChange={e => setNewFormBgColor(e.target.value)} className="input-field text-sm flex-1" placeholder="#0B3C62" />
+                <input type="color" value={newFormBgColor || '#0B3C62'} onChange={e => setNewFormBgColor(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                <input type="text" value={newFormBgColor} onChange={e => setNewFormBgColor(e.target.value)} className="input-field text-sm flex-1" placeholder="#0B3C62 (default brand primary)" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Page Background Color</label>
+              <div className="flex gap-2 items-center">
+                <input type="color" value={newFormAccentColor || '#FFCB3F'} onChange={e => setNewFormAccentColor(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                <input type="text" value={newFormAccentColor} onChange={e => setNewFormAccentColor(e.target.value)} className="input-field text-sm flex-1" placeholder="#FFCB3F (default brand gold)" />
               </div>
             </div>
           </div>
@@ -326,8 +353,10 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           <div key={form.id} className="card p-0 overflow-hidden">
             {/* Form header row */}
             {isEditing ? (
-              <div className="p-4 space-y-4 bg-blue-50/20 border-b border-gray-100">
+              <div className="p-4 space-y-5 bg-blue-50/20 border-b border-gray-100">
                 <h3 className="text-sm font-bold text-brand-primary">Edit Form Settings</h3>
+
+                {/* Row 1: Name + Logo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Form Name</label>
@@ -337,15 +366,88 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Conference Logo URL</label>
                     <input type="url" value={editDraft.conference_logo_url} onChange={e => setEditDraft(d => ({ ...d, conference_logo_url: e.target.value }))} className="input-field text-sm w-full" placeholder="https://..." />
                   </div>
+                </div>
+
+                {/* Row 2: Form card color + Page background color */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Background Color</label>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Form Card Color</label>
                     <div className="flex gap-2 items-center">
                       <input type="color" value={editDraft.background_color || '#0B3C62'} onChange={e => setEditDraft(d => ({ ...d, background_color: e.target.value }))} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
-                      <input type="text" value={editDraft.background_color} onChange={e => setEditDraft(d => ({ ...d, background_color: e.target.value }))} className="input-field text-sm flex-1" />
+                      <input type="text" value={editDraft.background_color} onChange={e => setEditDraft(d => ({ ...d, background_color: e.target.value }))} className="input-field text-sm flex-1" placeholder="#0B3C62" />
+                      <button type="button" onClick={() => setEditDraft(d => ({ ...d, background_color: getCssVarHex('--brand-primary-rgb', '#0B3C62') }))} className="text-xs text-brand-secondary hover:underline whitespace-nowrap">Brand default</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Page Background Color</label>
+                    <div className="flex gap-2 items-center">
+                      <input type="color" value={editDraft.accent_color || '#FFCB3F'} onChange={e => setEditDraft(d => ({ ...d, accent_color: e.target.value }))} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                      <input type="text" value={editDraft.accent_color} onChange={e => setEditDraft(d => ({ ...d, accent_color: e.target.value }))} className="input-field text-sm flex-1" placeholder="#FFCB3F" />
+                      <button type="button" onClick={() => setEditDraft(d => ({ ...d, accent_color: getCssVarHex('--brand-highlight-rgb', '#FFCB3F') }))} className="text-xs text-brand-secondary hover:underline whitespace-nowrap">Brand default</button>
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+
+                {/* Row 3: Gradient selector with live swatches */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-2">Background Gradient</label>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { value: 'none', label: 'None' },
+                      { value: 'radial-light', label: 'Radial Light' },
+                      { value: 'radial-dark', label: 'Radial Dark' },
+                      { value: 'linear-top', label: 'Linear ↓' },
+                      { value: 'linear-bottom', label: 'Linear ↑' },
+                    ] as const).map(opt => {
+                      const preview = buildAccentBackground(editDraft.accent_color || '#FFCB3F', opt.value === 'none' ? null : opt.value);
+                      const active = editDraft.accent_gradient === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setEditDraft(d => ({ ...d, accent_gradient: opt.value }))}
+                          className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${active ? 'border-brand-secondary ring-1 ring-brand-secondary' : 'border-gray-200 hover:border-gray-300'}`}
+                        >
+                          <span className="w-8 h-4 rounded flex-shrink-0" style={{ background: preview, border: '1px solid rgba(0,0,0,0.1)' }} />
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Row 4: Image element */}
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Image Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
+                  <div className="flex gap-3 items-start">
+                    <div className="flex-1">
+                      <input type="url" value={editDraft.image_url} onChange={e => setEditDraft(d => ({ ...d, image_url: e.target.value }))} className="input-field text-sm w-full" placeholder="https://example.com/image.png" />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <label className="text-xs text-gray-500 whitespace-nowrap">Max width</label>
+                      <input
+                        type="number" min={10} max={100}
+                        value={editDraft.image_max_width}
+                        onChange={e => setEditDraft(d => ({ ...d, image_max_width: e.target.value }))}
+                        className="input-field text-sm w-16 text-center"
+                      />
+                      <span className="text-xs text-gray-400">%</span>
+                    </div>
+                  </div>
+                  {editDraft.image_url && (
+                    <div className="mt-2">
+                      <img src={editDraft.image_url} alt="Preview" className="max-h-20 rounded border border-gray-200 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Row 5: HTML text editor */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">HTML Text Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
+                  <HtmlEditor value={editDraft.html_content} onChange={v => setEditDraft(d => ({ ...d, html_content: v }))} />
+                </div>
+
+                <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => handleSaveEditForm(form.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
                   <button type="button" onClick={() => setEditingFormId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
                 </div>
@@ -373,7 +475,19 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                   {/* Edit form settings */}
                   <button
                     type="button"
-                    onClick={() => { setEditingFormId(form.id); setEditDraft({ name: form.name, conference_logo_url: form.conference_logo_url || '', background_color: form.background_color || '' }); }}
+                    onClick={() => {
+                      setEditingFormId(form.id);
+                      setEditDraft({
+                        name: form.name,
+                        conference_logo_url: form.conference_logo_url || '',
+                        background_color: form.background_color || getCssVarHex('--brand-primary-rgb', '#0B3C62'),
+                        accent_color: form.accent_color || getCssVarHex('--brand-highlight-rgb', '#FFCB3F'),
+                        accent_gradient: form.accent_gradient || 'none',
+                        image_url: form.image_url || '',
+                        image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
+                        html_content: form.html_content || '',
+                      });
+                    }}
                     title="Edit form settings"
                     className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
                   >
@@ -562,6 +676,72 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           onClose={() => setBuilderFormId(null)}
         />
       )}
+    </div>
+  );
+}
+
+function HtmlEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  // Sync initial value to editor on mount only
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.innerHTML = value || '';
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const exec = (cmd: string, val?: string) => {
+    editorRef.current?.focus();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    document.execCommand(cmd, false, val);
+    if (editorRef.current) onChange(editorRef.current.innerHTML);
+  };
+
+  const toolbarBtn = (label: string, cmd: string, val?: string, title?: string) => (
+    <button
+      key={cmd + (val || '')}
+      type="button"
+      title={title || label}
+      onMouseDown={e => { e.preventDefault(); exec(cmd, val); }}
+      className="px-2 py-1 text-xs font-medium rounded hover:bg-gray-200 text-gray-700 transition-colors"
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="border border-gray-300 rounded-lg overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-0.5 p-1.5 bg-gray-50 border-b border-gray-200">
+        {toolbarBtn('B', 'bold', undefined, 'Bold')}
+        {toolbarBtn('I', 'italic', undefined, 'Italic')}
+        {toolbarBtn('U', 'underline', undefined, 'Underline')}
+        <span className="w-px bg-gray-300 mx-1 self-stretch" />
+        {toolbarBtn('H2', 'formatBlock', 'h2', 'Heading 2')}
+        {toolbarBtn('H3', 'formatBlock', 'h3', 'Heading 3')}
+        {toolbarBtn('P', 'formatBlock', 'p', 'Paragraph')}
+        <span className="w-px bg-gray-300 mx-1 self-stretch" />
+        {toolbarBtn('• List', 'insertUnorderedList', undefined, 'Bullet list')}
+        {toolbarBtn('1. List', 'insertOrderedList', undefined, 'Numbered list')}
+        <span className="w-px bg-gray-300 mx-1 self-stretch" />
+        {toolbarBtn('⬅', 'justifyLeft', undefined, 'Align left')}
+        {toolbarBtn('↔', 'justifyCenter', undefined, 'Center')}
+        {toolbarBtn('➡', 'justifyRight', undefined, 'Align right')}
+        <span className="w-px bg-gray-300 mx-1 self-stretch" />
+        {toolbarBtn('✕ Clear', 'removeFormat', undefined, 'Clear formatting')}
+      </div>
+      {/* Editable area */}
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => { if (editorRef.current) onChange(editorRef.current.innerHTML); }}
+        className="min-h-[140px] p-3 text-sm outline-none"
+        style={{ lineHeight: 1.6 }}
+        data-placeholder="Type and format your text here. This content appears in the left panel on landscape/desktop screens."
+      />
+      <style>{`[data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }`}</style>
     </div>
   );
 }
