@@ -38,6 +38,11 @@ interface StatusOption {
   value: string;
 }
 
+interface UserOption {
+  id: number;   // config_options.id
+  value: string; // display name
+}
+
 interface Props {
   conferenceId: number;
   conferenceName: string;
@@ -49,13 +54,120 @@ interface Props {
 
 function fmtDate(d?: string) {
   if (!d) return '—';
-  try { return new Date(d.includes('Z') ? d : d + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return '—'; }
+  try {
+    return new Date(d.includes('Z') ? d : d + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return '—'; }
+}
+
+// Inline user multi-select for follow-up assignment
+function FollowUpPicker({
+  sub,
+  userOptions,
+  defaultUserIds,
+  onAssign,
+  onCancel,
+}: {
+  sub: Submission;
+  userOptions: UserOption[];
+  defaultUserIds: number[];
+  onAssign: (userConfigIds: number[]) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<number[]>(defaultUserIds);
+  const [open, setOpen] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  const attName = sub.values.find(v => v.field_label === 'Name')?.field_value || 'this attendee';
+  const attTitle = sub.values.find(v => v.field_label === 'Title')?.field_value || '';
+  const attCo = sub.values.find(v => v.field_label === 'Company')?.field_value || '';
+  const label = [attName, attTitle || null, attCo || null].filter(Boolean).join(' – ');
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = (id: number) =>
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const displayLabel = selected.length === 0
+    ? 'Select user…'
+    : selected.length === 1
+      ? (userOptions.find(u => u.id === selected[0])?.value ?? 'Unknown')
+      : `${selected.length} users`;
+
+  const handleAssign = async () => {
+    if (selected.length === 0) { toast.error('Select at least one user'); return; }
+    setAssigning(true);
+    try {
+      await onAssign(selected);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-gray-500 whitespace-nowrap">Assign to:</span>
+      <div ref={dropRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 hover:border-brand-secondary transition-colors flex items-center gap-1.5 whitespace-nowrap"
+        >
+          {displayLabel}
+          <svg className={`w-3 h-3 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {open && (
+          <div className="absolute z-50 bottom-full mb-1 left-0 min-w-[180px] bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+            {userOptions.map(u => (
+              <label key={u.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(u.id)}
+                  onChange={() => toggle(u.id)}
+                  className="accent-brand-secondary"
+                />
+                <span>{u.value}</span>
+              </label>
+            ))}
+            {userOptions.length === 0 && (
+              <div className="px-3 py-2 text-xs text-gray-400">No users configured</div>
+            )}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={handleAssign}
+        disabled={assigning || selected.length === 0}
+        className="text-xs px-2.5 py-1.5 rounded-lg bg-brand-secondary text-white hover:opacity-90 transition-opacity disabled:opacity-50 whitespace-nowrap font-medium"
+      >
+        {assigning ? 'Assigning…' : 'Assign Follow Up'}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
+  );
 }
 
 export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, brandLogoUrl, isAdmin, currentUserEmail }: Props) {
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [currentUserConfigId, setCurrentUserConfigId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Add Form state
@@ -74,6 +186,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
   const [loadedSubmissions, setLoadedSubmissions] = useState<Set<number>>(new Set());
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
+  // Follow-up picker: which submission row is showing the picker
+  const [followUpOpenId, setFollowUpOpenId] = useState<number | null>(null);
+
   // Builder
   const [builderFormId, setBuilderFormId] = useState<number | null>(null);
 
@@ -83,10 +198,11 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
 
   const loadForms = useCallback(async () => {
     try {
-      const [formsRes, templatesRes, statusRes] = await Promise.all([
+      const [formsRes, templatesRes, statusRes, userRes] = await Promise.all([
         fetch(`/api/conference-forms?conference_id=${conferenceId}`),
         fetch('/api/form-templates'),
         fetch('/api/config?category=status'),
+        fetch('/api/config?category=user'),
       ]);
       if (formsRes.ok) setForms(await formsRes.json());
       if (templatesRes.ok) setTemplates(await templatesRes.json());
@@ -94,11 +210,25 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
         const data = await statusRes.json();
         setStatusOptions(data.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
       }
+      if (userRes.ok) {
+        const data = await userRes.json();
+        setUserOptions(data.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
+      }
     } catch { toast.error('Failed to load forms'); }
     finally { setLoading(false); }
   }, [conferenceId]);
 
   useEffect(() => { loadForms(); }, [loadForms]);
+
+  // Fetch current user's config_id for follow-up default selection
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.user?.configId) setCurrentUserConfigId(Number(data.user.configId));
+      })
+      .catch(() => {});
+  }, []);
 
   const loadSubmissions = useCallback(async (formId: number) => {
     if (loadedSubmissions.has(formId)) return;
@@ -177,30 +307,29 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
     } catch { toast.error('Failed to update status'); }
   };
 
-  const handleFollowUp = async (submissionId: number, sub: Submission) => {
-    const attName = sub.values.find(v => v.field_label === 'Name')?.field_value || 'this attendee';
-    const attTitle = sub.values.find(v => v.field_label === 'Title')?.field_value || '';
-    const attCo = sub.values.find(v => v.field_label === 'Company')?.field_value || '';
-    const label = [attName, attTitle ? `${attTitle}` : null, attCo ? `${attCo}` : null].filter(Boolean).join(' - ');
-    if (!confirm(`Assign Form Follow Up to ${label}?`)) return;
+  const handleAssignFollowUp = async (submissionId: number, userConfigIds: number[]) => {
     try {
-      const res = await fetch(`/api/form-submissions/${submissionId}/follow-up`, { method: 'POST' });
+      const res = await fetch(`/api/form-submissions/${submissionId}/follow-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned_user_config_ids: userConfigIds }),
+      });
       if (!res.ok) throw new Error();
-      toast.success('Follow-up task added!');
-    } catch { toast.error('Failed to add follow-up'); }
+      toast.success('Follow-up assigned!');
+      setFollowUpOpenId(null);
+    } catch { toast.error('Failed to assign follow-up'); }
   };
 
   const handleExport = (form: ConferenceForm) => {
     const subs = submissions[form.id] || [];
     if (subs.length === 0) { toast('No submissions to export'); return; }
-    const fieldLabels = form.fields
-      .filter(f => f.field_key !== 'attendee_name')
-      .map(f => f.label);
-    const headers = ['Conference', ...fieldLabels, 'Submitted At', 'Status'];
+    const dataFields = form.fields.filter(f => f.field_key !== 'attendee_name');
+    const headers = ['Conference', 'Name', ...dataFields.map(f => f.label), 'Submitted At', 'Status'];
     const rows = subs.map(sub => {
-      const row: (string | number)[] = [sub.conference_name];
-      for (const label of fieldLabels) {
-        const v = sub.values.find(vv => vv.field_label === label);
+      const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '';
+      const row: (string | number)[] = [sub.conference_name, nameVal];
+      for (const f of dataFields) {
+        const v = sub.values.find(vv => vv.field_label === f.label);
         row.push(v?.field_value || '');
       }
       row.push(sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : '');
@@ -243,7 +372,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
 
   return (
     <div className="space-y-6 py-4">
-      {/* Add Form button */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-brand-primary font-serif">Conference Forms</h2>
@@ -301,7 +430,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
         </div>
       )}
 
-      {/* Forms list */}
       {forms.length === 0 && !addingForm && (
         <div className="card text-center py-12">
           <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -313,12 +441,12 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
         const isExpanded = expandedRows.has(form.id);
         const subs = submissions[form.id] || [];
         const isEditing = editingFormId === form.id;
-        // Build column list from fields (excluding attendee_picker display)
+        // All fields except the attendee_picker — shown as data columns
         const dataFields = form.fields.filter(f => f.field_key !== 'attendee_name');
 
         return (
           <div key={form.id} className="card p-0 overflow-hidden">
-            {/* Form row */}
+            {/* Form header row */}
             {isEditing ? (
               <div className="p-4 space-y-4 bg-blue-50/20 border-b border-gray-100">
                 <h3 className="text-sm font-bold text-brand-primary">Edit Form Settings</h3>
@@ -425,6 +553,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
                         <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Conference</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Name</th>
                         {dataFields.map(f => (
                           <th key={f.id} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
                         ))}
@@ -434,39 +563,56 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {subs.map(sub => (
-                        <tr key={sub.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{sub.conference_name}</td>
-                          {dataFields.map(f => {
-                            const v = sub.values.find(vv => vv.field_label === f.label);
-                            return (
-                              <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
-                                <div className="truncate">{v?.field_value || '—'}</div>
-                              </td>
-                            );
-                          })}
-                          <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(sub.submitted_at)}</td>
-                          <td className="px-4 py-2.5">
-                            <select
-                              value={sub.status_option_id ?? ''}
-                              onChange={e => handleStatusChange(sub.id, form.id, e.target.value ? Number(e.target.value) : null)}
-                              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
-                            >
-                              <option value="">— Status —</option>
-                              {statusOptions.map(s => <option key={s.id} value={s.id}>{s.value}</option>)}
-                            </select>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <button
-                              type="button"
-                              onClick={() => handleFollowUp(sub.id, sub)}
-                              className="text-xs px-2.5 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary hover:bg-blue-50 transition-colors whitespace-nowrap font-medium"
-                            >
-                              + Follow Up
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {subs.map(sub => {
+                        const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '—';
+                        const isFollowUpOpen = followUpOpenId === sub.id;
+                        const defaultUsers = currentUserConfigId ? [currentUserConfigId] : [];
+
+                        return (
+                          <tr key={sub.id} className="hover:bg-gray-50/70 transition-colors">
+                            <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{sub.conference_name}</td>
+                            <td className="px-4 py-2.5 text-gray-800 font-medium whitespace-nowrap">{nameVal}</td>
+                            {dataFields.map(f => {
+                              const v = sub.values.find(vv => vv.field_label === f.label);
+                              return (
+                                <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
+                                  <div className="truncate">{v?.field_value || '—'}</div>
+                                </td>
+                              );
+                            })}
+                            <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(sub.submitted_at)}</td>
+                            <td className="px-4 py-2.5">
+                              <select
+                                value={sub.status_option_id ?? ''}
+                                onChange={e => handleStatusChange(sub.id, form.id, e.target.value ? Number(e.target.value) : null)}
+                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
+                              >
+                                <option value="">— Status —</option>
+                                {statusOptions.map(s => <option key={s.id} value={s.id}>{s.value}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-4 py-2.5 min-w-[200px]">
+                              {isFollowUpOpen ? (
+                                <FollowUpPicker
+                                  sub={sub}
+                                  userOptions={userOptions}
+                                  defaultUserIds={defaultUsers}
+                                  onAssign={ids => handleAssignFollowUp(sub.id, ids)}
+                                  onCancel={() => setFollowUpOpenId(null)}
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setFollowUpOpenId(sub.id)}
+                                  className="text-xs px-2.5 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary hover:bg-blue-50 transition-colors whitespace-nowrap font-medium"
+                                >
+                                  + Follow Up
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
