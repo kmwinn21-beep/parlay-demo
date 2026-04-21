@@ -676,9 +676,14 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: unitTypeLabel.trim() }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save');
-      setUnitTypeLabel(String(data.value));
+      // Use text() → JSON.parse() to avoid Safari's res.json() pattern error
+      const text = await res.text();
+      let data: { value?: string; error?: string } = {};
+      try { data = JSON.parse(text); } catch {
+        throw new Error(`Unexpected server response (${res.status}): ${text.slice(0, 150)}`);
+      }
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+      setUnitTypeLabel(String(data.value ?? unitTypeLabel.trim()));
       invalidateUnitTypeLabel();
       toast.success('Unit type saved!');
     } catch (err) { toast.error(`Failed to save unit type: ${err instanceof Error ? err.message : err}`); }
