@@ -4,9 +4,9 @@ import { requireAdmin } from '@/lib/auth';
 
 const DEFAULT_VALUE = 'Units';
 
-export async function GET() {
-  await dbReady;
+export async function GET(_request: NextRequest) {
   try {
+    await dbReady;
     const result = await db.execute({
       sql: "SELECT value FROM config_options WHERE category = 'unit_type' ORDER BY id LIMIT 1",
       args: [],
@@ -22,8 +22,8 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
   try {
+    await dbReady;
     const body = await request.json();
     const { value } = body as { value: string };
     if (!value?.trim()) {
@@ -31,7 +31,6 @@ export async function PUT(request: NextRequest) {
     }
     const trimmed = value.trim();
 
-    // Remove any duplicate unit_type rows first (keep oldest by id)
     const existing = await db.execute({
       sql: "SELECT id FROM config_options WHERE category = 'unit_type' ORDER BY id",
       args: [],
