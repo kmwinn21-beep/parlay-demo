@@ -26,6 +26,7 @@ interface Submission {
   conference_form_id: number;
   conference_id: number;
   attendee_id: number | null;
+  company_id: number | null;
   submitted_at: string;
   status_option_id: number | null;
   status_value: string | null;
@@ -575,12 +576,25 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                         return (
                           <tr key={sub.id} className="hover:bg-gray-50/70 transition-colors">
                             <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{sub.conference_name}</td>
-                            <td className="px-4 py-2.5 text-gray-800 font-medium whitespace-nowrap">{nameVal}</td>
+                            <td className="px-4 py-2.5 font-medium whitespace-nowrap">
+                              {sub.attendee_id ? (
+                                <a href={`/attendees/${sub.attendee_id}`} className="text-brand-secondary hover:underline">{nameVal}</a>
+                              ) : (
+                                <span className="text-gray-800">{nameVal}</span>
+                              )}
+                            </td>
                             {dataFields.map(f => {
                               const v = sub.values.find(vv => vv.field_label === f.label);
+                              const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
                               return (
                                 <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
-                                  <div className="truncate">{v?.field_value || '—'}</div>
+                                  <div className="truncate">
+                                    {isCompany && sub.company_id && v?.field_value ? (
+                                      <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>
+                                    ) : (
+                                      v?.field_value || '—'
+                                    )}
+                                  </div>
                                 </td>
                               );
                             })}
