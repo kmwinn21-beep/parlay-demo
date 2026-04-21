@@ -19,6 +19,24 @@ export async function GET(request: NextRequest) {
         sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope FROM config_options WHERE category = ? ORDER BY sort_order, value',
         args: [category],
       });
+
+      // Auto-seed unit_type with default 'WSE' if it has never been configured
+      if (category === 'unit_type' && result.rows.length === 0) {
+        const inserted = await db.execute({
+          sql: 'INSERT INTO config_options (category, value, sort_order) VALUES (?, ?, ?) RETURNING id, category, value, sort_order, color, action_key, status_key, scope',
+          args: ['unit_type', 'WSE', 0],
+        });
+        return NextResponse.json(inserted.rows.map(r => ({
+          id: Number(r.id),
+          category: String(r.category),
+          value: String(r.value),
+          sort_order: Number(r.sort_order ?? 0),
+          color: null,
+          action_key: null,
+          status_key: null,
+          scope: 'global',
+        })));
+      }
     } else {
       // Return all options (used for color lookups across the app)
       result = await db.execute({
