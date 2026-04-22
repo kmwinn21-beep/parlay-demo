@@ -30,6 +30,8 @@ export interface ConferenceForm {
   image_offset_y: number | null;
   html_offset_y: number | null;
   form_width: number | null;
+  form_height: number | null;
+  form_offset_y: number | null;
   created_by: string | null;
   created_at: string;
   fields: FormField[];
@@ -349,6 +351,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const imageOffsetY = form.image_offset_y ?? 0;
   const htmlOffsetY = form.html_offset_y ?? 0;
   const formWidth = form.form_width ?? 420;
+  const formHeight = form.form_height ?? null;
+  const formOffsetY = form.form_offset_y ?? 0;
 
   const renderField = (field: FormField) => {
     if (field.field_key === 'attendee_name') {
@@ -759,9 +763,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
             </div>
           </div>
 
-          {/* Right panel: form card — width configurable in landscape only */}
+          {/* Right panel: form card — width/height/Y configurable in landscape only */}
           <div className="flex-shrink-0 px-6 py-6 flex flex-col overflow-y-auto" style={{ width: formWidth, minWidth: 280, height: '100%' }}>
-            <div className="my-auto w-full rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor }}>
+            <div
+              className="my-auto w-full rounded-2xl shadow-2xl"
+              style={{
+                background: bgColor,
+                ...(formHeight != null ? { height: formHeight, overflowY: 'auto' } : { overflow: 'hidden' }),
+                ...(formOffsetY !== 0 ? { transform: `translateY(${formOffsetY}px)` } : {}),
+              }}
+            >
               {formCardInterior}
             </div>
           </div>
