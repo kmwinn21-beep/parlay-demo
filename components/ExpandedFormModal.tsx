@@ -137,6 +137,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const [scanLoading, setScanLoading] = useState(false);
   const [scanBanner, setScanBanner] = useState(false);
   const [scanCompanyMatches, setScanCompanyMatches] = useState<{ id: number; name: string }[]>([]);
+  const [lastScanResult, setLastScanResult] = useState<{
+    title: string | null; company: string | null; email: string | null; phone: string | null;
+  } | null>(null);
   const attendeeDropRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -182,9 +185,18 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       setIsOther(true);
       setAttendeeSearch('Other');
       setAttendeeDropOpen(false);
-      form.fields.forEach(f => {
-        if (['title', 'company', 'email'].includes(f.field_key || '')) setValue(f.id, '');
-      });
+      if (lastScanResult) {
+        form.fields.forEach(f => {
+          if (f.field_key === 'title')   setValue(f.id, lastScanResult.title   ?? '');
+          if (f.field_key === 'company') setValue(f.id, lastScanResult.company ?? '');
+          if (f.field_key === 'email')   setValue(f.id, lastScanResult.email   ?? '');
+          if (f.field_key === 'phone')   setValue(f.id, lastScanResult.phone   ?? '');
+        });
+      } else {
+        form.fields.forEach(f => {
+          if (['title', 'company', 'email'].includes(f.field_key || '')) setValue(f.id, '');
+        });
+      }
       return;
     }
     setIsOther(false);
@@ -199,7 +211,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       if (f.field_key === 'company' && attendee.company_name) setValue(f.id, attendee.company_name);
       if (f.field_key === 'email' && attendee.email) setValue(f.id, attendee.email);
     });
-  }, [form.fields, setValue]);
+  }, [form.fields, setValue, lastScanResult]);
 
   const handleScanFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -208,6 +220,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     setScanLoading(true);
     setScanBanner(false);
     setScanCompanyMatches([]);
+    setLastScanResult(null);
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -220,11 +233,24 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: base64, media_type: file.type }),
       });
+      if (res.status === 503) {
+        toast.error('Card scanning is not configured on this server.');
+        return;
+      }
       if (!res.ok) throw new Error('scan failed');
       const data: {
         first_name: string | null; last_name: string | null; title: string | null;
         company: string | null; email: string | null; phone: string | null; extra_text: string | null;
       } = await res.json();
+
+      // Check if Claude found anything at all
+      const hasAnyData = data.first_name || data.last_name || data.title || data.company || data.email || data.phone || data.extra_text;
+      if (!hasAnyData) {
+        toast.error('No contact info detected — try a clearer photo.');
+        return;
+      }
+
+      setLastScanResult({ title: data.title, company: data.company, email: data.email, phone: data.phone });
 
       // ── Name → populate attendee search + default to "Other" path ──
       if (data.first_name || data.last_name) {
@@ -250,8 +276,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
       // ── Company name search → inline suggestions ──
       if (data.company) {
-        const srRes = await fetch(`/api/search?q=${encodeURIComponent(data.company)}`);
-        if (srRes.ok) {
+        const srRes = await fetch(`/api/search?q=${encodeURIComponent(data.company)}`).catch(() => null);
+        if (srRes?.ok) {
           const sr = await srRes.json();
           if (sr.companies?.length) setScanCompanyMatches(sr.companies.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
         }
@@ -329,6 +355,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       setIsOther(false);
       setManualFirst('');
       setManualLast('');
+      setLastScanResult(null);
     } catch {
       toast.error('Failed to submit form');
     } finally {
