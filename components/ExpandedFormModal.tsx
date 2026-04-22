@@ -220,11 +220,22 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: base64, media_type: file.type }),
       });
+      if (res.status === 503) {
+        toast.error('Card scanning is not configured on this server.');
+        return;
+      }
       if (!res.ok) throw new Error('scan failed');
       const data: {
         first_name: string | null; last_name: string | null; title: string | null;
         company: string | null; email: string | null; phone: string | null; extra_text: string | null;
       } = await res.json();
+
+      // Check if Claude found anything at all
+      const hasAnyData = data.first_name || data.last_name || data.title || data.company || data.email || data.phone || data.extra_text;
+      if (!hasAnyData) {
+        toast.error('No contact info detected — try a clearer photo.');
+        return;
+      }
 
       // ── Name → populate attendee search + default to "Other" path ──
       if (data.first_name || data.last_name) {
@@ -250,8 +261,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
       // ── Company name search → inline suggestions ──
       if (data.company) {
-        const srRes = await fetch(`/api/search?q=${encodeURIComponent(data.company)}`);
-        if (srRes.ok) {
+        const srRes = await fetch(`/api/search?q=${encodeURIComponent(data.company)}`).catch(() => null);
+        if (srRes?.ok) {
           const sr = await srRes.json();
           if (sr.companies?.length) setScanCompanyMatches(sr.companies.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
         }
