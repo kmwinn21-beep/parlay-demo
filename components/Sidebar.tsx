@@ -100,11 +100,11 @@ export function Sidebar() {
   return (
     <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
       {/* Logo area */}
-      <div className="p-5 border-b border-blue-800">
+      <div className="p-5 border-b border-white/20">
         <div className="flex items-center gap-3">
           <LogoImage variant="sidebar" width={140} height={42} className="object-contain" alt="Logo" />
         </div>
-        <p className="text-blue-300 text-xs mt-2 italic">{tagline}</p>
+        <p className="text-white/60 text-xs mt-2 italic">{tagline}</p>
       </div>
 
       {/* Navigation */}
@@ -116,7 +116,7 @@ export function Sidebar() {
             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
               isActive(item.href)
                 ? 'bg-brand-highlight text-brand-primary'
-                : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}
           >
             {item.href === '/notifications' && unreadCount > 0 ? (
@@ -138,7 +138,7 @@ export function Sidebar() {
             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
               isActive('/admin')
                 ? 'bg-brand-highlight text-brand-primary'
-                : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,11 +151,11 @@ export function Sidebar() {
       </nav>
 
       {/* Footer — user info + logout */}
-      <div className="p-4 border-t border-blue-800 space-y-3">
+      <div className="p-4 border-t border-white/20 space-y-3">
         {user && (
           <Link
             href="/auth/account"
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-800 transition-colors group"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors group"
           >
             <div className="w-7 h-7 rounded-full bg-brand-secondary flex items-center justify-center flex-shrink-0">
               <span className="text-white text-xs font-bold">
@@ -166,13 +166,13 @@ export function Sidebar() {
               <p className="text-white text-xs font-medium truncate group-hover:text-brand-highlight transition-colors">
                 {user.email.split('@')[0]}
               </p>
-              <p className="text-blue-400 text-[10px] capitalize">{user.role}</p>
+              <p className="text-white/50 text-[10px] capitalize">{user.role}</p>
             </div>
           </Link>
         )}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-blue-800 transition-colors text-xs"
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors text-xs"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -182,8 +182,8 @@ export function Sidebar() {
         <div className="flex items-center gap-2 pt-1">
           <Image src="/emblem.png" alt="Procare HR Emblem" width={24} height={24} className="object-contain opacity-60" />
           <div>
-            <p className="text-blue-300 text-xs">{appName}</p>
-            <p className="text-blue-400 text-xs">v1.0</p>
+            <p className="text-white/60 text-xs">{appName}</p>
+            <p className="text-white/50 text-xs">v1.0</p>
           </div>
         </div>
       </div>
