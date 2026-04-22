@@ -32,6 +32,7 @@ export interface ConferenceForm {
   form_width: number | null;
   form_height: number | null;
   form_offset_y: number | null;
+  panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;
   fields: FormField[];
@@ -699,10 +700,10 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
           {/* Left panel — grid: logo (auto) + image (1fr) + html (3fr), no scrollbar */}
           <div className="flex-1 flex flex-col overflow-hidden p-8" style={{ height: '100%' }}>
-            {/* Company logo — auto height row */}
-            {brandLogoUrl && (
+            {/* Panel logo — per-form configurable, falls back to global brand logo */}
+            {(form.panel_logo_url || brandLogoUrl) && (
               <div className="mb-4 flex-shrink-0">
-                <img src={brandLogoUrl} alt="Company Logo" className="h-12 w-auto object-contain" />
+                <img src={form.panel_logo_url || brandLogoUrl!} alt="Logo" className="h-12 w-auto object-contain" />
               </div>
             )}
             {/* 4-row grid: image (1fr) + html text (3fr) */}

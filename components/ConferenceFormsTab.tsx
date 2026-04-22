@@ -106,7 +106,8 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
     form_width: number;
     form_height: number | null;
     form_offset_y: number;
-  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '', image_offset_y: 0, html_offset_y: 0, form_width: 420, form_height: null, form_offset_y: 0 });
+    panel_logo_url: string;
+  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '', image_offset_y: 0, html_offset_y: 0, form_width: 420, form_height: null, form_offset_y: 0, panel_logo_url: '' });
 
   const loadForms = useCallback(async () => {
     try {
@@ -264,6 +265,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           form_width: editDraft.form_width,
           form_height: editDraft.form_height,
           form_offset_y: editDraft.form_offset_y,
+          panel_logo_url: editDraft.panel_logo_url.trim() || null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -366,15 +368,39 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
               <div className="p-4 space-y-5 bg-blue-50/20 border-b border-gray-100">
                 <h3 className="text-sm font-bold text-brand-primary">Edit Form Settings</h3>
 
-                {/* Row 1: Name + Logo */}
+                {/* Row 1: Name */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Form Name</label>
+                  <input type="text" value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} className="input-field text-sm w-full" />
+                </div>
+
+                {/* Row 1b: Logos */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Form Name</label>
-                    <input type="text" value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} className="input-field text-sm w-full" />
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">
+                      Left Panel Logo URL
+                      <span className="font-normal text-gray-400 ml-1">(landscape top-left corner)</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={editDraft.panel_logo_url}
+                      onChange={e => setEditDraft(d => ({ ...d, panel_logo_url: e.target.value }))}
+                      className="input-field text-sm w-full"
+                      placeholder="https://..."
+                    />
+                    {editDraft.panel_logo_url && (
+                      <img src={editDraft.panel_logo_url} alt="Panel logo preview" className="mt-2 h-8 w-auto object-contain rounded border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    )}
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Conference Logo URL</label>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">
+                      Conference Logo URL
+                      <span className="font-normal text-gray-400 ml-1">(inside form card)</span>
+                    </label>
                     <input type="url" value={editDraft.conference_logo_url} onChange={e => setEditDraft(d => ({ ...d, conference_logo_url: e.target.value }))} className="input-field text-sm w-full" placeholder="https://..." />
+                    {editDraft.conference_logo_url && (
+                      <img src={editDraft.conference_logo_url} alt="Conference logo preview" className="mt-2 h-8 w-auto object-contain rounded border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    )}
                   </div>
                 </div>
 
@@ -594,6 +620,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                           form_width: form.form_width ?? 420,
                           form_height: form.form_height ?? null,
                           form_offset_y: form.form_offset_y ?? 0,
+                          panel_logo_url: form.panel_logo_url || '',
                         });
                       }}
                       title="Edit form settings"
