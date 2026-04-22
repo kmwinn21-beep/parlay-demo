@@ -764,17 +764,29 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
             </div>
           </div>
 
-          {/* Right panel: form card — width/height/Y configurable in landscape only */}
-          <div className="flex-shrink-0 px-6 py-6 flex flex-col overflow-y-auto" style={{ width: formWidth, minWidth: 280, height: '100%' }}>
+          {/* Right panel — column is formHeight tall (or 100% if unset), form card fills it */}
+          <div
+            className="flex-shrink-0 flex flex-col justify-center overflow-hidden"
+            style={{ width: formWidth, minWidth: 280, height: '100%' }}
+          >
+            {/* Inner container: sized to formHeight; form card stretches to fill it */}
             <div
-              className="my-auto w-full rounded-2xl shadow-2xl"
+              className="flex flex-col px-6 py-6"
               style={{
-                background: bgColor,
-                ...(formHeight != null ? { height: formHeight, overflowY: 'auto' } : { overflow: 'hidden' }),
-                ...(formOffsetY !== 0 ? { transform: `translateY(${formOffsetY}px)` } : {}),
+                height: formHeight != null ? formHeight : '100%',
+                flexShrink: 0,
+                transform: formOffsetY !== 0 ? `translateY(${formOffsetY}px)` : undefined,
               }}
             >
-              {formCardInterior}
+              <div
+                className="w-full rounded-2xl shadow-2xl overflow-hidden"
+                style={{
+                  background: bgColor,
+                  flex: formHeight != null ? 1 : undefined,
+                }}
+              >
+                {formCardInterior}
+              </div>
             </div>
           </div>
         </div>
