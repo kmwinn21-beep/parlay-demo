@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
+          <LogoImage variant="sidebar" width={160} height={48} className="object-contain mb-2" alt="Logo" />
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">

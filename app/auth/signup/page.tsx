@@ -45,7 +45,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <LogoImage variant="white" width={160} height={48} className="object-contain mb-2" alt="Logo" />
+          <LogoImage variant="sidebar" width={160} height={48} className="object-contain mb-2" alt="Logo" />
           <p className="text-blue-300 text-sm italic">Caring for people who care for people.</p>
         </div>
 
