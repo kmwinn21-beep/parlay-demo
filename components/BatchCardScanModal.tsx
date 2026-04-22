@@ -575,7 +575,7 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
             {cards.map((card, i) => (
               <div key={card.localId}>
                 {i > 0 && <div className="border-t border-gray-100 pt-4" />}
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <LeftCard
                     card={card}
                     onDraftChange={(f, v) => patchDraft(card.localId, f, v)}
