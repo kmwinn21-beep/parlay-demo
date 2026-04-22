@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 
@@ -34,6 +35,7 @@ export async function PUT(request: NextRequest) {
       sql: 'INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)',
       args: [key, String(value)],
     });
+    revalidatePath('/', 'layout');
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('PUT /api/admin/settings error:', error);
