@@ -5,7 +5,7 @@ export async function GET() {
   try {
     await dbReady;
     const rows = await db.execute({
-      sql: "SELECT key, value FROM site_settings WHERE key IN ('logo_white_url', 'logo_dark_url', 'favicon_url')",
+      sql: "SELECT key, value FROM site_settings WHERE key IN ('logo_white_url', 'logo_dark_url', 'favicon_url', 'logo_sidebar_url')",
       args: [],
     });
     const data: Record<string, string> = {};
@@ -14,8 +14,9 @@ export async function GET() {
       logoWhiteUrl: data['logo_white_url'] || '',
       logoDarkUrl: data['logo_dark_url'] || '',
       faviconUrl: data['favicon_url'] || '',
+      logoSidebarUrl: data['logo_sidebar_url'] || '',
     });
   } catch {
-    return NextResponse.json({ logoWhiteUrl: '', logoDarkUrl: '', faviconUrl: '' });
+    return NextResponse.json({ logoWhiteUrl: '', logoDarkUrl: '', faviconUrl: '', logoSidebarUrl: '' });
   }
 }
