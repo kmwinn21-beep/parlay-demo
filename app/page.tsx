@@ -6,6 +6,7 @@ import AttendeesTooltip from '@/components/AttendeesTooltip';
 import AwaitingUploadModal from '@/components/AwaitingUploadModal';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { getServerSessionUser } from '@/lib/auth';
+import { DashboardBanner } from '@/components/DashboardBanner';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -22,6 +23,19 @@ interface RecentConference {
   location: string;
   internal_attendees: string[];
   attendee_count: number;
+}
+
+async function getDashboardTitle(): Promise<string> {
+  await dbReady;
+  try {
+    const row = await db.execute({
+      sql: "SELECT value FROM site_settings WHERE key = 'dashboard_title'",
+      args: [],
+    });
+    return row.rows[0] ? String(row.rows[0].value).trim() : 'Conference Tracking';
+  } catch {
+    return 'Conference Tracking';
+  }
 }
 
 async function getStats(): Promise<DashboardStats> {
@@ -283,13 +297,18 @@ function RecentAndPrioritySkeleton() {
 /* ---------- Async section components for Suspense ---------- */
 
 async function StatsSection() {
-  const stats = await getStats();
+  const [stats, dashboardTitle, sessionUser] = await Promise.all([
+    getStats(),
+    getDashboardTitle(),
+    getServerSessionUser(),
+  ]);
+  const isAdmin = sessionUser?.role === 'administrator';
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-      {/* Conference Tracking banner — col 1-2 */}
+      {/* Banner — col 1-2 */}
         <div className="lg:col-span-2 bg-brand-primary rounded-2xl p-8 text-white relative overflow-hidden flex items-center">
           <div className="relative z-10">
-            <h1 className="text-3xl font-bold font-serif mb-2">Conference Tracking</h1>
+            <DashboardBanner initialTitle={dashboardTitle} isAdmin={isAdmin} />
           </div>
           <div className="absolute right-8 top-4 w-32 h-32 rounded-full bg-brand-secondary opacity-20" />
           <div className="absolute right-16 top-12 w-20 h-20 rounded-full bg-brand-highlight opacity-10" />
