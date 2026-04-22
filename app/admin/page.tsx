@@ -1266,14 +1266,14 @@ export default function AdminPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex gap-6">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`pb-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : 'Custom Forms'}
             </button>
