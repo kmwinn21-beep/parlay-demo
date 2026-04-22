@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     const formsRes = await db.execute({
       sql: `SELECT id, conference_id, template_id, name, conference_logo_url, background_color,
                    accent_color, accent_gradient, image_url, image_max_width, html_content,
-                   image_offset_y, html_offset_y, form_width, created_by, created_at
+                   image_offset_y, html_offset_y, form_width, form_height, form_offset_y,
+                   created_by, created_at
             FROM conference_forms WHERE conference_id = ? ORDER BY created_at DESC`,
       args: [conferenceId],
     });
@@ -95,6 +96,8 @@ export async function GET(request: NextRequest) {
         image_offset_y: f.image_offset_y != null ? Number(f.image_offset_y) : null,
         html_offset_y: f.html_offset_y != null ? Number(f.html_offset_y) : null,
         form_width: f.form_width != null ? Number(f.form_width) : null,
+        form_height: f.form_height != null ? Number(f.form_height) : null,
+        form_offset_y: f.form_offset_y != null ? Number(f.form_offset_y) : null,
         created_by: f.created_by ? String(f.created_by) : null,
         created_at: String(f.created_at),
         submission_count: Number(subCount.rows[0].cnt),
@@ -117,15 +120,15 @@ export async function POST(request: NextRequest) {
     await dbReady;
     const { conference_id, template_id, name, conference_logo_url, background_color,
             accent_color, accent_gradient, image_url, image_max_width, html_content,
-            image_offset_y, html_offset_y, form_width } = await request.json();
+            image_offset_y, html_offset_y, form_width, form_height, form_offset_y } = await request.json();
     if (!conference_id || !name?.trim()) return NextResponse.json({ error: 'conference_id and name required' }, { status: 400 });
 
     const result = await db.execute({
       sql: `INSERT INTO conference_forms
               (conference_id, template_id, name, conference_logo_url, background_color,
                accent_color, accent_gradient, image_url, image_max_width, html_content,
-               image_offset_y, html_offset_y, form_width, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+               image_offset_y, html_offset_y, form_width, form_height, form_offset_y, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       args: [
         conference_id, template_id || null, name.trim(),
         conference_logo_url || null, background_color || null,
@@ -135,6 +138,8 @@ export async function POST(request: NextRequest) {
         image_offset_y != null ? Number(image_offset_y) : null,
         html_offset_y != null ? Number(html_offset_y) : null,
         form_width != null ? Number(form_width) : null,
+        form_height != null ? Number(form_height) : null,
+        form_offset_y != null ? Number(form_offset_y) : null,
         user.email,
       ],
     });
