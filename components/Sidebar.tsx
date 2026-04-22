@@ -102,7 +102,7 @@ export function Sidebar() {
       {/* Logo area */}
       <div className="p-5 border-b border-blue-800">
         <div className="flex items-center gap-3">
-          <LogoImage variant="white" width={140} height={42} className="object-contain" alt="Logo" />
+          <LogoImage variant="sidebar" width={140} height={42} className="object-contain" alt="Logo" />
         </div>
         <p className="text-blue-300 text-xs mt-2 italic">{tagline}</p>
       </div>

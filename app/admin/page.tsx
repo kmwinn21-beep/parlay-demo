@@ -606,9 +606,11 @@ export default function AdminPage() {
   const [logoWhiteInput, setLogoWhiteInput] = useState('');
   const [logoDarkInput, setLogoDarkInput] = useState('');
   const [faviconInput, setFaviconInput] = useState('');
+  const [logoSidebarInput, setLogoSidebarInput] = useState('');
   const [savedLogoWhite, setSavedLogoWhite] = useState('');
   const [savedLogoDark, setSavedLogoDark] = useState('');
   const [savedFavicon, setSavedFavicon] = useState('');
+  const [savedLogoSidebar, setSavedLogoSidebar] = useState('');
   const [savingLogos, setSavingLogos] = useState(false);
   const [fontKey, setFontKey] = useState(DEFAULT_FONT_KEY);
   const [savedFontKey, setSavedFontKey] = useState(DEFAULT_FONT_KEY);
@@ -1074,9 +1076,11 @@ export default function AdminPage() {
       const lw = data['logo_white_url'] ?? '';
       const ld = data['logo_dark_url'] ?? '';
       const fav = data['favicon_url'] ?? '';
+      const ls = data['logo_sidebar_url'] ?? '';
       setSavedLogoWhite(lw); setLogoWhiteInput(lw);
       setSavedLogoDark(ld); setLogoDarkInput(ld);
       setSavedFavicon(fav); setFaviconInput(fav);
+      setSavedLogoSidebar(ls); setLogoSidebarInput(ls);
       const fk = data['font_key'] ?? DEFAULT_FONT_KEY;
       setFontKey(fk); setSavedFontKey(fk);
       const tl = data['tagline'] ?? '';
@@ -1174,10 +1178,12 @@ export default function AdminPage() {
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'logo_white_url', value: logoWhiteInput.trim() }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'logo_dark_url', value: logoDarkInput.trim() }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'favicon_url', value: faviconInput.trim() }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'logo_sidebar_url', value: logoSidebarInput.trim() }) }),
       ]);
       setSavedLogoWhite(logoWhiteInput.trim());
       setSavedLogoDark(logoDarkInput.trim());
       setSavedFavicon(faviconInput.trim());
+      setSavedLogoSidebar(logoSidebarInput.trim());
       invalidateLogoConfig();
       toast.success('Logo & favicon settings saved.');
     } catch { toast.error('Failed to save logo settings.'); }
@@ -1656,7 +1662,8 @@ export default function AdminPage() {
               <p className="text-sm text-gray-500 mb-5">Provide URLs to your logo images and browser favicon. Leave blank to use the default static files.</p>
               <div className="space-y-5">
                 {([
-                  { label: 'White Logo URL', desc: 'Used on dark backgrounds — sidebar, login, signup.', value: logoWhiteInput, set: setLogoWhiteInput, placeholder: '/logo-white.png' },
+                  { label: 'Sidebar Logo URL', desc: 'Logo displayed at the top of the sidebar. Falls back to White Logo if blank.', value: logoSidebarInput, set: setLogoSidebarInput, placeholder: '/logo-white.png' },
+                  { label: 'White Logo URL', desc: 'Used on dark backgrounds — login, signup, and sidebar fallback.', value: logoWhiteInput, set: setLogoWhiteInput, placeholder: '/logo-white.png' },
                   { label: 'Dark Logo URL', desc: 'Used on light backgrounds.', value: logoDarkInput, set: setLogoDarkInput, placeholder: '/logo-dark.png' },
                   { label: 'Favicon URL', desc: 'Shown in the browser tab. Use a .ico, .png, or .svg URL.', value: faviconInput, set: setFaviconInput, placeholder: '/favicon.ico' },
                 ] as { label: string; desc: string; value: string; set: (v: string) => void; placeholder: string }[]).map(({ label, desc, value, set, placeholder }) => (
@@ -1685,7 +1692,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={handleSaveLogos}
-                  disabled={savingLogos || (logoWhiteInput.trim() === savedLogoWhite && logoDarkInput.trim() === savedLogoDark && faviconInput.trim() === savedFavicon)}
+                  disabled={savingLogos || (logoSidebarInput.trim() === savedLogoSidebar && logoWhiteInput.trim() === savedLogoWhite && logoDarkInput.trim() === savedLogoDark && faviconInput.trim() === savedFavicon)}
                   className="btn-primary text-sm"
                 >
                   {savingLogos ? 'Saving…' : 'Save'}

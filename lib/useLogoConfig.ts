@@ -5,12 +5,14 @@ export interface LogoConfig {
   logoWhiteUrl: string;
   logoDarkUrl: string;
   faviconUrl: string;
+  logoSidebarUrl: string;
 }
 
 const DEFAULTS: LogoConfig = {
   logoWhiteUrl: '/logo-white.png',
   logoDarkUrl: '/logo-white.png',
   faviconUrl: '',
+  logoSidebarUrl: '',
 };
 
 let _cache: LogoConfig | null = null;
@@ -30,6 +32,7 @@ async function fetchLogoConfig(): Promise<LogoConfig> {
       logoWhiteUrl: data.logoWhiteUrl || DEFAULTS.logoWhiteUrl,
       logoDarkUrl: data.logoDarkUrl || DEFAULTS.logoDarkUrl,
       faviconUrl: data.faviconUrl || DEFAULTS.faviconUrl,
+      logoSidebarUrl: data.logoSidebarUrl || DEFAULTS.logoSidebarUrl,
     };
   } catch {
     return DEFAULTS;
