@@ -612,6 +612,7 @@ export default function AdminPage() {
   const [savedFavicon, setSavedFavicon] = useState('');
   const [savedLogoSidebar, setSavedLogoSidebar] = useState('');
   const [savingLogos, setSavingLogos] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState<string | null>(null);
   const [fontKey, setFontKey] = useState(DEFAULT_FONT_KEY);
   const [savedFontKey, setSavedFontKey] = useState(DEFAULT_FONT_KEY);
   const [savingFont, setSavingFont] = useState(false);
@@ -1190,6 +1191,26 @@ export default function AdminPage() {
     finally { setSavingLogos(false); }
   };
 
+  const handleLogoUpload = async (setter: (v: string) => void, file: File, fieldLabel: string) => {
+    setUploadingLogo(fieldLabel);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/admin/upload-logo', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error || 'Upload failed');
+      }
+      const { url } = await res.json() as { url: string };
+      setter(url);
+      toast.success('Image uploaded — click Save to apply.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingLogo(null);
+    }
+  };
+
   const handleSaveAppName = async () => {
     const trimmed = appNameInput.trim();
     setSavingAppName(true);
@@ -1659,31 +1680,68 @@ export default function AdminPage() {
             {/* Logos & Favicon */}
             <div className="card">
               <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Logos &amp; Favicon</h2>
-              <p className="text-sm text-gray-500 mb-5">Provide URLs to your logo images and browser favicon. Leave blank to use the default static files.</p>
-              <div className="space-y-5">
+              <p className="text-sm text-gray-500 mb-5">Upload image files or paste an external URL. PNG, JPG, WebP, SVG, and ICO supported (max 5 MB).</p>
+              <div className="divide-y divide-gray-100">
                 {([
-                  { label: 'Sidebar Logo URL', desc: 'Logo displayed at the top of the sidebar. Falls back to White Logo if blank.', value: logoSidebarInput, set: setLogoSidebarInput, placeholder: '/logo-white.png' },
-                  { label: 'White Logo URL', desc: 'Used on dark backgrounds — login, signup, and sidebar fallback.', value: logoWhiteInput, set: setLogoWhiteInput, placeholder: '/logo-white.png' },
-                  { label: 'Dark Logo URL', desc: 'Used on light backgrounds.', value: logoDarkInput, set: setLogoDarkInput, placeholder: '/logo-dark.png' },
-                  { label: 'Favicon URL', desc: 'Shown in the browser tab. Use a .ico, .png, or .svg URL.', value: faviconInput, set: setFaviconInput, placeholder: '/favicon.ico' },
-                ] as { label: string; desc: string; value: string; set: (v: string) => void; placeholder: string }[]).map(({ label, desc, value, set, placeholder }) => (
-                  <div key={label}>
-                    <p className="text-sm font-medium text-gray-800 mb-0.5">{label}</p>
-                    <p className="text-xs text-gray-400 mb-2">{desc}</p>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="url"
-                        value={value}
-                        onChange={e => set(e.target.value)}
-                        placeholder={placeholder}
-                        className="input-field text-sm flex-1 font-mono"
-                      />
-                      {value && (
-                        <div className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden flex-shrink-0 bg-gray-800 flex items-center justify-center">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={value} alt="preview" className="max-w-full max-h-full object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                        </div>
+                  { label: 'Sidebar Logo', desc: 'Shown at the top of the sidebar, login, and signup. Falls back to White Logo if blank.', value: logoSidebarInput, set: setLogoSidebarInput, accept: 'image/*' },
+                  { label: 'White Logo', desc: 'Used on dark backgrounds as a fallback.', value: logoWhiteInput, set: setLogoWhiteInput, accept: 'image/*' },
+                  { label: 'Dark Logo', desc: 'Used on light backgrounds.', value: logoDarkInput, set: setLogoDarkInput, accept: 'image/*' },
+                  { label: 'Favicon', desc: 'Shown in the browser tab.', value: faviconInput, set: setFaviconInput, accept: 'image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml' },
+                ] as { label: string; desc: string; value: string; set: (v: string) => void; accept: string }[]).map(({ label, desc, value, set, accept }) => (
+                  <div key={label} className="py-4 flex items-center gap-4">
+                    {/* Preview */}
+                    <div className="w-14 h-14 rounded-lg border border-gray-200 overflow-hidden flex-shrink-0 bg-gray-800 flex items-center justify-center">
+                      {value ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={value} alt={label} className="max-w-full max-h-full object-contain p-1" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                       )}
+                    </div>
+                    {/* Controls */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 mb-0.5">{label}</p>
+                      <p className="text-xs text-gray-400 mb-2">{desc}</p>
+                      <div className="flex items-center gap-2">
+                        <label className={`cursor-pointer flex-shrink-0 ${uploadingLogo !== null ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <input
+                            type="file"
+                            accept={accept}
+                            className="hidden"
+                            onChange={e => {
+                              const f = e.target.files?.[0];
+                              if (f) handleLogoUpload(set, f, label);
+                              e.target.value = '';
+                            }}
+                            disabled={uploadingLogo !== null}
+                          />
+                          <span className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5">
+                            {uploadingLogo === label ? (
+                              <>
+                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+                                Uploading…
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                Upload
+                              </>
+                            )}
+                          </span>
+                        </label>
+                        <input
+                          type="url"
+                          value={value}
+                          onChange={e => set(e.target.value)}
+                          placeholder="or paste URL…"
+                          className="input-field text-xs flex-1 font-mono"
+                        />
+                        {value && (
+                          <button type="button" onClick={() => set('')} className="flex-shrink-0 text-gray-300 hover:text-red-400 transition-colors" title="Clear">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1692,7 +1750,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={handleSaveLogos}
-                  disabled={savingLogos || (logoSidebarInput.trim() === savedLogoSidebar && logoWhiteInput.trim() === savedLogoWhite && logoDarkInput.trim() === savedLogoDark && faviconInput.trim() === savedFavicon)}
+                  disabled={savingLogos || uploadingLogo !== null || (logoSidebarInput.trim() === savedLogoSidebar && logoWhiteInput.trim() === savedLogoWhite && logoDarkInput.trim() === savedLogoDark && faviconInput.trim() === savedFavicon)}
                   className="btn-primary text-sm"
                 >
                   {savingLogos ? 'Saving…' : 'Save'}
