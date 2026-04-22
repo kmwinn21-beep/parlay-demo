@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+// Always render dynamically so BrandStyles, FontStyles, and favicon re-query
+// the DB on every request instead of serving a stale cached layout segment.
+export const dynamic = 'force-dynamic';
 import { AppShell } from '@/components/AppShell';
 import { ToastProvider } from '@/components/Toast';
 import { db, dbReady } from '@/lib/db';
