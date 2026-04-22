@@ -32,6 +32,7 @@ export interface ConferenceForm {
   form_width: number | null;
   form_height: number | null;
   form_offset_y: number | null;
+  panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;
   fields: FormField[];
@@ -699,10 +700,10 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
           {/* Left panel — grid: logo (auto) + image (1fr) + html (3fr), no scrollbar */}
           <div className="flex-1 flex flex-col overflow-hidden p-8" style={{ height: '100%' }}>
-            {/* Company logo — auto height row */}
-            {brandLogoUrl && (
+            {/* Panel logo — per-form configurable, falls back to global brand logo */}
+            {(form.panel_logo_url || brandLogoUrl) && (
               <div className="mb-4 flex-shrink-0">
-                <img src={brandLogoUrl} alt="Company Logo" className="h-12 w-auto object-contain" />
+                <img src={form.panel_logo_url || brandLogoUrl!} alt="Logo" className="h-12 w-auto object-contain" />
               </div>
             )}
             {/* 4-row grid: image (1fr) + html text (3fr) */}
@@ -763,17 +764,29 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
             </div>
           </div>
 
-          {/* Right panel: form card — width/height/Y configurable in landscape only */}
-          <div className="flex-shrink-0 px-6 py-6 flex flex-col overflow-y-auto" style={{ width: formWidth, minWidth: 280, height: '100%' }}>
+          {/* Right panel — column is formHeight tall (or 100% if unset), form card fills it */}
+          <div
+            className="flex-shrink-0 flex flex-col justify-center overflow-hidden"
+            style={{ width: formWidth, minWidth: 280, height: '100%' }}
+          >
+            {/* Inner container: sized to formHeight; form card stretches to fill it */}
             <div
-              className="my-auto w-full rounded-2xl shadow-2xl"
+              className="flex flex-col px-6 py-6"
               style={{
-                background: bgColor,
-                ...(formHeight != null ? { height: formHeight, overflowY: 'auto' } : { overflow: 'hidden' }),
-                ...(formOffsetY !== 0 ? { transform: `translateY(${formOffsetY}px)` } : {}),
+                height: formHeight != null ? formHeight : '100%',
+                flexShrink: 0,
+                transform: formOffsetY !== 0 ? `translateY(${formOffsetY}px)` : undefined,
               }}
             >
-              {formCardInterior}
+              <div
+                className="w-full rounded-2xl shadow-2xl overflow-hidden"
+                style={{
+                  background: bgColor,
+                  flex: formHeight != null ? 1 : undefined,
+                }}
+              >
+                {formCardInterior}
+              </div>
             </div>
           </div>
         </div>
