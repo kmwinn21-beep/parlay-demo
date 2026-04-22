@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 
+// Never cache — logo config must always reflect the latest DB values
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     await dbReady;
@@ -15,8 +18,13 @@ export async function GET() {
       logoDarkUrl: data['logo_dark_url'] || '',
       faviconUrl: data['favicon_url'] || '',
       logoSidebarUrl: data['logo_sidebar_url'] || '',
+    }, {
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch {
-    return NextResponse.json({ logoWhiteUrl: '', logoDarkUrl: '', faviconUrl: '', logoSidebarUrl: '' });
+    return NextResponse.json(
+      { logoWhiteUrl: '', logoDarkUrl: '', faviconUrl: '', logoSidebarUrl: '' },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   }
 }
