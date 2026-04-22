@@ -49,7 +49,7 @@ function LoginForm() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="sidebar" width={160} height={48} className="object-contain mb-2" alt="Logo" />
-          {tagline && <p className="text-blue-300 text-sm italic">{tagline}</p>}
+          {tagline && <p className="text-white/60 text-sm italic">{tagline}</p>}
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -114,7 +114,7 @@ function LoginForm() {
         </div>
 
         {process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN && (
-          <p className="text-center text-blue-400 text-xs mt-6">
+          <p className="text-center text-white/50 text-xs mt-6">
             Only @{process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN} accounts are permitted.
           </p>
         )}
