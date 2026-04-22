@@ -6,6 +6,7 @@ import { classifyCompanyType } from '@/lib/parsers';
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const userEmail = authResult.email;
 
   try {
     const body = await request.json() as {
@@ -22,6 +23,13 @@ export async function POST(request: NextRequest) {
     }
 
     await dbReady;
+
+    // Resolve the current user's config_id for assigned_rep
+    const userRow = await db.execute({
+      sql: `SELECT config_id FROM users WHERE email = ? AND config_id IS NOT NULL LIMIT 1`,
+      args: [userEmail],
+    });
+    const assignedRep = userRow.rows[0]?.config_id ? String(userRow.rows[0].config_id) : null;
 
     // Create company if name provided and no existing company selected
     if (!company_id && company_name && company_name.trim()) {
@@ -62,11 +70,11 @@ export async function POST(request: NextRequest) {
     });
     const nextStepsValue = busCardRow.rows[0] ? String(busCardRow.rows[0].value) : 'Bus. Card';
 
-    // Create follow-up
+    // Create follow-up with assigned rep
     const fuResult = await db.execute({
-      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes)
-            VALUES (?, ?, ?, ?)`,
-      args: [attendee_id, conference_id, nextStepsValue, 'Follow up from business card scan'],
+      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [attendee_id, conference_id, nextStepsValue, 'Follow up from business card scan', assignedRep],
     });
 
     return NextResponse.json({
