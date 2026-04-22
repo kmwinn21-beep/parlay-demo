@@ -17,11 +17,7 @@ const DEFAULTS: LogoConfig = {
 
 let _cache: LogoConfig | null = null;
 let _pending: Promise<LogoConfig> | undefined;
-
-export function invalidateLogoConfig() {
-  _cache = null;
-  _pending = undefined;
-}
+const _subscribers = new Set<(config: LogoConfig) => void>();
 
 async function fetchLogoConfig(): Promise<LogoConfig> {
   try {
@@ -39,15 +35,32 @@ async function fetchLogoConfig(): Promise<LogoConfig> {
   }
 }
 
+export function invalidateLogoConfig() {
+  _cache = null;
+  _pending = fetchLogoConfig().then(c => {
+    _cache = c;
+    _pending = undefined;
+    _subscribers.forEach(fn => fn(c));
+    return c;
+  });
+}
+
 export function useLogoConfig(): LogoConfig {
   const [config, setConfig] = useState<LogoConfig>(_cache ?? DEFAULTS);
 
   useEffect(() => {
-    if (_cache !== null) { setConfig(_cache); return; }
-    if (!_pending) {
-      _pending = fetchLogoConfig().then(c => { _cache = c; _pending = undefined; return c; });
+    _subscribers.add(setConfig);
+
+    if (_cache !== null) {
+      setConfig(_cache);
+    } else {
+      if (!_pending) {
+        _pending = fetchLogoConfig().then(c => { _cache = c; _pending = undefined; return c; });
+      }
+      _pending.then(c => setConfig(c));
     }
-    _pending.then(c => setConfig(c));
+
+    return () => { _subscribers.delete(setConfig); };
   }, []);
 
   return config;
