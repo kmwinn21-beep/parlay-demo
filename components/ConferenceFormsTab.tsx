@@ -581,70 +581,130 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
               </div>
             )}
 
-            {/* Submissions table */}
+            {/* Submissions */}
             {isExpanded && (
-              <div className="overflow-x-auto">
+              <>
                 {subs.length === 0 ? (
                   <div className="text-center py-8 text-sm text-gray-400">No submissions yet.</div>
                 ) : (
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Conference</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Name</th>
-                        {dataFields.map(f => (
-                          <th key={f.id} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
-                        ))}
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
+                  <>
+                    {/* Mobile cards */}
+                    <div className="md:hidden divide-y divide-gray-100">
                       {subs.map(sub => {
                         const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '—';
                         return (
-                          <tr key={sub.id} className="hover:bg-gray-50/70 transition-colors">
-                            <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{sub.conference_name}</td>
-                            <td className="px-4 py-2.5 font-medium whitespace-nowrap">
-                              {sub.attendee_id ? (
-                                <a href={`/attendees/${sub.attendee_id}`} className="text-brand-secondary hover:underline">{nameVal}</a>
-                              ) : (
-                                <span className="text-gray-800">{nameVal}</span>
-                              )}
-                            </td>
-                            {dataFields.map(f => {
-                              const v = sub.values.find(vv => vv.field_label === f.label);
-                              const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
-                              return (
-                                <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
-                                  <div className="truncate">
-                                    {isCompany && sub.company_id && v?.field_value ? (
-                                      <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>
-                                    ) : (
-                                      v?.field_value || '—'
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            })}
-                            <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(sub.submitted_at)}</td>
-                            <td className="px-4 py-2.5">
+                          <div key={sub.id} className="p-4 space-y-3">
+                            {/* Card header: name + date */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                {sub.attendee_id ? (
+                                  <a href={`/attendees/${sub.attendee_id}`} className="font-semibold text-sm text-brand-secondary hover:underline leading-snug block">{nameVal}</a>
+                                ) : (
+                                  <p className="font-semibold text-sm text-gray-800 leading-snug">{nameVal}</p>
+                                )}
+                                <p className="text-xs text-gray-400 mt-0.5">{sub.conference_name}</p>
+                              </div>
+                              <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">{fmtDate(sub.submitted_at)}</span>
+                            </div>
+                            {/* Field values grid */}
+                            {dataFields.length > 0 && (
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                {dataFields.map(f => {
+                                  const v = sub.values.find(vv => vv.field_label === f.label);
+                                  const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
+                                  return (
+                                    <div key={f.id}>
+                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</p>
+                                      <div className="text-sm text-gray-700 truncate">
+                                        {isCompany && sub.company_id && v?.field_value ? (
+                                          <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>
+                                        ) : (
+                                          v?.field_value || '—'
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {/* Status */}
+                            <div className="pt-1 border-t border-gray-100">
                               <select
                                 value={sub.status_option_id ?? ''}
                                 onChange={e => handleStatusChange(sub, form.id, e.target.value ? Number(e.target.value) : null)}
-                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
+                                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
                               >
                                 <option value="">— Status —</option>
                                 {statusOptions.map(s => <option key={s.id} value={s.id}>{s.value}</option>)}
                               </select>
-                            </td>
-                          </tr>
+                            </div>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+
+                    {/* Desktop table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-100">
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Conference</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Name</th>
+                            {dataFields.map(f => (
+                              <th key={f.id} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
+                            ))}
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {subs.map(sub => {
+                            const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '—';
+                            return (
+                              <tr key={sub.id} className="hover:bg-gray-50/70 transition-colors">
+                                <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{sub.conference_name}</td>
+                                <td className="px-4 py-2.5 font-medium whitespace-nowrap">
+                                  {sub.attendee_id ? (
+                                    <a href={`/attendees/${sub.attendee_id}`} className="text-brand-secondary hover:underline">{nameVal}</a>
+                                  ) : (
+                                    <span className="text-gray-800">{nameVal}</span>
+                                  )}
+                                </td>
+                                {dataFields.map(f => {
+                                  const v = sub.values.find(vv => vv.field_label === f.label);
+                                  const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
+                                  return (
+                                    <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
+                                      <div className="truncate">
+                                        {isCompany && sub.company_id && v?.field_value ? (
+                                          <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>
+                                        ) : (
+                                          v?.field_value || '—'
+                                        )}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(sub.submitted_at)}</td>
+                                <td className="px-4 py-2.5">
+                                  <select
+                                    value={sub.status_option_id ?? ''}
+                                    onChange={e => handleStatusChange(sub, form.id, e.target.value ? Number(e.target.value) : null)}
+                                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
+                                  >
+                                    <option value="">— Status —</option>
+                                    {statusOptions.map(s => <option key={s.id} value={s.id}>{s.value}</option>)}
+                                  </select>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
-              </div>
+              </>
             )}
           </div>
         );
