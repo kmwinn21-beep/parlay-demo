@@ -1191,7 +1191,7 @@ export default function AdminPage() {
     finally { setSavingLogos(false); }
   };
 
-  const handleLogoUpload = async (setter: (v: string) => void, file: File, fieldLabel: string) => {
+  const handleLogoUpload = async (setter: (v: string) => void, savedSetter: (v: string) => void, dbKey: string, file: File, fieldLabel: string) => {
     setUploadingLogo(fieldLabel);
     try {
       const fd = new FormData();
@@ -1202,8 +1202,15 @@ export default function AdminPage() {
         throw new Error(err.error || 'Upload failed');
       }
       const { url } = await res.json() as { url: string };
+      await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: dbKey, value: url }),
+      });
       setter(url);
-      toast.success('Image uploaded — click Save to apply.');
+      savedSetter(url);
+      invalidateLogoConfig();
+      toast.success(`${fieldLabel} updated.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -1683,11 +1690,11 @@ export default function AdminPage() {
               <p className="text-sm text-gray-500 mb-5">Upload image files or paste an external URL. PNG, JPG, WebP, SVG, and ICO supported (max 5 MB).</p>
               <div className="divide-y divide-gray-100">
                 {([
-                  { label: 'Sidebar Logo', desc: 'Shown at the top of the sidebar, login, and signup. Falls back to White Logo if blank.', value: logoSidebarInput, set: setLogoSidebarInput, accept: 'image/*' },
-                  { label: 'White Logo', desc: 'Used on dark backgrounds as a fallback.', value: logoWhiteInput, set: setLogoWhiteInput, accept: 'image/*' },
-                  { label: 'Dark Logo', desc: 'Used on light backgrounds.', value: logoDarkInput, set: setLogoDarkInput, accept: 'image/*' },
-                  { label: 'Favicon', desc: 'Shown in the browser tab.', value: faviconInput, set: setFaviconInput, accept: 'image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml' },
-                ] as { label: string; desc: string; value: string; set: (v: string) => void; accept: string }[]).map(({ label, desc, value, set, accept }) => (
+                  { label: 'Sidebar Logo', dbKey: 'logo_sidebar_url', desc: 'Shown at the top of the sidebar, login, and signup. Falls back to White Logo if blank.', value: logoSidebarInput, set: setLogoSidebarInput, savedSet: setSavedLogoSidebar, accept: 'image/*' },
+                  { label: 'White Logo', dbKey: 'logo_white_url', desc: 'Used on dark backgrounds as a fallback.', value: logoWhiteInput, set: setLogoWhiteInput, savedSet: setSavedLogoWhite, accept: 'image/*' },
+                  { label: 'Dark Logo', dbKey: 'logo_dark_url', desc: 'Used on light backgrounds.', value: logoDarkInput, set: setLogoDarkInput, savedSet: setSavedLogoDark, accept: 'image/*' },
+                  { label: 'Favicon', dbKey: 'favicon_url', desc: 'Shown in the browser tab.', value: faviconInput, set: setFaviconInput, savedSet: setSavedFavicon, accept: 'image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml' },
+                ] as { label: string; dbKey: string; desc: string; value: string; set: (v: string) => void; savedSet: (v: string) => void; accept: string }[]).map(({ label, dbKey, desc, value, set, savedSet, accept }) => (
                   <div key={label} className="py-4 flex items-center gap-4">
                     {/* Preview */}
                     <div className="w-14 h-14 rounded-lg border border-gray-200 overflow-hidden flex-shrink-0 bg-gray-800 flex items-center justify-center">
@@ -1710,7 +1717,7 @@ export default function AdminPage() {
                             className="hidden"
                             onChange={e => {
                               const f = e.target.files?.[0];
-                              if (f) handleLogoUpload(set, f, label);
+                              if (f) handleLogoUpload(set, savedSet, dbKey, f, label);
                               e.target.value = '';
                             }}
                             disabled={uploadingLogo !== null}
