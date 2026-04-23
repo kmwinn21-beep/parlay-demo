@@ -71,12 +71,11 @@ export function LandscapeTab({ data }: { data: LandscapeData }) {
         <div className="flex items-center gap-3 mb-4">
           <h3 className="text-sm font-semibold text-gray-700">Prior Conference Overlap</h3>
           <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-            {data.priorOverlapCount} attendee{data.priorOverlapCount !== 1 ? 's' : ''}
+            {data.priorOverlapCount} {data.priorOverlapTypeLabel}&apos;s
           </span>
-          <span className="text-xs text-gray-400">Operator companies only</span>
         </div>
         {data.priorOverlapAttendees.length === 0 ? (
-          <p className="text-sm text-gray-400">No returning Operator attendees from prior conferences.</p>
+          <p className="text-sm text-gray-400">No returning {data.priorOverlapTypeLabel} attendees from prior conferences.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {data.priorOverlapAttendees.map((a) => (

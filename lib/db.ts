@@ -306,6 +306,7 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('allow_attendee_upload', 'true')`,
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('font_key', 'default')`,
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('tagline', '')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('prior_overlap_company_type', 'Operator')`,
     `CREATE TABLE IF NOT EXISTS table_column_config (table_name TEXT NOT NULL, column_key TEXT NOT NULL, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (table_name, column_key))`,
     `ALTER TABLE table_column_config ADD COLUMN sort_order INTEGER`,
     `CREATE TABLE IF NOT EXISTS section_config (page TEXT NOT NULL, section_key TEXT NOT NULL, label TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, visible INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (page, section_key))`,
