@@ -10,11 +10,15 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const search = url.searchParams.get('search')?.trim() ?? '';
     const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!, 10) : null;
+    const conferenceId = url.searchParams.get('conference_id') ? parseInt(url.searchParams.get('conference_id')!, 10) : null;
+    const companyId = url.searchParams.get('company_id') ? parseInt(url.searchParams.get('company_id')!, 10) : null;
 
     const searchClause = search
       ? `AND (a.first_name LIKE ? OR a.last_name LIKE ? OR co.name LIKE ?)`
       : '';
     const searchArgs = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const confJoin = conferenceId ? `JOIN conference_attendees ca_f ON a.id = ca_f.attendee_id AND ca_f.conference_id = ${conferenceId}` : '';
+    const companyClause = companyId ? `AND a.company_id = ${companyId}` : '';
 
     const result = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, a.email,
@@ -61,7 +65,8 @@ export async function GET(request: NextRequest) {
               WHERE entity_type = 'attendee'
               GROUP BY entity_id
             ) pn ON a.id = pn.entity_id
-            WHERE 1=1 ${searchClause}
+            ${confJoin}
+            WHERE 1=1 ${searchClause} ${companyClause}
             ORDER BY a.last_name, a.first_name
             ${limit ? `LIMIT ${limit}` : ''}`,
       args: searchArgs,
