@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPreset } from '@/lib/colors';
+import { TouchpointMap } from './TouchpointMap';
 
 interface Conference {
   id: number;
@@ -27,16 +28,20 @@ interface Props {
 export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'Touchpoints' }: Props) {
   const [options, setOptions] = useState<TouchpointOption[]>([]);
   const [counts, setCounts] = useState<Record<number, number>>({});
+  const [totalCount, setTotalCount] = useState(0);
   const [selectedConf, setSelectedConf] = useState<Conference | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [loadingOpts, setLoadingOpts] = useState(false);
   const [loadingCounts, setLoadingCounts] = useState(false);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [hoverOptId, setHoverOptId] = useState<number | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const mapBtnRef = useRef<HTMLButtonElement>(null);
+
+  const today = new Date().toISOString().slice(0, 10);
 
   // Sort conferences: in-progress first, then descending by start_date
-  const today = new Date().toISOString().slice(0, 10);
   const sortedConferences = [...conferences].sort((a, b) => {
     const aActive = a.start_date <= today && a.end_date >= today;
     const bActive = b.start_date <= today && b.end_date >= today;
@@ -49,19 +54,23 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
     setLoadingOpts(true);
     fetch('/api/config?category=touchpoints')
       .then(r => r.json())
-      .then((data: TouchpointOption[]) => {
-        setOptions(data.sort((a, b) => a.sort_order - b.sort_order));
-      })
+      .then((data: TouchpointOption[]) => setOptions(data.sort((a, b) => a.sort_order - b.sort_order)))
       .catch(() => {})
       .finally(() => setLoadingOpts(false));
   }, []);
 
-  // Auto-select in-progress conference on load
+  // Default to first conference in sorted list (in-progress first)
   useEffect(() => {
-    if (selectedConf) return;
-    const inProgress = sortedConferences.find(c => c.start_date <= today && c.end_date >= today);
-    if (inProgress) setSelectedConf(inProgress);
+    if (selectedConf || sortedConferences.length === 0) return;
+    setSelectedConf(sortedConferences[0]);
   }, [conferences]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchTotalCount = useCallback(() => {
+    fetch(`/api/attendees/${attendeeId}/touchpoints`)
+      .then(r => r.json())
+      .then((d: { total: number }) => setTotalCount(d.total ?? 0))
+      .catch(() => {});
+  }, [attendeeId]);
 
   const fetchCounts = useCallback((confId: number) => {
     setLoadingCounts(true);
@@ -76,6 +85,8 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
     if (selectedConf) fetchCounts(selectedConf.id);
     else setCounts({});
   }, [selectedConf, fetchCounts]);
+
+  useEffect(() => { fetchTotalCount(); }, [fetchTotalCount]);
 
   // Close picker on outside click
   useEffect(() => {
@@ -98,6 +109,7 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
       });
       if (res.ok) {
         setCounts(prev => ({ ...prev, [opt.id]: (prev[opt.id] ?? 0) + 1 }));
+        setTotalCount(prev => prev + 1);
       }
     } catch { /* silent */ }
     finally { setPendingId(null); }
@@ -115,6 +127,7 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
       });
       if (res.ok) {
         setCounts(prev => ({ ...prev, [opt.id]: Math.max(0, (prev[opt.id] ?? 0) - 1) }));
+        setTotalCount(prev => Math.max(0, prev - 1));
       }
     } catch { /* silent */ }
     finally { setPendingId(null); }
@@ -125,10 +138,30 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
     return `${parseInt(m)}/${parseInt(day)}/${y.slice(2)}`;
   };
 
+  const selectedIsActive = selectedConf ? selectedConf.start_date <= today && selectedConf.end_date >= today : false;
+
   return (
     <div className="card">
+      {/* Header row */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base font-semibold text-brand-primary font-serif">{sectionLabel}</h2>
+        <div className="relative">
+          <button
+            ref={mapBtnRef}
+            type="button"
+            onClick={() => setShowMap(prev => !prev)}
+            className="w-7 h-7 rounded-full border-2 border-brand-secondary bg-white flex items-center justify-center hover:bg-brand-secondary/10 transition-colors"
+            title="View touchpoint map"
+          >
+            <span className="text-xs font-bold text-brand-secondary leading-none">{totalCount}</span>
+          </button>
+          <TouchpointMap
+            attendeeId={attendeeId}
+            open={showMap}
+            onClose={() => setShowMap(false)}
+            anchorRef={mapBtnRef as React.RefObject<HTMLElement>}
+          />
+        </div>
       </div>
 
       {/* Conference selector */}
@@ -136,10 +169,13 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
         <button
           type="button"
           onClick={() => setShowPicker(prev => !prev)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:border-brand-secondary transition-colors text-sm"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:border-brand-secondary transition-colors text-sm"
           disabled={conferences.length === 0}
         >
-          <span className="truncate text-left">
+          {selectedIsActive && (
+            <span className="w-2 h-2 rounded-full bg-brand-secondary flex-shrink-0 animate-pulse" />
+          )}
+          <span className="flex-1 truncate text-left">
             {selectedConf ? selectedConf.name : conferences.length === 0 ? 'No conferences' : 'Select conference...'}
           </span>
           <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${showPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -158,7 +194,11 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
                   onClick={() => { setSelectedConf(conf); setShowPicker(false); }}
                   className={`w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${selectedConf?.id === conf.id ? 'bg-blue-50' : ''}`}
                 >
-                  {isActive && <span className="w-2 h-2 rounded-full bg-brand-secondary flex-shrink-0 animate-pulse" />}
+                  {isActive ? (
+                    <span className="w-2.5 h-2.5 rounded-full bg-brand-secondary flex-shrink-0 animate-pulse" />
+                  ) : (
+                    <span className="w-2.5 h-2.5 flex-shrink-0" />
+                  )}
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">{conf.name}</div>
                     <div className="text-xs text-gray-400">{formatDate(conf.start_date)}</div>
@@ -203,10 +243,7 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
                   onClick={() => handleAdd(opt)}
                   disabled={isPending || !selectedConf}
                   className={`w-full rounded-lg border-2 transition-all text-xs font-medium py-2
-                    ${isActive
-                      ? 'text-left pl-3 pr-8'
-                      : 'text-center px-2'
-                    }
+                    ${isActive ? 'text-left pl-3 pr-8' : 'text-center px-2'}
                     ${isPending ? 'opacity-50 cursor-wait' : ''}
                   `}
                   style={isActive ? {
@@ -230,7 +267,7 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
                   )}
                 </button>
 
-                {/* Minus / undo button — visible on hover when count > 0 */}
+                {/* Minus / undo on hover */}
                 {isActive && isHovered && !isPending && (
                   <button
                     type="button"

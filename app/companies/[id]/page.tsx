@@ -153,6 +153,7 @@ export default function CompanyDetailPage() {
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
   const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
+  const [touchpointTotal, setTouchpointTotal] = useState<number | null>(null);
 
   // Operator / Capital relationship state
   const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
@@ -267,13 +268,20 @@ export default function CompanyDetailPage() {
       if (notesRes.ok) setCompanyNotes(await notesRes.json());
       if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
 
-      // Fetch pinned notes for this company
+      // Fetch pinned notes and touchpoint total in parallel
       try {
-        const pinnedRes = await fetch(`/api/pinned-notes?entity_type=company&entity_id=${id}`);
+        const [pinnedRes, tpRes] = await Promise.all([
+          fetch(`/api/pinned-notes?entity_type=company&entity_id=${id}`),
+          fetch(`/api/companies/${id}/touchpoints`),
+        ]);
         if (pinnedRes.ok) {
           const pinData = await pinnedRes.json();
           setPinnedNotes(pinData);
           setPinnedNoteIds(new Set(pinData.map((p: PinnedNote) => p.note_id)));
+        }
+        if (tpRes.ok) {
+          const tpData = await tpRes.json();
+          setTouchpointTotal(tpData.total ?? 0);
         }
       } catch { /* non-fatal */ }
     } catch {
@@ -880,6 +888,16 @@ export default function CompanyDetailPage() {
                     <span className="text-sm text-gray-500">{displayIcp || '—'}</span>
                   );
                 })()}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Touchpoints</p>
+                {touchpointTotal !== null ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20">
+                    {touchpointTotal}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
               </div>
             </div>
           </div>
