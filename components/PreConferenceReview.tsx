@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 import { LandscapeTab } from './pre-conference/LandscapeTab';
 import { IcpCompaniesTab } from './pre-conference/IcpCompaniesTab';
 import { MeetingsTab } from './pre-conference/MeetingsTab';
@@ -26,7 +27,7 @@ export interface LandscapeData {
   companyTypeBreakdown: { label: string; count: number }[];
   seniorityBreakdown: { label: string; count: number }[];
   priorOverlapCount: number;
-  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; prior_conference: string }[];
+  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; prior_conference: string; assigned_user_names: string[] }[];
 }
 
 export interface IcpCompany {
@@ -34,6 +35,7 @@ export interface IcpCompany {
   name: string;
   company_type: string | null;
   avgHealth: number;
+  assigned_user_names: string[];
   attendees: { id: number; first_name: string; last_name: string; title: string | null; health: number }[];
 }
 
@@ -147,6 +149,16 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('landscape');
 
+  const tabConfig = useSectionConfig('pre_conference_review');
+  const visibleTabs = useMemo(() => {
+    if (tabConfig.orderedKeys.length === 0) return TABS;
+    return tabConfig.orderedKeys
+      .filter(k => tabConfig.isVisible(k))
+      .map(k => TABS.find(t => t.key === k))
+      .filter((t): t is { key: TabKey; label: string } => t !== undefined)
+      .map(t => ({ key: t.key, label: tabConfig.getLabel(t.key) }));
+  }, [tabConfig]);
+
   const load = useCallback(async () => {
     if (data) { setOpen(true); return; }
     setLoading(true);
@@ -212,7 +224,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
             {/* Tab nav */}
             <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
               <nav className="flex gap-0 px-4">
-                {TABS.map((t) => (
+                {visibleTabs.map((t) => (
                   <button key={t.key} onClick={() => setActiveTab(t.key)}
                     className={`py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap
                       ${activeTab === t.key ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>

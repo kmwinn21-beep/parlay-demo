@@ -38,7 +38,14 @@ export function IcpCompaniesTab({ companies }: { companies: IcpCompany[] }) {
                   <span className="text-xs text-gray-500">{co.company_type}</span>
                 )}
               </div>
-              <HealthBadge score={co.avgHealth} />
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <HealthBadge score={co.avgHealth} />
+                {co.assigned_user_names.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-brand-highlight/20 text-brand-primary text-[10px] font-semibold max-w-[90px] truncate">
+                    {co.assigned_user_names[0]}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Health bar */}

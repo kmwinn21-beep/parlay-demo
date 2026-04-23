@@ -86,6 +86,7 @@ const SECTION_PAGE_LABELS: Record<string, string> = {
   company: 'Company Page',
   conference_details: 'Conference Details Page',
   relationships_page: 'Relationships Page',
+  pre_conference_review: 'Pre-Conference Review',
 };
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
