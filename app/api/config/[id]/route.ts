@@ -12,12 +12,13 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { value, sort_order, color, visible_forms, scope } = body as {
+    const { value, sort_order, color, visible_forms, scope, auto_follow_up } = body as {
       value: string;
       sort_order?: number;
       color?: string | null;
       visible_forms?: string[];
       scope?: string;
+      auto_follow_up?: boolean | number;
     };
 
     if (!value) {
@@ -38,13 +39,14 @@ export async function PUT(
     const category = String(existing.rows[0].category);
 
     const scopeValue = scope === 'user' ? 'user' : 'global';
+    const autoFollowUpVal = auto_follow_up === undefined ? 1 : (auto_follow_up ? 1 : 0);
     const result = await db.execute({
       sql: sort_order !== undefined
-        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ?, scope = ? WHERE id = ? RETURNING *'
-        : 'UPDATE config_options SET value = ?, color = ?, scope = ? WHERE id = ? RETURNING *',
+        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ?, scope = ?, auto_follow_up = ? WHERE id = ? RETURNING *'
+        : 'UPDATE config_options SET value = ?, color = ?, scope = ?, auto_follow_up = ? WHERE id = ? RETURNING *',
       args: sort_order !== undefined
-        ? [value, sort_order, color !== undefined ? color : null, scopeValue, params.id]
-        : [value, color !== undefined ? color : null, scopeValue, params.id],
+        ? [value, sort_order, color !== undefined ? color : null, scopeValue, autoFollowUpVal, params.id]
+        : [value, color !== undefined ? color : null, scopeValue, autoFollowUpVal, params.id],
     });
 
     if (result.rows.length === 0) {

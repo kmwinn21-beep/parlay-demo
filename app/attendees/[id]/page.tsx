@@ -19,6 +19,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
 import { useUserOptions, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
+import { TouchpointsSection } from '@/components/TouchpointsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
@@ -1066,6 +1067,14 @@ export default function AttendeeDetailPage() {
               </div>
             )}
                 </div>
+              ) : null,
+              touchpoints: attendee ? (
+                <TouchpointsSection
+                  key="touchpoints"
+                  attendeeId={Number(id)}
+                  conferences={attendee.conferences}
+                  sectionLabel={getSectionLabel('touchpoints')}
+                />
               ) : null,
             };
             return sectionOrder.map(key => isSectionVisible(key) ? sectionMap[key] : null);

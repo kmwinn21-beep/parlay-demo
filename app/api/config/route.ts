@@ -16,14 +16,14 @@ export async function GET(request: NextRequest) {
     let result;
     if (category) {
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope FROM config_options WHERE category = ? ORDER BY sort_order, value',
+        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up FROM config_options WHERE category = ? ORDER BY sort_order, value',
         args: [category],
       });
 
       // Auto-seed unit_type with default 'WSE' if it has never been configured
       if (category === 'unit_type' && result.rows.length === 0) {
         const inserted = await db.execute({
-          sql: 'INSERT INTO config_options (category, value, sort_order) VALUES (?, ?, ?) RETURNING id, category, value, sort_order, color, action_key, status_key, scope',
+          sql: 'INSERT INTO config_options (category, value, sort_order) VALUES (?, ?, ?) RETURNING id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up',
           args: ['unit_type', 'WSE', 0],
         });
         return NextResponse.json(inserted.rows.map(r => ({
@@ -35,12 +35,13 @@ export async function GET(request: NextRequest) {
           action_key: null,
           status_key: null,
           scope: 'global',
+          auto_follow_up: 1,
         })));
       }
     } else {
       // Return all options (used for color lookups across the app)
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope FROM config_options ORDER BY category, sort_order, value',
+        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up FROM config_options ORDER BY category, sort_order, value',
         args: [],
       });
     }
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
       action_key: r.action_key ? String(r.action_key) : null,
       status_key: r.status_key ? String(r.status_key) : null,
       scope: r.scope ? String(r.scope) : 'global',
+      auto_follow_up: r.auto_follow_up === null || r.auto_follow_up === undefined ? 1 : Number(r.auto_follow_up),
     }));
 
     if (!form && !includeVisibility) {
