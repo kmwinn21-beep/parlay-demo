@@ -121,7 +121,7 @@ export function CompanyTouchpointMatrix({ companyId, open, onClose }: Props) {
                                 return (
                                   <div
                                     key={pill.option_id}
-                                    className="inline-flex items-center justify-between gap-2 rounded-lg border-2 pl-2.5 pr-2 py-1 text-xs font-medium w-full"
+                                    className="inline-flex items-center gap-2 rounded-lg border-2 pl-2.5 pr-2 py-1 text-xs font-medium"
                                     style={{
                                       borderColor: preset.hex,
                                       backgroundColor: `${preset.hex}18`,
