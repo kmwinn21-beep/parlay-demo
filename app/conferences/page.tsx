@@ -68,15 +68,20 @@ function mLast(y: number, m: number) {
 }
 function buildDS(y: number, m: number, d: number) { return `${y}-${pad2(m + 1)}-${pad2(d)}`; }
 
+function localDateStr(dt: Date) {
+  return buildDS(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
 function confDatesInMonth(confs: Conference[], y: number, m: number): Set<string> {
   const set = new Set<string>();
   const first = mFirst(y, m), last = mLast(y, m);
   for (const c of confs) {
-    if (c.start_date > last || c.end_date < first) continue;
+    const effEnd = c.end_date || c.start_date;
+    if (c.start_date > last || effEnd < first) continue;
     const os = c.start_date < first ? first : c.start_date;
-    const oe = c.end_date   > last  ? last  : c.end_date;
+    const oe = effEnd > last ? last : effEnd;
     const dt = new Date(os + 'T00:00:00'), end = new Date(oe + 'T00:00:00');
-    while (dt <= end) { set.add(dt.toISOString().slice(0, 10)); dt.setDate(dt.getDate() + 1); }
+    while (dt <= end) { set.add(localDateStr(dt)); dt.setDate(dt.getDate() + 1); }
   }
   return set;
 }
@@ -190,7 +195,7 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ConferencesPage() {
   const now          = new Date();
-  const todayStr     = now.toISOString().slice(0, 10);
+  const todayStr     = buildDS(now.getFullYear(), now.getMonth(), now.getDate());
   const currentYear  = now.getFullYear();
   const currentMonth = now.getMonth(); // 0-based
 
