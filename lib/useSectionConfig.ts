@@ -31,6 +31,10 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'notes', label: 'Notes' },
     { key: 'forms', label: 'Conference Forms' },
   ],
+  relationships_page: [
+    { key: 'company_relationships', label: 'Company Level Relationships' },
+    { key: 'relationship_timeline', label: 'Relationship Timeline' },
+  ],
 };
 
 interface SectionConfig {

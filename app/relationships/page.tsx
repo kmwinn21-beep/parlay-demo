@@ -8,6 +8,11 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions, parseRepIds } from '@/lib/useUserOptions';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { useSectionConfig } from '@/lib/useSectionConfig';
+import RelationshipTimeline from '@/components/RelationshipTimeline';
+
+type RelationshipsTabKey = 'company_relationships' | 'relationship_timeline';
+const RELATIONSHIPS_TAB_ORDER: RelationshipsTabKey[] = ['company_relationships', 'relationship_timeline'];
 
 interface CompanyOption {
   id: number;
@@ -104,6 +109,16 @@ function RepPill({ name }: { name: string }) {
 
 export default function RelationshipsPage() {
   const unitTypeLabel = useUnitTypeLabel();
+
+  // ── Tab state ──
+  const relTabConfig = useSectionConfig('relationships_page');
+  const visibleTabs = RELATIONSHIPS_TAB_ORDER.filter(
+    k => relTabConfig.orderedKeys.includes(k) && relTabConfig.isVisible(k)
+  );
+  const [activeTab, setActiveTab] = useState<RelationshipsTabKey>('company_relationships');
+  const effectiveTab = visibleTabs.includes(activeTab) ? activeTab : (visibleTabs[0] ?? 'company_relationships');
+
+  // ── Company relationship state ──
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [companySearch, setCompanySearch] = useState('');
@@ -467,7 +482,37 @@ export default function RelationshipsPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div>
+      {/* Tab bar */}
+      {visibleTabs.length > 1 && (
+        <div className="border-b border-gray-200 px-6 pt-4">
+          <nav className="-mb-px flex gap-6 overflow-x-auto">
+            {visibleTabs.map(tabKey => (
+              <button
+                key={tabKey}
+                onClick={() => setActiveTab(tabKey)}
+                className={`py-3 px-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap
+                  ${effectiveTab === tabKey
+                    ? 'border-brand-secondary text-brand-secondary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {relTabConfig.getLabel(tabKey)}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+
+      {/* Relationship Timeline tab */}
+      {effectiveTab === 'relationship_timeline' && (
+        <div className="p-6">
+          <RelationshipTimeline />
+        </div>
+      )}
+
+      {/* Company Level Relationships tab */}
+      {effectiveTab === 'company_relationships' && (
+      <div className="p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
         <div ref={companyDropdownRef} className="max-w-md w-full relative">
           <label className="label">Company</label>
@@ -674,6 +719,8 @@ export default function RelationshipsPage() {
           </div>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 }
