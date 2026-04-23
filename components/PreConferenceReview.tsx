@@ -248,7 +248,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {activeTab === 'landscape' && <LandscapeTab data={data.landscape} />}
               {activeTab === 'icp' && <IcpCompaniesTab companies={data.icpCompanies} />}
               {activeTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}

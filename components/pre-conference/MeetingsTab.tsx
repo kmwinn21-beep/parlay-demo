@@ -42,7 +42,48 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      {/* Mobile card view */}
+      <div className="sm:hidden space-y-3">
+        {meetings.map((m) => (
+          <div
+            key={m.id}
+            className={`rounded-xl border p-4 space-y-2 ${m.hasConflict ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <Link href={`/attendees/${m.attendee_id}`} className="font-medium text-brand-secondary hover:underline text-sm">
+                  {m.first_name} {m.last_name}
+                </Link>
+                {m.title && <p className="text-xs text-gray-400 truncate">{m.title}</p>}
+              </div>
+              {m.outcome ? (
+                <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">{m.outcome}</span>
+              ) : (
+                <span className="flex-shrink-0 text-gray-400 text-xs">Pending</span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+              <span>{fmtDate(m.meeting_date)}{m.meeting_time ? ` · ${fmtTime(m.meeting_time)}` : ''}</span>
+              {m.hasConflict && (
+                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">Conflict</span>
+              )}
+            </div>
+
+            {m.company_name && (
+              <p className="text-xs text-gray-500 truncate">{m.company_name}</p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+              {m.scheduled_by && <span>Rep: {m.scheduled_by}</span>}
+              {m.meeting_type && <span className="text-gray-400">{m.meeting_type}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-200">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
