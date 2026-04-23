@@ -446,6 +446,20 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE conference_forms ADD COLUMN form_height INTEGER`,
     `ALTER TABLE conference_forms ADD COLUMN form_offset_y INTEGER`,
     `ALTER TABLE conference_forms ADD COLUMN panel_logo_url TEXT`,
+    `ALTER TABLE config_options ADD COLUMN auto_follow_up INTEGER DEFAULT 1`,
+    `CREATE TABLE IF NOT EXISTS attendee_touchpoints (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attendee_id INTEGER NOT NULL,
+      conference_id INTEGER NOT NULL,
+      option_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Booth Stop', 1)`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Coffee', 2)`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Dinner', 3)`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Event', 4)`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Breakfast/Lunch', 5)`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Other', 6)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

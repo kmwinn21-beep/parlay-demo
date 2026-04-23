@@ -24,6 +24,7 @@ interface ConfigOption {
   color: string | null;
   visible_forms?: string[];
   scope?: string; // 'global' | 'user' — only meaningful for status category
+  auto_follow_up?: number; // 1 = yes, 0 = no — only meaningful for touchpoints category
 }
 
 const CATEGORIES = [
@@ -39,6 +40,7 @@ const CATEGORIES = [
   { key: 'meeting_type', label: 'Meeting Type' },
   { key: 'event_type', label: 'Event Type' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
+  { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'user', label: 'Users' },
 ];
 
@@ -156,6 +158,8 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const [formPickerOpenId, setFormPickerOpenId] = useState<number | null>(null);
   const availableForms = CATEGORY_FORM_USAGE[category] ?? [];
   const showScopeDropdown = category === 'status';
+  const showAutoFollowUp = category === 'touchpoints';
+  const [editAutoFollowUp, setEditAutoFollowUp] = useState<boolean>(true);
 
   useEffect(() => { setLocalOptions(options); }, [options]);
 
@@ -164,6 +168,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     setEditValue(opt.value);
     setEditVisibleForms(opt.visible_forms ?? availableForms.map(f => f.key));
     setEditScope((opt.scope === 'user' ? 'user' : 'global') as 'global' | 'user');
+    setEditAutoFollowUp(opt.auto_follow_up === undefined ? true : opt.auto_follow_up !== 0);
     setFormPickerOpenId(null);
     setExpandedOptions(prev => new Set(prev).add(opt.id));
   };
@@ -173,13 +178,14 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     try {
       const payload: Record<string, unknown> = { value: editValue.trim(), visible_forms: editVisibleForms };
       if (showScopeDropdown) payload.scope = editScope;
+      if (showAutoFollowUp) payload.auto_follow_up = editAutoFollowUp;
       const res = await fetch(`/api/config/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Update failed');
-      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), visible_forms: [...editVisibleForms], scope: showScopeDropdown ? editScope : opt.scope } : opt));
+      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), visible_forms: [...editVisibleForms], scope: showScopeDropdown ? editScope : opt.scope, auto_follow_up: showAutoFollowUp ? (editAutoFollowUp ? 1 : 0) : opt.auto_follow_up } : opt));
       toast.success('Updated!');
       setEditingId(null);
       setExpandedOptions(prev => {
@@ -353,6 +359,28 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                               {editScope === 'user'
                                 ? 'Only visible to the user who set it — shows as "StatusName - Initials" on company profiles.'
                                 : 'Visible to all users across all tables and views.'}
+                            </p>
+                          </div>
+                        )}
+                        {showAutoFollowUp && (
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Automatically Assign Follow Up</label>
+                            <div className="flex items-center gap-3">
+                              <div className="inline-flex items-center rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+                                {([true, false] as const).map(v => (
+                                  <button
+                                    key={String(v)}
+                                    type="button"
+                                    onClick={() => setEditAutoFollowUp(v)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${editAutoFollowUp === v ? 'bg-brand-secondary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                  >
+                                    {v ? 'Yes' : 'No'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              When enabled, logging this touchpoint will automatically create a follow-up task.
                             </p>
                           </div>
                         )}
