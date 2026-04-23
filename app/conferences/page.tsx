@@ -157,13 +157,6 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
   for (let d = 1; d <= dim; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
 
-  if (dates.size > 0) {
-    const first = Array.from(dates)[0];
-    console.debug(`[MonthCalendar] ${MONTH_NAMES[month]} ${year}: dates.size=${dates.size}, sample="${first}", buildDS(y,m,1)="${buildDS(year, month, 1)}"`);
-  } else {
-    console.debug(`[MonthCalendar] ${MONTH_NAMES[month]} ${year}: dates EMPTY`);
-  }
-
   return (
     <div className="flex-1 min-w-0">
       <p className="text-xl font-semibold text-brand-primary text-center mb-2 font-serif">
@@ -328,9 +321,6 @@ export default function ConferencesPage() {
   // Calendar date highlight sets (use ALL conferences for visual)
   const calDateSets = useMemo(() => {
     const sets = calMonths.map(([y, m]) => confDatesInMonth(conferences, y, m));
-    if (conferences.length > 0) {
-      console.debug('[Calendar] calMonths:', calMonths, 'first conf:', conferences[0]?.start_date, '→', conferences[0]?.end_date, 'set sizes:', sets.map(s => s.size));
-    }
     return sets;
   }, [calMonths, conferences]);
 
