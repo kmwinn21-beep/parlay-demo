@@ -27,12 +27,11 @@ export function LandscapeTab({ data }: { data: LandscapeData }) {
   return (
     <div className="space-y-8">
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
           { label: 'Total Attendees', value: data.totalAttendees },
           { label: 'Companies', value: data.totalCompanies },
           { label: 'ICP Companies', value: data.icpCount },
-          { label: 'WSE Companies', value: data.wseCount },
         ].map((s) => (
           <div key={s.label} className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
             <p className="text-2xl font-bold text-brand-primary">{s.value}</p>

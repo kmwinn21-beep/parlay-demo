@@ -113,7 +113,7 @@ export async function GET(
 
   const companyIds = uniqueNumbers(attendees.map((a) => a.company_id as number | null));
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes] = await Promise.all([
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -151,6 +151,8 @@ export async function GET(
       : Promise.resolve({ rows: [] }),
     // All user config_options to resolve rep IDs → display names
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] }),
+    // Relationship status config_options
+    db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'rep_relationship_type'`, args: [] }),
   ]);
 
   const internalRels = internalRelsRes.rows;
@@ -160,6 +162,23 @@ export async function GET(
   const userNameMap = new Map<number, string>();
   for (const row of allUserOptsRes.rows) {
     userNameMap.set(row.id as number, String(row.value));
+  }
+
+  // Build relationship_status ID → label lookup
+  const relStatusMap = new Map<number, string>();
+  for (const row of relStatusOptsRes.rows) {
+    relStatusMap.set(row.id as number, String(row.value));
+  }
+
+  function resolveIdList(raw: unknown, map: Map<number, string>): string | null {
+    if (!raw) return null;
+    const str = String(raw).trim();
+    if (!str) return null;
+    const parts = str.split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.every((p) => /^\d+$/.test(p))) {
+      return parts.map((p) => map.get(parseInt(p, 10)) ?? p).join(', ');
+    }
+    return str;
   }
 
   function resolveUserIds(raw: unknown): string[] {
@@ -326,7 +345,7 @@ export async function GET(
   });
   const meetingsData = meetings.map((m) => ({
     id: m.id, attendee_id: m.attendee_id, meeting_date: m.meeting_date, meeting_time: m.meeting_time,
-    location: m.location, scheduled_by: m.scheduled_by, outcome: m.outcome, meeting_type: m.meeting_type,
+    location: m.location, scheduled_by: resolveIdList(m.scheduled_by, userNameMap) ?? (m.scheduled_by ? String(m.scheduled_by) : null), outcome: m.outcome, meeting_type: m.meeting_type,
     first_name: m.first_name, last_name: m.last_name, title: m.title,
     company_name: m.company_name, company_id: m.company_id, hasConflict: conflictIds.has(m.id as number),
   }));
@@ -370,7 +389,7 @@ export async function GET(
     if (!companyRelsMap.has(cid)) companyRelsMap.set(cid, []);
     companyRelsMap.get(cid)!.push({
       rep_names: resolveUserIds(rel.rep_ids),
-      relationship_status: String(rel.relationship_status || ''),
+      relationship_status: resolveIdList(rel.relationship_status, relStatusMap) ?? String(rel.relationship_status || ''),
       description: String(rel.description || ''),
     });
   }
@@ -401,7 +420,7 @@ export async function GET(
         company_id: cid,
         company_name: String(compAttendees[0]?.company_name ?? ''),
         company_type: (compAttendees[0]?.company_type as string) ?? null,
-        relationship_status: (rel?.relationship_status as string) ?? null,
+        relationship_status: rel ? (resolveIdList(rel.relationship_status, relStatusMap) ?? String(rel.relationship_status || '')) : null,
         description: (rel?.description as string) ?? null,
         profit_type: detail?.profit_type ?? null,
         entity_structure: detail?.entity_structure ?? null,
@@ -432,7 +451,7 @@ export async function GET(
     return {
       id: rel.id, company_id: cid,
       company_name: String(compAttendees[0]?.company_name ?? ''),
-      relationship_status: String(rel.relationship_status ?? ''),
+      relationship_status: resolveIdList(rel.relationship_status, relStatusMap) ?? String(rel.relationship_status ?? ''),
       description: String(rel.description ?? ''),
       rep_names: resolveUserIds(rel.rep_ids),
       contact_names: contactNames,

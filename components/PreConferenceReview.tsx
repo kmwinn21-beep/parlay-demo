@@ -183,10 +183,10 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
       {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
 
       {open && data && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ animation: 'fadeUp 0.2s ease-out' }}>
+        <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
           <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative flex flex-col bg-white w-full h-full overflow-hidden shadow-2xl md:m-6 md:rounded-2xl md:h-[calc(100vh-48px)]">
+          <div className="absolute inset-0 sm:inset-4 md:inset-6 flex flex-col bg-white overflow-hidden shadow-2xl sm:rounded-2xl">
             {/* Panel header */}
             <div className="bg-brand-primary px-6 py-4 flex-shrink-0">
               <div className="flex items-start justify-between gap-4">
