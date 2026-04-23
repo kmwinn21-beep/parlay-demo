@@ -31,7 +31,17 @@ interface Props {
 export function TouchpointMap({ attendeeId, open, onClose, anchorRef }: Props) {
   const [data, setData] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [alignRight, setAlignRight] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Determine which side to open based on available viewport space
+  useEffect(() => {
+    if (!open || !anchorRef?.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const POPUP_WIDTH = 320; // w-80
+    const spaceRight = window.innerWidth - rect.right;
+    setAlignRight(spaceRight >= POPUP_WIDTH || spaceRight >= rect.left);
+  }, [open, anchorRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +70,7 @@ export function TouchpointMap({ attendeeId, open, onClose, anchorRef }: Props) {
   return (
     <div
       ref={containerRef}
-      className="absolute z-50 right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-4"
+      className={`absolute z-50 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-4 ${alignRight ? 'left-0' : 'right-0'}`}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Touchpoint Map</span>
