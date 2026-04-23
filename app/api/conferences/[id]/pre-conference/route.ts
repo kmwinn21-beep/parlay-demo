@@ -37,7 +37,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id,
@@ -90,6 +90,7 @@ export async function GET(
     }),
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
+    db.execute({ sql: `SELECT value FROM site_settings WHERE key='prior_overlap_company_type'`, args: [] }),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -383,7 +384,14 @@ export async function GET(
     if (a.wse && a.company_id) wseCompanyIds.add(a.company_id as number);
   }
 
-  // Prior overlap: build map of attendee_id → most recent conference name, filter to Operator companies
+  // Prior overlap: build map of attendee_id → most recent conference name, filter to configured company type
+  const overlapCompanyType = (overlapTypeRes.rows[0]?.value as string) ?? 'Operator';
+  const overlapLabelRes = await db.execute({
+    sql: `SELECT value FROM config_options WHERE category='company_type' AND value=? LIMIT 1`,
+    args: [overlapCompanyType],
+  });
+  const priorOverlapTypeLabel = (overlapLabelRes.rows[0]?.value as string) ?? overlapCompanyType;
+
   const prevConfMap = new Map<number, string>();
   for (const row of prevConfsRes.rows) {
     const aid = row.attendee_id as number;
@@ -392,13 +400,14 @@ export async function GET(
   const priorOverlapAttendees = attendees.filter((a) => {
     if (!prevConfMap.has(a.id as number)) return false;
     const types = String(a.company_type || '').split(',').map((t: string) => t.trim());
-    return types.includes('Operator');
+    return types.includes(overlapCompanyType);
   });
 
   const landscape = {
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
     companyTypeBreakdown: Object.entries(companyTypeCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     seniorityBreakdown: Object.entries(seniorityCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+    priorOverlapTypeLabel,
     priorOverlapCount: priorOverlapAttendees.length,
     priorOverlapAttendees: priorOverlapAttendees.map((a) => ({
       id: a.id, first_name: a.first_name, last_name: a.last_name,
