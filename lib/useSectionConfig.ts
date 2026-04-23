@@ -35,6 +35,14 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'company_relationships', label: 'Company Level Relationships' },
     { key: 'relationship_timeline', label: 'Relationship Timeline' },
   ],
+  pre_conference_review: [
+    { key: 'landscape', label: 'Landscape' },
+    { key: 'icp', label: 'ICP Companies' },
+    { key: 'meetings', label: 'Meetings' },
+    { key: 'social', label: 'Social Events' },
+    { key: 'by-rep', label: 'By Rep' },
+    { key: 'relationships', label: 'Relationships' },
+  ],
 };
 
 interface SectionConfig {
