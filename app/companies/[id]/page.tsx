@@ -907,16 +907,16 @@ export default function CompanyDetailPage() {
           </h2>
           <div className="flex items-center gap-3">
             {touchpointTotal !== null && (
-              <span className="text-sm text-gray-500">
-                Touchpoints:{' '}
-                <button
-                  type="button"
-                  onClick={() => setShowTpMatrix(true)}
-                  className="font-semibold text-brand-secondary hover:underline focus:outline-none"
-                >
-                  {touchpointTotal}
-                </button>
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowTpMatrix(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                </svg>
+                <span className="text-sm font-medium text-brand-primary">{touchpointTotal} Touchpoints</span>
+              </button>
             )}
             {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
               <button
