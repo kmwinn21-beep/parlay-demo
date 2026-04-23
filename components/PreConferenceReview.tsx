@@ -56,6 +56,17 @@ export interface MeetingRow {
   hasConflict: boolean;
 }
 
+export interface SocialEventGuest {
+  attendee_id: number;
+  first_name: string;
+  last_name: string;
+  title: string | null;
+  company_name: string | null;
+  company_id: number | null;
+  company_type: string | null;
+  rsvp_status: string;
+}
+
 export interface SocialEventRow {
   id: number;
   event_type: string | null;
@@ -69,6 +80,7 @@ export interface SocialEventRow {
   internal_attendees: string | null;
   attending_count: number;
   declined_count: number;
+  guestList: SocialEventGuest[];
 }
 
 export interface CompanyInternalRel {

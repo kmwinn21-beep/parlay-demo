@@ -76,14 +76,11 @@ export async function GET(
     }),
     db.execute({
       sql: `SELECT se.id, se.event_type, se.event_name, se.host, se.location,
-                   se.event_date, se.event_time, se.invite_only, se.notes, se.internal_attendees,
-                   COUNT(rsvp_yes.attendee_id) as attending_count,
-                   COUNT(rsvp_no.attendee_id) as declined_count
+                   se.event_date, se.event_time, se.invite_only, se.notes,
+                   se.internal_attendees, se.prospect_attendees
             FROM social_events se
-            LEFT JOIN social_event_rsvps rsvp_yes ON se.id = rsvp_yes.social_event_id AND rsvp_yes.rsvp_status = 'attending'
-            LEFT JOIN social_event_rsvps rsvp_no ON se.id = rsvp_no.social_event_id AND rsvp_no.rsvp_status = 'declined'
             WHERE se.conference_id = ?
-            GROUP BY se.id ORDER BY se.event_date, se.event_time`,
+            ORDER BY se.event_date, se.event_time`,
       args: [confId],
     }),
     db.execute({
@@ -113,7 +110,9 @@ export async function GET(
 
   const companyIds = uniqueNumbers(attendees.map((a) => a.company_id as number | null));
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes] = await Promise.all([
+  const socialEventIds = uniqueNumbers(socialEvents.map((se) => se.id as number | null));
+
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -153,6 +152,19 @@ export async function GET(
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] }),
     // Relationship status config_options
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'rep_relationship_type'`, args: [] }),
+    // Social event RSVPs with attendee details
+    socialEventIds.length > 0
+      ? db.execute({
+          sql: `SELECT ser.social_event_id, ser.attendee_id, ser.rsvp_status,
+                       a.first_name, a.last_name, a.title,
+                       c.name as company_name, c.id as company_id, c.company_type
+                FROM social_event_rsvps ser
+                JOIN attendees a ON ser.attendee_id = a.id
+                LEFT JOIN companies c ON a.company_id = c.id
+                WHERE ser.social_event_id IN (${socialEventIds.map(() => '?').join(',')})`,
+          args: socialEventIds,
+        })
+      : Promise.resolve({ rows: [] }),
   ]);
 
   const internalRels = internalRelsRes.rows;
@@ -353,11 +365,32 @@ export async function GET(
   }));
 
   // --- Social Events ---
+  // Build per-event guest list from RSVP rows
+  const guestListByEvent = new Map<number, Array<{
+    attendee_id: number; first_name: string; last_name: string; title: string | null;
+    company_name: string | null; company_id: number | null; company_type: string | null; rsvp_status: string;
+  }>>();
+  for (const row of socialRsvpsRes.rows) {
+    const eid = Number(row.social_event_id);
+    if (!guestListByEvent.has(eid)) guestListByEvent.set(eid, []);
+    guestListByEvent.get(eid)!.push({
+      attendee_id: Number(row.attendee_id),
+      first_name: String(row.first_name),
+      last_name: String(row.last_name),
+      title: row.title ? String(row.title) : null,
+      company_name: row.company_name ? String(row.company_name) : null,
+      company_id: row.company_id != null ? Number(row.company_id) : null,
+      company_type: row.company_type ? String(row.company_type) : null,
+      rsvp_status: String(row.rsvp_status),
+    });
+  }
+
   const socialEventsData = socialEvents.map((se) => ({
-    id: se.id, event_type: se.event_type, event_name: se.event_name, host: se.host,
+    id: Number(se.id), event_type: se.event_type, event_name: se.event_name, host: se.host,
     location: se.location, event_date: se.event_date, event_time: se.event_time,
     invite_only: se.invite_only, notes: se.notes, internal_attendees: se.internal_attendees,
-    attending_count: se.attending_count, declined_count: se.declined_count,
+    attending_count: 0, declined_count: 0,
+    guestList: guestListByEvent.get(Number(se.id)) ?? [],
   }));
 
   // --- By Rep ---
