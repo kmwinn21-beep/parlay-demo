@@ -9,6 +9,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { BackButton } from '@/components/BackButton';
+import { CompanyTouchpointMatrix } from '@/components/CompanyTouchpointMatrix';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -154,6 +155,7 @@ export default function CompanyDetailPage() {
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
   const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
   const [touchpointTotal, setTouchpointTotal] = useState<number | null>(null);
+  const [showTpMatrix, setShowTpMatrix] = useState(false);
 
   // Operator / Capital relationship state
   const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
@@ -889,16 +891,6 @@ export default function CompanyDetailPage() {
                   );
                 })()}
               </div>
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Touchpoints</p>
-                {touchpointTotal !== null ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20">
-                    {touchpointTotal}
-                  </span>
-                ) : (
-                  <span className="text-sm text-gray-400">—</span>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -913,15 +905,29 @@ export default function CompanyDetailPage() {
           <h2 className="text-lg font-semibold text-brand-primary font-serif">
             Attendees ({company.attendees.length})
           </h2>
-          {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
-            <button
-              onClick={() => setAttendeesExpanded(prev => !prev)}
-              className="text-gray-400 hover:text-brand-secondary transition-colors p-1 rounded hover:bg-gray-50"
-              title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
-            >
-              <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {touchpointTotal !== null && (
+              <span className="text-sm text-gray-500">
+                Touchpoints:{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowTpMatrix(true)}
+                  className="font-semibold text-brand-secondary hover:underline focus:outline-none"
+                >
+                  {touchpointTotal}
+                </button>
+              </span>
+            )}
+            {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
+              <button
+                onClick={() => setAttendeesExpanded(prev => !prev)}
+                className="text-gray-400 hover:text-brand-secondary transition-colors p-1 rounded hover:bg-gray-50"
+                title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
+              >
+                <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {filteredAttendees.length === 0 ? (
@@ -1433,6 +1439,12 @@ export default function CompanyDetailPage() {
         onSuccess={fetchCompany}
         defaultCompanyId={Number(id)}
         availableConferences={company?.conferences}
+      />
+
+      <CompanyTouchpointMatrix
+        companyId={id}
+        open={showTpMatrix}
+        onClose={() => setShowTpMatrix(false)}
       />
     </div>
   );
