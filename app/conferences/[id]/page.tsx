@@ -29,6 +29,7 @@ import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
 import { useUser } from '@/components/UserContext';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { BatchCardScanModal } from '@/components/BatchCardScanModal';
+import { PreConferenceReview } from '@/components/PreConferenceReview';
 
 interface Attendee {
   id: number;
@@ -1045,7 +1046,8 @@ export default function ConferenceDetailPage() {
                 </div>
               )}
             </div>
-            <div className="flex gap-2 sm:ml-4 flex-shrink-0">
+            <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
+              <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
