@@ -12,7 +12,7 @@ function HealthBadge({ score }: { score: number }) {
     ? { label: 'Cool', cls: 'bg-orange-100 text-orange-700' }
     : { label: 'Cold', cls: 'bg-red-100 text-red-700' };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{label} {score}</span>
+    <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{label} {score}</span>
   );
 }
 
@@ -41,12 +41,12 @@ export function IcpCompaniesTab({ companies }: { companies: IcpCompany[] }) {
       <p className="text-sm text-gray-500">{companies.length} ICP {companies.length === 1 ? 'company' : 'companies'} — sorted by relationship health</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {companies.map((co) => (
-          <div key={co.id} className="border border-gray-200 rounded-xl p-4 hover:border-brand-secondary/40 hover:shadow-sm transition-all">
+          <div key={co.id} className="border border-gray-200 rounded-xl p-4 hover:border-brand-secondary/40 hover:shadow-sm transition-all overflow-hidden">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="min-w-0">
                 <h4 className="font-semibold text-gray-900 truncate text-sm">{co.name}</h4>
                 {co.company_type && (
-                  <span className="text-xs text-gray-500">{co.company_type}</span>
+                  <span className="text-xs text-gray-500 truncate block">{co.company_type}</span>
                 )}
               </div>
               <HealthBadge score={co.avgHealth} />

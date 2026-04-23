@@ -22,14 +22,14 @@ export function RelationshipsTab({ relationships }: { relationships: Relationshi
       <p className="text-sm text-gray-500">{relationships.length} relationship{relationships.length !== 1 ? 's' : ''} on record</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {relationships.map((rel) => (
-          <div key={rel.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all flex flex-col gap-3">
+          <div key={rel.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all flex flex-col gap-3 overflow-hidden min-w-0">
             {/* Header */}
-            <div>
+            <div className="min-w-0">
               <Link href={`/companies/${rel.company_id}`} className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate">
                 {rel.company_name}
               </Link>
               {rel.relationship_status && (
-                <span className="text-xs text-gray-500">{rel.relationship_status}</span>
+                <span className="text-xs text-gray-500 truncate block">{rel.relationship_status}</span>
               )}
             </div>
 
