@@ -121,14 +121,16 @@ export function CompanyTouchpointMatrix({ companyId, open, onClose }: Props) {
                                 return (
                                   <div
                                     key={pill.option_id}
-                                    className="inline-flex items-center gap-2 rounded-lg border-2 pl-2.5 pr-2 py-1 text-xs font-medium"
+                                    className="inline-flex items-center justify-between gap-3 rounded-lg border-2 pl-2.5 pr-2 py-1 text-xs font-medium"
                                     style={{
                                       borderColor: preset.hex,
                                       backgroundColor: `${preset.hex}18`,
                                       color: preset.hex,
+                                      minWidth: '7rem',
+                                      width: 'fit-content',
                                     }}
                                   >
-                                    <span className="truncate">{pill.value}</span>
+                                    <span>{pill.value}</span>
                                     <span className="font-bold flex-shrink-0">{pill.count}</span>
                                   </div>
                                 );
