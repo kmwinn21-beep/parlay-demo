@@ -345,7 +345,7 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
   const avatarLetter = (attendee.first_name?.[0] ?? '').toUpperCase();
 
   return (
-    <div className="card flex-shrink-0 flex flex-col gap-3 relative" style={{ width: 300, minWidth: 300 }}>
+    <div className="card flex-shrink-0 flex flex-col gap-3 relative" style={{ width: 360, minWidth: 360 }}>
       {/* Remove button */}
       <button onClick={onRemove} className="absolute top-3 right-3 text-gray-300 hover:text-gray-500 transition-colors text-xs">✕</button>
 
@@ -357,10 +357,10 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
         </div>
         <div className="flex-1 min-w-0">
           <Link href={`/attendees/${attendee.id}`}
-            className="font-semibold text-brand-primary hover:text-brand-secondary transition-colors leading-tight block truncate font-serif">
+            className="font-semibold text-brand-primary hover:text-brand-secondary transition-colors leading-tight block font-serif">
             {attendee.first_name} {attendee.last_name}
           </Link>
-          <div className="text-xs text-gray-500 truncate">
+          <div className="text-xs text-gray-500 leading-snug mt-0.5">
             {attendee.title && <span>{attendee.title}</span>}
             {attendee.title && attendee.company_name && <span> · </span>}
             {attendee.company_name && (
@@ -382,7 +382,9 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
           <span className="badge-green text-xs px-2 py-0.5">ICP</span>
         )}
         {attendee.status && (
-          <span className="badge-gray text-xs px-2 py-0.5">{attendee.status}</span>
+          <span className="badge-gray text-xs px-2 py-0.5">
+            {attendee.status.split(',').map(s => s.trim()).join(', ')}
+          </span>
         )}
       </div>
 
@@ -430,8 +432,11 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
                       {hasMeeting && <div className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-white" />}
                       {hasSocial && <div className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400 border border-white" />}
                     </button>
-                    <div className="text-[9px] text-gray-400 text-center max-w-[48px] truncate">
-                      {fmtDateShort(tp.conference.start_date)}
+                    <div className="text-[9px] text-gray-400 text-center max-w-[56px] leading-tight">
+                      <div>{fmtDateShort(tp.conference.start_date)}</div>
+                      <div className="text-gray-400 break-words leading-tight" style={{ fontSize: 8 }}>
+                        {tp.conference.name}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -567,7 +572,7 @@ export default function RelationshipTimeline() {
             const isLoading = loadingCards.has(a.id);
             if (isLoading || !data) {
               return (
-                <div key={a.id} className="card flex-shrink-0 flex items-center justify-center" style={{ width: 300, minWidth: 300, minHeight: 200 }}>
+                <div key={a.id} className="card flex-shrink-0 flex items-center justify-center" style={{ width: 360, minWidth: 360, minHeight: 200 }}>
                   <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
                 </div>
               );
@@ -581,6 +586,25 @@ export default function RelationshipTimeline() {
 }
 
 // ── Card detail panel ──────────────────────────────────────────────────────────
+
+function ExpandableNote({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const LIMIT = 120;
+  const isLong = content.length > LIMIT;
+  return (
+    <div className="py-1 border-t border-gray-100">
+      <div className="text-gray-600 leading-relaxed text-xs">
+        {expanded || !isLong ? content : `${content.slice(0, LIMIT).trimEnd()}…`}
+      </div>
+      {isLong && (
+        <button onClick={() => setExpanded(v => !v)}
+          className="text-brand-secondary text-[10px] font-medium mt-0.5 hover:underline">
+          {expanded ? 'Show less' : 'See more'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function CardDetail({ tp }: { tp: Touchpoint }) {
   const dColor = scoreColor(tp.depthScore);
@@ -634,8 +658,8 @@ function CardDetail({ tp }: { tp: Touchpoint }) {
       {tp.notes.length > 0 && (
         <div>
           <div className="text-[9px] uppercase tracking-wide text-gray-400 mb-1">Notes</div>
-          {tp.notes.slice(0, 2).map(n => (
-            <div key={n.id} className="text-gray-600 py-1 border-t border-gray-100 leading-relaxed line-clamp-2">{n.content}</div>
+          {tp.notes.map(n => (
+            <ExpandableNote key={n.id} content={n.content} />
           ))}
         </div>
       )}
