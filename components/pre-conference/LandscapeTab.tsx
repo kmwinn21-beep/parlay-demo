@@ -53,21 +53,22 @@ export function LandscapeTab({ data }: { data: LandscapeData }) {
         </div>
       </div>
 
-      {/* Prior overlap */}
+      {/* Prior overlap — Operator companies only */}
       <div>
         <div className="flex items-center gap-3 mb-4">
           <h3 className="text-sm font-semibold text-gray-700">Prior Conference Overlap</h3>
           <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
             {data.priorOverlapCount} attendee{data.priorOverlapCount !== 1 ? 's' : ''}
           </span>
+          <span className="text-xs text-gray-400">Operator companies only</span>
         </div>
         {data.priorOverlapAttendees.length === 0 ? (
-          <p className="text-sm text-gray-400">No returning attendees from prior conferences.</p>
+          <p className="text-sm text-gray-400">No returning Operator attendees from prior conferences.</p>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {data.priorOverlapAttendees.map((a) => (
               <Link
-                key={a.id}
+                key={String(a.id)}
                 href={`/attendees/${a.id}`}
                 className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-brand-secondary/40 hover:bg-blue-50/50 transition-colors"
               >
@@ -77,8 +78,11 @@ export function LandscapeTab({ data }: { data: LandscapeData }) {
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{a.first_name} {a.last_name}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{String(a.first_name)} {String(a.last_name)}</p>
                   <p className="text-xs text-gray-500 truncate">{a.company_name ?? '—'}</p>
+                  {a.prior_conference && (
+                    <p className="text-xs text-gray-400 truncate">({a.prior_conference})</p>
+                  )}
                 </div>
               </Link>
             ))}

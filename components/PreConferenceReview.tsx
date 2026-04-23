@@ -7,7 +7,6 @@ import { MeetingsTab } from './pre-conference/MeetingsTab';
 import { SocialEventsTab } from './pre-conference/SocialEventsTab';
 import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
-import { CoverageGapsTab } from './pre-conference/CoverageGapsTab';
 
 export interface PreConferenceSummary {
   conference: { id: number; name: string; start_date: string | null; end_date: string | null; location: string | null };
@@ -27,7 +26,7 @@ export interface LandscapeData {
   companyTypeBreakdown: { label: string; count: number }[];
   seniorityBreakdown: { label: string; count: number }[];
   priorOverlapCount: number;
-  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null }[];
+  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; prior_conference: string }[];
 }
 
 export interface IcpCompany {
@@ -70,17 +69,34 @@ export interface SocialEventRow {
   declined_count: number;
 }
 
+export interface CompanyInternalRel {
+  rep_names: string[];
+  relationship_status: string;
+  description: string;
+}
+
+export interface ByRepCompany {
+  company_id: number;
+  company_name: string;
+  company_type: string | null;
+  relationship_status: string | null;
+  description: string | null;
+  profit_type: string | null;
+  entity_structure: string | null;
+  wse: number | null;
+  services: string | null;
+  icp: string | null;
+  company_status: string | null;
+  assigned_user_names: string[];
+  website: string | null;
+  internal_relationships: CompanyInternalRel[];
+  attendees: { id: number; first_name: string; last_name: string; title: string | null; status: string | null; health: number }[];
+  notes: { id: number; content: string; created_at: string | null; rep: string | null; attendee_name: string | null; conference_name: string | null }[];
+}
+
 export interface ByRepEntry {
   rep: string;
-  companies: {
-    company_id: number;
-    company_name: string;
-    company_type: string | null;
-    relationship_status: string | null;
-    description: string | null;
-    attendees: { id: number; first_name: string; last_name: string; title: string | null; status: string | null; health: number }[];
-    notes: { id: number; content: string; created_at: string | null; rep: string | null; attendee_name: string | null; conference_name: string | null }[];
-  }[];
+  companies: ByRepCompany[];
 }
 
 export interface RelationshipRow {
@@ -89,16 +105,10 @@ export interface RelationshipRow {
   company_name: string;
   relationship_status: string;
   description: string;
-  rep_ids: string[];
+  rep_names: string[];
+  contact_names: string[];
   attendees: { id: number; first_name: string; last_name: string; title: string | null; health: number }[];
   recentNotes: { id: number; content: string; created_at: string | null; rep: string | null }[];
-}
-
-export interface GapsData {
-  icpAttendeesNoMeeting: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null }[];
-  icpCompaniesNoRelationship: { id: number; name: string; company_type: string | null }[];
-  attendeesWithOpenFollowUps: { id: number; first_name: string; last_name: string; company_name: string | null; openCount: number }[];
-  totalGaps: number;
 }
 
 export interface PreConferenceData {
@@ -109,10 +119,9 @@ export interface PreConferenceData {
   socialEvents: SocialEventRow[];
   byRep: ByRepEntry[];
   relationships: RelationshipRow[];
-  gaps: GapsData;
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'gaps';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -120,14 +129,13 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'social', label: 'Social Events' },
   { key: 'by-rep', label: 'By Rep' },
   { key: 'relationships', label: 'Relationships' },
-  { key: 'gaps', label: 'Coverage Gaps' },
 ];
 
-function StatPill({ label, value, highlight }: { label: string; value: number | string; highlight?: boolean }) {
+function StatPill({ label, value, accent }: { label: string; value: number | string; accent?: boolean }) {
   return (
-    <div className={`flex flex-col items-center px-4 py-2 rounded-lg ${highlight ? 'bg-brand-secondary/10' : 'bg-white/10'}`}>
-      <span className="text-xl font-bold text-white">{value}</span>
-      <span className="text-xs text-white/70 whitespace-nowrap">{label}</span>
+    <div className={`flex flex-col items-center px-4 py-2 rounded-lg ${accent ? 'bg-brand-highlight/20 ring-1 ring-brand-highlight/50' : 'bg-white/10'}`}>
+      <span className={`text-xl font-bold ${accent ? 'text-brand-highlight' : 'text-white'}`}>{value}</span>
+      <span className={`text-xs whitespace-nowrap ${accent ? 'text-brand-highlight/80' : 'text-white/70'}`}>{label}</span>
     </div>
   );
 }
@@ -158,11 +166,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
 
   return (
     <>
-      <button
-        onClick={load}
-        disabled={loading}
-        className="btn-primary flex items-center gap-2 text-sm"
-      >
+      <button onClick={load} disabled={loading} className="btn-primary flex items-center gap-2 text-sm">
         {loading ? (
           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -181,11 +185,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
       {open && data && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ animation: 'fadeUp 0.2s ease-out' }}>
           <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-
-          {/* Panel */}
           <div className="relative flex flex-col bg-white w-full h-full overflow-hidden shadow-2xl md:m-6 md:rounded-2xl md:h-[calc(100vh-48px)]">
             {/* Panel header */}
             <div className="bg-brand-primary px-6 py-4 flex-shrink-0">
@@ -203,12 +203,9 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
               <div className="flex flex-wrap gap-2 mt-3">
                 <StatPill label="Attendees" value={data.summary.totalAttendees} />
                 <StatPill label="Companies" value={data.summary.totalCompanies} />
-                <StatPill label="ICP" value={data.summary.icpCount} highlight />
+                <StatPill label="ICP" value={data.summary.icpCount} accent />
                 <StatPill label="Meetings" value={data.summary.meetingCount} />
                 <StatPill label="Open Follow-ups" value={data.summary.openFollowUps} />
-                {data.gaps.totalGaps > 0 && (
-                  <StatPill label="Gaps" value={data.gaps.totalGaps} />
-                )}
               </div>
             </div>
 
@@ -216,20 +213,10 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
             <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
               <nav className="flex gap-0 px-4">
                 {TABS.map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => setActiveTab(t.key)}
+                  <button key={t.key} onClick={() => setActiveTab(t.key)}
                     className={`py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                      ${activeTab === t.key
-                        ? 'border-brand-secondary text-brand-secondary'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                  >
+                      ${activeTab === t.key ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     {t.label}
-                    {t.key === 'gaps' && data.gaps.totalGaps > 0 && (
-                      <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
-                        {data.gaps.totalGaps}
-                      </span>
-                    )}
                   </button>
                 ))}
               </nav>
@@ -243,7 +230,6 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
               {activeTab === 'social' && <SocialEventsTab events={data.socialEvents} />}
               {activeTab === 'by-rep' && <ByRepTab entries={data.byRep} conferenceId={conferenceId} conferenceName={conferenceName} />}
               {activeTab === 'relationships' && <RelationshipsTab relationships={data.relationships} />}
-              {activeTab === 'gaps' && <CoverageGapsTab gaps={data.gaps} />}
             </div>
           </div>
         </div>

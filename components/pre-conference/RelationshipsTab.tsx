@@ -20,44 +20,58 @@ export function RelationshipsTab({ relationships }: { relationships: Relationshi
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">{relationships.length} relationship{relationships.length !== 1 ? 's' : ''} on record</p>
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {relationships.map((rel) => (
-          <div key={rel.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all">
+          <div key={rel.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all flex flex-col gap-3">
             {/* Header */}
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="min-w-0">
-                <Link href={`/companies/${rel.company_id}`} className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm truncate block">
-                  {rel.company_name}
-                </Link>
+            <div>
+              <Link href={`/companies/${rel.company_id}`} className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate">
+                {rel.company_name}
+              </Link>
+              {rel.relationship_status && (
                 <span className="text-xs text-gray-500">{rel.relationship_status}</span>
-              </div>
+              )}
             </div>
 
             {/* Description */}
             {rel.description && (
-              <p className="text-xs text-gray-600 mb-3 line-clamp-2">{rel.description}</p>
+              <p className="text-xs text-gray-600 line-clamp-3">{rel.description}</p>
             )}
 
-            {/* Reps */}
-            {rel.rep_ids.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-3">
-                {rel.rep_ids.map((rep) => (
-                  <span key={rep} className="px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs border border-blue-200">
-                    {rep}
+            {/* Rep names (resolved) */}
+            {rel.rep_names.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {rel.rep_names.map((name) => (
+                  <span key={name} className="px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs border border-blue-200">
+                    {name}
                   </span>
                 ))}
               </div>
             )}
 
+            {/* Contact names (resolved from attendee IDs) */}
+            {rel.contact_names.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Contacts</p>
+                <div className="flex flex-wrap gap-1">
+                  {rel.contact_names.map((name) => (
+                    <span key={name} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Attendees at this conference */}
             {rel.attendees.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">At This Conference</p>
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">At This Conference</p>
                 <div className="space-y-1">
                   {rel.attendees.map((a) => (
-                    <Link key={a.id} href={`/attendees/${a.id}`} className="flex items-center gap-2 text-xs hover:text-brand-secondary transition-colors">
+                    <Link key={String(a.id)} href={`/attendees/${a.id}`} className="flex items-center gap-2 text-xs hover:text-brand-secondary transition-colors">
                       <HealthDot score={a.health} />
-                      <span className="text-gray-700 truncate">{a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}</span>
+                      <span className="text-gray-700 truncate">{String(a.first_name)} {String(a.last_name)}{a.title ? ` · ${String(a.title)}` : ''}</span>
                       <span className="text-gray-400 ml-auto flex-shrink-0">{a.health}</span>
                     </Link>
                   ))}
@@ -68,7 +82,7 @@ export function RelationshipsTab({ relationships }: { relationships: Relationshi
             {/* Recent notes */}
             {rel.recentNotes.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Recent Notes</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Recent Notes</p>
                 <div className="space-y-1.5">
                   {rel.recentNotes.map((n) => (
                     <div key={n.id} className="bg-gray-50 rounded-lg px-3 py-2">
