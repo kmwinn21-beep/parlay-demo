@@ -40,7 +40,7 @@ export async function GET(
     args: [attendeeId],
   });
 
-  const touchpoints = await Promise.all(
+  const touchpointResults = await Promise.all(
     confRows.rows.map(async (conf) => {
       const confId = conf.id as number;
 
@@ -88,69 +88,81 @@ export async function GET(
       const followUps = followUpsRes.rows;
       const socialEvents = socialRes.rows;
 
+      const hasMeeting = meetings.length > 0;
+      const meetingHasOutcome = meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
+      const hasNotes = notes.length > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
+      const hasSocialAttending = socialEvents.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attending'));
+      const hasFollowUps = followUps.length > 0;
+      const hasCompletedFu = followUps.some(f => f.completed);
+
       let depth = 0;
-      if (details?.action) depth += 20;
-      if (meetings.length > 0) depth += 30;
-      if (meetings.some((m) => m.outcome)) depth += 15;
-      if (notes.length > 0 || details?.notes) depth += 15;
-      if (socialEvents.some((e) => e.rsvp_status === 'attending')) depth += 10;
-      if (followUps.length > 0) depth += 5;
-      if (followUps.some((f) => f.completed)) depth += 5;
+      if (hasMeeting) depth += 25;
+      if (meetingHasOutcome) depth += 20;
+      if (hasNotes) depth += 20;
+      if (hasSocialAttending) depth += 20;
+      if (hasFollowUps && hasCompletedFu) depth += 15;
       depth = Math.min(100, depth);
 
+      const isZeroEngagement = !hasMeeting && !hasNotes && !hasSocialAttending && !hasFollowUps;
+
       return {
-        conference: {
-          id: conf.id,
-          name: conf.name,
-          start_date: conf.start_date,
-          end_date: conf.end_date,
-          location: conf.location,
+        touchpoint: {
+          conference: {
+            id: conf.id,
+            name: conf.name,
+            start_date: conf.start_date,
+            end_date: conf.end_date,
+            location: conf.location,
+          },
+          details: details
+            ? {
+                action: details.action,
+                notes: details.notes,
+                next_steps: details.next_steps,
+                assigned_rep: details.assigned_rep,
+                completed: details.completed,
+              }
+            : null,
+          meetings: meetings.map((m) => ({
+            id: m.id,
+            meeting_date: m.meeting_date,
+            meeting_time: m.meeting_time,
+            location: m.location,
+            scheduled_by: m.scheduled_by,
+            outcome: m.outcome,
+            meeting_type: m.meeting_type,
+          })),
+          notes: notes.map((n) => ({
+            id: n.id,
+            content: n.content,
+            created_at: n.created_at,
+            conference_name: n.conference_name,
+            rep: n.rep,
+          })),
+          followUps: followUps.map((f) => ({
+            id: f.id,
+            conference_id: f.conference_id,
+            next_steps: f.next_steps,
+            assigned_rep: f.assigned_rep,
+            completed: f.completed,
+            created_at: f.created_at,
+          })),
+          socialEvents: socialEvents.map((e) => ({
+            social_event_id: e.social_event_id,
+            rsvp_status: e.rsvp_status,
+            conference_id: e.conference_id,
+            event_type: e.event_type,
+            event_name: e.event_name,
+            event_date: e.event_date,
+          })),
+          depthScore: depth,
         },
-        details: details
-          ? {
-              action: details.action,
-              notes: details.notes,
-              next_steps: details.next_steps,
-              assigned_rep: details.assigned_rep,
-              completed: details.completed,
-            }
-          : null,
-        meetings: meetings.map((m) => ({
-          id: m.id,
-          meeting_date: m.meeting_date,
-          meeting_time: m.meeting_time,
-          location: m.location,
-          scheduled_by: m.scheduled_by,
-          outcome: m.outcome,
-          meeting_type: m.meeting_type,
-        })),
-        notes: notes.map((n) => ({
-          id: n.id,
-          content: n.content,
-          created_at: n.created_at,
-          conference_name: n.conference_name,
-          rep: n.rep,
-        })),
-        followUps: followUps.map((f) => ({
-          id: f.id,
-          conference_id: f.conference_id,
-          next_steps: f.next_steps,
-          assigned_rep: f.assigned_rep,
-          completed: f.completed,
-          created_at: f.created_at,
-        })),
-        socialEvents: socialEvents.map((e) => ({
-          social_event_id: e.social_event_id,
-          rsvp_status: e.rsvp_status,
-          conference_id: e.conference_id,
-          event_type: e.event_type,
-          event_name: e.event_name,
-          event_date: e.event_date,
-        })),
-        depthScore: depth,
+        isZeroEngagement,
       };
     })
   );
+
+  const touchpoints = touchpointResults.map(r => r.touchpoint);
 
   const totalConferences = touchpoints.length;
   const lastConfDate =
@@ -161,26 +173,23 @@ export async function GET(
     ? Math.floor((Date.now() - new Date(lastConfDate + 'T00:00:00').getTime()) / 86400000)
     : null;
 
-  const avgDepth =
+  const avgDepthScore =
     totalConferences > 0
       ? touchpoints.reduce((sum, t) => sum + t.depthScore, 0) / totalConferences
       : 0;
 
   const allFollowUps = touchpoints.flatMap((t) => t.followUps);
-  const followUpCompletionRate =
-    allFollowUps.length > 0
-      ? Math.round((allFollowUps.filter((f) => f.completed).length / allFollowUps.length) * 100)
-      : null;
+  const totalFus = allFollowUps.length;
+  const completedFus = allFollowUps.filter((f) => f.completed).length;
+  const followUpCompletionRate = totalFus > 0 ? Math.round((completedFus / totalFus) * 100) : null;
 
-  const recency =
-    daysSinceLastTouch !== null
-      ? Math.max(0, 100 - (daysSinceLastTouch / 365) * 100)
-      : 0;
-  const frequency = Math.min(100, (totalConferences / 5) * 100);
-  const completionForScore = followUpCompletionRate ?? 50;
-  const healthScore = Math.round(
-    recency * 0.35 + avgDepth * 0.35 + frequency * 0.2 + completionForScore * 0.1
-  );
+  const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
+
+  const ghostCount = touchpointResults.filter(r => r.isZeroEngagement).length;
+  const ghostPenalty = totalConferences > 0 ? (ghostCount / totalConferences) * 100 : 0;
+
+  const rawScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
+  const healthScore = Math.round(Math.max(0, Math.min(100, rawScore)));
 
   return NextResponse.json({
     attendee,

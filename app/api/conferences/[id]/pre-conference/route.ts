@@ -3,18 +3,6 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 
-function calcHealthScore(
-  daysSinceLast: number | null,
-  totalConfs: number,
-  avgDepth: number,
-  completionRate: number | null
-) {
-  const recency = daysSinceLast !== null ? Math.max(0, 100 - (daysSinceLast / 365) * 100) : 0;
-  const frequency = Math.min(100, (totalConfs / 5) * 100);
-  const completion = completionRate ?? 50;
-  return Math.round(recency * 0.35 + avgDepth * 0.35 + frequency * 0.2 + completion * 0.1);
-}
-
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
   const out: number[] = [];
@@ -112,7 +100,9 @@ export async function GET(
 
   const socialEventIds = uniqueNumbers(socialEvents.map((se) => se.id as number | null));
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes] = await Promise.all([
+  const attendeeIds = attendees.map((a) => a.id);
+
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -152,7 +142,7 @@ export async function GET(
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] }),
     // Relationship status config_options
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'rep_relationship_type'`, args: [] }),
-    // Social event RSVPs with attendee details
+    // Social event RSVPs with attendee details (for social events tab guest list)
     socialEventIds.length > 0
       ? db.execute({
           sql: `SELECT ser.social_event_id, ser.attendee_id, ser.rsvp_status,
@@ -163,6 +153,54 @@ export async function GET(
                 LEFT JOIN companies c ON a.company_id = c.id
                 WHERE ser.social_event_id IN (${socialEventIds.map(() => '?').join(',')})`,
           args: socialEventIds,
+        })
+      : Promise.resolve({ rows: [] }),
+    // Cross-conference meetings per attendee (for health score depth)
+    attendeeIds.length > 0
+      ? db.execute({
+          sql: `SELECT m.attendee_id, m.conference_id,
+                       COUNT(m.id) as meeting_count,
+                       SUM(CASE WHEN m.outcome IS NOT NULL AND TRIM(m.outcome) != '' THEN 1 ELSE 0 END) as outcome_count
+                FROM meetings m
+                WHERE m.attendee_id IN (${attendeeIds.map(() => '?').join(',')})
+                GROUP BY m.attendee_id, m.conference_id`,
+          args: attendeeIds,
+        })
+      : Promise.resolve({ rows: [] }),
+    // Cross-conference follow_ups per attendee (for health score completion + ghost)
+    attendeeIds.length > 0
+      ? db.execute({
+          sql: `SELECT f.attendee_id, f.conference_id,
+                       COUNT(f.id) as total_fus,
+                       SUM(CASE WHEN f.completed = 1 THEN 1 ELSE 0 END) as completed_fus
+                FROM follow_ups f
+                WHERE f.attendee_id IN (${attendeeIds.map(() => '?').join(',')})
+                GROUP BY f.attendee_id, f.conference_id`,
+          args: attendeeIds,
+        })
+      : Promise.resolve({ rows: [] }),
+    // Cross-conference social_event_rsvps 'attending' per attendee (for health score depth + ghost)
+    attendeeIds.length > 0
+      ? db.execute({
+          sql: `SELECT ser.attendee_id, se.conference_id
+                FROM social_event_rsvps ser
+                JOIN social_events se ON ser.social_event_id = se.id
+                WHERE ser.attendee_id IN (${attendeeIds.map(() => '?').join(',')})
+                  AND ser.rsvp_status LIKE '%attending%'
+                GROUP BY ser.attendee_id, se.conference_id`,
+          args: attendeeIds,
+        })
+      : Promise.resolve({ rows: [] }),
+    // Cross-conference entity_notes per attendee (for health score depth + ghost)
+    attendeeIds.length > 0
+      ? db.execute({
+          sql: `SELECT en.entity_id as attendee_id, c.id as conference_id
+                FROM entity_notes en
+                JOIN conferences c ON c.name = en.conference_name
+                WHERE en.entity_type = 'attendee'
+                  AND en.entity_id IN (${attendeeIds.map(() => '?').join(',')})
+                GROUP BY en.entity_id, c.id`,
+          args: attendeeIds,
         })
       : Promise.resolve({ rows: [] }),
   ]);
@@ -210,40 +248,78 @@ export async function GET(
     detailsMap.set(`${row.attendee_id}_${row.conference_id}`, { action: row.action, notes: row.notes });
   }
 
-  const followUpsMap = new Map<number, typeof followUps>();
-  for (const f of followUps) {
-    const aid = f.attendee_id as number;
-    if (!followUpsMap.has(aid)) followUpsMap.set(aid, []);
-    followUpsMap.get(aid)!.push(f);
+  // Cross-conference health score lookup structures
+  const xMeetingMap = new Map<string, { meeting_count: number; outcome_count: number }>();
+  for (const row of xMeetingsRes.rows) {
+    xMeetingMap.set(`${row.attendee_id}_${row.conference_id}`, {
+      meeting_count: Number(row.meeting_count),
+      outcome_count: Number(row.outcome_count),
+    });
+  }
+
+  const xFollowUpMap = new Map<string, { total_fus: number; completed_fus: number }>();
+  for (const row of xFollowUpsRes.rows) {
+    xFollowUpMap.set(`${row.attendee_id}_${row.conference_id}`, {
+      total_fus: Number(row.total_fus),
+      completed_fus: Number(row.completed_fus),
+    });
+  }
+
+  const xSocialSet = new Set<string>();
+  for (const row of xSocialRes.rows) {
+    xSocialSet.add(`${row.attendee_id}_${row.conference_id}`);
+  }
+
+  const xNotesSet = new Set<string>();
+  for (const row of xNotesRes.rows) {
+    xNotesSet.add(`${row.attendee_id}_${row.conference_id}`);
   }
 
   function calcAttendeeHealth(aid: number): number {
     const confs = attendeeConfMap.get(aid) ?? [];
     const totalConfs = confs.length;
     if (totalConfs === 0) return 0;
-    const sorted = confs.slice().sort((a, b) =>
-      String(b.end_date || b.start_date).localeCompare(String(a.end_date || a.start_date))
-    );
-    const lastDate = String(sorted[0].end_date || sorted[0].start_date);
-    const daysSince = Math.floor((Date.now() - new Date(lastDate + 'T00:00:00').getTime()) / 86400000);
-    const meetingsForAtt = meetings.filter((m) => m.attendee_id === aid);
-    const fuForAtt = followUpsMap.get(aid) ?? [];
+
     let totalDepth = 0;
+    let ghostCount = 0;
+    let totalFus = 0;
+    let completedFus = 0;
+
     for (const c of confs) {
-      const det = detailsMap.get(`${aid}_${c.conference_id}`);
+      const key = `${aid}_${c.conference_id}`;
+      const det = detailsMap.get(key);
+      const meetData = xMeetingMap.get(key);
+      const fuData = xFollowUpMap.get(key);
+
+      const hasMeeting = (meetData?.meeting_count ?? 0) > 0;
+      const hasOutcome = (meetData?.outcome_count ?? 0) > 0;
+      const hasNotes = xNotesSet.has(key) || (det?.notes != null && String(det.notes).trim().length > 0);
+      const hasSocial = xSocialSet.has(key);
+      const hasFu = (fuData?.total_fus ?? 0) > 0;
+      const hasFuCompleted = (fuData?.completed_fus ?? 0) > 0;
+
       let d = 0;
-      if (det?.action) d += 20;
-      const confMeetings = meetingsForAtt.filter((m) => m.conference_id === c.conference_id);
-      if (confMeetings.length > 0) d += 30;
-      if (confMeetings.some((m) => m.outcome)) d += 15;
-      if (det?.notes) d += 15;
+      if (hasMeeting) d += 25;
+      if (hasOutcome) d += 20;
+      if (hasNotes) d += 20;
+      if (hasSocial) d += 20;
+      if (hasFu && hasFuCompleted) d += 15;
       totalDepth += Math.min(100, d);
+
+      if (!hasMeeting && !hasNotes && !hasSocial && !hasFu) ghostCount++;
+
+      if (fuData) {
+        totalFus += fuData.total_fus;
+        completedFus += fuData.completed_fus;
+      }
     }
-    const avgDepth = totalConfs > 0 ? totalDepth / totalConfs : 0;
-    const completion = fuForAtt.length > 0
-      ? (fuForAtt.filter((f) => f.completed).length / fuForAtt.length) * 100
-      : null;
-    return calcHealthScore(daysSince, totalConfs, avgDepth, completion);
+
+    const avgDepthScore = totalDepth / totalConfs;
+    const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
+    const ghostPenalty = (ghostCount / totalConfs) * 100;
+
+    const rawScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
+    return Math.round(Math.max(0, Math.min(100, rawScore)));
   }
 
   const attendeeHealthMap = new Map<number, number>();
