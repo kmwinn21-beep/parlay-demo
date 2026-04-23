@@ -61,8 +61,13 @@ export async function GET(
           args: [attendeeId],
         }),
         db.execute({
-          sql: `SELECT id, conference_id, next_steps, assigned_rep, completed, created_at
-                FROM follow_ups WHERE attendee_id = ? AND conference_id = ?`,
+          sql: `SELECT f.id, f.conference_id,
+                       COALESCE(co.value, f.next_steps) as next_steps,
+                       f.next_steps_notes, f.assigned_rep, f.completed, f.created_at
+                FROM follow_ups f
+                LEFT JOIN config_options co
+                  ON co.id = CAST(f.next_steps AS INTEGER) AND co.category = 'next_steps'
+                WHERE f.attendee_id = ? AND f.conference_id = ?`,
           args: [attendeeId, confId],
         }),
         db.execute({
