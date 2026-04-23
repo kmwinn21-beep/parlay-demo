@@ -65,6 +65,7 @@ export interface SocialEventGuest {
   company_id: number | null;
   company_type: string | null;
   rsvp_status: string;
+  assigned_user_names: string[];
 }
 
 export interface SocialEventRow {

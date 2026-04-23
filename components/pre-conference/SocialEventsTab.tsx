@@ -23,6 +23,17 @@ function fmtTime(t: string | null) {
   } catch { return t; }
 }
 
+function UserPill({ name }: { name: string }) {
+  return (
+    <span className="self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-blue-100 text-blue-800 border border-blue-300">
+      <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      {name}
+    </span>
+  );
+}
+
 /* ─── SVG helpers ─── */
 const CheckSvg = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>;
 const XSvg = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>;
@@ -84,6 +95,9 @@ function GuestRow({ guest, eventId, onUpdate }: {
           ? <Link href={`/companies/${guest.company_id}`} className="hover:underline text-brand-primary">{guest.company_name}</Link>
           : <span>{guest.company_name || '—'}</span>
         }
+      </td>
+      <td className="py-2 pr-3 hidden sm:table-cell">
+        {guest.assigned_user_names.length > 0 && <UserPill name={guest.assigned_user_names[0]} />}
       </td>
       <td className="py-2">
         <div className="flex gap-1">
@@ -181,6 +195,7 @@ function GuestListPanel({ event }: { event: SocialEventRow }) {
               <tr className="border-b border-gray-200">
                 <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Name</th>
                 <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Company</th>
+                <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Rep</th>
                 <th className="pb-1.5 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">RSVP</th>
               </tr>
             </thead>

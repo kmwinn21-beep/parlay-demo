@@ -157,7 +157,7 @@ export async function GET(
       ? db.execute({
           sql: `SELECT ser.social_event_id, ser.attendee_id, ser.rsvp_status,
                        a.first_name, a.last_name, a.title,
-                       c.name as company_name, c.id as company_id, c.company_type
+                       c.name as company_name, c.id as company_id, c.company_type, c.assigned_user
                 FROM social_event_rsvps ser
                 JOIN attendees a ON ser.attendee_id = a.id
                 LEFT JOIN companies c ON a.company_id = c.id
@@ -368,7 +368,8 @@ export async function GET(
   // Build per-event guest list from RSVP rows
   const guestListByEvent = new Map<number, Array<{
     attendee_id: number; first_name: string; last_name: string; title: string | null;
-    company_name: string | null; company_id: number | null; company_type: string | null; rsvp_status: string;
+    company_name: string | null; company_id: number | null; company_type: string | null;
+    rsvp_status: string; assigned_user_names: string[];
   }>>();
   for (const row of socialRsvpsRes.rows) {
     const eid = Number(row.social_event_id);
@@ -382,6 +383,7 @@ export async function GET(
       company_id: row.company_id != null ? Number(row.company_id) : null,
       company_type: row.company_type ? String(row.company_type) : null,
       rsvp_status: String(row.rsvp_status),
+      assigned_user_names: resolveUserIds(row.assigned_user),
     });
   }
 
