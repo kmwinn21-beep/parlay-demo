@@ -57,8 +57,10 @@ export async function GET(
         }),
         db.execute({
           sql: `SELECT id, content, created_at, conference_name, rep
-                FROM entity_notes WHERE entity_type = 'attendee' AND entity_id = ?`,
-          args: [attendeeId],
+                FROM entity_notes
+                WHERE entity_type = 'attendee' AND entity_id = ?
+                  AND (conference_name = ? OR conference_name IS NULL OR conference_name = '')`,
+          args: [attendeeId, conf.name],
         }),
         db.execute({
           sql: `SELECT f.id, f.conference_id,
