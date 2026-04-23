@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { TouchpointMap } from './TouchpointMap';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ interface TimelineData {
   daysSinceLastTouch: number | null;
   totalTouchpoints: number;
   followUpCompletionRate: number | null;
+  loggedTouchpoints: number;
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -336,10 +338,11 @@ function CardCarousel({ children }: { children: React.ReactNode }) {
 // ── AttendeeCard ───────────────────────────────────────────────────────────────
 
 function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => void }) {
-  const { attendee, touchpoints, healthScore, daysSinceLastTouch, totalTouchpoints, followUpCompletionRate } = data;
+  const { attendee, touchpoints, healthScore, totalTouchpoints, followUpCompletionRate, loggedTouchpoints } = data;
   const [selectedIdx, setSelectedIdx] = useState<number | null>(touchpoints.length > 0 ? touchpoints.length - 1 : null);
+  const [showTpMap, setShowTpMap] = useState(false);
+  const tpBtnRef = useRef<HTMLDivElement>(null);
   const hColor = scoreColor(healthScore);
-  const stale = daysSinceLastTouch !== null && daysSinceLastTouch > 180;
   const selectedTp = selectedIdx !== null ? touchpoints[selectedIdx] ?? null : null;
 
   const avatarLetter = (attendee.first_name?.[0] ?? '').toUpperCase();
@@ -390,18 +393,31 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: 'Conferences', value: totalTouchpoints, sub: '' },
-          { label: 'Last Touch', value: daysSinceLastTouch !== null ? daysSinceLastTouch : '—', sub: daysSinceLastTouch !== null ? 'days' : '', warn: stale },
-          { label: 'Follow-ups', value: followUpCompletionRate !== null ? `${followUpCompletionRate}%` : '—', sub: '' },
-        ].map(({ label, value, sub, warn }) => (
-          <div key={label} className="rounded-lg p-2 text-center"
-            style={{ background: warn ? 'rgba(239,68,68,0.04)' : '#F1F5F9', border: `1px solid ${warn ? 'rgba(239,68,68,0.2)' : 'rgba(34,58,94,0.07)'}` }}>
-            <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">{label}</div>
-            <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: warn ? '#ef4444' : '#223A5E' }}>{value}</div>
-            {sub && <div className="text-[9px] text-gray-400 mt-0.5">{sub}</div>}
-          </div>
-        ))}
+        <div className="rounded-lg p-2 text-center" style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}>
+          <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Conferences</div>
+          <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: '#223A5E' }}>{totalTouchpoints}</div>
+        </div>
+        <div ref={tpBtnRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setShowTpMap(prev => !prev)}
+            className="w-full rounded-lg p-2 text-center hover:bg-blue-50 transition-colors cursor-pointer"
+            style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}
+          >
+            <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Touchpoints</div>
+            <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: '#223A5E' }}>{loggedTouchpoints}</div>
+          </button>
+          <TouchpointMap
+            attendeeId={attendee.id}
+            open={showTpMap}
+            onClose={() => setShowTpMap(false)}
+            anchorRef={tpBtnRef as React.RefObject<HTMLElement>}
+          />
+        </div>
+        <div className="rounded-lg p-2 text-center" style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}>
+          <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Follow-ups</div>
+          <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: '#223A5E' }}>{followUpCompletionRate !== null ? `${followUpCompletionRate}%` : '—'}</div>
+        </div>
       </div>
 
       {/* Timeline nodes */}

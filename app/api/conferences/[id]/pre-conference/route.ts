@@ -37,7 +37,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id,
@@ -89,6 +89,7 @@ export async function GET(
       args: [confId, confId],
     }),
     getIcpConfig(),
+    db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -220,6 +221,13 @@ export async function GET(
     relStatusMap.set(row.id as number, String(row.value));
   }
 
+  // Build action value → action_key lookup for depth scoring
+  const actionKeyMap = new Map<string, string>();
+  for (const row of actionOptsRes.rows) {
+    if (row.action_key) actionKeyMap.set(String(row.value), String(row.action_key));
+  }
+  const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
+
   function resolveIdList(raw: unknown, map: Map<number, string>): string | null {
     if (!raw) return null;
     const str = String(raw).trim();
@@ -291,22 +299,27 @@ export async function GET(
       const meetData = xMeetingMap.get(key);
       const fuData = xFollowUpMap.get(key);
 
-      const hasMeeting = (meetData?.meeting_count ?? 0) > 0;
-      const hasOutcome = (meetData?.outcome_count ?? 0) > 0;
+      const detailActions = (det?.action ? String(det.action) : '').split(',').map(s => s.trim()).filter(Boolean);
+      const detailActionKeys = detailActions.map(v => actionKeyMap.get(v) ?? null).filter((k): k is string => k !== null);
+
+      const hasMeetingHeld = detailActionKeys.some(k => k === 'meeting_held');
+      const hasOutcome = hasMeetingHeld && (meetData?.outcome_count ?? 0) > 0;
       const hasNotes = xNotesSet.has(key) || (det?.notes != null && String(det.notes).trim().length > 0);
       const hasSocial = xSocialSet.has(key);
       const hasFu = (fuData?.total_fus ?? 0) > 0;
       const hasFuCompleted = (fuData?.completed_fus ?? 0) > 0;
+      const hasTouchpoint = detailActions.length > 0 && detailActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
 
       let d = 0;
-      if (hasMeeting) d += 25;
+      if (hasMeetingHeld) d += 25;
       if (hasOutcome) d += 20;
-      if (hasNotes) d += 20;
+      if (hasNotes) d += 10;
       if (hasSocial) d += 20;
       if (hasFu && hasFuCompleted) d += 15;
+      if (hasTouchpoint) d += 10;
       totalDepth += Math.min(100, d);
 
-      if (!hasMeeting && !hasNotes && !hasSocial && !hasFu) ghostCount++;
+      if (!hasMeetingHeld && !hasNotes && !hasSocial && !hasFu) ghostCount++;
 
       if (fuData) {
         totalFus += fuData.total_fus;

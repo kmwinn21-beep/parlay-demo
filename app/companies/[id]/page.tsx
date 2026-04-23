@@ -9,6 +9,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { BackButton } from '@/components/BackButton';
+import { CompanyTouchpointMatrix } from '@/components/CompanyTouchpointMatrix';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -153,6 +154,8 @@ export default function CompanyDetailPage() {
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
   const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
+  const [touchpointTotal, setTouchpointTotal] = useState<number | null>(null);
+  const [showTpMatrix, setShowTpMatrix] = useState(false);
 
   // Operator / Capital relationship state
   const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
@@ -267,13 +270,20 @@ export default function CompanyDetailPage() {
       if (notesRes.ok) setCompanyNotes(await notesRes.json());
       if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
 
-      // Fetch pinned notes for this company
+      // Fetch pinned notes and touchpoint total in parallel
       try {
-        const pinnedRes = await fetch(`/api/pinned-notes?entity_type=company&entity_id=${id}`);
+        const [pinnedRes, tpRes] = await Promise.all([
+          fetch(`/api/pinned-notes?entity_type=company&entity_id=${id}`),
+          fetch(`/api/companies/${id}/touchpoints`),
+        ]);
         if (pinnedRes.ok) {
           const pinData = await pinnedRes.json();
           setPinnedNotes(pinData);
           setPinnedNoteIds(new Set(pinData.map((p: PinnedNote) => p.note_id)));
+        }
+        if (tpRes.ok) {
+          const tpData = await tpRes.json();
+          setTouchpointTotal(tpData.total ?? 0);
         }
       } catch { /* non-fatal */ }
     } catch {
@@ -895,15 +905,29 @@ export default function CompanyDetailPage() {
           <h2 className="text-lg font-semibold text-brand-primary font-serif">
             Attendees ({company.attendees.length})
           </h2>
-          {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
-            <button
-              onClick={() => setAttendeesExpanded(prev => !prev)}
-              className="text-gray-400 hover:text-brand-secondary transition-colors p-1 rounded hover:bg-gray-50"
-              title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
-            >
-              <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {touchpointTotal !== null && (
+              <button
+                type="button"
+                onClick={() => setShowTpMatrix(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                </svg>
+                <span className="text-sm font-medium text-brand-primary">{touchpointTotal} Touchpoints</span>
+              </button>
+            )}
+            {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
+              <button
+                onClick={() => setAttendeesExpanded(prev => !prev)}
+                className="text-gray-400 hover:text-brand-secondary transition-colors p-1 rounded hover:bg-gray-50"
+                title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
+              >
+                <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {filteredAttendees.length === 0 ? (
@@ -1415,6 +1439,12 @@ export default function CompanyDetailPage() {
         onSuccess={fetchCompany}
         defaultCompanyId={Number(id)}
         availableConferences={company?.conferences}
+      />
+
+      <CompanyTouchpointMatrix
+        companyId={id}
+        open={showTpMatrix}
+        onClose={() => setShowTpMatrix(false)}
       />
     </div>
   );

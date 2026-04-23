@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 
+const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,19 +19,31 @@ export async function GET(
 
   await dbReady;
 
-  const attRow = await db.execute({
-    sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
-                 c.name as company_name, c.company_type, c.icp, c.wse
-          FROM attendees a LEFT JOIN companies c ON a.company_id = c.id
-          WHERE a.id = ?`,
-    args: [attendeeId],
-  });
+  const [attRow, actionOptsRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
+                   c.name as company_name, c.company_type, c.icp, c.wse
+            FROM attendees a LEFT JOIN companies c ON a.company_id = c.id
+            WHERE a.id = ?`,
+      args: [attendeeId],
+    }),
+    db.execute({
+      sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`,
+      args: [],
+    }),
+  ]);
 
   if (attRow.rows.length === 0) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
   const attendee = attRow.rows[0];
+
+  // Build action value → action_key lookup
+  const actionKeyMap = new Map<string, string>();
+  for (const row of actionOptsRes.rows) {
+    if (row.action_key) actionKeyMap.set(String(row.value), String(row.action_key));
+  }
 
   const confRows = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location
@@ -88,22 +102,29 @@ export async function GET(
       const followUps = followUpsRes.rows;
       const socialEvents = socialRes.rows;
 
-      const hasMeeting = meetings.length > 0;
-      const meetingHasOutcome = meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
+      // Resolve action_keys from conference_attendee_details.action
+      const detailActions = (details?.action ? String(details.action) : '').split(',').map(s => s.trim()).filter(Boolean);
+      const detailActionKeys = detailActions.map(v => actionKeyMap.get(v) ?? null).filter((k): k is string => k !== null);
+
+      const hasMeetingHeld = detailActionKeys.some(k => k === 'meeting_held');
+      const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
       const hasNotes = notes.length > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
       const hasSocialAttending = socialEvents.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attending'));
       const hasFollowUps = followUps.length > 0;
-      const hasCompletedFu = followUps.some(f => f.completed);
+      const hasCompletedFu = followUps.some(f => Number(f.completed) === 1);
+      // Non-meeting touchpoint: action is set and its key is not a formal meeting action
+      const hasTouchpoint = detailActions.length > 0 && detailActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
 
       let depth = 0;
-      if (hasMeeting) depth += 25;
+      if (hasMeetingHeld) depth += 25;
       if (meetingHasOutcome) depth += 20;
-      if (hasNotes) depth += 20;
+      if (hasNotes) depth += 10;
       if (hasSocialAttending) depth += 20;
       if (hasFollowUps && hasCompletedFu) depth += 15;
+      if (hasTouchpoint) depth += 10;
       depth = Math.min(100, depth);
 
-      const isZeroEngagement = !hasMeeting && !hasNotes && !hasSocialAttending && !hasFollowUps;
+      const isZeroEngagement = !hasMeetingHeld && !hasNotes && !hasSocialAttending && !hasFollowUps;
 
       return {
         touchpoint: {
@@ -180,7 +201,7 @@ export async function GET(
 
   const allFollowUps = touchpoints.flatMap((t) => t.followUps);
   const totalFus = allFollowUps.length;
-  const completedFus = allFollowUps.filter((f) => f.completed).length;
+  const completedFus = allFollowUps.filter((f) => Number(f.completed) === 1).length;
   const followUpCompletionRate = totalFus > 0 ? Math.round((completedFus / totalFus) * 100) : null;
 
   const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
@@ -191,6 +212,13 @@ export async function GET(
   const rawScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
   const healthScore = Math.round(Math.max(0, Math.min(100, rawScore)));
 
+  // Total logged touchpoints from attendee_touchpoints table
+  const tpCountRes = await db.execute({
+    sql: `SELECT COUNT(*) as total FROM attendee_touchpoints WHERE attendee_id = ?`,
+    args: [attendeeId],
+  });
+  const loggedTouchpoints = Number(tpCountRes.rows[0]?.total ?? 0);
+
   return NextResponse.json({
     attendee,
     touchpoints,
@@ -198,5 +226,6 @@ export async function GET(
     daysSinceLastTouch,
     totalTouchpoints: totalConferences,
     followUpCompletionRate,
+    loggedTouchpoints,
   });
 }
