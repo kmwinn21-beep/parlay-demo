@@ -7,6 +7,15 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
+    const url = new URL(request.url);
+    const search = url.searchParams.get('search')?.trim() ?? '';
+    const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!, 10) : null;
+
+    const searchClause = search
+      ? `AND (a.first_name LIKE ? OR a.last_name LIKE ? OR co.name LIKE ?)`
+      : '';
+    const searchArgs = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+
     const result = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, a.email,
                    a.notes, a.action, a.next_steps, a.next_steps_notes,
@@ -52,8 +61,10 @@ export async function GET(request: NextRequest) {
               WHERE entity_type = 'attendee'
               GROUP BY entity_id
             ) pn ON a.id = pn.entity_id
-            ORDER BY a.last_name, a.first_name`,
-      args: [],
+            WHERE 1=1 ${searchClause}
+            ORDER BY a.last_name, a.first_name
+            ${limit ? `LIMIT ${limit}` : ''}`,
+      args: searchArgs,
     });
 
     const attendees = result.rows.map((r) => ({ ...r }));

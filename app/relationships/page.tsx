@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getBadgeClass, getPreset } from '@/lib/colors';
@@ -8,6 +8,11 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions, parseRepIds } from '@/lib/useUserOptions';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { useSectionConfig } from '@/lib/useSectionConfig';
+import RelationshipTimeline from '@/components/RelationshipTimeline';
+
+type RelationshipsTabKey = 'company_relationships' | 'relationship_timeline';
+const RELATIONSHIPS_TAB_ORDER: RelationshipsTabKey[] = ['company_relationships', 'relationship_timeline'];
 
 interface CompanyOption {
   id: number;
@@ -104,6 +109,23 @@ function RepPill({ name }: { name: string }) {
 
 export default function RelationshipsPage() {
   const unitTypeLabel = useUnitTypeLabel();
+
+  // ── Tab state ──
+  const relTabConfig = useSectionConfig('relationships_page');
+  const visibleTabs = RELATIONSHIPS_TAB_ORDER.filter(
+    k => relTabConfig.orderedKeys.includes(k) && relTabConfig.isVisible(k)
+  );
+  const [activeTab, setActiveTab] = useState<RelationshipsTabKey>('company_relationships');
+  const effectiveTab = visibleTabs.includes(activeTab) ? activeTab : (visibleTabs[0] ?? 'company_relationships');
+
+  // ── Attendee typeahead (for timeline tab) ──
+  const [timelineAttendeeId, setTimelineAttendeeId] = useState<number | null>(null);
+  const [timelineSearch, setTimelineSearch] = useState('');
+  const [timelineResults, setTimelineResults] = useState<Array<{ id: number; first_name: string; last_name: string; title: string | null; company_name: string | null }>>([]);
+  const [timelineSearchOpen, setTimelineSearchOpen] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  // ── Company relationship state ──
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [companySearch, setCompanySearch] = useState('');
@@ -120,6 +142,28 @@ export default function RelationshipsPage() {
   const relTypeOptions = useConfigWithIds('rep_relationship_type');
   const configOptions = useConfigOptions('relationships_page');
   const colorMaps = useConfigColors();
+
+  // Debounced attendee search for timeline tab
+  useEffect(() => {
+    if (!timelineSearch.trim()) { setTimelineResults([]); return; }
+    const timer = setTimeout(async () => {
+      setTimelineLoading(true);
+      try {
+        const res = await fetch(`/api/attendees?search=${encodeURIComponent(timelineSearch.trim())}&limit=10`);
+        if (!res.ok) return;
+        const rows = await res.json();
+        setTimelineResults(rows.map((r: Record<string, unknown>) => ({
+          id: Number(r.id),
+          first_name: String(r.first_name ?? ''),
+          last_name: String(r.last_name ?? ''),
+          title: r.title ? String(r.title) : null,
+          company_name: r.company_name ? String(r.company_name) : null,
+        })));
+        setTimelineSearchOpen(true);
+      } catch { /* ignore */ } finally { setTimelineLoading(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [timelineSearch]);
 
   useEffect(() => {
     let mounted = true;
@@ -467,7 +511,88 @@ export default function RelationshipsPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div>
+      {/* Tab bar */}
+      {visibleTabs.length > 1 && (
+        <div className="border-b border-gray-200 px-6 pt-4">
+          <nav className="-mb-px flex gap-6 overflow-x-auto">
+            {visibleTabs.map(tabKey => (
+              <button
+                key={tabKey}
+                onClick={() => setActiveTab(tabKey)}
+                className={`py-3 px-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap
+                  ${effectiveTab === tabKey
+                    ? 'border-brand-secondary text-brand-secondary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {relTabConfig.getLabel(tabKey)}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+
+      {/* Relationship Timeline tab */}
+      {effectiveTab === 'relationship_timeline' && (
+        <div className="p-6">
+          {!timelineAttendeeId ? (
+            <div className="max-w-md">
+              <label className="label">Search Attendee</label>
+              <div className="relative">
+                <input
+                  className="input-field w-full"
+                  placeholder="Type a name to search…"
+                  value={timelineSearch}
+                  onChange={e => { setTimelineSearch(e.target.value); setTimelineSearchOpen(true); }}
+                  onFocus={() => timelineResults.length > 0 && setTimelineSearchOpen(true)}
+                />
+                {timelineLoading && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="animate-spin w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full" />
+                  </div>
+                )}
+                {timelineSearchOpen && timelineResults.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {timelineResults.map(a => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
+                        onClick={() => {
+                          setTimelineAttendeeId(a.id);
+                          setTimelineSearch('');
+                          setTimelineResults([]);
+                          setTimelineSearchOpen(false);
+                        }}
+                      >
+                        <span className="font-medium text-gray-800">{a.first_name} {a.last_name}</span>
+                        {(a.title || a.company_name) && (
+                          <span className="text-gray-500 ml-1">· {[a.title, a.company_name].filter(Boolean).join(', ')}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <button
+                type="button"
+                className="text-sm text-brand-secondary hover:underline mb-4 flex items-center gap-1"
+                onClick={() => { setTimelineAttendeeId(null); setTimelineSearch(''); }}
+              >
+                ← Search another attendee
+              </button>
+              <RelationshipTimeline attendeeId={timelineAttendeeId} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Company Level Relationships tab */}
+      {effectiveTab === 'company_relationships' && (
+      <div className="p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
         <div ref={companyDropdownRef} className="max-w-md w-full relative">
           <label className="label">Company</label>
@@ -674,6 +799,8 @@ export default function RelationshipsPage() {
           </div>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 }
