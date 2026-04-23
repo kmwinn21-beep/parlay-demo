@@ -16,6 +16,17 @@ function HealthBadge({ score }: { score: number }) {
   );
 }
 
+function UserPill({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-blue-100 text-blue-800 border border-blue-300">
+      <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      {name}
+    </span>
+  );
+}
+
 export function IcpCompaniesTab({ companies }: { companies: IcpCompany[] }) {
   if (companies.length === 0) {
     return (
@@ -31,22 +42,22 @@ export function IcpCompaniesTab({ companies }: { companies: IcpCompany[] }) {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {companies.map((co) => (
           <div key={co.id} className="border border-gray-200 rounded-xl p-4 hover:border-brand-secondary/40 hover:shadow-sm transition-all">
-            <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div className="min-w-0">
                 <h4 className="font-semibold text-gray-900 truncate text-sm">{co.name}</h4>
                 {co.company_type && (
                   <span className="text-xs text-gray-500">{co.company_type}</span>
                 )}
               </div>
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <HealthBadge score={co.avgHealth} />
-                {co.assigned_user_names.length > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-brand-highlight/20 text-brand-primary text-[10px] font-semibold max-w-[90px] truncate">
-                    {co.assigned_user_names[0]}
-                  </span>
-                )}
-              </div>
+              <HealthBadge score={co.avgHealth} />
             </div>
+
+            {/* Assigned user pill */}
+            {co.assigned_user_names.length > 0 && (
+              <div className="mb-3">
+                <UserPill name={co.assigned_user_names[0]} />
+              </div>
+            )}
 
             {/* Health bar */}
             <div className="w-full bg-gray-100 rounded-full h-1.5 mb-3">

@@ -23,35 +23,46 @@ function BarChart({ items, total, colorClass }: { items: { label: string; count:
   );
 }
 
+function UserPill({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-blue-100 text-blue-800 border border-blue-300">
+      <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      {name}
+    </span>
+  );
+}
+
 export function LandscapeTab({ data }: { data: LandscapeData }) {
   return (
     <div className="space-y-8">
-      {/* 3-column layout: stat cards left, two charts right */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left: stacked stat cards */}
-        <div className="space-y-3">
+      {/* 4-column layout: stat cards (1 col) + stacked charts (3 cols) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-stretch">
+        {/* Col 1: stacked stat cards — same width as one overlap column */}
+        <div className="flex flex-col gap-3">
           {[
             { label: 'Total Attendees', value: data.totalAttendees },
             { label: 'Companies', value: data.totalCompanies },
             { label: 'ICP Companies', value: data.icpCount },
           ].map((s) => (
-            <div key={s.label} className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+            <div key={s.label} className="flex-1 bg-gray-50 rounded-xl p-4 text-center border border-gray-100 flex flex-col items-center justify-center">
               <p className="text-2xl font-bold text-brand-primary">{s.value}</p>
               <p className="text-xs text-gray-500 mt-1">{s.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Middle: Company Type Breakdown */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Company Type Breakdown</h3>
-          <BarChart items={data.companyTypeBreakdown} total={data.totalAttendees} colorClass="bg-brand-secondary" />
-        </div>
-
-        {/* Right: Seniority Breakdown */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Seniority Breakdown</h3>
-          <BarChart items={data.seniorityBreakdown} total={data.totalAttendees} colorClass="bg-brand-highlight" />
+        {/* Cols 2-4: stacked charts filling same height as stat cards */}
+        <div className="md:col-span-3 flex flex-col gap-6 justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Company Type Breakdown</h3>
+            <BarChart items={data.companyTypeBreakdown} total={data.totalAttendees} colorClass="bg-brand-secondary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Seniority Breakdown</h3>
+            <BarChart items={data.seniorityBreakdown} total={data.totalAttendees} colorClass="bg-brand-highlight" />
+          </div>
         </div>
       </div>
 
@@ -72,30 +83,28 @@ export function LandscapeTab({ data }: { data: LandscapeData }) {
               <Link
                 key={String(a.id)}
                 href={`/attendees/${a.id}`}
-                className="relative flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-brand-secondary/40 hover:bg-blue-50/50 transition-colors"
+                className="flex flex-col gap-2 p-3 rounded-lg border border-gray-100 hover:border-brand-secondary/40 hover:bg-blue-50/50 transition-colors"
               >
-                {/* Assigned user pill — top right */}
+                {/* Avatar + name row */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-bold text-brand-secondary">
+                      {String(a.first_name)[0]}{String(a.last_name)[0]}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate leading-tight">{String(a.first_name)} {String(a.last_name)}</p>
+                    <p className="text-xs text-gray-500 truncate">{a.company_name ?? '—'}</p>
+                    {a.prior_conference && (
+                      <p className="text-xs text-gray-400 truncate">({a.prior_conference})</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assigned user pill */}
                 {a.assigned_user_names.length > 0 && (
-                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-brand-highlight/20 text-brand-primary text-[10px] font-semibold leading-tight max-w-[80px] truncate">
-                    {a.assigned_user_names[0]}
-                  </span>
+                  <UserPill name={a.assigned_user_names[0]} />
                 )}
-
-                {/* Avatar */}
-                <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-brand-secondary">
-                    {String(a.first_name)[0]}{String(a.last_name)[0]}
-                  </span>
-                </div>
-
-                {/* Name + company + conference */}
-                <div className="min-w-0 pr-16">
-                  <p className="text-sm font-medium text-gray-800 truncate leading-tight">{String(a.first_name)} {String(a.last_name)}</p>
-                  <p className="text-xs text-gray-500 truncate">{a.company_name ?? '—'}</p>
-                  {a.prior_conference && (
-                    <p className="text-xs text-gray-400 truncate">({a.prior_conference})</p>
-                  )}
-                </div>
               </Link>
             ))}
           </div>
