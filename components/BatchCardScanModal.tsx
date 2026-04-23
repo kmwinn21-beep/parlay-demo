@@ -26,6 +26,19 @@ interface SearchResult {
 
 type CardStatus = 'matching' | 'matched' | 'no-match' | 'confirmed' | 'added' | 'error';
 
+interface StatusOption {
+  id: number; value: string; color: string | null; scope: string;
+}
+
+interface PendingAction {
+  type: 'confirm' | 'add';
+  attendeeId?: number;
+  companyId?: number | null;
+  view: 'prompt' | 'note' | 'status';
+  noteText: string;
+  selectedStatus: StatusOption | null;
+}
+
 interface ScannedCard {
   localId: string;
   draft: CardDraft;
@@ -37,6 +50,7 @@ interface ScannedCard {
   // add-new form state
   showAddForm: boolean;
   addDraft: CardDraft & { company_id: number | null };
+  pendingAction: PendingAction | null;
 }
 
 interface Props {
@@ -72,6 +86,7 @@ function makeCard(raw: Partial<CardDraft>): ScannedCard {
       email: raw.email ?? '', phone: raw.phone ?? '',
       company_id: null,
     },
+    pendingAction: null,
   };
 }
 
@@ -237,16 +252,140 @@ function LeftCard({ card, onDraftChange, onAttendeeSelect, onCompanySelect }: Le
 
 interface RightCardProps {
   card: ScannedCard;
-  onConfirm: (attendeeId: number) => void;
+  onConfirm: (attendeeId: number, companyId: number | null) => void;
   onNotAMatch: () => void;
   onShowAddForm: () => void;
   onAddFormChange: (field: keyof ScannedCard['addDraft'], value: string) => void;
   onAddFormCompanySelect: (r: SearchResult) => void;
-  onAddNew: () => void;
+  onInitiateAdd: () => void;
+  onFinalConfirm: () => void;
+  onCancelPending: () => void;
+  onPendingViewChange: (view: PendingAction['view']) => void;
+  onPendingNoteChange: (text: string) => void;
+  onPendingStatusSelect: (opt: StatusOption | null) => void;
+  statusOptions: StatusOption[];
   saving: boolean;
 }
 
-function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChange, onAddFormCompanySelect, onAddNew, saving }: RightCardProps) {
+function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChange, onAddFormCompanySelect, onInitiateAdd, onFinalConfirm, onCancelPending, onPendingViewChange, onPendingNoteChange, onPendingStatusSelect, statusOptions, saving }: RightCardProps) {
+  if (card.pendingAction) {
+    const action = card.pendingAction;
+
+    if (action.view === 'note') {
+      return (
+        <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 space-y-3 min-w-0">
+          <div className="flex items-center gap-2">
+            <button onClick={() => onPendingViewChange('prompt')} className="text-gray-400 hover:text-gray-600">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Add a Note</p>
+          </div>
+          <textarea
+            autoFocus
+            value={action.noteText}
+            onChange={e => onPendingNoteChange(e.target.value)}
+            placeholder="Enter note…"
+            rows={4}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-brand-secondary"
+          />
+          <button onClick={() => onPendingViewChange('prompt')} className="btn-primary text-xs w-full">
+            Save Note
+          </button>
+        </div>
+      );
+    }
+
+    if (action.view === 'status') {
+      return (
+        <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 space-y-3 min-w-0">
+          <div className="flex items-center gap-2">
+            <button onClick={() => onPendingViewChange('prompt')} className="text-gray-400 hover:text-gray-600">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Set Status</p>
+          </div>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {statusOptions.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => { onPendingStatusSelect(opt); onPendingViewChange('prompt'); }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  action.selectedStatus?.id === opt.id
+                    ? 'bg-brand-secondary text-white'
+                    : 'hover:bg-gray-50 text-gray-700'
+                }`}
+              >
+                <span className="font-medium">{opt.value}</span>
+                {opt.scope === 'user' && (
+                  <span className="ml-2 text-[10px] opacity-60">user-scoped</span>
+                )}
+              </button>
+            ))}
+            {action.selectedStatus && (
+              <button
+                onClick={() => { onPendingStatusSelect(null); onPendingViewChange('prompt'); }}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-50"
+              >
+                Clear status
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // 'prompt' view
+    return (
+      <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4 min-w-0">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Before you save</p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => onPendingViewChange('note')}
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-200 hover:border-brand-secondary hover:bg-blue-50/40 transition-colors group relative"
+          >
+            <svg className="w-6 h-6 text-gray-400 group-hover:text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span className="text-[10px] text-gray-500 group-hover:text-brand-secondary">Note</span>
+            {action.noteText && <span className="absolute -top-1 -right-1 w-3 h-3 bg-brand-secondary rounded-full" />}
+          </button>
+          <button
+            onClick={() => onPendingViewChange('status')}
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-200 hover:border-brand-secondary hover:bg-blue-50/40 transition-colors group relative"
+          >
+            <svg className="w-6 h-6 text-gray-400 group-hover:text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-[10px] text-gray-500 group-hover:text-brand-secondary">Status</span>
+            {action.selectedStatus && <span className="absolute -top-1 -right-1 w-3 h-3 bg-brand-secondary rounded-full" />}
+          </button>
+        </div>
+        {(action.noteText || action.selectedStatus) && (
+          <div className="space-y-1">
+            {action.noteText && (
+              <p className="text-[10px] text-gray-400 truncate">
+                Note: &ldquo;{action.noteText.slice(0, 40)}{action.noteText.length > 40 ? '…' : ''}&rdquo;
+              </p>
+            )}
+            {action.selectedStatus && (
+              <p className="text-[10px] text-gray-400">Status: {action.selectedStatus.value}</p>
+            )}
+          </div>
+        )}
+        <div className="flex gap-2 mt-auto">
+          <button onClick={onFinalConfirm} disabled={saving} className="btn-primary text-xs flex-1">
+            {saving ? 'Saving…' : action.type === 'confirm' ? 'Confirm Match' : 'Save Attendee'}
+          </button>
+          <button onClick={onCancelPending} className="btn-secondary text-xs px-3">Back</button>
+        </div>
+      </div>
+    );
+  }
+
   if (card.status === 'confirmed' || card.status === 'added') {
     return (
       <div className="flex-1 bg-green-50 rounded-xl border border-green-200 p-4 flex flex-col items-center justify-center gap-2 min-w-0">
@@ -317,9 +456,9 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
           />
         </div>
         <div className="flex gap-2 pt-1">
-          <button onClick={onAddNew} disabled={saving || !card.addDraft.first_name || !card.addDraft.last_name}
+          <button onClick={onInitiateAdd} disabled={!card.addDraft.first_name || !card.addDraft.last_name}
             className="btn-primary text-xs flex-1">
-            {saving ? 'Saving…' : 'Save & Create'}
+            Review &amp; Save
           </button>
           <button onClick={onShowAddForm} className="btn-secondary text-xs px-3">Cancel</button>
         </div>
@@ -349,7 +488,7 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => onConfirm(topMatch.id)} disabled={saving}
+            <button onClick={() => onConfirm(topMatch.id, topMatch.company_id)} disabled={saving}
               className="btn-primary text-xs flex-1">
               {saving ? 'Saving…' : 'Confirm Match'}
             </button>
@@ -394,7 +533,15 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
   const [cards, setCards] = useState<ScannedCard[]>([]);
   const [scanning, setScanning] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/api/config?category=status')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setStatusOptions(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const updateCard = useCallback((localId: string, patch: Partial<ScannedCard>) => {
     setCards(prev => prev.map(c => c.localId === localId ? { ...c, ...patch } : c));
@@ -464,33 +611,98 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
     if (file?.type.startsWith('image/')) handleFile(file);
   }, [handleFile]);
 
-  const handleConfirm = useCallback(async (localId: string, attendeeId: number) => {
-    setSavingId(localId);
-    try {
-      const res = await fetch('/api/card-scan/confirm', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendee_id: attendeeId, conference_id: conferenceId }),
-      });
-      if (res.ok) updateCard(localId, { status: 'confirmed' });
-    } finally { setSavingId(null); }
-  }, [conferenceId, updateCard]);
+  const handleConfirm = useCallback((localId: string, attendeeId: number, companyId: number | null) => {
+    updateCard(localId, {
+      pendingAction: { type: 'confirm', attendeeId, companyId, view: 'prompt', noteText: '', selectedStatus: null },
+    });
+  }, [updateCard]);
 
-  const handleAddNew = useCallback(async (localId: string) => {
+  const handleInitiateAdd = useCallback((localId: string) => {
     const card = cards.find(c => c.localId === localId);
-    if (!card) return;
+    if (!card || !card.addDraft.first_name || !card.addDraft.last_name) return;
+    updateCard(localId, {
+      pendingAction: { type: 'add', view: 'prompt', noteText: '', selectedStatus: null },
+    });
+  }, [cards, updateCard]);
+
+  const updatePendingAction = useCallback((localId: string, patch: Partial<PendingAction>) => {
+    setCards(prev => prev.map(c =>
+      c.localId === localId && c.pendingAction
+        ? { ...c, pendingAction: { ...c.pendingAction, ...patch } }
+        : c
+    ));
+  }, []);
+
+  const handleCancelPending = useCallback((localId: string) => {
+    updateCard(localId, { pendingAction: null });
+  }, [updateCard]);
+
+  const handleFinalConfirm = useCallback(async (localId: string) => {
+    const card = cards.find(c => c.localId === localId);
+    if (!card?.pendingAction) return;
+    const action = card.pendingAction;
     setSavingId(localId);
     try {
-      const res = await fetch('/api/card-scan/add-new', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          first_name: card.addDraft.first_name, last_name: card.addDraft.last_name,
-          title: card.addDraft.title || undefined, email: card.addDraft.email || undefined,
-          company_id: card.addDraft.company_id || undefined,
-          company_name: !card.addDraft.company_id && card.addDraft.company ? card.addDraft.company : undefined,
-          conference_id: conferenceId,
-        }),
-      });
-      if (res.ok) updateCard(localId, { status: 'added' });
+      let attendeeId: number | null = null;
+      let companyId: number | null = null;
+
+      if (action.type === 'confirm' && action.attendeeId) {
+        const res = await fetch('/api/card-scan/confirm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attendee_id: action.attendeeId, conference_id: conferenceId }),
+        });
+        if (!res.ok) return;
+        attendeeId = action.attendeeId;
+        companyId = action.companyId ?? null;
+      } else if (action.type === 'add') {
+        const res = await fetch('/api/card-scan/add-new', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: card.addDraft.first_name, last_name: card.addDraft.last_name,
+            title: card.addDraft.title || undefined, email: card.addDraft.email || undefined,
+            company_id: card.addDraft.company_id || undefined,
+            company_name: !card.addDraft.company_id && card.addDraft.company ? card.addDraft.company : undefined,
+            conference_id: conferenceId,
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        attendeeId = data.attendee_id;
+        companyId = data.company_id ?? null;
+      }
+
+      if (attendeeId === null) return;
+
+      const noteTrimmed = action.noteText.trim();
+      if (noteTrimmed) {
+        const attendeeName = action.type === 'confirm'
+          ? `${card.selectedMatch?.first_name ?? ''} ${card.selectedMatch?.last_name ?? ''}`.trim()
+          : `${card.addDraft.first_name} ${card.addDraft.last_name}`.trim();
+        const companyName = action.type === 'confirm'
+          ? (card.selectedMatch?.company_name ?? undefined)
+          : (card.addDraft.company || undefined);
+        const noteBase = { content: noteTrimmed, attendee_name: attendeeName, company_name: companyName };
+        const noteReqs: Promise<unknown>[] = [
+          fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...noteBase, entity_type: 'attendee', entity_id: attendeeId }) }),
+          fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...noteBase, entity_type: 'conference', entity_id: conferenceId }) }),
+        ];
+        if (companyId) {
+          noteReqs.push(fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...noteBase, entity_type: 'company', entity_id: companyId }) }));
+        }
+        await Promise.all(noteReqs);
+      }
+
+      if (action.selectedStatus && companyId) {
+        await fetch(`/api/companies/${companyId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: action.selectedStatus.value }),
+        });
+      }
+
+      updateCard(localId, { status: action.type === 'confirm' ? 'confirmed' : 'added', pendingAction: null });
     } finally { setSavingId(null); }
   }, [cards, conferenceId, updateCard]);
 
@@ -585,12 +797,18 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
                   <RightCard
                     card={card}
                     saving={savingId === card.localId}
-                    onConfirm={attId => handleConfirm(card.localId, attId)}
+                    statusOptions={statusOptions}
+                    onConfirm={(attId, compId) => handleConfirm(card.localId, attId, compId)}
                     onNotAMatch={() => updateCard(card.localId, { selectedMatch: null, selectedCompany: null, status: 'no-match' })}
                     onShowAddForm={() => updateCard(card.localId, { showAddForm: !card.showAddForm })}
                     onAddFormChange={(f, v) => patchAddDraft(card.localId, f, v)}
                     onAddFormCompanySelect={r => handleAddFormCompanySelect(card.localId, r)}
-                    onAddNew={() => handleAddNew(card.localId)}
+                    onInitiateAdd={() => handleInitiateAdd(card.localId)}
+                    onFinalConfirm={() => handleFinalConfirm(card.localId)}
+                    onCancelPending={() => handleCancelPending(card.localId)}
+                    onPendingViewChange={view => updatePendingAction(card.localId, { view })}
+                    onPendingNoteChange={text => updatePendingAction(card.localId, { noteText: text })}
+                    onPendingStatusSelect={opt => updatePendingAction(card.localId, { selectedStatus: opt })}
                   />
                 </div>
               </div>
