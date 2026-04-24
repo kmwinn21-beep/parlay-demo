@@ -30,6 +30,7 @@ import { useUser } from '@/components/UserContext';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { BatchCardScanModal } from '@/components/BatchCardScanModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
+import { PostConferenceReview } from '@/components/PostConferenceReview';
 
 interface Attendee {
   id: number;
@@ -1048,6 +1049,12 @@ export default function ConferenceDetailPage() {
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
               <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
+              <PostConferenceReview
+                conferenceId={conference.id}
+                conferenceName={conference.name}
+                endDate={conference.end_date}
+                userRole={currentUser?.role ?? 'user'}
+              />
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
