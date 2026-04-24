@@ -574,32 +574,32 @@ export async function GET(
   const repPerfRows: RepPerformanceRow[] = [];
   for (const repName of repSet) {
     const repDetails = currentDetails.filter(d => rawFieldMatchesName(d.assigned_rep, repName));
-    const repMeetings = meetingRows.filter(m => {
-      const rawM = confMeetingsRes.rows.find(r => Number(r.id) === m.id);
-      return rawM && rawFieldMatchesName(rawM.scheduled_by, repName);
-    });
-    const repFollowUps = followUpRows.filter(f => {
-      const rawF = confFollowUpsRes.rows.find(r => Number(r.id) === f.id);
-      return rawF && rawFieldMatchesName(rawF.assigned_rep, repName);
-    });
 
-    // Contacts captured = attendees with this rep in their details.assigned_rep
+    // Meetings: use all conference meetings (not restricted to operator attendees)
+    const repRawMeetings = confMeetingsRes.rows.filter(m => rawFieldMatchesName(m.scheduled_by, repName));
+    const heldMeetings = repRawMeetings.filter(m => {
+      const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+      return (actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held';
+    });
+    const walkIns = heldMeetings.filter(m => String(m.meeting_type ?? '') === unplannedValue);
+
+    // Follow-ups: use all conference follow-ups (not restricted to operator attendees)
+    const repFollowUps = confFollowUpsRes.rows.filter(r => rawFieldMatchesName(r.assigned_rep, repName));
+    const fuCompleted = repFollowUps.filter(r => Number(r.completed) === 1).length;
+    const fuRate = repFollowUps.length > 0 ? Math.round((fuCompleted / repFollowUps.length) * 100) : 0;
+
+    // Contacts captured = operator attendees with this rep in their details.assigned_rep
     const repAttendeeIds = new Set(repDetails.map(d => Number(d.attendee_id)));
     const captured = Array.from(repAttendeeIds).map(aid => contactRows.find(c => c.attendee_id === aid)).filter(Boolean) as ContactRow[];
-
-    const heldMeetings = repMeetings.filter(m => m.status === 'held');
-    const walkIns = heldMeetings.filter(m => m.isWalkIn);
-    const fuCompleted = repFollowUps.filter(f => f.status === 'completed').length;
-    const fuRate = repFollowUps.length > 0 ? Math.round((fuCompleted / repFollowUps.length) * 100) : 0;
 
     // Get companies for this rep
     const companyMap = new Map<number, RepPerformanceRow['companies'][0]>();
     for (const c of captured) {
       if (!c.company_id) continue;
       if (companyMap.has(c.company_id)) continue;
-      const fu = repFollowUps.find(f => f.attendee_id === c.attendee_id);
+      const fu = repFollowUps.find(r => Number(r.attendee_id) === c.attendee_id);
       let fuStatus: 'completed' | 'in_progress' | 'not_started' | 'none' = 'none';
-      if (fu) fuStatus = fu.status === 'completed' ? 'completed' : 'not_started';
+      if (fu) fuStatus = Number(fu.completed) === 1 ? 'completed' : 'not_started';
       companyMap.set(c.company_id, {
         company_id: c.company_id,
         company_name: c.company_name ?? '',
