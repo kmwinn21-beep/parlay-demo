@@ -318,10 +318,7 @@ export async function GET(
       sql: `SELECT ser.social_event_id, ser.attendee_id, ser.rsvp_status,
                    a.first_name, a.last_name, a.title,
                    c.name as company_name, c.id as company_id, c.company_type,
-                   (SELECT GROUP_CONCAT(u.name, ', ')
-                    FROM conference_attendee_assignments caa
-                    JOIN users u ON u.id = caa.user_id
-                    WHERE caa.attendee_id = ser.attendee_id) as assigned_user_names
+                   c.assigned_user
             FROM social_event_rsvps ser
             JOIN attendees a ON a.id = ser.attendee_id
             LEFT JOIN companies c ON c.id = a.company_id
@@ -348,7 +345,7 @@ export async function GET(
       company_id: r.company_id ? Number(r.company_id) : null,
       company_type: r.company_type ? String(r.company_type) : null,
       rsvp_status: String(r.rsvp_status ?? 'maybe'),
-      assigned_user_names: r.assigned_user_names ? String(r.assigned_user_names).split(', ').filter(Boolean) : [],
+      assigned_user_names: resolveIds(r.assigned_user),
     });
   }
 
