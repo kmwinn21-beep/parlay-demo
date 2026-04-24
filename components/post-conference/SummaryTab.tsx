@@ -145,7 +145,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="Contacts Captured" value={summary.totalCaptured} sub={`${summary.newlyEngaged} newly engaged`} color="#223A5E" />
         <StatCard label="Newly Engaged" value={summary.newlyEngaged} color="#059669" />
         <StatCard label="Meetings Held" value={summary.meetingsHeld} sub={`${summary.walkInMeetings} unplanned`} color="#059669" />
@@ -239,7 +239,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
       {sortedReps.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Activity by Rep</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {sortedReps.map(rep => <RepCard key={rep.repName} rep={rep} />)}
           </div>
         </div>
