@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import type { ByRepEntry, ByRepCompany } from '../PreConferenceReview';
+import { TargetBtn } from './TargetBtn';
+import type { ByRepEntry, ByRepCompany, TargetEntry } from '../PreConferenceReview';
 
 interface CompanyNote {
   id: number;
@@ -166,7 +167,7 @@ function CompanyRecordPopup({ company, onClose }: { company: ByRepCompany; onClo
   );
 }
 
-function CompanyPopup({ company, type, conferenceName, onClose }: { company: ByRepCompany; type: PopupType; conferenceName: string; onClose: () => void }) {
+function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onToggleTarget }: { company: ByRepCompany; type: PopupType; conferenceName: string; onClose: () => void; targetMap?: Map<number, TargetEntry>; onToggleTarget?: (entry: Omit<TargetEntry, 'tier'>) => Promise<void> }) {
   const titles: Record<PopupType, string> = { company: 'Company Record', notes: 'Notes', attendees: 'Attendees' };
 
   return (
@@ -195,18 +196,34 @@ function CompanyPopup({ company, type, conferenceName, onClose }: { company: ByR
             {company.attendees.length === 0 ? (
               <p className="text-sm text-gray-400">No attendees.</p>
             ) : (
-              company.attendees.map((a) => (
-                <Link key={String(a.id)} href={`/attendees/${a.id}`} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{String(a.first_name)} {String(a.last_name)}</p>
-                    {a.title && <p className="text-xs text-gray-500">{String(a.title)}</p>}
+              company.attendees.map((a) => {
+                const isTarget = targetMap.has(Number(a.id));
+                return (
+                  <div key={String(a.id)} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
+                    <Link href={`/attendees/${a.id}`} className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">{String(a.first_name)} {String(a.last_name)}</p>
+                      {a.title && <p className="text-xs text-gray-500">{String(a.title)}</p>}
+                    </Link>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {a.status && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">{String(a.status)}</span>}
+                      <TargetBtn
+                        isTarget={isTarget}
+                        size="md"
+                        onClick={() => onToggleTarget({
+                          attendeeId: Number(a.id),
+                          firstName: String(a.first_name),
+                          lastName: String(a.last_name),
+                          title: a.title ? String(a.title) : null,
+                          seniority: a.seniority ? String(a.seniority) : null,
+                          companyName: company.company_name,
+                          companyId: company.company_id,
+                          assignedUserNames: company.assigned_user_names,
+                        })}
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {a.status && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">{String(a.status)}</span>}
-                    <span className="text-xs text-gray-400">H:{a.health}</span>
-                  </div>
-                </Link>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -225,12 +242,14 @@ function IconButton({ title, onClick, children }: { title: string; onClick: () =
   );
 }
 
-function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle }: {
+function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle, targetMap, onToggleTarget }: {
   entry: ByRepEntry;
   conferenceId: number;
   conferenceName: string;
   expandedRep: string | null;
   onToggle: (rep: string) => void;
+  targetMap: Map<number, TargetEntry>;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
 }) {
   const isOpen = expandedRep === entry.rep;
   const [popup, setPopup] = useState<{ company: ByRepCompany; type: PopupType } | null>(null);
@@ -293,13 +312,19 @@ function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle
       )}
 
       {popup && (
-        <CompanyPopup company={popup.company} type={popup.type} conferenceName={conferenceName} onClose={() => setPopup(null)} />
+        <CompanyPopup company={popup.company} type={popup.type} conferenceName={conferenceName} onClose={() => setPopup(null)} targetMap={targetMap} onToggleTarget={onToggleTarget} />
       )}
     </div>
   );
 }
 
-export function ByRepTab({ entries, conferenceId, conferenceName }: { entries: ByRepEntry[]; conferenceId: number; conferenceName: string }) {
+export function ByRepTab({ entries, conferenceId, conferenceName, targetMap, onToggleTarget }: {
+  entries: ByRepEntry[];
+  conferenceId: number;
+  conferenceName: string;
+  targetMap: Map<number, TargetEntry>;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+}) {
   const [expandedRep, setExpandedRep] = useState<string | null>(null);
 
   function handleToggle(rep: string) {
@@ -318,7 +343,7 @@ export function ByRepTab({ entries, conferenceId, conferenceName }: { entries: B
     <div className="space-y-3">
       <p className="text-sm text-gray-500">{entries.length} rep{entries.length !== 1 ? 's' : ''} with company assignments — click to expand</p>
       {entries.map((entry) => (
-        <RepSection key={entry.rep} entry={entry} conferenceId={conferenceId} conferenceName={conferenceName} expandedRep={expandedRep} onToggle={handleToggle} />
+        <RepSection key={entry.rep} entry={entry} conferenceId={conferenceId} conferenceName={conferenceName} expandedRep={expandedRep} onToggle={handleToggle} targetMap={targetMap} onToggleTarget={onToggleTarget} />
       ))}
     </div>
   );

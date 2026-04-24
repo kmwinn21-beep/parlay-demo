@@ -41,6 +41,7 @@ const CATEGORIES = [
   { key: 'event_type', label: 'Event Type' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'touchpoints', label: 'Touchpoints' },
+  { key: 'attendee_conference_status', label: 'Attendee Conference Status' },
   { key: 'user', label: 'Users' },
 ];
 

@@ -412,6 +412,8 @@ export async function GET(
     priorOverlapAttendees: priorOverlapAttendees.map((a) => ({
       id: a.id, first_name: a.first_name, last_name: a.last_name,
       title: a.title, company_name: a.company_name,
+      seniority: a.seniority ? String(a.seniority) : null,
+      company_id: a.company_id ? Number(a.company_id) : null,
       prior_conference: prevConfMap.get(a.id as number) ?? '',
       assigned_user_names: resolveUserIds(a.company_assigned_user),
     })),
@@ -432,7 +434,7 @@ export async function GET(
     const scores = c.attendeeList.map((a) => attendeeHealthMap.get(a.id as number) ?? 0);
     const avg = scores.length > 0 ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
     const assignedNames = resolveUserIds(c.attendeeList[0]?.company_assigned_user);
-    icpCompanies.push({ id: c.id, name: c.name, company_type: c.company_type, avgHealth: avg, assigned_user_names: assignedNames, attendees: c.attendeeList.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, health: attendeeHealthMap.get(a.id as number) ?? 0 })) });
+    icpCompanies.push({ id: c.id, name: c.name, company_type: c.company_type, avgHealth: avg, assigned_user_names: assignedNames, attendees: c.attendeeList.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: a.seniority ? String(a.seniority) : null, health: attendeeHealthMap.get(a.id as number) ?? 0 })) });
   });
   icpCompanies.sort((a, b) => b.avgHealth - a.avgHealth);
 
@@ -566,7 +568,7 @@ export async function GET(
         assigned_user_names: detail?.assigned_user_names ?? [],
         website: detail?.website ?? null,
         internal_relationships: companyRelsMap.get(cid) ?? [],
-        attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, status: a.status, health: attendeeHealthMap.get(a.id as number) ?? 0 })),
+        attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: a.seniority ? String(a.seniority) : null, status: a.status, health: attendeeHealthMap.get(a.id as number) ?? 0 })),
         notes: notes.slice(0, 5).map((n) => ({ id: n.id, content: n.content, created_at: n.created_at, rep: n.rep, attendee_name: n.attendee_name, conference_name: n.conference_name })),
       });
     });
@@ -590,7 +592,7 @@ export async function GET(
       description: String(rel.description ?? ''),
       rep_names: resolveUserIds(rel.rep_ids),
       contact_names: contactNames,
-      attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, health: attendeeHealthMap.get(a.id as number) ?? 0 })),
+      attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: a.seniority ? String(a.seniority) : null, health: attendeeHealthMap.get(a.id as number) ?? 0 })),
       recentNotes: notes.slice(0, 3).map((n) => ({ id: n.id, content: n.content, created_at: n.created_at, rep: n.rep })),
     };
   });

@@ -8,6 +8,7 @@ import { MeetingsTab } from './pre-conference/MeetingsTab';
 import { SocialEventsTab } from './pre-conference/SocialEventsTab';
 import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
+import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
 
 export interface PreConferenceSummary {
   conference: { id: number; name: string; start_date: string | null; end_date: string | null; location: string | null };
@@ -28,7 +29,7 @@ export interface LandscapeData {
   seniorityBreakdown: { label: string; count: number }[];
   priorOverlapTypeLabel: string;
   priorOverlapCount: number;
-  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; prior_conference: string; assigned_user_names: string[] }[];
+  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; company_id: number | null; seniority: string | null; prior_conference: string; assigned_user_names: string[] }[];
 }
 
 export interface IcpCompany {
@@ -37,7 +38,7 @@ export interface IcpCompany {
   company_type: string | null;
   avgHealth: number;
   assigned_user_names: string[];
-  attendees: { id: number; first_name: string; last_name: string; title: string | null; health: number }[];
+  attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null; health: number }[];
 }
 
 export interface MeetingRow {
@@ -106,7 +107,7 @@ export interface ByRepCompany {
   assigned_user_names: string[];
   website: string | null;
   internal_relationships: CompanyInternalRel[];
-  attendees: { id: number; first_name: string; last_name: string; title: string | null; status: string | null; health: number }[];
+  attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null; status: string | null; health: number }[];
   notes: { id: number; content: string; created_at: string | null; rep: string | null; attendee_name: string | null; conference_name: string | null }[];
 }
 
@@ -123,8 +124,20 @@ export interface RelationshipRow {
   description: string;
   rep_names: string[];
   contact_names: string[];
-  attendees: { id: number; first_name: string; last_name: string; title: string | null; health: number }[];
+  attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null; health: number }[];
   recentNotes: { id: number; content: string; created_at: string | null; rep: string | null }[];
+}
+
+export interface TargetEntry {
+  attendeeId: number;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  seniority: string | null;
+  companyName: string | null;
+  companyId: number | null;
+  assignedUserNames: string[];
+  tier: string;
 }
 
 export interface PreConferenceData {
@@ -137,7 +150,7 @@ export interface PreConferenceData {
   relationships: RelationshipRow[];
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'conference_targets';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -145,6 +158,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'social', label: 'Social Events' },
   { key: 'by-rep', label: 'By Rep' },
   { key: 'relationships', label: 'Relationships' },
+  { key: 'conference_targets', label: 'Conference Targets' },
 ];
 
 function StatPill({ label, value }: { label: string; value: number | string }) {
@@ -162,6 +176,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   const [data, setData] = useState<PreConferenceData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('landscape');
+  const [targetMap, setTargetMap] = useState<Map<number, TargetEntry>>(new Map());
 
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
@@ -177,10 +192,17 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/conferences/${conferenceId}/pre-conference`);
-      if (!res.ok) throw new Error('Failed to load');
-      const json: PreConferenceData = await res.json();
+      const [confRes, targetsRes] = await Promise.all([
+        fetch(`/api/conferences/${conferenceId}/pre-conference`),
+        fetch(`/api/conferences/${conferenceId}/targets`),
+      ]);
+      if (!confRes.ok) throw new Error('Failed to load');
+      const json: PreConferenceData = await confRes.json();
       setData(json);
+      if (targetsRes.ok) {
+        const tArr = await targetsRes.json() as TargetEntry[];
+        setTargetMap(new Map(tArr.map(t => [t.attendeeId, t])));
+      }
       setOpen(true);
     } catch {
       setError('Failed to load pre-conference data.');
@@ -188,6 +210,51 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
       setLoading(false);
     }
   }, [conferenceId]);
+
+  const toggleTarget = useCallback(async (entry: Omit<TargetEntry, 'tier'>) => {
+    const isTarget = targetMap.has(entry.attendeeId);
+    // Optimistic update
+    if (isTarget) {
+      setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
+    } else {
+      setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier: 'unassigned' }));
+    }
+    try {
+      await fetch(`/api/conferences/${conferenceId}/targets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: entry.attendeeId }),
+      });
+    } catch {
+      // Revert on error
+      if (isTarget) {
+        setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier: 'unassigned' }));
+      } else {
+        setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
+      }
+    }
+  }, [conferenceId, targetMap]);
+
+  const setTargetTier = useCallback(async (attendeeId: number, tier: string) => {
+    setTargetMap(prev => {
+      const next = new Map(prev);
+      const entry = next.get(attendeeId);
+      if (entry) next.set(attendeeId, { ...entry, tier });
+      return next;
+    });
+    try {
+      await fetch(`/api/conferences/${conferenceId}/targets/${attendeeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier }),
+      });
+    } catch { /* ignore */ }
+  }, [conferenceId]);
+
+  const meetingAttendeeIds = useMemo(
+    () => new Set((data?.meetings ?? []).map(m => m.attendee_id)),
+    [data?.meetings]
+  );
 
   return (
     <>
@@ -249,12 +316,29 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
 
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-              {activeTab === 'landscape' && <LandscapeTab data={data.landscape} />}
-              {activeTab === 'icp' && <IcpCompaniesTab companies={data.icpCompanies} />}
+              {activeTab === 'landscape' && (
+                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} />
+              )}
+              {activeTab === 'icp' && (
+                <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} />
+              )}
               {activeTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
               {activeTab === 'social' && <SocialEventsTab events={data.socialEvents} />}
-              {activeTab === 'by-rep' && <ByRepTab entries={data.byRep} conferenceId={conferenceId} conferenceName={conferenceName} />}
-              {activeTab === 'relationships' && <RelationshipsTab relationships={data.relationships} />}
+              {activeTab === 'by-rep' && (
+                <ByRepTab entries={data.byRep} conferenceId={conferenceId} conferenceName={conferenceName} targetMap={targetMap} onToggleTarget={toggleTarget} />
+              )}
+              {activeTab === 'relationships' && (
+                <RelationshipsTab relationships={data.relationships} targetMap={targetMap} onToggleTarget={toggleTarget} />
+              )}
+              {activeTab === 'conference_targets' && (
+                <ConferenceTargetsTab
+                  conferenceName={conferenceName}
+                  targetMap={targetMap}
+                  meetingAttendeeIds={meetingAttendeeIds}
+                  onToggleTarget={toggleTarget}
+                  onSetTier={setTargetTier}
+                />
+              )}
             </div>
           </div>
         </div>
