@@ -75,11 +75,11 @@ export interface PostConferenceData {
     engagementByType: { meetingsHeld: number; socialConversations: number; touchpoints: number; notesLogged: number; zeroEngagement: number };
     companyTypeBreakdown: { label: string; count: number }[];
     priorAverageComparison: {
-      contactsPerRep: { current: number; avg: number };
-      meetingsPerRep: { current: number; avg: number };
-      icpCaptureRate: { current: number; avg: number };
-      followUpRate: { current: number; avg: number };
-      notesPerContact: { current: number; avg: number };
+      contactsPerRep: { current: number; avg: number | null };
+      meetingsPerRep: { current: number; avg: number | null };
+      icpCaptureRate: { current: number; avg: number | null };
+      followUpRate: { current: number; avg: number | null };
+      notesPerContact: { current: number; avg: number | null };
     };
   };
   contacts: { newlyEngaged: ContactRow[]; reEngagements: ContactRow[]; stillUnengaged: ContactRow[] };

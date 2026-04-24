@@ -299,6 +299,108 @@ export async function GET(
     if (c.start_date < confStartDate) priorConfIds.add(cid);
   });
 
+  // ── Phase 3: prior conference averages ────────────────────────────────────
+  // Compute per-conference metrics across prior conferences, then average them.
+  const priorIdList = Array.from(priorConfIds);
+  type PriorAvg = { contactsPerRep: number | null; meetingsPerRep: number | null; followUpRate: number | null; notesPerContact: number | null; icpCaptureRate: number | null; priorConferences: number };
+  let priorAvg: PriorAvg = { contactsPerRep: null, meetingsPerRep: null, followUpRate: null, notesPerContact: null, icpCaptureRate: null, priorConferences: 0 };
+
+  if (priorIdList.length > 0) {
+    const ph = priorIdList.map(() => '?').join(',');
+    const [pContactsRes, pMeetingsRes, pFuRes, pEntityNotesRes, pDetailsNotesRes, pIcpRes, pConfsRes] = await Promise.all([
+      db.execute({
+        sql: `SELECT ca.conference_id, COUNT(DISTINCT ca.attendee_id) as contacts
+              FROM conference_attendees ca
+              JOIN attendees a ON a.id = ca.attendee_id
+              JOIN companies c ON a.company_id = c.id
+              WHERE LOWER(c.company_type) LIKE ? AND ca.conference_id IN (${ph})
+              GROUP BY ca.conference_id`,
+        args: [`%${operatorType.toLowerCase()}%`, ...priorIdList],
+      }),
+      db.execute({
+        sql: `SELECT m.conference_id, COUNT(*) as meetings
+              FROM meetings m
+              JOIN config_options co ON LOWER(co.value) = LOWER(m.outcome) AND co.action_key = 'meeting_held'
+              WHERE m.conference_id IN (${ph})
+              GROUP BY m.conference_id`,
+        args: priorIdList,
+      }),
+      db.execute({
+        sql: `SELECT conference_id,
+                     COUNT(*) as total,
+                     SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done
+              FROM follow_ups WHERE conference_id IN (${ph})
+              GROUP BY conference_id`,
+        args: priorIdList,
+      }),
+      db.execute({
+        sql: `SELECT cf.id as conference_id, COUNT(*) as notes
+              FROM entity_notes en JOIN conferences cf ON cf.name = en.conference_name
+              WHERE en.entity_type = 'attendee' AND cf.id IN (${ph})
+              GROUP BY cf.id`,
+        args: priorIdList,
+      }),
+      db.execute({
+        sql: `SELECT conference_id, COUNT(*) as notes
+              FROM conference_attendee_details
+              WHERE conference_id IN (${ph}) AND notes IS NOT NULL AND TRIM(notes) != ''
+              GROUP BY conference_id`,
+        args: priorIdList,
+      }),
+      db.execute({
+        sql: `SELECT ca.conference_id, COUNT(DISTINCT ca.attendee_id) as icp
+              FROM conference_attendees ca
+              JOIN attendees a ON a.id = ca.attendee_id
+              JOIN companies c ON a.company_id = c.id
+              WHERE LOWER(c.company_type) LIKE ? AND LOWER(c.icp) = 'yes'
+              AND ca.conference_id IN (${ph})
+              GROUP BY ca.conference_id`,
+        args: [`%${operatorType.toLowerCase()}%`, ...priorIdList],
+      }),
+      db.execute({
+        sql: `SELECT id, internal_attendees FROM conferences WHERE id IN (${ph})`,
+        args: priorIdList,
+      }),
+    ]);
+
+    const pContactsByConf = new Map(pContactsRes.rows.map(r => [Number(r.conference_id), Number(r.contacts)]));
+    const pMeetingsByConf = new Map(pMeetingsRes.rows.map(r => [Number(r.conference_id), Number(r.meetings)]));
+    const pFuByConf = new Map(pFuRes.rows.map(r => [Number(r.conference_id), { total: Number(r.total), done: Number(r.done) }]));
+    const pEntityNotesByConf = new Map(pEntityNotesRes.rows.map(r => [Number(r.conference_id), Number(r.notes)]));
+    const pDetailsNotesByConf = new Map(pDetailsNotesRes.rows.map(r => [Number(r.conference_id), Number(r.notes)]));
+    const pIcpByConf = new Map(pIcpRes.rows.map(r => [Number(r.conference_id), Number(r.icp)]));
+
+    let sumCPR = 0, sumMPR = 0, sumFuR = 0, sumNPC = 0, sumICP = 0, count = 0;
+    for (const row of pConfsRes.rows) {
+      const cid = Number(row.id);
+      const contacts = pContactsByConf.get(cid) ?? 0;
+      const meetings = pMeetingsByConf.get(cid) ?? 0;
+      if (contacts === 0 && meetings === 0) continue; // skip empty/cancelled conferences
+      const repCount = Math.max(1, row.internal_attendees
+        ? String(row.internal_attendees).split(',').map((s: string) => s.trim()).filter(Boolean).length
+        : 1);
+      const fu = pFuByConf.get(cid) ?? { total: 0, done: 0 };
+      const notes = (pEntityNotesByConf.get(cid) ?? 0) + (pDetailsNotesByConf.get(cid) ?? 0);
+      const icp = pIcpByConf.get(cid) ?? 0;
+      sumCPR += contacts / repCount;
+      sumMPR += meetings / repCount;
+      sumFuR += fu.total > 0 ? (fu.done / fu.total) * 100 : 0;
+      sumNPC += contacts > 0 ? notes / contacts : 0;
+      sumICP += contacts > 0 ? (icp / contacts) * 100 : 0;
+      count++;
+    }
+    if (count > 0) {
+      priorAvg = {
+        contactsPerRep: Math.round(sumCPR / count),
+        meetingsPerRep: Math.round(sumMPR / count),
+        followUpRate: Math.round(sumFuR / count),
+        notesPerContact: Math.round(sumNPC / count),
+        icpCaptureRate: Math.round(sumICP / count),
+        priorConferences: count,
+      };
+    }
+  }
+
   // Build per-attendee lookup maps
   // allConfByAttendee: attendee_id -> conference_ids[]
   const allConfByAttendee = new Map<number, number[]>();
@@ -884,11 +986,11 @@ export async function GET(
     },
     companyTypeBreakdown,
     priorAverageComparison: {
-      contactsPerRep: { current: repPerfRows.length > 0 ? Math.round(contactRows.length / repPerfRows.length) : 0, avg: 0 },
-      meetingsPerRep: { current: repPerfRows.length > 0 ? Math.round(meetingsHeld / Math.max(1, repPerfRows.length)) : 0, avg: 0 },
-      icpCaptureRate: { current: icpCaptureRate, avg: 0 },
-      followUpRate: { current: fuRate, avg: 0 },
-      notesPerContact: { current: contactRows.length > 0 ? Math.round(notesLoggedCount / contactRows.length) : 0, avg: 0 },
+      contactsPerRep: { current: repPerfRows.length > 0 ? Math.round(contactRows.length / repPerfRows.length) : 0, avg: priorAvg.contactsPerRep },
+      meetingsPerRep: { current: repPerfRows.length > 0 ? Math.round(meetingsHeld / Math.max(1, repPerfRows.length)) : 0, avg: priorAvg.meetingsPerRep },
+      icpCaptureRate: { current: icpCaptureRate, avg: priorAvg.icpCaptureRate },
+      followUpRate: { current: fuRate, avg: priorAvg.followUpRate },
+      notesPerContact: { current: contactRows.length > 0 ? Math.round(notesLoggedCount / contactRows.length) : 0, avg: priorAvg.notesPerContact },
     },
   };
 

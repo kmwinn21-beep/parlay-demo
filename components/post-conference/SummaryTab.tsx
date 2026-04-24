@@ -129,13 +129,13 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
     summary.formSubmissions,
   );
 
-  const compareItems: { label: string; current: number; avg: number }[] = [
+  const compareItems: { label: string; current: number; avg: number | null }[] = [
     { label: 'Contacts per Rep', current: summary.priorAverageComparison.contactsPerRep.current, avg: summary.priorAverageComparison.contactsPerRep.avg },
     { label: 'Follow-up Rate %', current: summary.priorAverageComparison.followUpRate.current, avg: summary.priorAverageComparison.followUpRate.avg },
     { label: 'Meetings per Rep', current: summary.priorAverageComparison.meetingsPerRep.current, avg: summary.priorAverageComparison.meetingsPerRep.avg },
     { label: 'Notes per Contact', current: summary.priorAverageComparison.notesPerContact.current, avg: summary.priorAverageComparison.notesPerContact.avg },
     { label: 'ICP Capture Rate %', current: summary.priorAverageComparison.icpCaptureRate.current, avg: summary.priorAverageComparison.icpCaptureRate.avg },
-    { label: 'Newly Engaged', current: summary.newlyEngaged, avg: 0 },
+    { label: 'Newly Engaged', current: summary.newlyEngaged, avg: null },
   ];
 
   const sortedReps = [...repPerformance]
@@ -199,21 +199,32 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
         </div>
 
         <div className="rounded-xl border border-gray-200 p-4 bg-white">
-          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Conference vs Prior Average</h4>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Conference vs Prior Average</h4>
+          <p className="text-xs text-gray-400 mb-3">
+            {compareItems.some(item => item.avg !== null) ? 'vs. avg across prior conferences' : 'No prior conference data'}
+          </p>
           <div>
             {compareItems.map((item, i) => {
-              const diff = item.current - item.avg;
-              const up = diff >= 0;
+              const hasAvg = item.avg !== null;
+              const diff = hasAvg ? item.current - (item.avg as number) : 0;
+              const direction = diff > 0 ? 'up' : diff < 0 ? 'down' : 'same';
               return (
                 <div key={i} className="flex items-center justify-between py-2"
                   style={{ borderBottom: i < compareItems.length - 1 ? '1px solid #f9fafb' : 'none' }}>
                   <span className="text-xs text-gray-600">{item.label}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span className="text-sm font-semibold text-gray-800">{item.current}</span>
-                    {item.avg > 0 && (
-                      <span className={`text-xs font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {up ? '↑' : '↓'} {Math.abs(diff)}
-                      </span>
+                    {hasAvg && (
+                      <>
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                          direction === 'up' ? 'bg-emerald-100 text-emerald-700' :
+                          direction === 'down' ? 'bg-red-100 text-red-600' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {direction === 'up' ? `↑ ${Math.abs(diff)}` : direction === 'down' ? `↓ ${Math.abs(diff)}` : '='}
+                        </span>
+                        <span className="text-xs text-gray-400">avg {item.avg}</span>
+                      </>
                     )}
                   </div>
                 </div>
