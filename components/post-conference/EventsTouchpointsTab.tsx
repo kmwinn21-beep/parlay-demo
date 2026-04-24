@@ -297,7 +297,7 @@ export function EventsTouchpointsTab({ socialEvents, touchpoints }: {
             </div>
 
             {/* Attendee cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {touchpoints.map(row => <TouchpointCard key={row.attendee_id} row={row} />)}
             </div>
           </>
