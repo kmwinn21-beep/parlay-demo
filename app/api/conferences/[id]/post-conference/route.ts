@@ -86,7 +86,7 @@ function computeHealthScore(params: {
     const hasMeetingHeld = actionKeys.includes('meeting_held');
     const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hasNotes = noteCount > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
-    const hasSocialAttending = social.some(e => String(e.rsvp_status).includes('attending'));
+    const hasSocialAttending = social.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
     const hasFus = fus.length > 0;
     const hasCompletedFu = fus.some(f => Number(f.completed) === 1);
     const hasTouchpoint = actionVals.length > 0 && actionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
@@ -173,7 +173,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -201,6 +201,12 @@ export async function GET(
       args: [confId],
     }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
+            JOIN social_events se ON r.social_event_id = se.id
+            WHERE se.conference_id = ? AND r.rsvp_status LIKE '%attended%'`,
+      args: [confId],
+    }),
   ]);
 
   const operatorType = operatorTypeRes.rows[0]?.value ? String(operatorTypeRes.rows[0].value) : 'Operator';
@@ -224,7 +230,7 @@ export async function GET(
 
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
-    allSocialRes, allConfsRes] = await Promise.all([
+    allSocialRes, allConfsRes, confTouchpointsRes] = await Promise.all([
     db.execute({
       sql: `SELECT ca.attendee_id, ca.conference_id
             FROM conference_attendees ca
@@ -262,6 +268,11 @@ export async function GET(
       args: attendeeIds,
     }),
     db.execute({ sql: `SELECT id, name, start_date FROM conferences ORDER BY start_date ASC`, args: [] }),
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM attendee_touchpoints
+            WHERE conference_id = ? AND attendee_id IN (${idPlaceholders})`,
+      args: [confId, ...attendeeIds],
+    }),
   ]);
 
   // Index conferences by id
@@ -484,17 +495,14 @@ export async function GET(
     const mtType = m.meeting_type ? String(m.meeting_type) : null;
     const isWalkIn = mtType === unplannedValue;
 
-    // Determine status from action_key
-    const detKey = `${aid}_${confId}`;
-    const det = detailsByAttConf.get(detKey);
-    const actionStr = det?.action ? String(det.action) : '';
-    const actionKeys = actionStr.split(',').map(s => s.trim()).filter(Boolean)
-      .map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    let status: MeetingRow['status'] = 'held';
-    if (actionKeys.includes('no_show')) status = 'no_show';
-    else if (actionKeys.includes('rescheduled')) status = 'rescheduled';
-    else if (actionKeys.includes('cancelled')) status = 'cancelled';
-    else if (actionKeys.includes('meeting_held')) status = 'held';
+    // Derive status from the meeting's own outcome field — canonical source of truth
+    const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+    const outcomeKey = outcomeStr ? (actionKeyMap.get(outcomeStr) ?? null) : null;
+    let status: MeetingRow['status'] = 'rescheduled'; // no outcome = not yet held
+    if (outcomeKey === 'no_show') status = 'no_show';
+    else if (outcomeKey === 'rescheduled') status = 'rescheduled';
+    else if (outcomeKey === 'cancelled') status = 'cancelled';
+    else if (outcomeKey === 'meeting_held') status = 'held';
 
     meetingRows.push({
       id: Number(m.id),
@@ -668,7 +676,7 @@ export async function GET(
     const hadMeeting = confActionKeys.includes('meeting_held');
     const hadOutcome = hadMeeting && confMeetingsList.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hadNotes = confNoteCount > 0 || (confDet?.notes != null && String(confDet.notes).trim().length > 0);
-    const hadSocial = confSocialList.some(e => String(e.rsvp_status).includes('attending'));
+    const hadSocial = confSocialList.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
     const hadFus = confFuList.length > 0;
     const hadCompletedFu = confFuList.some(f => Number(f.completed) === 1);
     const hadTouchpoint = confActionVals.length > 0 && confActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
@@ -788,6 +796,21 @@ export async function GET(
   const icpCount = contactRows.filter(c => c.icp === 'Yes').length;
   const icpCaptureRate = attendees.length > 0 ? Math.round((icpCount / attendees.length) * 100) : 0;
 
+  // Notes logged for this conference (entity_notes + conference_attendee_details.notes)
+  const entityNotesCount = allNotesRes.rows.filter(r => String(r.conference_name) === confName).length;
+  const detailsNotesCount = allDetailsRes.rows.filter(r =>
+    Number(r.conference_id) === confId &&
+    attendeeIds.includes(Number(r.attendee_id)) &&
+    r.notes && String(r.notes).trim().length > 0
+  ).length;
+  const notesLoggedCount = entityNotesCount + detailsNotesCount;
+
+  // Touchpoints for this conference — from attendee_touchpoints table
+  const touchpointCount = Number(confTouchpointsRes.rows[0]?.count ?? 0);
+
+  // Event attendees — all attendees with 'attended' RSVP status for this conference's social events
+  const eventAttendeesCount = Number(eventAttendeesRes.rows[0]?.count ?? 0);
+
   // ── Company type breakdown ────────────────────────────────────────────────
   const ctCount: Record<string, number> = {};
   for (const c of contactRows) {
@@ -835,9 +858,9 @@ export async function GET(
     repsAttended: repsFromConf.length || repPerfRows.length,
     engagementByType: {
       meetingsHeld,
-      socialConversations: 0, // social event RSVPs counted separately
-      touchpoints: 0,
-      notesLogged: 0,
+      socialConversations: eventAttendeesCount,
+      touchpoints: touchpointCount,
+      notesLogged: notesLoggedCount,
       zeroEngagement: stillUnengaged.length,
     },
     companyTypeBreakdown,
@@ -846,7 +869,7 @@ export async function GET(
       meetingsPerRep: { current: repPerfRows.length > 0 ? Math.round(meetingsHeld / Math.max(1, repPerfRows.length)) : 0, avg: 0 },
       icpCaptureRate: { current: icpCaptureRate, avg: 0 },
       followUpRate: { current: fuRate, avg: 0 },
-      notesPerContact: { current: 0, avg: 0 },
+      notesPerContact: { current: contactRows.length > 0 ? Math.round(notesLoggedCount / contactRows.length) : 0, avg: 0 },
     },
   };
 

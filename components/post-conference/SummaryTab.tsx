@@ -125,7 +125,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
     summary.engagementByType.socialConversations,
     summary.engagementByType.touchpoints,
     summary.engagementByType.notesLogged,
-    summary.engagementByType.zeroEngagement,
+    summary.followUpsCreated,
   );
 
   const compareItems: { label: string; current: number; avg: number }[] = [
@@ -180,10 +180,10 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
           <div className="space-y-2">
             {[
               { label: 'Meetings Held', value: summary.engagementByType.meetingsHeld, color: '#059669' },
-              { label: 'Social Conversations', value: summary.engagementByType.socialConversations, color: '#0f766e' },
+              { label: 'Event Attendees', value: summary.engagementByType.socialConversations, color: '#0f766e' },
               { label: 'Touchpoints', value: summary.engagementByType.touchpoints, color: '#1B76BC' },
               { label: 'Notes Logged', value: summary.engagementByType.notesLogged, color: '#7c3aed' },
-              { label: 'Zero Engagement', value: summary.engagementByType.zeroEngagement, color: '#ef4444' },
+              { label: 'Follow Ups', value: summary.followUpsCreated, color: '#d97706' },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-3">
                 <span className="text-xs text-gray-600 w-24 truncate flex-shrink-0">{item.label}</span>
