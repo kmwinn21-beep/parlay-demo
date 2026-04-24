@@ -129,7 +129,7 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
           { label: 'Total Captured', value: contacts.newlyEngaged.length + contacts.reEngagements.length, color: '#223A5E' },
           { label: 'Newly Engaged', value: contacts.newlyEngaged.length, color: '#059669' },
@@ -175,7 +175,7 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
       {contacts.newlyEngaged.length > 0 && (
         <div>
           <SectionDivider label="Newly Engaged" count={contacts.newlyEngaged.length} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {contacts.newlyEngaged.map(c => <ContactCard key={c.attendee_id} c={c} />)}
           </div>
         </div>
@@ -185,7 +185,7 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
       {contacts.reEngagements.length > 0 && (
         <div>
           <SectionDivider label="Re-Engagements" count={contacts.reEngagements.length} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {contacts.reEngagements.map(c => (
               <div key={c.attendee_id} className="rounded-xl border border-gray-200 p-4 bg-white space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -223,7 +223,7 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
       {contacts.stillUnengaged.length > 0 && (
         <div>
           <SectionDivider label="Still Unengaged" count={contacts.stillUnengaged.length} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {contacts.stillUnengaged.map(c => <GhostCard key={c.attendee_id} c={c} />)}
           </div>
         </div>
