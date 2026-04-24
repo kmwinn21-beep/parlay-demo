@@ -173,7 +173,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, touchpointOptsRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -201,7 +201,6 @@ export async function GET(
       args: [confId],
     }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
-    db.execute({ sql: `SELECT value FROM config_options WHERE LOWER(category) = 'touchpoint'`, args: [] }),
   ]);
 
   const operatorType = operatorTypeRes.rows[0]?.value ? String(operatorTypeRes.rows[0].value) : 'Operator';
@@ -218,9 +217,6 @@ export async function GET(
     if (r.value && r.action_key) actionKeyMap.set(String(r.value), String(r.action_key));
   }
   const unplannedValue = unplannedTypeRes.rows[0]?.value ? String(unplannedTypeRes.rows[0].value) : 'Unplanned';
-  const touchpointValues = new Set<string>(
-    touchpointOptsRes.rows.map(r => String(r.value).trim()).filter(Boolean)
-  );
 
   const attendeeIds = attendees.map(a => Number(a.id));
   // Use a sentinel that matches nothing when no operator attendees exist
@@ -228,7 +224,7 @@ export async function GET(
 
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
-    allSocialRes, allConfsRes] = await Promise.all([
+    allSocialRes, allConfsRes, confTouchpointsRes] = await Promise.all([
     db.execute({
       sql: `SELECT ca.attendee_id, ca.conference_id
             FROM conference_attendees ca
@@ -266,6 +262,11 @@ export async function GET(
       args: attendeeIds,
     }),
     db.execute({ sql: `SELECT id, name, start_date FROM conferences ORDER BY start_date ASC`, args: [] }),
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM attendee_touchpoints
+            WHERE conference_id = ? AND attendee_id IN (${idPlaceholders})`,
+      args: [confId, ...attendeeIds],
+    }),
   ]);
 
   // Index conferences by id
@@ -488,17 +489,14 @@ export async function GET(
     const mtType = m.meeting_type ? String(m.meeting_type) : null;
     const isWalkIn = mtType === unplannedValue;
 
-    // Determine status from action_key — only 'held' when meeting_held is explicitly logged
-    const detKey = `${aid}_${confId}`;
-    const det = detailsByAttConf.get(detKey);
-    const actionStr = det?.action ? String(det.action) : '';
-    const actionKeys = actionStr.split(',').map(s => s.trim()).filter(Boolean)
-      .map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    let status: MeetingRow['status'] = 'rescheduled'; // default: scheduled but no outcome yet
-    if (actionKeys.includes('no_show')) status = 'no_show';
-    else if (actionKeys.includes('rescheduled')) status = 'rescheduled';
-    else if (actionKeys.includes('cancelled')) status = 'cancelled';
-    else if (actionKeys.includes('meeting_held')) status = 'held';
+    // Derive status from the meeting's own outcome field — canonical source of truth
+    const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+    const outcomeKey = outcomeStr ? (actionKeyMap.get(outcomeStr) ?? null) : null;
+    let status: MeetingRow['status'] = 'rescheduled'; // no outcome = not yet held
+    if (outcomeKey === 'no_show') status = 'no_show';
+    else if (outcomeKey === 'rescheduled') status = 'rescheduled';
+    else if (outcomeKey === 'cancelled') status = 'cancelled';
+    else if (outcomeKey === 'meeting_held') status = 'held';
 
     meetingRows.push({
       id: Number(m.id),
@@ -801,16 +799,8 @@ export async function GET(
   ).length;
   const notesLoggedCount = entityNotesCount + detailsNotesCount;
 
-  // Touchpoints for this conference — count touchpoint config_option values in action fields
-  let touchpointCount = 0;
-  for (const r of allDetailsRes.rows) {
-    if (Number(r.conference_id) !== confId) continue;
-    if (!attendeeIds.includes(Number(r.attendee_id))) continue;
-    if (!r.action) continue;
-    for (const v of String(r.action).split(',').map(s => s.trim()).filter(Boolean)) {
-      if (touchpointValues.has(v)) touchpointCount++;
-    }
-  }
+  // Touchpoints for this conference — from attendee_touchpoints table
+  const touchpointCount = Number(confTouchpointsRes.rows[0]?.count ?? 0);
 
   // Event attendees — attending RSVPs for social events tied to this conference
   const eventAttendeesCount = allSocialRes.rows.filter(r =>
