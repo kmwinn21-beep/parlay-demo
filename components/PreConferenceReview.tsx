@@ -192,7 +192,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
 
   return (
     <>
-      <button onClick={load} disabled={loading} className="flex items-center gap-1.5 py-3 px-2 text-xs sm:text-sm font-medium text-gray-500 hover:text-brand-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-wait">
+      <button onClick={load} disabled={loading} className="flex items-center gap-1.5 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-wait">
         {loading ? (
           <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

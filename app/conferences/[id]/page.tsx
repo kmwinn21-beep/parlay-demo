@@ -986,7 +986,18 @@ export default function ConferenceDetailPage() {
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
+                <div className="flex items-center gap-1 border-l border-gray-200 pl-3">
+                  <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
+                  <PostConferenceReview
+                    conferenceId={conference.id}
+                    conferenceName={conference.name}
+                    endDate={conference.end_date}
+                    userRole={currentUser?.role ?? 'user'}
+                  />
+                </div>
+              </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
                 <span className="flex items-center gap-2 text-sm text-gray-600">
                   <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1063,8 +1074,8 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 flex items-center">
-        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap overflow-x-auto flex-1 min-w-0">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {visibleConferenceTabs.map((tabKey) => {
             const baseLabel = conferenceTabConfig.getLabel(tabKey);
             const labelWithCount = tabKey === 'attendees'
@@ -1090,15 +1101,6 @@ export default function ConferenceDetailPage() {
             );
           })}
         </nav>
-        <div className="flex items-center gap-1 px-2 flex-shrink-0 border-l border-gray-100">
-          <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
-          <PostConferenceReview
-            conferenceId={conference.id}
-            conferenceName={conference.name}
-            endDate={conference.end_date}
-            userRole={currentUser?.role ?? 'user'}
-          />
-        </div>
       </div>
 
       {/* Attendees Tab */}

@@ -164,7 +164,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
         type="button"
         disabled={!isAccessible}
         onClick={handleOpen}
-        className={`flex items-center gap-1.5 py-3 px-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap
+        className={`flex items-center gap-1.5 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap
           ${isAccessible
             ? `text-gray-500 hover:text-brand-accent ${loading ? 'cursor-wait' : 'cursor-pointer'}`
             : 'text-gray-400 cursor-not-allowed opacity-40'}`}
