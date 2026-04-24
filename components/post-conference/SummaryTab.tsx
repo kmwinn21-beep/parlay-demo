@@ -212,20 +212,21 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
                 <div key={i} className="flex items-center justify-between py-2"
                   style={{ borderBottom: i < compareItems.length - 1 ? '1px solid #f9fafb' : 'none' }}>
                   <span className="text-xs text-gray-600">{item.label}</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-semibold text-gray-800">{item.current}</span>
-                    {hasAvg && (
-                      <>
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: 56, display: 'flex', justifyContent: 'flex-end' }}>
+                      {hasAvg && (
                         <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                           direction === 'up' ? 'bg-emerald-100 text-emerald-700' :
                           direction === 'down' ? 'bg-red-100 text-red-600' :
                           'bg-gray-100 text-gray-500'
                         }`}>
-                          {direction === 'up' ? `↑ ${Math.abs(diff)}` : direction === 'down' ? `↓ ${Math.abs(diff)}` : '='}
+                          {direction === 'up' ? `+${Math.abs(diff)}` : direction === 'down' ? `-${Math.abs(diff)}` : '='}
                         </span>
-                        <span className="text-xs text-gray-400">avg {item.avg}</span>
-                      </>
-                    )}
+                      )}
+                    </div>
+                    <div style={{ width: 28, textAlign: 'right' }}>
+                      <span className="text-sm font-semibold text-gray-800">{item.current}</span>
+                    </div>
                   </div>
                 </div>
               );
