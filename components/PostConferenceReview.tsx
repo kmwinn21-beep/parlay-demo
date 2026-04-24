@@ -22,7 +22,7 @@ export interface ContactRow {
   meetingHeld: boolean; hasNotes: boolean;
 }
 export interface MeetingRow {
-  id: number; attendee_id: number; attendeeName: string;
+  id: number; attendee_id: number; attendeeName: string; attendeeTitle: string | null;
   company_name: string | null; company_type: string | null; company_id: number | null;
   seniority: string | null; meeting_date: string | null; meeting_time: string | null;
   location: string | null; scheduled_by: string | null; outcome: string | null;
@@ -30,7 +30,7 @@ export interface MeetingRow {
   status: 'held' | 'no_show' | 'rescheduled' | 'cancelled';
 }
 export interface FollowUpRow {
-  id: number; attendee_id: number; attendeeName: string;
+  id: number; attendee_id: number; attendeeName: string; attendeeTitle: string | null;
   company_name: string | null; company_id: number | null;
   next_steps: string | null; assigned_rep: string | null;
   completed: number; created_at: string | null;
@@ -51,6 +51,7 @@ export interface RelationshipShiftRow {
   attendee_id: number; attendeeName: string;
   company_name: string | null; company_type: string | null;
   company_id: number | null; icp: string | null;
+  assignedUsers: string[];
   priorConferenceCount: number; healthBefore: number; healthAfter: number;
   healthDelta: number; shiftReason: string;
 }
@@ -64,7 +65,7 @@ export interface PostConferenceData {
   summary: {
     conference: { id: number; name: string; start_date: string; end_date: string; location: string };
     totalCaptured: number; newlyEngaged: number; reEngagements: number;
-    stillUnengaged: number; icpContacts: number;
+    stillUnengaged: number; icpContacts: number; icpCaptureRate: number;
     meetingsScheduled: number; meetingsHeld: number; walkInMeetings: number;
     noShows: number; meetingsWithOutcome: number;
     followUpsCreated: number; followUpsCompleted: number;
@@ -217,12 +218,11 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
               </button>
             </div>
             <div className="flex flex-wrap gap-2 mt-3">
-              <StatPill label="Captured" value={data.summary.totalCaptured} />
+              <StatPill label="Reps" value={data.summary.repsAttended} />
               <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
               <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
               <StatPill label="Follow-up Rate" value={`${fuRate}%`} />
-              <StatPill label="Reps" value={data.summary.repsAttended} />
-              <StatPill label="ICP Contacts" value={data.summary.icpContacts} />
+              <StatPill label="ICP Capture Rate" value={`${data.summary.icpCaptureRate}%`} />
             </div>
           </div>
 

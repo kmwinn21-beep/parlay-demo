@@ -12,7 +12,7 @@ function HealthBar({ score }: { score: number }) {
       <div className="w-12 bg-gray-100 rounded-full h-1.5 overflow-hidden flex-shrink-0">
         <div className="h-1.5 rounded-full" style={{ width: `${score}%`, backgroundColor: color }} />
       </div>
-      <span className="text-[10px] font-medium" style={{ color }}>{score}</span>
+      <span className="text-xs font-medium" style={{ color }}>{score}</span>
     </div>
   );
 }
@@ -20,7 +20,7 @@ function HealthBar({ score }: { score: number }) {
 function DeltaBadge({ delta }: { delta: number }) {
   const up = delta > 0;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
       {up ? `↑ +${delta}` : `↓ ${delta}`} pts
     </span>
   );
@@ -45,30 +45,36 @@ function ShiftCard({ r, direction }: { r: RelationshipShiftRow; direction: 'impr
 
       <div className="flex items-center gap-4">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[9px] text-gray-400 uppercase tracking-wider">Before</span>
+          <span className="text-xs text-gray-400 uppercase tracking-wider" style={{ fontSize: 9 }}>Before</span>
           <HealthBar score={r.healthBefore} />
         </div>
         <span className="text-gray-300 text-xs">→</span>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[9px] text-gray-400 uppercase tracking-wider">After</span>
+          <span className="text-xs text-gray-400 uppercase tracking-wider" style={{ fontSize: 9 }}>After</span>
           <HealthBar score={r.healthAfter} />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-1">
-        {r.icp === 'Yes' && <span className="badge-green text-[10px] px-2 py-0.5">ICP</span>}
+        {r.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5">ICP</span>}
         {r.company_type && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
             {r.company_type.split(',')[0].trim()}
           </span>
         )}
+        {r.assignedUsers.length > 0 && r.assignedUsers.map((u, i) => (
+          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+            style={{ background: 'rgba(34,58,94,0.06)', color: '#223A5E', borderColor: 'rgba(34,58,94,0.15)' }}>
+            {u}
+          </span>
+        ))}
         {r.priorConferenceCount > 0 && (
-          <span className="text-[10px] text-gray-400">{r.priorConferenceCount} prior conf{r.priorConferenceCount !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-gray-400">{r.priorConferenceCount} prior conf{r.priorConferenceCount !== 1 ? 's' : ''}</span>
         )}
       </div>
 
       {r.shiftReason && (
-        <p className="text-[10px] text-gray-500 border-t border-gray-100 pt-2">{r.shiftReason}</p>
+        <p className="text-xs text-gray-500 border-t border-gray-100 pt-2">{r.shiftReason}</p>
       )}
     </div>
   );
@@ -111,9 +117,9 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
             )}
           </div>
           <div className="flex items-center gap-4 mt-2">
-            <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Improved</span>
-            <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-gray-200 inline-block" /> Unchanged</span>
-            <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Declined</span>
+            <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Improved</span>
+            <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-gray-200 inline-block" /> Unchanged</span>
+            <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Declined</span>
           </div>
         </div>
       )}
@@ -126,7 +132,7 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
             <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wider whitespace-nowrap">Improved ({improved.length})</span>
             <div className="flex-1 h-px bg-emerald-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {improved.map(r => <ShiftCard key={r.attendee_id} r={r} direction="improved" />)}
           </div>
         </div>
@@ -140,7 +146,7 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
             <span className="text-xs font-semibold text-red-500 uppercase tracking-wider whitespace-nowrap">Declined ({declined.length})</span>
             <div className="flex-1 h-px bg-red-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {declined.map(r => <ShiftCard key={r.attendee_id} r={r} direction="declined" />)}
           </div>
         </div>

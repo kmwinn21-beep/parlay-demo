@@ -12,13 +12,13 @@ function StatusPill({ status }: { status: FollowUpRow['status'] }) {
     not_started: { label: 'Not Started', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
   };
   const { label, className } = map[status];
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${className}`}>{label}</span>;
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${className}`}>{label}</span>;
 }
 
 function DaysChip({ days }: { days: number }) {
   const urgent = days >= 7;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${urgent ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${urgent ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
       {days}d since conf
     </span>
   );
@@ -30,7 +30,7 @@ function FollowUpCard({ f }: { f: FollowUpRow }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <Link href={`/attendees/${f.attendee_id}`} className="text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors block truncate">
-            {f.attendeeName}
+            {f.attendeeName}{f.attendeeTitle ? `, ${f.attendeeTitle}` : ''}
           </Link>
           {f.company_name && (
             <Link href={f.company_id ? `/companies/${f.company_id}` : '#'} className="text-xs text-gray-400 hover:text-brand-secondary truncate block">
@@ -46,7 +46,7 @@ function FollowUpCard({ f }: { f: FollowUpRow }) {
       <div className="flex flex-wrap items-center gap-2">
         <DaysChip days={f.daysSinceConference} />
         {f.assigned_rep && (
-          <span className="text-[10px] text-gray-500">→ {f.assigned_rep}</span>
+          <span className="text-xs text-gray-500">→ {f.assigned_rep}</span>
         )}
       </div>
     </div>
@@ -89,7 +89,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
           <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
             <div className="h-3 rounded-full transition-all" style={{ width: `${rate}%`, backgroundColor: rate >= 40 ? '#059669' : '#d97706' }} />
           </div>
-          <p className="text-[10px] text-gray-400 mt-1">{completed.length} of {followUps.length} follow-ups completed</p>
+          <p className="text-xs text-gray-400 mt-1">{completed.length} of {followUps.length} follow-ups completed</p>
         </div>
       )}
 
@@ -101,7 +101,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Not Started ({notStarted.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {notStarted.map(f => <FollowUpCard key={f.id} f={f} />)}
           </div>
         </div>
@@ -115,7 +115,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">In Progress ({inProgress.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {inProgress.map(f => <FollowUpCard key={f.id} f={f} />)}
           </div>
         </div>
@@ -129,7 +129,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Completed ({completed.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {completed.map(f => <FollowUpCard key={f.id} f={f} />)}
           </div>
         </div>

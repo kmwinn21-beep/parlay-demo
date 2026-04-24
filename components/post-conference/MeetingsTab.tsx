@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getHex } from '@/lib/colors';
 import type { MeetingRow, PostConferenceData } from '../PostConferenceReview';
 
 type Meetings = PostConferenceData['meetings'];
@@ -21,16 +23,29 @@ function StatusPill({ status }: { status: MeetingRow['status'] }) {
     cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-600 border border-gray-200' },
   };
   const { label, className } = map[status] ?? map.cancelled;
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${className}`}>{label}</span>;
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${className}`}>{label}</span>;
 }
 
-function MeetingCard({ m }: { m: MeetingRow }) {
+function ColorPill({ label, hex }: { label: string; hex: string }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+      style={{ backgroundColor: `${hex}18`, borderColor: `${hex}40`, color: hex }}>
+      {label}
+    </span>
+  );
+}
+
+function MeetingCard({ m, colorMaps }: { m: MeetingRow; colorMaps: Record<string, Record<string, string | null>> }) {
+  const seniorityHex = m.seniority ? (getHex(m.seniority, colorMaps.seniority ?? {}) || '#6b7280') : null;
+  const companyTypeFirst = m.company_type ? m.company_type.split(',')[0].trim() : null;
+  const companyTypeHex = companyTypeFirst ? (getHex(companyTypeFirst, colorMaps.company_type ?? {}) || '#6b7280') : null;
+
   return (
     <div className="rounded-xl border border-gray-200 p-4 bg-white space-y-2 hover:shadow-sm transition-all">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors block truncate">
-            {m.attendeeName}
+            {m.attendeeName}{m.attendeeTitle ? `, ${m.attendeeTitle}` : ''}
           </Link>
           {m.company_name && (
             <Link href={m.company_id ? `/companies/${m.company_id}` : '#'} className="text-xs text-gray-400 hover:text-brand-secondary truncate block">
@@ -42,34 +57,24 @@ function MeetingCard({ m }: { m: MeetingRow }) {
       </div>
       <div className="flex flex-wrap gap-1">
         {m.isWalkIn && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
             {m.meeting_type ?? 'Unplanned'}
           </span>
         )}
-        {m.seniority && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-            {m.seniority}
-          </span>
-        )}
-        {m.company_type && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-            {m.company_type.split(',')[0].trim()}
-          </span>
-        )}
+        {seniorityHex && m.seniority && <ColorPill label={m.seniority} hex={seniorityHex} />}
+        {companyTypeHex && companyTypeFirst && <ColorPill label={companyTypeFirst} hex={companyTypeHex} />}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
         {m.meeting_date && <span>{fmtDate(m.meeting_date)}{m.meeting_time ? ` · ${m.meeting_time}` : ''}</span>}
         {m.location && <span>{m.location}</span>}
-        {m.scheduled_by && <span>by {m.scheduled_by}</span>}
+        {m.scheduled_by && <span>Rep: {m.scheduled_by}</span>}
       </div>
-      {m.outcome && (
-        <p className="text-xs text-gray-600 border-t border-gray-100 pt-2">{m.outcome}</p>
-      )}
     </div>
   );
 }
 
 export function MeetingsTab({ meetings }: { meetings: Meetings }) {
+  const colorMaps = useConfigColors();
   const held = meetings.filter(m => m.status === 'held');
   const noShows = meetings.filter(m => m.status === 'no_show');
   const other = meetings.filter(m => m.status !== 'held' && m.status !== 'no_show');
@@ -102,8 +107,8 @@ export function MeetingsTab({ meetings }: { meetings: Meetings }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Meetings Held ({held.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {held.map(m => <MeetingCard key={m.id} m={m} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {held.map(m => <MeetingCard key={m.id} m={m} colorMaps={colorMaps} />)}
           </div>
         </div>
       )}
@@ -116,8 +121,8 @@ export function MeetingsTab({ meetings }: { meetings: Meetings }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">No Shows ({noShows.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {noShows.map(m => <MeetingCard key={m.id} m={m} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {noShows.map(m => <MeetingCard key={m.id} m={m} colorMaps={colorMaps} />)}
           </div>
         </div>
       )}
@@ -130,8 +135,8 @@ export function MeetingsTab({ meetings }: { meetings: Meetings }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Other ({other.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {other.map(m => <MeetingCard key={m.id} m={m} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {other.map(m => <MeetingCard key={m.id} m={m} colorMaps={colorMaps} />)}
           </div>
         </div>
       )}

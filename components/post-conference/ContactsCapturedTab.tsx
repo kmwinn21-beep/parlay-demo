@@ -9,7 +9,7 @@ function HealthDelta({ delta }: { delta: number }) {
   if (delta === 0) return null;
   const up = delta > 0;
   return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+    <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
       {up ? `↑ +${delta}` : `↓ ${delta}`} pts
     </span>
   );
@@ -18,14 +18,14 @@ function HealthDelta({ delta }: { delta: number }) {
 function Pill({ label, color }: { label: string; color?: string }) {
   if (color) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border"
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
         style={{ backgroundColor: `${color}18`, borderColor: `${color}40`, color }}>
         {label}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
       {label}
     </span>
   );
@@ -49,17 +49,17 @@ function ContactCard({ c }: { c: ContactRow }) {
         <HealthDelta delta={c.healthDelta} />
       </div>
       <div className="flex flex-wrap gap-1">
-        {c.icp === 'Yes' && <span className="badge-green text-[10px] px-2 py-0.5">ICP</span>}
+        {c.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5">ICP</span>}
         {c.seniority && <Pill label={c.seniority} />}
         {c.company_type && <Pill label={c.company_type.split(',')[0].trim()} />}
         {c.lastEngagementType && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-brand-secondary border border-blue-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
             {c.lastEngagementType}
           </span>
         )}
       </div>
       {c.firstSeenConference && (
-        <p className="text-[10px] text-gray-400">First seen at {c.firstSeenConference}</p>
+        <p className="text-xs text-gray-400">First seen at {c.firstSeenConference}</p>
       )}
     </div>
   );
@@ -78,15 +78,15 @@ function GhostCard({ c }: { c: ContactRow }) {
         <HealthDelta delta={c.healthDelta} />
       </div>
       <div className="flex flex-wrap gap-1">
-        {c.icp === 'Yes' && <span className="badge-green text-[10px] px-2 py-0.5">ICP</span>}
+        {c.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5">ICP</span>}
         {c.company_type && <Pill label={c.company_type.split(',')[0].trim()} />}
         {c.priorConferenceCount >= 2 && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
             Ghost penalty
           </span>
         )}
       </div>
-      <p className="text-[10px] text-gray-400">{c.priorConferenceCount} prior conferences, zero engagement this conference</p>
+      <p className="text-xs text-gray-400">{c.priorConferenceCount} prior conferences, zero engagement this conference</p>
     </div>
   );
 }
@@ -148,14 +148,14 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
             <span className="text-xs text-gray-600 flex-shrink-0">{b.count} <span className="text-gray-400">({b.icp} ICP)</span></span>
           </div>
         ))}
-        <p className="text-[10px] text-gray-400">Lighter section within each bar represents ICP contacts</p>
+        <p className="text-xs text-gray-400">Lighter section within each bar represents ICP contacts</p>
       </div>
 
       {/* Newly engaged */}
       {contacts.newlyEngaged.length > 0 && (
         <div>
           <SectionDivider label="Newly Engaged" count={contacts.newlyEngaged.length} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {contacts.newlyEngaged.map(c => <ContactCard key={c.attendee_id} c={c} />)}
           </div>
         </div>
@@ -165,7 +165,7 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
       {contacts.reEngagements.length > 0 && (
         <div>
           <SectionDivider label="Re-Engagements" count={contacts.reEngagements.length} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {contacts.reEngagements.map(c => (
               <div key={c.attendee_id} className="rounded-xl border border-gray-200 p-4 bg-white space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -178,21 +178,21 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
                   <HealthDelta delta={c.healthDelta} />
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {c.icp === 'Yes' && <span className="badge-green text-[10px] px-2 py-0.5">ICP</span>}
+                  {c.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5">ICP</span>}
                   {c.seniority && <Pill label={c.seniority} />}
                   {c.lastEngagementType && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-brand-secondary border border-blue-200">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
                       {c.lastEngagementType}
                     </span>
                   )}
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                     c.healthDelta > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     : c.healthDelta < 0 ? 'bg-red-50 text-red-700 border border-red-200'
                     : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
                     {c.healthDelta > 0 ? 'Strengthened' : c.healthDelta < 0 ? 'Declined' : 'Held'}
                   </span>
                 </div>
-                <p className="text-[10px] text-gray-400">{c.priorConferenceCount} prior conference{c.priorConferenceCount !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-gray-400">{c.priorConferenceCount} prior conference{c.priorConferenceCount !== 1 ? 's' : ''}</p>
               </div>
             ))}
           </div>
@@ -203,7 +203,7 @@ export function ContactsCapturedTab({ contacts }: { contacts: Contacts }) {
       {contacts.stillUnengaged.length > 0 && (
         <div>
           <SectionDivider label="Still Unengaged" count={contacts.stillUnengaged.length} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {contacts.stillUnengaged.map(c => <GhostCard key={c.attendee_id} c={c} />)}
           </div>
         </div>

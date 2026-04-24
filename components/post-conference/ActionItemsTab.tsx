@@ -14,7 +14,7 @@ const TYPE_META: Record<ActionItem['type'], { label: string; icon: string; bg: s
   retrospective: { label: 'Retrospective', icon: '📊', bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
 };
 
-const PRIORITY_ORDER: ActionItem['priority'][] = ['high', 'medium', 'low'];
+const PRIORITY_ORDER: ActionItem['priority'][] = ['high', 'medium'];
 const PRIORITY_META: Record<ActionItem['priority'], { label: string; className: string }> = {
   high: { label: 'High', className: 'bg-red-100 text-red-700' },
   medium: { label: 'Medium', className: 'bg-amber-100 text-amber-700' },
@@ -29,17 +29,17 @@ function ActionCard({ item }: { item: ActionItem }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-base flex-shrink-0">{meta.icon}</span>
-          <span className={`text-[10px] font-semibold uppercase tracking-wider flex-shrink-0 ${meta.text}`}>{meta.label}</span>
+          <span className={`text-xs font-semibold uppercase tracking-wider flex-shrink-0 ${meta.text}`}>{meta.label}</span>
         </div>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${pMeta.className}`}>{pMeta.label}</span>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${pMeta.className}`}>{pMeta.label}</span>
       </div>
       <p className="text-sm font-semibold text-gray-800 leading-snug">{item.title}</p>
       <p className="text-xs text-gray-600 leading-relaxed">{item.description}</p>
       {(item.repName || item.attendeeName || item.companyName) && (
-        <div className="flex flex-wrap gap-1.5 pt-1 border-t border-black/5">
-          {item.repName && <span className="text-[10px] text-gray-500">Rep: <span className="font-medium text-gray-700">{item.repName}</span></span>}
-          {item.attendeeName && <span className="text-[10px] text-gray-500">Contact: <span className="font-medium text-gray-700">{item.attendeeName}</span></span>}
-          {item.companyName && <span className="text-[10px] text-gray-500">Company: <span className="font-medium text-gray-700">{item.companyName}</span></span>}
+        <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1 border-t border-black/5">
+          {item.repName && <span className="text-xs text-gray-500">Rep: <span className="font-medium text-gray-700">{item.repName}</span></span>}
+          {item.attendeeName && <span className="text-xs text-gray-500">Contact: <span className="font-medium text-gray-700">{item.attendeeName}</span></span>}
+          {item.companyName && <span className="text-xs text-gray-500">Company: <span className="font-medium text-gray-700">{item.companyName}</span></span>}
         </div>
       )}
     </div>
@@ -47,7 +47,10 @@ function ActionCard({ item }: { item: ActionItem }) {
 }
 
 export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
-  if (actionItems.length === 0) {
+  // Exclude low priority items entirely
+  const visibleItems = actionItems.filter(i => i.priority !== 'low');
+
+  if (visibleItems.length === 0) {
     return (
       <div className="text-center py-16 space-y-2">
         <p className="text-2xl">✅</p>
@@ -57,12 +60,11 @@ export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
     );
   }
 
-  const high = actionItems.filter(i => i.priority === 'high');
-  const medium = actionItems.filter(i => i.priority === 'medium');
-  const low = actionItems.filter(i => i.priority === 'low');
+  const high = visibleItems.filter(i => i.priority === 'high');
+  const medium = visibleItems.filter(i => i.priority === 'medium');
 
   // Type breakdown
-  const typeCounts = actionItems.reduce<Record<string, number>>((acc, item) => {
+  const typeCounts = visibleItems.reduce<Record<string, number>>((acc, item) => {
     acc[item.type] = (acc[item.type] ?? 0) + 1;
     return acc;
   }, {});
@@ -72,10 +74,9 @@ export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
       {/* Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
         {[
-          { label: 'Total Actions', value: actionItems.length, color: '#223A5E' },
+          { label: 'Total Actions', value: visibleItems.length, color: '#223A5E' },
           { label: 'High Priority', value: high.length, color: '#ef4444' },
           { label: 'Medium Priority', value: medium.length, color: '#d97706' },
-          { label: 'Low Priority', value: low.length, color: '#6b7280' },
         ].map(s => (
           <div key={s.label} className="rounded-xl border border-gray-100 p-4 bg-white">
             <div className="text-2xl font-bold" style={{ color: s.color }}>{s.value}</div>
@@ -102,9 +103,9 @@ export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
         </div>
       )}
 
-      {/* Items grouped by priority */}
+      {/* Items grouped by priority (high + medium only) */}
       {PRIORITY_ORDER.map(priority => {
-        const items = actionItems.filter(i => i.priority === priority);
+        const items = visibleItems.filter(i => i.priority === priority);
         if (items.length === 0) return null;
         const pMeta = PRIORITY_META[priority];
         return (
@@ -116,7 +117,7 @@ export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
               </span>
               <div className="flex-1 h-px bg-gray-200" />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
               {items.map((item, i) => <ActionCard key={i} item={item} />)}
             </div>
           </div>

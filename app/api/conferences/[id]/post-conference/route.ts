@@ -14,7 +14,7 @@ interface ContactRow {
   meetingHeld: boolean; hasNotes: boolean;
 }
 interface MeetingRow {
-  id: number; attendee_id: number; attendeeName: string;
+  id: number; attendee_id: number; attendeeName: string; attendeeTitle: string | null;
   company_name: string | null; company_type: string | null; company_id: number | null;
   seniority: string | null; meeting_date: string | null; meeting_time: string | null;
   location: string | null; scheduled_by: string | null; outcome: string | null;
@@ -22,7 +22,7 @@ interface MeetingRow {
   status: 'held' | 'no_show' | 'rescheduled' | 'cancelled';
 }
 interface FollowUpRow {
-  id: number; attendee_id: number; attendeeName: string;
+  id: number; attendee_id: number; attendeeName: string; attendeeTitle: string | null;
   company_name: string | null; company_id: number | null;
   next_steps: string | null; assigned_rep: string | null;
   completed: number; created_at: string | null;
@@ -43,6 +43,7 @@ interface RelationshipShiftRow {
   attendee_id: number; attendeeName: string;
   company_name: string | null; company_type: string | null;
   company_id: number | null; icp: string | null;
+  assignedUsers: string[];
   priorConferenceCount: number; healthBefore: number; healthAfter: number;
   healthDelta: number; shiftReason: string;
 }
@@ -103,12 +104,28 @@ function computeHealthScore(params: {
     if (isGhost) ghostCount++;
   }
   const avgDepth = totalDepth / confs.length;
-  const fuScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
+  const fuScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 0;
   const ghostPenalty = (ghostCount / confs.length) * 100;
   return Math.round(Math.max(0, Math.min(100, avgDepth * 0.60 + fuScore * 0.30 - ghostPenalty * 0.10)));
 }
 
-function resolveUserIds(raw: unknown): string[] {
+// Resolved at route-init time once users are fetched
+let userIdToName: Map<string, string> = new Map();
+
+function resolveIds(raw: unknown): string[] {
+  if (!raw) return [];
+  return String(raw).split(',').map(s => s.trim()).filter(Boolean)
+    .map(id => userIdToName.get(id) ?? id);
+}
+
+function resolveIdsSingle(raw: unknown): string | null {
+  if (!raw) return null;
+  const ids = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  if (ids.length === 0) return null;
+  return ids.map(id => userIdToName.get(id) ?? id).join(', ');
+}
+
+function splitIds(raw: unknown): string[] {
   if (!raw) return [];
   return String(raw).split(',').map(s => s.trim()).filter(Boolean);
 }
@@ -139,6 +156,14 @@ export async function GET(
   const confName = String(conf.name);
   const today = new Date();
   const daysSinceEnd = Math.floor((today.getTime() - new Date(confEndDate + 'T00:00:00').getTime()) / 86400000);
+
+  // ── Resolve user IDs → display names ─────────────────────────────────────
+  const usersRes = await db.execute({
+    sql: `SELECT u.id, COALESCE(co.value, u.display_name, CAST(u.id AS TEXT)) as display_name
+          FROM users u LEFT JOIN config_options co ON u.config_id = co.id`,
+    args: [],
+  });
+  userIdToName = new Map(usersRes.rows.map(u => [String(u.id), u.display_name ? String(u.display_name) : String(u.id)]));
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
   const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
@@ -390,7 +415,7 @@ export async function GET(
       company_type: a.company_type ? String(a.company_type) : null,
       seniority: a.seniority ? String(a.seniority) : null,
       icp: a.icp ? String(a.icp) : null,
-      assigned_user_names: resolveUserIds(a.company_assigned_user),
+      assigned_user_names: resolveIds(a.company_assigned_user),
       firstSeenConference: firstSeen,
       priorConferenceCount: priorConfs.length,
       lastEngagementType: lastActionVal,
@@ -468,14 +493,15 @@ export async function GET(
       id: Number(m.id),
       attendee_id: aid,
       attendeeName,
-      company_name: a?.company_name ? String(a.company_name) : null,
-      company_type: a?.company_type ? String(a.company_type) : null,
-      company_id: a?.company_id ? Number(a.company_id) : null,
-      seniority: a?.seniority ? String(a.seniority) : null,
+      attendeeTitle: a.title ? String(a.title) : null,
+      company_name: a.company_name ? String(a.company_name) : null,
+      company_type: a.company_type ? String(a.company_type) : null,
+      company_id: a.company_id ? Number(a.company_id) : null,
+      seniority: a.seniority ? String(a.seniority) : null,
       meeting_date: m.meeting_date ? String(m.meeting_date) : null,
       meeting_time: m.meeting_time ? String(m.meeting_time) : null,
       location: m.location ? String(m.location) : null,
-      scheduled_by: m.scheduled_by ? String(m.scheduled_by) : null,
+      scheduled_by: resolveIdsSingle(m.scheduled_by),
       outcome: m.outcome ? String(m.outcome) : null,
       meeting_type: mtType,
       isWalkIn,
@@ -494,11 +520,12 @@ export async function GET(
     followUpRows.push({
       id: Number(f.id),
       attendee_id: aid,
-      attendeeName: a ? `${a.first_name} ${a.last_name}` : 'Unknown',
-      company_name: a?.company_name ? String(a.company_name) : null,
-      company_id: a?.company_id ? Number(a.company_id) : null,
+      attendeeName: `${a.first_name} ${a.last_name}`,
+      attendeeTitle: a.title ? String(a.title) : null,
+      company_name: a.company_name ? String(a.company_name) : null,
+      company_id: a.company_id ? Number(a.company_id) : null,
       next_steps: f.next_steps ? String(f.next_steps) : null,
-      assigned_rep: f.assigned_rep ? String(f.assigned_rep) : null,
+      assigned_rep: resolveIdsSingle(f.assigned_rep),
       completed: Number(f.completed),
       created_at: f.created_at ? String(f.created_at) : null,
       daysSinceConference: Math.max(0, daysSinceEnd),
@@ -508,27 +535,37 @@ export async function GET(
 
   // ── Rep performance ───────────────────────────────────────────────────────
   const repsFromConf = conf.internal_attendees
-    ? String(conf.internal_attendees).split(',').map(s => s.trim()).filter(Boolean)
+    ? splitIds(conf.internal_attendees)
     : [];
 
-  // Collect all rep names from details, meetings, follow_ups
-  const repNamesSet = new Set<string>(repsFromConf);
+  // Collect individual rep IDs from details, meetings, follow_ups (split comma-separated)
+  const repIdsSet = new Set<string>(repsFromConf);
   const currentDetails = allDetailsRes.rows.filter(r => Number(r.conference_id) === confId);
   for (const d of currentDetails) {
-    if (d.assigned_rep) repNamesSet.add(String(d.assigned_rep));
+    if (d.assigned_rep) splitIds(d.assigned_rep).forEach(id => repIdsSet.add(id));
   }
   for (const m of confMeetingsRes.rows) {
-    if (m.scheduled_by) repNamesSet.add(String(m.scheduled_by));
+    if (m.scheduled_by) splitIds(m.scheduled_by).forEach(id => repIdsSet.add(id));
   }
   for (const f of confFollowUpsRes.rows) {
-    if (f.assigned_rep) repNamesSet.add(String(f.assigned_rep));
+    if (f.assigned_rep) splitIds(f.assigned_rep).forEach(id => repIdsSet.add(id));
   }
 
   const repPerfRows: RepPerformanceRow[] = [];
-  for (const repName of Array.from(repNamesSet)) {
-    const repDetails = currentDetails.filter(d => String(d.assigned_rep) === repName);
-    const repMeetings = meetingRows.filter(m => m.scheduled_by === repName);
-    const repFollowUps = followUpRows.filter(f => f.assigned_rep === repName);
+  for (const repId of Array.from(repIdsSet)) {
+    // Include this contact/meeting/follow-up if repId is in their comma-separated list
+    const repDetails = currentDetails.filter(d =>
+      d.assigned_rep && splitIds(d.assigned_rep).includes(repId)
+    );
+    // meetingRows already have resolved scheduled_by (display name); match by ID against raw data
+    const repMeetings = meetingRows.filter(m => {
+      const rawM = confMeetingsRes.rows.find(r => Number(r.id) === m.id);
+      return rawM && splitIds(rawM.scheduled_by).includes(repId);
+    });
+    const repFollowUps = followUpRows.filter(f => {
+      const rawF = confFollowUpsRes.rows.find(r => Number(r.id) === f.id);
+      return rawF && splitIds(rawF.assigned_rep).includes(repId);
+    });
 
     // Contacts captured = attendees with this rep in their details.assigned_rep
     const repAttendeeIds = new Set(repDetails.map(d => Number(d.attendee_id)));
@@ -562,7 +599,7 @@ export async function GET(
     const repReEngage = captured.filter(c => reEngagements.some(r => r.attendee_id === c.attendee_id)).length;
 
     repPerfRows.push({
-      repName,
+      repName: userIdToName.get(repId) ?? repId,
       contactsCaptured: captured.length,
       newlyEngaged: repNewly,
       reEngagements: repReEngage,
@@ -617,6 +654,7 @@ export async function GET(
       company_type: c.company_type,
       company_id: c.company_id,
       icp: c.icp,
+      assignedUsers: c.assigned_user_names,
       priorConferenceCount: priorConfs.length,
       healthBefore,
       healthAfter,
@@ -706,7 +744,7 @@ export async function GET(
     }
   }
 
-  // Retrospective observations (low)
+  // Stats used in summary
   const totalFus = followUpRows.length;
   const completedFus = followUpRows.filter(f => f.status === 'completed').length;
   const fuRate = totalFus > 0 ? Math.round((completedFus / totalFus) * 100) : 0;
@@ -714,21 +752,6 @@ export async function GET(
   const walkInCount = meetingRows.filter(m => m.isWalkIn).length;
   const icpCount = contactRows.filter(c => c.icp === 'Yes').length;
   const icpCaptureRate = attendees.length > 0 ? Math.round((icpCount / attendees.length) * 100) : 0;
-
-  actionItems.push({
-    type: 'retrospective', priority: 'low',
-    title: 'Conference wrap-up summary',
-    description: `${confName}: ${attendees.length} contacts, ${heldCount} meetings held (${walkInCount} unplanned), ${fuRate}% follow-up rate, ${icpCaptureRate}% ICP capture rate.`,
-    repName: null, attendeeName: null, companyName: null,
-  });
-  if (walkInCount > heldCount - walkInCount) {
-    actionItems.push({
-      type: 'retrospective', priority: 'low',
-      title: 'Unplanned meetings exceeded scheduled',
-      description: `${walkInCount} of ${heldCount} meetings were unplanned — consider more proactive scheduling at future conferences`,
-      repName: null, attendeeName: null, companyName: null,
-    });
-  }
 
   // ── Company type breakdown ────────────────────────────────────────────────
   const ctCount: Record<string, number> = {};
@@ -761,7 +784,8 @@ export async function GET(
     newlyEngaged: newlyEngaged.length,
     reEngagements: reEngagements.length,
     stillUnengaged: stillUnengaged.length,
-    icpContacts: contactRows.filter(c => c.icp === 'Yes').length,
+    icpContacts: icpCount,
+    icpCaptureRate,
     meetingsScheduled: meetingRows.length,
     meetingsHeld,
     walkInMeetings: walkIns,
