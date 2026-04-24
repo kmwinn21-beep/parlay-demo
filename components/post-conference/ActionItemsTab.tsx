@@ -118,7 +118,7 @@ export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
               </span>
               <div className="flex-1 h-px bg-gray-200" />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {items.map((item, i) => <ActionCard key={i} item={item} />)}
             </div>
           </div>

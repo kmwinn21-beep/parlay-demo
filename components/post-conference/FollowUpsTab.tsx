@@ -101,7 +101,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Not Started ({notStarted.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {notStarted.map(f => <FollowUpCard key={f.id} f={f} />)}
           </div>
         </div>
@@ -115,7 +115,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">In Progress ({inProgress.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {inProgress.map(f => <FollowUpCard key={f.id} f={f} />)}
           </div>
         </div>
@@ -129,7 +129,7 @@ export function FollowUpsTab({ followUps }: { followUps: FollowUps }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Completed ({completed.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {completed.map(f => <FollowUpCard key={f.id} f={f} />)}
           </div>
         </div>
