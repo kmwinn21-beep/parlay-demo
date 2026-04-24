@@ -487,14 +487,19 @@ export async function GET(
   });
 
   // ── Process meetings ──────────────────────────────────────────────────────
+  // allAttendeesById: ALL conference attendees (no operator filter) — used for
+  // meetings and follow-ups so every held meeting is counted regardless of company type.
+  // attendeeById: operator-filtered — used only for contact/health analysis.
+  const allAttendeesById = new Map<number, typeof attendeesRes.rows[0]>();
+  for (const a of attendeesRes.rows) allAttendeesById.set(Number(a.id), a);
   const attendeeById = new Map<number, typeof attendees[0]>();
   for (const a of attendees) attendeeById.set(Number(a.id), a);
 
   const meetingRows: MeetingRow[] = [];
   for (const m of confMeetingsRes.rows) {
     const aid = Number(m.attendee_id);
-    const a = attendeeById.get(aid);
-    if (!a) continue; // skip non-operator attendees
+    const a = allAttendeesById.get(aid);
+    if (!a) continue;
     const attendeeName = `${a.first_name} ${a.last_name}`;
     const mtType = m.meeting_type ? String(m.meeting_type) : null;
     const isWalkIn = mtType === unplannedValue;
@@ -532,8 +537,8 @@ export async function GET(
   const followUpRows: FollowUpRow[] = [];
   for (const f of confFollowUpsRes.rows) {
     const aid = Number(f.attendee_id);
-    const a = attendeeById.get(aid);
-    if (!a) continue; // skip non-operator attendees
+    const a = allAttendeesById.get(aid);
+    if (!a) continue;
     const isCompleted = Number(f.completed) === 1;
     const status: FollowUpRow['status'] = isCompleted ? 'completed' : 'not_started';
     followUpRows.push({
