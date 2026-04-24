@@ -7,7 +7,10 @@ import { ContactsCapturedTab } from './post-conference/ContactsCapturedTab';
 import { MeetingsTab } from './post-conference/MeetingsTab';
 import { FollowUpsTab } from './post-conference/FollowUpsTab';
 import { RelationshipShiftsTab } from './post-conference/RelationshipShiftsTab';
+import { EventsTouchpointsTab } from './post-conference/EventsTouchpointsTab';
 import { ActionItemsTab } from './post-conference/ActionItemsTab';
+import type { SocialEventRow, SocialEventGuest } from './PreConferenceReview';
+export type { SocialEventRow, SocialEventGuest };
 
 // ── Shared interfaces (imported by tab components) ─────────────────────────
 
@@ -55,6 +58,12 @@ export interface RelationshipShiftRow {
   healthDelta: number; shiftReason: string;
   conferenceBreakdown: { label: string; points: number }[];
 }
+export interface TouchpointAttendeeRow {
+  attendee_id: number; first_name: string; last_name: string;
+  title: string | null; company_name: string | null; company_id: number | null;
+  totalCount: number;
+  options: { option_id: number; value: string; color: string | null; count: number }[];
+}
 export interface ActionItem {
   type: 'overdue_followup' | 'missing_outcome' | 'no_show' | 'ghost_penalty' | 'pipeline' | 'new_contact' | 'retrospective';
   priority: 'high' | 'medium' | 'low';
@@ -87,6 +96,8 @@ export interface PostConferenceData {
   followUps: FollowUpRow[];
   repPerformance: RepPerformanceRow[];
   relationshipShifts: { improved: RelationshipShiftRow[]; declined: RelationshipShiftRow[]; unchanged: RelationshipShiftRow[] };
+  socialEvents: SocialEventRow[];
+  touchpoints: TouchpointAttendeeRow[];
   actionItems: ActionItem[];
 }
 
@@ -94,7 +105,7 @@ export interface PostConferenceData {
 const GREEN = '#34D399';
 const GREEN_DARK = '#064e3b';
 const GREEN_ACTIVE = '#059669';
-const TAB_ORDER = ['summary', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'action_items'];
+const TAB_ORDER = ['summary', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'events_touchpoints', 'action_items'];
 
 function fmtDate(d: string) {
   try {
@@ -250,6 +261,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
             {effectiveTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
             {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}
             {effectiveTab === 'relationship_shifts' && <RelationshipShiftsTab relationshipShifts={data.relationshipShifts} />}
+            {effectiveTab === 'events_touchpoints' && <EventsTouchpointsTab socialEvents={data.socialEvents} touchpoints={data.touchpoints} />}
             {effectiveTab === 'action_items' && <ActionItemsTab actionItems={data.actionItems} />}
           </div>
         </div>
