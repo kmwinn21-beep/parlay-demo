@@ -29,21 +29,20 @@ export async function GET(
       args: [confId],
     }),
     db.execute({
-      sql: `SELECT u.id, COALESCE(co.value, u.display_name, CAST(u.id AS TEXT)) as display_name
-            FROM users u LEFT JOIN config_options co ON u.config_id = co.id`,
+      sql: `SELECT id, value FROM config_options WHERE category = 'user'`,
       args: [],
     }),
   ]);
 
-  const userMap = new Map<string, string>();
+  const userMap = new Map<number, string>();
   for (const u of usersRes.rows) {
-    userMap.set(String(u.id), String(u.display_name ?? u.id));
+    userMap.set(Number(u.id), String(u.value));
   }
 
   function resolveUsers(raw: unknown): string[] {
     if (!raw) return [];
     return String(raw).split(',').map(s => s.trim()).filter(Boolean)
-      .map(id => userMap.get(id) ?? id);
+      .map(id => userMap.get(Number(id)) ?? id);
   }
 
   const targets = targetsRes.rows.map(r => ({

@@ -292,10 +292,11 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   </svg>
                 </button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }} className="mt-3">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }} className="mt-3">
                 <StatPill label="Attendees" value={data.summary.totalAttendees} />
                 <StatPill label="Companies" value={data.summary.totalCompanies} />
                 <StatPill label="ICP" value={data.summary.icpCount} />
+                <StatPill label="Targets" value={targetMap.size} />
                 <StatPill label="Meetings" value={data.summary.meetingCount} />
                 <StatPill label="Open Follow-ups" value={data.summary.openFollowUps} />
               </div>

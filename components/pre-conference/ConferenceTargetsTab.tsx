@@ -6,11 +6,39 @@ import { TargetBtn } from './TargetBtn';
 import type { TargetEntry } from '../PreConferenceReview';
 
 const TIERS = [
-  { key: '1', label: 'Tier 1', color: '#7c3aed', bg: 'bg-purple-50', border: 'border-purple-200' },
-  { key: '2', label: 'Tier 2', color: '#1B76BC', bg: 'bg-blue-50', border: 'border-blue-200' },
-  { key: '3', label: 'Tier 3', color: '#059669', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { key: 'unassigned', label: 'Unassigned', color: '#6b7280', bg: 'bg-gray-50', border: 'border-gray-200' },
-] as const;
+  {
+    key: '1' as const,
+    label: 'Tier 1',
+    labelClass: 'text-red-600',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    dragOutline: '2px solid #dc2626',
+  },
+  {
+    key: '2' as const,
+    label: 'Tier 2',
+    labelClass: 'text-brand-primary',
+    bg: 'bg-brand-primary/10',
+    border: 'border-brand-primary/40',
+    dragOutline: '2px solid rgb(var(--brand-primary-rgb))',
+  },
+  {
+    key: '3' as const,
+    label: 'Tier 3',
+    labelClass: 'text-brand-highlight',
+    bg: 'bg-brand-highlight/10',
+    border: 'border-brand-highlight/40',
+    dragOutline: '2px solid rgb(var(--brand-highlight-rgb))',
+  },
+  {
+    key: 'unassigned' as const,
+    label: 'Unassigned',
+    labelClass: 'text-gray-500',
+    bg: 'bg-gray-50',
+    border: 'border-gray-200',
+    dragOutline: '2px solid #9ca3af',
+  },
+];
 
 const SENIORITY_COLORS: Record<string, string> = {
   'C-Suite': '#7c3aed',
@@ -200,14 +228,14 @@ export function ConferenceTargetsTab({
               <div
                 key={tier.key}
                 className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg}`}
-                style={isOver ? { outline: `2px solid ${tier.color}`, outlineOffset: '2px' } : {}}
+                style={isOver ? { outline: tier.dragOutline, outlineOffset: '2px' } : {}}
                 onDragOver={e => { e.preventDefault(); setDragOverTier(tier.key); }}
                 onDragLeave={() => setDragOverTier(null)}
                 onDrop={() => handleDrop(tier.key)}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: tier.color }}>{tier.label}</span>
-                  <span className="text-xs font-semibold text-gray-400">{tierCards.length}</span>
+                  <span className={`text-lg font-bold uppercase tracking-wider ${tier.labelClass}`}>{tier.label}</span>
+                  <span className="text-lg font-bold text-gray-400">{tierCards.length}</span>
                 </div>
                 <div className="space-y-2">
                   {tierCards.map(entry => (
