@@ -57,6 +57,7 @@ interface Props {
   attendees: AttendeeOption[];
   onClose: () => void;
   onSubmitted: () => void;
+  onImageOffsetYChange?: (y: number) => void;
 }
 
 function hexToRgb(hex: string): string {
@@ -123,7 +124,7 @@ function isColorLight(hex: string): boolean {
 
 type FieldValues = Record<number | string, string | string[]>;
 
-export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLogoUrl, attendees, onClose, onSubmitted }: Props) {
+export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLogoUrl, attendees, onClose, onSubmitted, onImageOffsetYChange }: Props) {
   const [values, setValues] = useState<FieldValues>({});
   const [isOther, setIsOther] = useState(false);
   const [manualFirst, setManualFirst] = useState('');
@@ -142,6 +143,49 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   } | null>(null);
   const attendeeDropRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Image drag-to-reposition state
+  // image_offset_y is stored as 0–100 (% for objectPosition Y); null/0 → 50 (center)
+  const imgYPctRef = useRef(
+    form.image_offset_y != null && form.image_offset_y !== 0
+      ? Math.max(0, Math.min(100, form.image_offset_y))
+      : 50
+  );
+  const [imgYPct, setImgYPctState] = useState(imgYPctRef.current);
+  const [isDraggingImg, setIsDraggingImg] = useState(false);
+  const imgContainerRef = useRef<HTMLDivElement>(null);
+  const imgDragStartRef = useRef<{ clientY: number; startYPct: number } | null>(null);
+
+  const setImgYPct = (v: number) => { imgYPctRef.current = v; setImgYPctState(v); };
+
+  const handleImgMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    imgDragStartRef.current = { clientY: e.clientY, startYPct: imgYPctRef.current };
+    setIsDraggingImg(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingImg) return;
+    const handleMove = (e: MouseEvent) => {
+      if (!imgDragStartRef.current || !imgContainerRef.current) return;
+      const containerH = imgContainerRef.current.clientHeight;
+      if (containerH === 0) return;
+      const deltaY = e.clientY - imgDragStartRef.current.clientY;
+      // Drag down → image moves down → top of image becomes visible → Y% decreases
+      const newY = Math.max(0, Math.min(100, imgDragStartRef.current.startYPct - (deltaY / containerH) * 100));
+      setImgYPct(newY);
+    };
+    const handleUp = () => {
+      setIsDraggingImg(false);
+      onImageOffsetYChange?.(Math.round(imgYPctRef.current));
+    };
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDraggingImg, onImageOffsetYChange]);
 
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
@@ -736,28 +780,52 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
             {/* 4-row grid: image (1fr) + html text (3fr) */}
             <div style={{ display: 'grid', gridTemplateRows: '1fr 3fr', flex: 1, minHeight: 0, gap: '1rem' }}>
 
-              {/* Image cell — row 1 (1fr = 25%) */}
-              <div style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {/* Image cell — row 1 (1fr = 25%); drag to reposition */}
+              <div
+                ref={imgContainerRef}
+                onMouseDown={form.image_url && !imgError ? handleImgMouseDown : undefined}
+                style={{
+                  overflow: 'hidden',
+                  borderRadius: 12,
+                  position: 'relative',
+                  cursor: form.image_url && !imgError ? (isDraggingImg ? 'grabbing' : 'grab') : 'default',
+                  userSelect: 'none',
+                }}
+              >
                 {form.image_url && !imgError ? (
-                  <img
-                    src={form.image_url}
-                    alt=""
-                    onError={() => setImgError(true)}
-                    className="rounded-lg shadow-lg"
-                    style={{
-                      maxWidth: `${imageMaxWidth}%`,
-                      height: 'auto',
-                      objectFit: 'contain',
-                      transform: `translateY(${imageOffsetY}px)`,
-                    }}
-                  />
+                  <>
+                    <img
+                      src={form.image_url}
+                      alt=""
+                      onError={() => setImgError(true)}
+                      draggable={false}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        objectPosition: `50% ${imgYPct}%`,
+                        display: 'block',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    {!isDraggingImg && (
+                      <div style={{
+                        position: 'absolute', bottom: 6, right: 8,
+                        fontSize: 10, color: 'rgba(255,255,255,0.75)',
+                        background: 'rgba(0,0,0,0.45)', borderRadius: 4,
+                        padding: '2px 6px', pointerEvents: 'none',
+                        letterSpacing: '0.02em',
+                      }}>
+                        drag to reposition
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div
                     className="w-full h-full rounded-xl flex items-center justify-center"
                     style={{
                       border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
                       color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
-                      transform: `translateY(${imageOffsetY}px)`,
                     }}
                   >
                     <span className="text-lg font-semibold tracking-wide">Image Element</span>
