@@ -524,15 +524,15 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                   </div>
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: Math.max(0, d.image_offset_y - 5) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up (show lower in image)">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
                     </button>
-                    <input type="number" value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-20 text-center input-field text-xs tabular-nums" />
-                    <span className="text-xs text-gray-400">px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: d.image_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
+                    <input type="number" min={0} max={100} value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 50)) }))} className="w-16 text-center input-field text-xs tabular-nums" />
+                    <span className="text-xs text-gray-400">%</span>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: Math.min(100, d.image_offset_y + 5) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down (show higher in image)">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
                     </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset</button>
+                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: 50 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Center</button>
                   </div>
                   {editDraft.image_url && (
                     <div className="mt-2">
@@ -615,7 +615,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                           image_url: form.image_url || '',
                           image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
                           html_content: form.html_content || '',
-                          image_offset_y: form.image_offset_y ?? 0,
+                          image_offset_y: form.image_offset_y != null && form.image_offset_y !== 0 ? form.image_offset_y : 50,
                           html_offset_y: form.html_offset_y ?? 0,
                           form_width: form.form_width ?? 420,
                           form_height: form.form_height ?? null,
@@ -805,6 +805,19 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
               return next;
             });
             loadForms();
+          }}
+          onImageOffsetYChange={async (y) => {
+            try {
+              const res = await fetch(`/api/conference-forms/${expandedForm.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_offset_y: y }),
+              });
+              if (res.ok) {
+                setForms(prev => prev.map(f => f.id === expandedForm.id ? { ...f, image_offset_y: y } : f));
+                setExpandedForm(prev => prev ? { ...prev, image_offset_y: y } : prev);
+              }
+            } catch { /* silent — don't interrupt user */ }
           }}
         />
       )}
