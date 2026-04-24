@@ -931,9 +931,9 @@ export async function GET(
   // Form submissions — all submissions for this conference
   const formSubmissionsCount = Number(formSubmissionsRes.rows[0]?.count ?? 0);
 
-  // ── Company type breakdown ────────────────────────────────────────────────
+  // ── Company type breakdown — only captured contacts (not still-unengaged) ──
   const ctCount: Record<string, number> = {};
-  for (const c of contactRows) {
+  for (const c of [...newlyEngaged, ...reEngagements]) {
     const ct = c.company_type ?? 'Unknown';
     for (const t of ct.split(',').map(s => s.trim())) {
       ctCount[t] = (ctCount[t] ?? 0) + 1;
