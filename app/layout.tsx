@@ -6,6 +6,8 @@ import './globals.css';
 export const dynamic = 'force-dynamic';
 import { AppShell } from '@/components/AppShell';
 import { ToastProvider } from '@/components/Toast';
+import { ServiceWorkerProvider } from '@/components/ServiceWorkerProvider';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { db, dbReady } from '@/lib/db';
 import { BRAND_COLOR_DEFAULTS, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 
@@ -106,12 +108,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0B3C62" />
         <FontStyles />
         <BrandStyles />
       </head>
       <body className="font-sans">
+        <ServiceWorkerProvider />
         <ToastProvider>
           <AppShell>{children}</AppShell>
+          <OfflineBanner />
         </ToastProvider>
       </body>
     </html>
