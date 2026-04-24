@@ -192,18 +192,18 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
 
   return (
     <>
-      <button onClick={load} disabled={loading} className="btn-primary flex items-center gap-2 text-sm">
+      <button onClick={load} disabled={loading} className="flex items-center gap-1.5 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-wait">
         {loading ? (
-          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         ) : (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
         )}
-        Pre-Conference Review
+        Pre-Conference
       </button>
 
       {error && <p className="text-sm text-red-600 mt-1">{error}</p>}

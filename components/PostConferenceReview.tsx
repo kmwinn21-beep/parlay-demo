@@ -164,13 +164,13 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
         type="button"
         disabled={!isAccessible}
         onClick={handleOpen}
-        style={isAccessible
-          ? { backgroundColor: GREEN, color: GREEN_DARK, cursor: loading ? 'wait' : 'pointer' }
-          : { cursor: 'not-allowed', opacity: 0.45 }}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border border-transparent"
+        className={`flex items-center gap-1.5 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap
+          ${isAccessible
+            ? `text-gray-500 hover:text-brand-accent ${loading ? 'cursor-wait' : 'cursor-pointer'}`
+            : 'text-gray-400 cursor-not-allowed opacity-40'}`}
       >
         {loading ? (
-          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
@@ -179,7 +179,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
         )}
-        <span>Post-Conference Review</span>
+        <span>Post-Conference</span>
       </button>
       {!isAccessible && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap

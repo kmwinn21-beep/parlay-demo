@@ -986,7 +986,18 @@ export default function ConferenceDetailPage() {
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
+                <div className="flex items-center gap-1 border-l border-gray-200 pl-3">
+                  <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
+                  <PostConferenceReview
+                    conferenceId={conference.id}
+                    conferenceName={conference.name}
+                    endDate={conference.end_date}
+                    userRole={currentUser?.role ?? 'user'}
+                  />
+                </div>
+              </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
                 <span className="flex items-center gap-2 text-sm text-gray-600">
                   <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1048,13 +1059,6 @@ export default function ConferenceDetailPage() {
               )}
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
-              <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
-              <PostConferenceReview
-                conferenceId={conference.id}
-                conferenceName={conference.name}
-                endDate={conference.end_date}
-                userRole={currentUser?.role ?? 'user'}
-              />
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
