@@ -461,6 +461,17 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Event', 4)`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Breakfast/Lunch', 5)`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('touchpoints', 'Other', 6)`,
+    `CREATE TABLE IF NOT EXISTS conference_targets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attendee_id INTEGER NOT NULL,
+      conference_id INTEGER NOT NULL,
+      tier TEXT NOT NULL DEFAULT 'unassigned',
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(attendee_id, conference_id),
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('attendee_conference_status', 'Target', 1)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

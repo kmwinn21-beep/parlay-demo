@@ -15,10 +15,10 @@ export const BRAND_CSS_VARS: Record<BrandColorKey, string> = {
 };
 
 export const BRAND_COLOR_META: Record<BrandColorKey, { label: string; description: string }> = {
-  brand_dark_blue:   { label: 'Primary Dark',  description: 'Headings, navigation, secondary button borders' },
-  brand_bright_blue: { label: 'Primary Blue',  description: 'Buttons, links, active states, focus rings' },
-  brand_beige:       { label: 'Accent Beige',  description: 'Secondary button hover, subtle fill backgrounds' },
-  brand_gold:        { label: 'Accent Gold',   description: 'Gold buttons and highlight accents' },
+  brand_dark_blue:   { label: 'Primary #1',  description: 'Headings, navigation, secondary button borders' },
+  brand_bright_blue: { label: 'Primary #2',  description: 'Buttons, links, active states, focus rings' },
+  brand_beige:       { label: 'Accent #1',   description: 'Secondary button hover, subtle fill backgrounds' },
+  brand_gold:        { label: 'Accent #2',   description: 'Gold buttons and highlight accents' },
 };
 
 export function hexToRgbChannels(hex: string): string {

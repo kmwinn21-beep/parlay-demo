@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import type { IcpCompany } from '../PreConferenceReview';
+import { TargetBtn } from './TargetBtn';
+import type { IcpCompany, TargetEntry } from '../PreConferenceReview';
 
 function HealthBadge({ score }: { score: number }) {
   const { label, cls } = score >= 75
@@ -27,7 +28,15 @@ function UserPill({ name }: { name: string }) {
   );
 }
 
-export function IcpCompaniesTab({ companies }: { companies: IcpCompany[] }) {
+export function IcpCompaniesTab({
+  companies,
+  targetMap,
+  onToggleTarget,
+}: {
+  companies: IcpCompany[];
+  targetMap: Map<number, TargetEntry>;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+}) {
   if (companies.length === 0) {
     return (
       <div className="text-center py-16">
@@ -72,16 +81,35 @@ export function IcpCompaniesTab({ companies }: { companies: IcpCompany[] }) {
 
             {/* Attendees */}
             <div className="space-y-1.5">
-              {co.attendees.slice(0, 4).map((a) => (
-                <Link
-                  key={a.id}
-                  href={`/attendees/${a.id}`}
-                  className="flex items-center justify-between text-xs hover:text-brand-secondary transition-colors"
-                >
-                  <span className="truncate text-gray-700">{a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}</span>
-                  <span className="text-gray-400 ml-2 flex-shrink-0">{a.health}</span>
-                </Link>
-              ))}
+              {co.attendees.slice(0, 4).map((a) => {
+                const isTarget = targetMap.has(Number(a.id));
+                return (
+                  <div key={Number(a.id)} className="flex items-center justify-between text-xs gap-1">
+                    <Link
+                      href={`/attendees/${a.id}`}
+                      className="truncate text-gray-700 hover:text-brand-secondary transition-colors flex-1 min-w-0"
+                    >
+                      {a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}
+                    </Link>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-gray-400">{a.health}</span>
+                      <TargetBtn
+                        isTarget={isTarget}
+                        onClick={() => onToggleTarget({
+                          attendeeId: Number(a.id),
+                          firstName: String(a.first_name),
+                          lastName: String(a.last_name),
+                          title: a.title ? String(a.title) : null,
+                          seniority: a.seniority ?? null,
+                          companyName: co.name,
+                          companyId: co.id,
+                          assignedUserNames: co.assigned_user_names,
+                        })}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
               {co.attendees.length > 4 && (
                 <p className="text-xs text-gray-400">+{co.attendees.length - 4} more</p>
               )}

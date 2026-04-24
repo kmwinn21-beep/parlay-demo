@@ -1,14 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import type { RelationshipRow } from '../PreConferenceReview';
+import { TargetBtn } from './TargetBtn';
+import type { RelationshipRow, TargetEntry } from '../PreConferenceReview';
 
 function HealthDot({ score }: { score: number }) {
   const color = score >= 75 ? '#34D399' : score >= 50 ? '#f59e0b' : score >= 25 ? '#f97316' : '#ef4444';
   return <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />;
 }
 
-export function RelationshipsTab({ relationships }: { relationships: RelationshipRow[] }) {
+export function RelationshipsTab({
+  relationships,
+  targetMap,
+  onToggleTarget,
+}: {
+  relationships: RelationshipRow[];
+  targetMap: Map<number, TargetEntry>;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+}) {
   if (relationships.length === 0) {
     return (
       <div className="text-center py-16">
@@ -38,7 +47,7 @@ export function RelationshipsTab({ relationships }: { relationships: Relationshi
               <p className="text-xs text-gray-600 line-clamp-3">{rel.description}</p>
             )}
 
-            {/* Rep names (resolved) */}
+            {/* Rep names */}
             {rel.rep_names.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {rel.rep_names.map((name) => (
@@ -49,7 +58,7 @@ export function RelationshipsTab({ relationships }: { relationships: Relationshi
               </div>
             )}
 
-            {/* Contact names (resolved from attendee IDs) */}
+            {/* Contact names */}
             {rel.contact_names.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Contacts</p>
@@ -68,28 +77,33 @@ export function RelationshipsTab({ relationships }: { relationships: Relationshi
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">At This Conference</p>
                 <div className="space-y-1">
-                  {rel.attendees.map((a) => (
-                    <Link key={String(a.id)} href={`/attendees/${a.id}`} className="flex items-center gap-2 text-xs hover:text-brand-secondary transition-colors">
-                      <HealthDot score={a.health} />
-                      <span className="text-gray-700 truncate">{String(a.first_name)} {String(a.last_name)}{a.title ? ` · ${String(a.title)}` : ''}</span>
-                      <span className="text-gray-400 ml-auto flex-shrink-0">{a.health}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recent notes */}
-            {rel.recentNotes.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Recent Notes</p>
-                <div className="space-y-1.5">
-                  {rel.recentNotes.map((n) => (
-                    <div key={n.id} className="bg-gray-50 rounded-lg px-3 py-2">
-                      <p className="text-xs text-gray-700 line-clamp-2">{n.content}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{n.rep ?? 'Unknown'}</p>
-                    </div>
-                  ))}
+                  {rel.attendees.map((a) => {
+                    const isTarget = targetMap.has(Number(a.id));
+                    return (
+                      <div key={String(a.id)} className="flex items-center gap-2 text-xs">
+                        <HealthDot score={a.health} />
+                        <Link
+                          href={`/attendees/${a.id}`}
+                          className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors"
+                        >
+                          {String(a.first_name)} {String(a.last_name)}{a.title ? ` · ${String(a.title)}` : ''}
+                        </Link>
+                        <TargetBtn
+                          isTarget={isTarget}
+                          onClick={() => onToggleTarget({
+                            attendeeId: Number(a.id),
+                            firstName: String(a.first_name),
+                            lastName: String(a.last_name),
+                            title: a.title ? String(a.title) : null,
+                            seniority: a.seniority ?? null,
+                            companyName: rel.company_name,
+                            companyId: rel.company_id,
+                            assignedUserNames: rel.rep_names,
+                          })}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
