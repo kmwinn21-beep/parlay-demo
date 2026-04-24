@@ -154,69 +154,70 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
         <StatCard label="ICP Contacts" value={summary.icpContacts} color="#223A5E" />
       </div>
 
-      {/* Charts — full-width stacked */}
-      <div className="rounded-xl border border-gray-200 p-4 bg-white">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Captures by Company Type</h4>
-        {summary.companyTypeBreakdown.length === 0
-          ? <p className="text-xs text-gray-400">No data</p>
-          : (
-            <div className="space-y-2">
-              {summary.companyTypeBreakdown.map(item => (
-                <div key={item.label} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-600 w-28 truncate flex-shrink-0">{item.label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div className="h-2 rounded-full bg-brand-secondary" style={{ width: `${Math.round((item.count / maxCt) * 100)}%` }} />
+      {/* Charts + comparison — 3-column row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignItems: 'start' }}>
+        <div className="rounded-xl border border-gray-200 p-4 bg-white">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Captures by Company Type</h4>
+          {summary.companyTypeBreakdown.length === 0
+            ? <p className="text-xs text-gray-400">No data</p>
+            : (
+              <div className="space-y-2">
+                {summary.companyTypeBreakdown.map(item => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-600 w-20 truncate flex-shrink-0">{item.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div className="h-2 rounded-full bg-brand-secondary" style={{ width: `${Math.round((item.count / maxCt) * 100)}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{item.count}</span>
                   </div>
-                  <span className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{item.count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-      </div>
-
-      <div className="rounded-xl border border-gray-200 p-4 bg-white">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Engagement Quality</h4>
-        <div className="space-y-2">
-          {[
-            { label: 'Meetings Held', value: summary.engagementByType.meetingsHeld, color: '#059669' },
-            { label: 'Social Conversations', value: summary.engagementByType.socialConversations, color: '#0f766e' },
-            { label: 'Touchpoints', value: summary.engagementByType.touchpoints, color: '#1B76BC' },
-            { label: 'Notes Logged', value: summary.engagementByType.notesLogged, color: '#7c3aed' },
-            { label: 'Zero Engagement', value: summary.engagementByType.zeroEngagement, color: '#ef4444' },
-          ].map(item => (
-            <div key={item.label} className="flex items-center gap-3">
-              <span className="text-xs text-gray-600 w-32 truncate flex-shrink-0">{item.label}</span>
-              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div className="h-2 rounded-full" style={{ width: `${Math.round((item.value / maxEng) * 100)}%`, backgroundColor: item.color }} />
+                ))}
               </div>
-              <span className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{item.value}</span>
-            </div>
-          ))}
+            )}
         </div>
-      </div>
 
-      {/* Conference vs Prior Average — combined single card */}
-      <div className="rounded-xl border border-gray-200 p-4 bg-white">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Conference vs Prior Average</h4>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 24 }}>
-          {compareItems.map((item, i) => {
-            const diff = item.current - item.avg;
-            const up = diff >= 0;
-            return (
-              <div key={i} className="flex items-center justify-between py-2"
-                style={{ borderBottom: i < 4 ? '1px solid #f9fafb' : 'none' }}>
-                <span className="text-xs text-gray-600">{item.label}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-800">{item.current}</span>
-                  {item.avg > 0 && (
-                    <span className={`text-xs font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {up ? '↑' : '↓'} {Math.abs(diff)} vs avg
-                    </span>
-                  )}
+        <div className="rounded-xl border border-gray-200 p-4 bg-white">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Engagement Quality</h4>
+          <div className="space-y-2">
+            {[
+              { label: 'Meetings Held', value: summary.engagementByType.meetingsHeld, color: '#059669' },
+              { label: 'Social Conversations', value: summary.engagementByType.socialConversations, color: '#0f766e' },
+              { label: 'Touchpoints', value: summary.engagementByType.touchpoints, color: '#1B76BC' },
+              { label: 'Notes Logged', value: summary.engagementByType.notesLogged, color: '#7c3aed' },
+              { label: 'Zero Engagement', value: summary.engagementByType.zeroEngagement, color: '#ef4444' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-3">
+                <span className="text-xs text-gray-600 w-24 truncate flex-shrink-0">{item.label}</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div className="h-2 rounded-full" style={{ width: `${Math.round((item.value / maxEng) * 100)}%`, backgroundColor: item.color }} />
                 </div>
+                <span className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{item.value}</span>
               </div>
-            );
-          })}
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 p-4 bg-white">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Conference vs Prior Average</h4>
+          <div>
+            {compareItems.map((item, i) => {
+              const diff = item.current - item.avg;
+              const up = diff >= 0;
+              return (
+                <div key={i} className="flex items-center justify-between py-2"
+                  style={{ borderBottom: i < compareItems.length - 1 ? '1px solid #f9fafb' : 'none' }}>
+                  <span className="text-xs text-gray-600">{item.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-800">{item.current}</span>
+                    {item.avg > 0 && (
+                      <span className={`text-xs font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {up ? '↑' : '↓'} {Math.abs(diff)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

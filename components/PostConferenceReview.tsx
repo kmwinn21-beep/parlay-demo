@@ -105,9 +105,9 @@ function fmtDate(d: string) {
 // ── Stat pill in header ────────────────────────────────────────────────────────
 function StatPill({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border-2 border-brand-primary p-3 bg-white flex flex-col gap-0.5 min-w-0">
+    <div className="rounded-xl border-2 border-brand-primary p-3 bg-white flex flex-col items-center gap-0.5 min-w-0">
       <div className="text-xl font-bold text-brand-primary leading-tight">{value}</div>
-      <div className="text-xs font-semibold text-gray-500 truncate">{label}</div>
+      <div className="text-sm font-semibold text-gray-500 text-center truncate w-full">{label}</div>
     </div>
   );
 }
