@@ -49,7 +49,6 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'contacts', label: 'Contacts Captured' },
     { key: 'meetings', label: 'Meetings' },
     { key: 'follow_ups', label: 'Follow-ups' },
-    { key: 'rep_performance', label: 'By Rep' },
     { key: 'relationship_shifts', label: 'Relationship Shifts' },
     { key: 'action_items', label: 'Action Items' },
   ],

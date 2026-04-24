@@ -6,7 +6,6 @@ import { SummaryTab } from './post-conference/SummaryTab';
 import { ContactsCapturedTab } from './post-conference/ContactsCapturedTab';
 import { MeetingsTab } from './post-conference/MeetingsTab';
 import { FollowUpsTab } from './post-conference/FollowUpsTab';
-import { RepPerformanceTab } from './post-conference/RepPerformanceTab';
 import { RelationshipShiftsTab } from './post-conference/RelationshipShiftsTab';
 import { ActionItemsTab } from './post-conference/ActionItemsTab';
 
@@ -94,7 +93,7 @@ export interface PostConferenceData {
 const GREEN = '#34D399';
 const GREEN_DARK = '#064e3b';
 const GREEN_ACTIVE = '#059669';
-const TAB_ORDER = ['summary', 'contacts', 'meetings', 'follow_ups', 'rep_performance', 'relationship_shifts', 'action_items'];
+const TAB_ORDER = ['summary', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'action_items'];
 
 function fmtDate(d: string) {
   try {
@@ -106,9 +105,9 @@ function fmtDate(d: string) {
 // ── Stat pill in header ────────────────────────────────────────────────────────
 function StatPill({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="flex flex-col items-center px-4 py-2 rounded-lg bg-white/10">
-      <span className="text-lg font-bold text-white leading-tight">{value}</span>
-      <span className="text-xs text-white/70 font-medium">{label}</span>
+    <div className="rounded-xl border-2 border-brand-primary p-3 bg-white flex flex-col gap-0.5 min-w-0">
+      <div className="text-xl font-bold text-brand-primary leading-tight">{value}</div>
+      <div className="text-xs font-semibold text-gray-500 truncate">{label}</div>
     </div>
   );
 }
@@ -218,7 +217,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
                 </svg>
               </button>
             </div>
-            <div className="flex flex-wrap gap-2 mt-3">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }} className="mt-3">
               <StatPill label="Reps" value={data.summary.repsAttended} />
               <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
               <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
@@ -244,11 +243,10 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
 
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            {effectiveTab === 'summary' && <SummaryTab summary={data.summary} />}
+            {effectiveTab === 'summary' && <SummaryTab summary={data.summary} repPerformance={data.repPerformance} />}
             {effectiveTab === 'contacts' && <ContactsCapturedTab contacts={data.contacts} />}
             {effectiveTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
             {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}
-            {effectiveTab === 'rep_performance' && <RepPerformanceTab repPerformance={data.repPerformance} />}
             {effectiveTab === 'relationship_shifts' && <RelationshipShiftsTab relationshipShifts={data.relationshipShifts} />}
             {effectiveTab === 'action_items' && <ActionItemsTab actionItems={data.actionItems} />}
           </div>
