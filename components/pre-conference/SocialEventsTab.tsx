@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SocialEventRow, SocialEventGuest } from '../PreConferenceReview';
 
@@ -79,6 +79,7 @@ function GuestRow({ guest, eventId, onUpdate }: {
         body: JSON.stringify({ attendee_id: guest.attendee_id, rsvp_status: statusStr }),
       });
       onUpdate(guest.attendee_id, statusStr);
+      window.dispatchEvent(new CustomEvent('rsvp-updated', { detail: { eventId, attendeeId: guest.attendee_id, rsvpStatus: statusStr } }));
     } catch { /* ignore */ }
   }
 
@@ -133,6 +134,16 @@ function GuestListPanel({ event }: { event: SocialEventRow }) {
   function handleUpdate(attendeeId: number, newStatus: string) {
     setGuests(prev => prev.map(g => g.attendee_id === attendeeId ? { ...g, rsvp_status: newStatus } : g));
   }
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { eventId, attendeeId, rsvpStatus } = (e as CustomEvent).detail as { eventId: number; attendeeId: number; rsvpStatus: string };
+      if (eventId !== event.id) return;
+      handleUpdate(attendeeId, rsvpStatus);
+    };
+    window.addEventListener('rsvp-updated', handler);
+    return () => window.removeEventListener('rsvp-updated', handler);
+  }, [event.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOperator = (ct: string | null | undefined) => {
     const l = (ct || '').toLowerCase();
