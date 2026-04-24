@@ -86,7 +86,7 @@ function computeHealthScore(params: {
     const hasMeetingHeld = actionKeys.includes('meeting_held');
     const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hasNotes = noteCount > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
-    const hasSocialAttending = social.some(e => String(e.rsvp_status).includes('attending'));
+    const hasSocialAttending = social.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
     const hasFus = fus.length > 0;
     const hasCompletedFu = fus.some(f => Number(f.completed) === 1);
     const hasTouchpoint = actionVals.length > 0 && actionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
@@ -173,7 +173,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -201,6 +201,12 @@ export async function GET(
       args: [confId],
     }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
+            JOIN social_events se ON r.social_event_id = se.id
+            WHERE se.conference_id = ? AND r.rsvp_status LIKE '%attended%'`,
+      args: [confId],
+    }),
   ]);
 
   const operatorType = operatorTypeRes.rows[0]?.value ? String(operatorTypeRes.rows[0].value) : 'Operator';
@@ -670,7 +676,7 @@ export async function GET(
     const hadMeeting = confActionKeys.includes('meeting_held');
     const hadOutcome = hadMeeting && confMeetingsList.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hadNotes = confNoteCount > 0 || (confDet?.notes != null && String(confDet.notes).trim().length > 0);
-    const hadSocial = confSocialList.some(e => String(e.rsvp_status).includes('attending'));
+    const hadSocial = confSocialList.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
     const hadFus = confFuList.length > 0;
     const hadCompletedFu = confFuList.some(f => Number(f.completed) === 1);
     const hadTouchpoint = confActionVals.length > 0 && confActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
@@ -802,11 +808,8 @@ export async function GET(
   // Touchpoints for this conference — from attendee_touchpoints table
   const touchpointCount = Number(confTouchpointsRes.rows[0]?.count ?? 0);
 
-  // Event attendees — attending RSVPs for social events tied to this conference
-  const eventAttendeesCount = allSocialRes.rows.filter(r =>
-    Number(r.conference_id) === confId &&
-    String(r.rsvp_status).toLowerCase().includes('attending')
-  ).length;
+  // Event attendees — all attendees with 'attended' RSVP status for this conference's social events
+  const eventAttendeesCount = Number(eventAttendeesRes.rows[0]?.count ?? 0);
 
   // ── Company type breakdown ────────────────────────────────────────────────
   const ctCount: Record<string, number> = {};
