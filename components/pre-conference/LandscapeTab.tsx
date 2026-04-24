@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
-import type { LandscapeData, TargetEntry } from '../PreConferenceReview';
+import type { LandscapeData, TargetEntry, ClientCompanyEntry } from '../PreConferenceReview';
 
 type OverlapAttendee = LandscapeData['priorOverlapAttendees'][number];
 
@@ -37,6 +38,57 @@ function UserPill({ name }: { name: string }) {
   );
 }
 
+function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unitTypeLabel: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      {/* Header row */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left gap-2"
+      >
+        <span className="text-xs font-semibold text-gray-800 truncate flex-1">{co.companyName}</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs font-bold text-brand-primary">{co.attendeeCount}</span>
+          <svg
+            className={`w-3.5 h-3.5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Unit type pill row */}
+      {co.wse != null && (
+        <div className="px-3 pt-1.5 pb-1">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20">
+            {unitTypeLabel}: {co.wse.toLocaleString()}
+          </span>
+        </div>
+      )}
+
+      {/* Expanded attendee list */}
+      {expanded && co.attendees.length > 0 && (
+        <div className="divide-y divide-gray-100 border-t border-gray-100">
+          {co.attendees.map(a => (
+            <div key={a.id} className="px-3 py-1.5">
+              <Link
+                href={`/attendees/${a.id}`}
+                className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate"
+                onClick={e => e.stopPropagation()}
+              >
+                {a.firstName} {a.lastName}
+              </Link>
+              {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LandscapeTab({
   data,
   targetMap,
@@ -48,8 +100,8 @@ export function LandscapeTab({
 }) {
   return (
     <div className="space-y-8">
-      {/* 4-column layout: stat cards (1 col) + stacked charts (3 cols) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-stretch">
+      {/* 5-column layout: stat cards | charts (×3) | client attendees */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
         {/* Col 1: stacked stat cards */}
         <div className="flex flex-col gap-3">
           {[
@@ -73,6 +125,25 @@ export function LandscapeTab({
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Seniority Breakdown</h3>
             <BarChart items={data.seniorityBreakdown} total={data.totalAttendees} colorClass="bg-brand-highlight" />
+          </div>
+        </div>
+
+        {/* Col 5: Client Attendees */}
+        <div className="flex flex-col border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-3 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Client Attendees</h3>
+            {data.clientCompanies.length > 0 && (
+              <span className="text-xs font-semibold text-gray-400">{data.clientCompanies.length}</span>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {data.clientCompanies.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">No client companies attending</p>
+            ) : (
+              data.clientCompanies.map(co => (
+                <ClientCompanyCard key={co.companyId} co={co} unitTypeLabel={data.unitTypeLabel} />
+              ))
+            )}
           </div>
         </div>
       </div>

@@ -104,7 +104,7 @@ export async function GET(
 
   const attendeeIds = attendees.map((a) => a.id);
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes] = await Promise.all([
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -205,6 +205,8 @@ export async function GET(
           args: attendeeIds,
         })
       : Promise.resolve({ rows: [] }),
+    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'unit_type' LIMIT 1`, args: [] }),
+    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'status' AND LOWER(TRIM(value)) LIKE '%client%'`, args: [] }),
   ]);
 
   const internalRels = internalRelsRes.rows;
@@ -403,6 +405,36 @@ export async function GET(
     return types.includes(overlapCompanyType);
   });
 
+  // --- Client companies ---
+  const unitTypeLabel = unitTypeRes.rows[0]?.value ? String(unitTypeRes.rows[0].value) : 'Units';
+  const clientStatusSet = new Set(clientStatusRes.rows.map(r => String(r.value).toLowerCase().trim()));
+
+  const clientCompanyMap = new Map<number, { companyId: number; companyName: string; wse: number | null; attendees: { id: number; firstName: string; lastName: string; title: string | null }[] }>();
+  for (const a of attendees) {
+    const companyId = a.company_id as number | null;
+    if (!companyId) continue;
+    const rawStatus = String(a.company_status || '');
+    const hasClientStatus = rawStatus.split(',').some(s => clientStatusSet.has(s.trim().toLowerCase()));
+    if (!hasClientStatus) continue;
+    if (!clientCompanyMap.has(companyId)) {
+      clientCompanyMap.set(companyId, {
+        companyId,
+        companyName: String(a.company_name || ''),
+        wse: a.wse != null ? Number(a.wse) : null,
+        attendees: [],
+      });
+    }
+    clientCompanyMap.get(companyId)!.attendees.push({
+      id: Number(a.id),
+      firstName: String(a.first_name || ''),
+      lastName: String(a.last_name || ''),
+      title: a.title ? String(a.title) : null,
+    });
+  }
+  const clientCompanies = Array.from(clientCompanyMap.values())
+    .sort((a, b) => b.attendees.length - a.attendees.length || a.companyName.localeCompare(b.companyName))
+    .map(co => ({ ...co, attendeeCount: co.attendees.length }));
+
   const landscape = {
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
     companyTypeBreakdown: Object.entries(companyTypeCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
@@ -417,6 +449,8 @@ export async function GET(
       prior_conference: prevConfMap.get(a.id as number) ?? '',
       assigned_user_names: resolveUserIds(a.company_assigned_user),
     })),
+    clientCompanies,
+    unitTypeLabel,
   };
 
   // --- ICP Companies (evaluated using icp rules, not stored column) ---

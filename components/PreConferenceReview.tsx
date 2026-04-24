@@ -20,6 +20,14 @@ export interface PreConferenceSummary {
   reps: string[];
 }
 
+export interface ClientCompanyEntry {
+  companyId: number;
+  companyName: string;
+  wse: number | null;
+  attendeeCount: number;
+  attendees: { id: number; firstName: string; lastName: string; title: string | null }[];
+}
+
 export interface LandscapeData {
   totalAttendees: number;
   totalCompanies: number;
@@ -30,6 +38,8 @@ export interface LandscapeData {
   priorOverlapTypeLabel: string;
   priorOverlapCount: number;
   priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; company_id: number | null; seniority: string | null; prior_conference: string; assigned_user_names: string[] }[];
+  clientCompanies: ClientCompanyEntry[];
+  unitTypeLabel: string;
 }
 
 export interface IcpCompany {
