@@ -319,7 +319,7 @@ export function FloatingNav() {
                     if (item.key === 'quick-note') setShowQuickNote(true);
                     else setShowSearch(true);
                   }}
-                  className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border min-w-[152px] transition-colors ${pillCls}`}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border w-full min-w-[152px] transition-colors ${pillCls}`}
                 >
                   {item.icon}
                   <span className="text-sm font-medium leading-none">{item.label}</span>
