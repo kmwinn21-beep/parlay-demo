@@ -197,7 +197,7 @@ function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onTog
               <p className="text-sm text-gray-400">No attendees.</p>
             ) : (
               company.attendees.map((a) => {
-                const isTarget = targetMap.has(Number(a.id));
+                const isTarget = targetMap?.has(Number(a.id)) ?? false;
                 return (
                   <div key={String(a.id)} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
                     <Link href={`/attendees/${a.id}`} className="flex-1 min-w-0">
@@ -206,7 +206,7 @@ function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onTog
                     </Link>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {a.status && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">{String(a.status)}</span>}
-                      <TargetBtn
+                      {onToggleTarget && <TargetBtn
                         isTarget={isTarget}
                         size="md"
                         onClick={() => onToggleTarget({
@@ -219,7 +219,7 @@ function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onTog
                           companyId: company.company_id,
                           assignedUserNames: company.assigned_user_names,
                         })}
-                      />
+                      />}
                     </div>
                   </div>
                 );

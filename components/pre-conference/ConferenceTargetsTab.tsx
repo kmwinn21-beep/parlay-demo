@@ -199,8 +199,8 @@ export function ConferenceTargetsTab({
             return (
               <div
                 key={tier.key}
-                className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg} ${isOver ? 'ring-2 ring-offset-1' : ''}`}
-                style={isOver ? { ringColor: tier.color } : {}}
+                className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg}`}
+                style={isOver ? { outline: `2px solid ${tier.color}`, outlineOffset: '2px' } : {}}
                 onDragOver={e => { e.preventDefault(); setDragOverTier(tier.key); }}
                 onDragLeave={() => setDragOverTier(null)}
                 onDrop={() => handleDrop(tier.key)}
