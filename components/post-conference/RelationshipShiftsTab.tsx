@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import type { RelationshipShiftRow, PostConferenceData } from '../PostConferenceReview';
 
@@ -17,16 +18,10 @@ function HealthBar({ score }: { score: number }) {
   );
 }
 
-function DeltaBadge({ delta }: { delta: number }) {
-  const up = delta > 0;
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-      {up ? `↑ +${delta}` : `↓ ${delta}`} pts
-    </span>
-  );
-}
-
 function ShiftCard({ r, direction }: { r: RelationshipShiftRow; direction: 'improved' | 'declined' }) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const up = r.healthDelta > 0;
+
   return (
     <div className={`rounded-xl border p-4 bg-white space-y-2 hover:shadow-sm transition-all ${direction === 'improved' ? 'border-emerald-200' : 'border-red-200'}`}>
       <div className="flex items-start justify-between gap-2">
@@ -40,21 +35,49 @@ function ShiftCard({ r, direction }: { r: RelationshipShiftRow; direction: 'impr
             </Link>
           )}
         </div>
-        <DeltaBadge delta={r.healthDelta} />
+        <button
+          onClick={() => setShowBreakdown(v => !v)}
+          title="Show engagement breakdown"
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 cursor-pointer transition-opacity hover:opacity-80 ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+          {up ? `↑ +${r.healthDelta}` : `↓ ${r.healthDelta}`} pts
+        </button>
       </div>
 
+      {/* Health before/after */}
       <div className="flex items-center gap-4">
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wider" style={{ fontSize: 9 }}>Before</span>
+          <span className="text-gray-400 uppercase tracking-wider" style={{ fontSize: 9 }}>Before</span>
           <HealthBar score={r.healthBefore} />
         </div>
         <span className="text-gray-300 text-xs">→</span>
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wider" style={{ fontSize: 9 }}>After</span>
+          <span className="text-gray-400 uppercase tracking-wider" style={{ fontSize: 9 }}>After</span>
           <HealthBar score={r.healthAfter} />
         </div>
       </div>
 
+      {/* Breakdown panel (toggled) */}
+      {showBreakdown && (
+        <div className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">This conference engagement</p>
+          {r.conferenceBreakdown.map((item, i) => (
+            <div key={i} className="flex items-center justify-between text-xs">
+              <span className="text-gray-600">{item.label}</span>
+              <span className={`font-semibold ${item.points > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                {item.points > 0 ? `+${item.points}` : '—'}
+              </span>
+            </div>
+          ))}
+          <div className="border-t border-gray-200 pt-1 flex items-center justify-between text-xs">
+            <span className="text-gray-500">Net health change</span>
+            <span className={`font-bold ${up ? 'text-emerald-600' : 'text-red-500'}`}>
+              {up ? `+${r.healthDelta}` : r.healthDelta} pts
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Tags */}
       <div className="flex flex-wrap gap-1">
         {r.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5">ICP</span>}
         {r.company_type && (
@@ -62,7 +85,7 @@ function ShiftCard({ r, direction }: { r: RelationshipShiftRow; direction: 'impr
             {r.company_type.split(',')[0].trim()}
           </span>
         )}
-        {r.assignedUsers.length > 0 && r.assignedUsers.map((u, i) => (
+        {r.assignedUsers.map((u, i) => (
           <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
             style={{ background: 'rgba(34,58,94,0.06)', color: '#223A5E', borderColor: 'rgba(34,58,94,0.15)' }}>
             {u}
@@ -107,13 +130,13 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Net Relationship Impact</h4>
           <div className="flex h-6 rounded-full overflow-hidden">
             {improved.length > 0 && (
-              <div className="h-full bg-emerald-400 transition-all" style={{ width: `${Math.round((improved.length / total) * 100)}%` }} title={`${improved.length} improved`} />
+              <div className="h-full bg-emerald-400" style={{ width: `${Math.round((improved.length / total) * 100)}%` }} />
             )}
             {unchanged.length > 0 && (
-              <div className="h-full bg-gray-200" style={{ width: `${Math.round((unchanged.length / total) * 100)}%` }} title={`${unchanged.length} unchanged`} />
+              <div className="h-full bg-gray-200" style={{ width: `${Math.round((unchanged.length / total) * 100)}%` }} />
             )}
             {declined.length > 0 && (
-              <div className="h-full bg-red-400 transition-all" style={{ width: `${Math.round((declined.length / total) * 100)}%` }} title={`${declined.length} declined`} />
+              <div className="h-full bg-red-400" style={{ width: `${Math.round((declined.length / total) * 100)}%` }} />
             )}
           </div>
           <div className="flex items-center gap-4 mt-2">
@@ -124,7 +147,6 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
         </div>
       )}
 
-      {/* Improved */}
       {improved.length > 0 && (
         <div>
           <div className="flex items-center gap-3 my-2">
@@ -138,7 +160,6 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
         </div>
       )}
 
-      {/* Declined */}
       {declined.length > 0 && (
         <div>
           <div className="flex items-center gap-3 my-2">

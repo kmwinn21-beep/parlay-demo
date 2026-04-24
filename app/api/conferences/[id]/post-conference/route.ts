@@ -46,6 +46,7 @@ interface RelationshipShiftRow {
   assignedUsers: string[];
   priorConferenceCount: number; healthBefore: number; healthAfter: number;
   healthDelta: number; shiftReason: string;
+  conferenceBreakdown: { label: string; points: number }[];
 }
 interface ActionItem {
   type: 'overdue_followup' | 'missing_outcome' | 'no_show' | 'ghost_penalty' | 'pipeline' | 'new_contact' | 'retrospective';
@@ -159,11 +160,17 @@ export async function GET(
 
   // ── Resolve user IDs → display names ─────────────────────────────────────
   const usersRes = await db.execute({
-    sql: `SELECT u.id, COALESCE(co.value, u.display_name, CAST(u.id AS TEXT)) as display_name
+    sql: `SELECT u.id, u.config_id, COALESCE(co.value, u.display_name, CAST(u.id AS TEXT)) as display_name
           FROM users u LEFT JOIN config_options co ON u.config_id = co.id`,
     args: [],
   });
-  userIdToName = new Map(usersRes.rows.map(u => [String(u.id), u.display_name ? String(u.display_name) : String(u.id)]));
+  userIdToName = new Map<string, string>();
+  for (const u of usersRes.rows) {
+    const name = u.display_name ? String(u.display_name) : String(u.id);
+    userIdToName.set(String(u.id), name);
+    // Also map by config_options ID so scheduled_by/assigned_rep that store co.id resolve correctly
+    if (u.config_id != null) userIdToName.set(String(u.config_id), name);
+  }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
   const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
@@ -534,37 +541,38 @@ export async function GET(
   }
 
   // ── Rep performance ───────────────────────────────────────────────────────
+  // Only include reps listed on the conference (internal_attendees) — resolve display names
   const repsFromConf = conf.internal_attendees
     ? splitIds(conf.internal_attendees)
     : [];
+  // repsFromConf may store display names OR IDs — resolve each through the map
+  // Build a canonical rep set: resolve IDs to names, keep as names
+  const repDisplayNames = repsFromConf.map(r => userIdToName.get(r) ?? r);
+  // Deduplicate
+  const repSet = Array.from(new Set(repDisplayNames)).filter(Boolean);
 
-  // Collect individual rep IDs from details, meetings, follow_ups (split comma-separated)
-  const repIdsSet = new Set<string>(repsFromConf);
   const currentDetails = allDetailsRes.rows.filter(r => Number(r.conference_id) === confId);
-  for (const d of currentDetails) {
-    if (d.assigned_rep) splitIds(d.assigned_rep).forEach(id => repIdsSet.add(id));
-  }
-  for (const m of confMeetingsRes.rows) {
-    if (m.scheduled_by) splitIds(m.scheduled_by).forEach(id => repIdsSet.add(id));
-  }
-  for (const f of confFollowUpsRes.rows) {
-    if (f.assigned_rep) splitIds(f.assigned_rep).forEach(id => repIdsSet.add(id));
+
+  // Build a helper to check if a raw field (possibly IDs or names) resolves to a given display name
+  function rawFieldMatchesName(raw: unknown, displayName: string): boolean {
+    if (!raw) return false;
+    const parts = splitIds(raw);
+    return parts.some(p => {
+      const resolved = userIdToName.get(p) ?? p;
+      return resolved === displayName || p === displayName;
+    });
   }
 
   const repPerfRows: RepPerformanceRow[] = [];
-  for (const repId of Array.from(repIdsSet)) {
-    // Include this contact/meeting/follow-up if repId is in their comma-separated list
-    const repDetails = currentDetails.filter(d =>
-      d.assigned_rep && splitIds(d.assigned_rep).includes(repId)
-    );
-    // meetingRows already have resolved scheduled_by (display name); match by ID against raw data
+  for (const repName of repSet) {
+    const repDetails = currentDetails.filter(d => rawFieldMatchesName(d.assigned_rep, repName));
     const repMeetings = meetingRows.filter(m => {
       const rawM = confMeetingsRes.rows.find(r => Number(r.id) === m.id);
-      return rawM && splitIds(rawM.scheduled_by).includes(repId);
+      return rawM && rawFieldMatchesName(rawM.scheduled_by, repName);
     });
     const repFollowUps = followUpRows.filter(f => {
       const rawF = confFollowUpsRes.rows.find(r => Number(r.id) === f.id);
-      return rawF && splitIds(rawF.assigned_rep).includes(repId);
+      return rawF && rawFieldMatchesName(rawF.assigned_rep, repName);
     });
 
     // Contacts captured = attendees with this rep in their details.assigned_rep
@@ -599,7 +607,7 @@ export async function GET(
     const repReEngage = captured.filter(c => reEngagements.some(r => r.attendee_id === c.attendee_id)).length;
 
     repPerfRows.push({
-      repName: userIdToName.get(repId) ?? repId,
+      repName,
       contactsCaptured: captured.length,
       newlyEngaged: repNewly,
       reEngagements: repReEngage,
@@ -647,6 +655,32 @@ export async function GET(
     } else {
       shiftReason = 'Engagement level held steady';
     }
+    // Compute engagement breakdown at this specific conference for the tooltip
+    const confKey = `${aid}_${confId}`;
+    const confDet = detailsByAttConf.get(confKey);
+    const confMeetingsList = meetingsByAttConf.get(confKey) ?? [];
+    const confFuList = fusByAttConf.get(confKey) ?? [];
+    const confNoteCount = noteCountByAttConf.get(confKey) ?? 0;
+    const confSocialList = socialByAttConf.get(confKey) ?? [];
+    const confActionStr = confDet?.action ?? '';
+    const confActionVals = confActionStr.split(',').map(s => s.trim()).filter(Boolean);
+    const confActionKeys = confActionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
+    const hadMeeting = confActionKeys.includes('meeting_held');
+    const hadOutcome = hadMeeting && confMeetingsList.some(m => m.outcome && String(m.outcome).trim().length > 0);
+    const hadNotes = confNoteCount > 0 || (confDet?.notes != null && String(confDet.notes).trim().length > 0);
+    const hadSocial = confSocialList.some(e => String(e.rsvp_status).includes('attending'));
+    const hadFus = confFuList.length > 0;
+    const hadCompletedFu = confFuList.some(f => Number(f.completed) === 1);
+    const hadTouchpoint = confActionVals.length > 0 && confActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
+    const conferenceBreakdown: { label: string; points: number }[] = [];
+    if (hadMeeting) conferenceBreakdown.push({ label: 'Meeting held', points: 25 });
+    if (hadOutcome) conferenceBreakdown.push({ label: 'Meeting outcome logged', points: 20 });
+    if (hadNotes) conferenceBreakdown.push({ label: 'Notes logged', points: 10 });
+    if (hadSocial) conferenceBreakdown.push({ label: 'Social event attendance', points: 20 });
+    if (hadFus && hadCompletedFu) conferenceBreakdown.push({ label: 'Follow-up completed', points: 15 });
+    if (hadTouchpoint) conferenceBreakdown.push({ label: 'Touchpoint logged', points: 10 });
+    if (conferenceBreakdown.length === 0) conferenceBreakdown.push({ label: 'No engagement logged', points: 0 });
+
     const row: RelationshipShiftRow = {
       attendee_id: aid,
       attendeeName: `${c.first_name} ${c.last_name}`,
@@ -660,6 +694,7 @@ export async function GET(
       healthAfter,
       healthDelta: delta,
       shiftReason,
+      conferenceBreakdown,
     };
     if (delta > 0) improved.push(row);
     else if (delta < 0) declined.push(row);

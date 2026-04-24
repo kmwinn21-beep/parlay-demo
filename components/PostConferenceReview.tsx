@@ -54,6 +54,7 @@ export interface RelationshipShiftRow {
   assignedUsers: string[];
   priorConferenceCount: number; healthBefore: number; healthAfter: number;
   healthDelta: number; shiftReason: string;
+  conferenceBreakdown: { label: string; points: number }[];
 }
 export interface ActionItem {
   type: 'overdue_followup' | 'missing_outcome' | 'no_show' | 'ghost_penalty' | 'pipeline' | 'new_contact' | 'retrospective';

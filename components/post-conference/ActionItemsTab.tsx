@@ -89,13 +89,14 @@ export function ActionItemsTab({ actionItems }: { actionItems: ActionItems }) {
       {Object.keys(typeCounts).length > 1 && (
         <div className="rounded-xl border border-gray-200 p-4 bg-white">
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Action Types</h4>
-          <div className="flex flex-wrap gap-2">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
             {Object.entries(typeCounts).map(([type, count]) => {
               const meta = TYPE_META[type as ActionItem['type']];
               if (!meta) return null;
               return (
-                <span key={type} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${meta.bg} ${meta.border} ${meta.text}`}>
-                  {meta.icon} {meta.label} <span className="font-bold">{count}</span>
+                <span key={type} className={`inline-flex items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border ${meta.bg} ${meta.border} ${meta.text}`}>
+                  <span className="flex items-center gap-1">{meta.icon} {meta.label}</span>
+                  <span className="font-bold">{count}</span>
                 </span>
               );
             })}

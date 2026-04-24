@@ -58,6 +58,16 @@ function ContactCard({ c }: { c: ContactRow }) {
           </span>
         )}
       </div>
+      {c.assigned_user_names.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {c.assigned_user_names.map((u, i) => (
+            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+              style={{ background: 'rgba(34,58,94,0.06)', color: '#223A5E', borderColor: 'rgba(34,58,94,0.15)' }}>
+              {u}
+            </span>
+          ))}
+        </div>
+      )}
       {c.firstSeenConference && (
         <p className="text-xs text-gray-400">First seen at {c.firstSeenConference}</p>
       )}
@@ -86,6 +96,16 @@ function GhostCard({ c }: { c: ContactRow }) {
           </span>
         )}
       </div>
+      {c.assigned_user_names.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {c.assigned_user_names.map((u, i) => (
+            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+              style={{ background: 'rgba(34,58,94,0.06)', color: '#223A5E', borderColor: 'rgba(34,58,94,0.15)' }}>
+              {u}
+            </span>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-gray-400">{c.priorConferenceCount} prior conferences, zero engagement this conference</p>
     </div>
   );
