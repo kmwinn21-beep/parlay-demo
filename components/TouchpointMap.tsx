@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getPreset } from '@/lib/colors';
 
 interface TouchpointEntry {
@@ -31,16 +31,23 @@ interface Props {
 export function TouchpointMap({ attendeeId, open, onClose, anchorRef }: Props) {
   const [data, setData] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [alignRight, setAlignRight] = useState(true);
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ width: 320, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Determine which side to open based on available viewport space
+  // Clamp popup within viewport bounds
   useEffect(() => {
     if (!open || !anchorRef?.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
-    const POPUP_WIDTH = 320; // w-80
-    const spaceRight = window.innerWidth - rect.right;
-    setAlignRight(spaceRight >= POPUP_WIDTH || spaceRight >= rect.left);
+    const popupWidth = Math.min(320, window.innerWidth - 16);
+    // Default: align to anchor left edge
+    let left = 0;
+    // If that overflows the right viewport edge, shift popup leftward
+    if (rect.left + popupWidth > window.innerWidth - 8) {
+      left = window.innerWidth - 8 - popupWidth - rect.left;
+    }
+    // Never let the popup go past the left viewport edge
+    left = Math.max(8 - rect.left, left);
+    setPopupStyle({ width: popupWidth, left });
   }, [open, anchorRef]);
 
   useEffect(() => {
@@ -70,7 +77,8 @@ export function TouchpointMap({ attendeeId, open, onClose, anchorRef }: Props) {
   return (
     <div
       ref={containerRef}
-      className={`absolute z-50 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-4 ${alignRight ? 'left-0' : 'right-0'}`}
+      className="absolute z-50 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4"
+      style={popupStyle}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Touchpoint Map</span>

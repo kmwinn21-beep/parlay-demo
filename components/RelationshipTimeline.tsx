@@ -317,7 +317,7 @@ function CardCarousel({ children }: { children: React.ReactNode }) {
           </svg>
         </button>
       )}
-      <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-2"
+      <div ref={scrollRef} className="flex flex-col sm:flex-row gap-4 sm:overflow-x-auto pb-2"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <style>{`.no-scrollbar::-webkit-scrollbar{display:none}`}</style>
         {children}
@@ -348,7 +348,7 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
   const avatarLetter = (attendee.first_name?.[0] ?? '').toUpperCase();
 
   return (
-    <div className="card flex-shrink-0 flex flex-col gap-3 relative" style={{ width: 360, minWidth: 360 }}>
+    <div className="card flex-shrink-0 flex flex-col gap-3 relative w-full sm:w-[360px] sm:min-w-[360px]">
       {/* Remove button */}
       <button onClick={onRemove} className="absolute top-3 right-3 text-gray-300 hover:text-gray-500 transition-colors text-xs">✕</button>
 
@@ -588,7 +588,7 @@ export default function RelationshipTimeline() {
             const isLoading = loadingCards.has(a.id);
             if (isLoading || !data) {
               return (
-                <div key={a.id} className="card flex-shrink-0 flex items-center justify-center" style={{ width: 360, minWidth: 360, minHeight: 200 }}>
+                <div key={a.id} className="card flex-shrink-0 flex items-center justify-center w-full sm:w-[360px] sm:min-w-[360px]" style={{ minHeight: 200 }}>
                   <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
                 </div>
               );
