@@ -125,7 +125,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
     summary.engagementByType.socialConversations,
     summary.engagementByType.touchpoints,
     summary.engagementByType.notesLogged,
-    summary.engagementByType.zeroEngagement,
+    summary.followUpsCreated,
   );
 
   const compareItems: { label: string; current: number; avg: number }[] = [
