@@ -188,7 +188,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
               { label: 'Form Submissions', value: summary.formSubmissions, color: '#64748b' },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-3">
-                <span className="text-xs text-gray-600 whitespace-nowrap flex-shrink-0">{item.label}</span>
+                <span className="text-xs text-gray-600 w-24 flex-shrink-0">{item.label}</span>
                 <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                   <div className="h-2 rounded-full" style={{ width: `${Math.round((item.value / maxEng) * 100)}%`, backgroundColor: item.color }} />
                 </div>
