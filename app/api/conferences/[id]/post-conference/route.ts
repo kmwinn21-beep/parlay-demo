@@ -141,7 +141,7 @@ export async function GET(
   const daysSinceEnd = Math.floor((today.getTime() - new Date(confEndDate + 'T00:00:00').getTime()) / 86400000);
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -168,12 +168,17 @@ export async function GET(
             WHERE f.conference_id = ?`,
       args: [confId],
     }),
+    db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
   ]);
 
-  const attendees = attendeesRes.rows;
-  if (attendees.length === 0) {
-    return NextResponse.json({ error: 'No attendees' }, { status: 404 });
-  }
+  const operatorType = operatorTypeRes.rows[0]?.value ? String(operatorTypeRes.rows[0].value) : 'Operator';
+
+  // Filter to operator-type attendees only
+  const attendees = attendeesRes.rows.filter(a => {
+    if (!a.company_type) return false;
+    const types = String(a.company_type).split(',').map(s => s.trim().toLowerCase());
+    return types.includes(operatorType.toLowerCase());
+  });
 
   const actionKeyMap = new Map<string, string>();
   for (const r of actionOptsRes.rows) {
@@ -182,7 +187,8 @@ export async function GET(
   const unplannedValue = unplannedTypeRes.rows[0]?.value ? String(unplannedTypeRes.rows[0].value) : 'Unplanned';
 
   const attendeeIds = attendees.map(a => Number(a.id));
-  const idPlaceholders = attendeeIds.map(() => '?').join(',');
+  // Use a sentinel that matches nothing when no operator attendees exist
+  const idPlaceholders = attendeeIds.length > 0 ? attendeeIds.map(() => '?').join(',') : '-1';
 
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
@@ -441,7 +447,8 @@ export async function GET(
   for (const m of confMeetingsRes.rows) {
     const aid = Number(m.attendee_id);
     const a = attendeeById.get(aid);
-    const attendeeName = a ? `${a.first_name} ${a.last_name}` : 'Unknown';
+    if (!a) continue; // skip non-operator attendees
+    const attendeeName = `${a.first_name} ${a.last_name}`;
     const mtType = m.meeting_type ? String(m.meeting_type) : null;
     const isWalkIn = mtType === unplannedValue;
 
@@ -481,6 +488,7 @@ export async function GET(
   for (const f of confFollowUpsRes.rows) {
     const aid = Number(f.attendee_id);
     const a = attendeeById.get(aid);
+    if (!a) continue; // skip non-operator attendees
     const isCompleted = Number(f.completed) === 1;
     const status: FollowUpRow['status'] = isCompleted ? 'completed' : 'not_started';
     followUpRows.push({
