@@ -147,11 +147,11 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'relationships', label: 'Relationships' },
 ];
 
-function StatPill({ label, value, accent }: { label: string; value: number | string; accent?: boolean }) {
+function StatPill({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className={`flex flex-col items-center px-4 py-2 rounded-lg ${accent ? 'bg-brand-highlight/20 ring-1 ring-brand-highlight/50' : 'bg-white/10'}`}>
-      <span className={`text-xl font-bold ${accent ? 'text-brand-highlight' : 'text-white'}`}>{value}</span>
-      <span className={`text-xs whitespace-nowrap ${accent ? 'text-brand-highlight/80' : 'text-white/70'}`}>{label}</span>
+    <div className="rounded-xl border-2 border-brand-accent p-3 bg-white flex flex-col items-center gap-0.5 min-w-0">
+      <div className="text-xl font-bold text-brand-primary leading-tight">{value}</div>
+      <div className="text-sm font-semibold text-gray-500 text-center truncate w-full">{label}</div>
     </div>
   );
 }
@@ -226,10 +226,10 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   </svg>
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }} className="mt-3">
                 <StatPill label="Attendees" value={data.summary.totalAttendees} />
                 <StatPill label="Companies" value={data.summary.totalCompanies} />
-                <StatPill label="ICP" value={data.summary.icpCount} accent />
+                <StatPill label="ICP" value={data.summary.icpCount} />
                 <StatPill label="Meetings" value={data.summary.meetingCount} />
                 <StatPill label="Open Follow-ups" value={data.summary.openFollowUps} />
               </div>
