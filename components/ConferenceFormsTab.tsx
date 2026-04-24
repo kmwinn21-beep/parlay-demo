@@ -328,15 +328,15 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Form Card Color</label>
               <div className="flex gap-2 items-center">
-                <input type="color" value={newFormBgColor || '#0B3C62'} onChange={e => setNewFormBgColor(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
-                <input type="text" value={newFormBgColor} onChange={e => setNewFormBgColor(e.target.value)} className="input-field text-sm flex-1" placeholder="#0B3C62 (default brand primary)" />
+                <input type="color" value={newFormBgColor || getCssVarHex('--brand-primary-rgb', '#0B3C62')} onChange={e => setNewFormBgColor(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                <input type="text" value={newFormBgColor} onChange={e => setNewFormBgColor(e.target.value)} className="input-field text-sm flex-1" placeholder="(default brand primary)" />
               </div>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Page Background Color</label>
               <div className="flex gap-2 items-center">
-                <input type="color" value={newFormAccentColor || '#FFCB3F'} onChange={e => setNewFormAccentColor(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
-                <input type="text" value={newFormAccentColor} onChange={e => setNewFormAccentColor(e.target.value)} className="input-field text-sm flex-1" placeholder="#FFCB3F (default brand gold)" />
+                <input type="color" value={newFormAccentColor || getCssVarHex('--brand-highlight-rgb', '#FFCB3F')} onChange={e => setNewFormAccentColor(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                <input type="text" value={newFormAccentColor} onChange={e => setNewFormAccentColor(e.target.value)} className="input-field text-sm flex-1" placeholder="(default brand gold)" />
               </div>
             </div>
           </div>
