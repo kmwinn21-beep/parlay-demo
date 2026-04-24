@@ -154,7 +154,7 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
             <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wider whitespace-nowrap">Improved ({improved.length})</span>
             <div className="flex-1 h-px bg-emerald-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {improved.map(r => <ShiftCard key={r.attendee_id} r={r} direction="improved" />)}
           </div>
         </div>
@@ -167,7 +167,7 @@ export function RelationshipShiftsTab({ relationshipShifts }: { relationshipShif
             <span className="text-xs font-semibold text-red-500 uppercase tracking-wider whitespace-nowrap">Declined ({declined.length})</span>
             <div className="flex-1 h-px bg-red-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {declined.map(r => <ShiftCard key={r.attendee_id} r={r} direction="declined" />)}
           </div>
         </div>

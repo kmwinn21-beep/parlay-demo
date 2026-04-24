@@ -107,7 +107,7 @@ export function MeetingsTab({ meetings }: { meetings: Meetings }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Meetings Held ({held.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {held.map(m => <MeetingCard key={m.id} m={m} colorMaps={colorMaps} />)}
           </div>
         </div>
@@ -121,7 +121,7 @@ export function MeetingsTab({ meetings }: { meetings: Meetings }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">No Shows ({noShows.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {noShows.map(m => <MeetingCard key={m.id} m={m} colorMaps={colorMaps} />)}
           </div>
         </div>
@@ -135,7 +135,7 @@ export function MeetingsTab({ meetings }: { meetings: Meetings }) {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Other ({other.length})</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {other.map(m => <MeetingCard key={m.id} m={m} colorMaps={colorMaps} />)}
           </div>
         </div>

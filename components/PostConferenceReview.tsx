@@ -218,7 +218,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
                 </svg>
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }} className="mt-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3">
               <StatPill label="Reps" value={data.summary.repsAttended} />
               <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
               <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />

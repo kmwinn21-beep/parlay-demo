@@ -156,7 +156,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
       </div>
 
       {/* Charts + comparison — 3-column row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignItems: 'start' }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3" style={{ alignItems: 'start' }}>
         <div className="rounded-xl border border-gray-200 p-4 bg-white">
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Captures by Company Type</h4>
           {summary.companyTypeBreakdown.length === 0
@@ -165,7 +165,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
               <div className="space-y-2">
                 {summary.companyTypeBreakdown.map(item => (
                   <div key={item.label} className="flex items-center gap-3">
-                    <span className="text-xs text-gray-600 w-20 truncate flex-shrink-0">{item.label}</span>
+                    <span className="text-xs text-gray-600 w-20 flex-shrink-0">{item.label}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div className="h-2 rounded-full bg-brand-secondary" style={{ width: `${Math.round((item.count / maxCt) * 100)}%` }} />
                     </div>
@@ -239,7 +239,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
       {sortedReps.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Activity by Rep</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {sortedReps.map(rep => <RepCard key={rep.repName} rep={rep} />)}
           </div>
         </div>
