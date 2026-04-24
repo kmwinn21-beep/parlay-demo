@@ -245,7 +245,7 @@ export async function GET(
 
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
-    allSocialRes, allConfsRes, confTouchpointsRes] = await Promise.all([
+    allSocialRes, allConfsRes, confTouchpointsRes, confSocialEventsRes, confTouchpointRowsRes] = await Promise.all([
     db.execute({
       sql: `SELECT ca.attendee_id, ca.conference_id
             FROM conference_attendees ca
@@ -287,7 +287,114 @@ export async function GET(
       sql: `SELECT COUNT(*) as count FROM attendee_touchpoints WHERE conference_id = ?`,
       args: [confId],
     }),
+    db.execute({
+      sql: `SELECT id, event_type, event_name, host, location, event_date, event_time,
+                   invite_only, notes, internal_attendees
+            FROM social_events WHERE conference_id = ?
+            ORDER BY event_date, event_time`,
+      args: [confId],
+    }),
+    db.execute({
+      sql: `SELECT at.attendee_id, a.first_name, a.last_name, a.title,
+                   c.name as company_name, c.id as company_id,
+                   co.id as option_id, co.value as option_value, co.color, COUNT(*) as cnt
+            FROM attendee_touchpoints at
+            JOIN attendees a ON a.id = at.attendee_id
+            LEFT JOIN companies c ON c.id = a.company_id
+            JOIN config_options co ON co.id = at.option_id
+            WHERE at.conference_id = ?
+            GROUP BY at.attendee_id, at.option_id
+            ORDER BY a.last_name, a.first_name`,
+      args: [confId],
+    }),
   ]);
+
+  // ── Social events for this conference ────────────────────────────────────
+  const confSocialEventIds = confSocialEventsRes.rows.map(r => Number(r.id));
+  let confSocialRsvpsRes: { rows: Record<string, unknown>[] } = { rows: [] };
+  if (confSocialEventIds.length > 0) {
+    const rsvpPh = confSocialEventIds.map(() => '?').join(',');
+    confSocialRsvpsRes = await db.execute({
+      sql: `SELECT ser.social_event_id, ser.attendee_id, ser.rsvp_status,
+                   a.first_name, a.last_name, a.title,
+                   c.name as company_name, c.id as company_id, c.company_type,
+                   c.assigned_user
+            FROM social_event_rsvps ser
+            JOIN attendees a ON a.id = ser.attendee_id
+            LEFT JOIN companies c ON c.id = a.company_id
+            WHERE ser.social_event_id IN (${rsvpPh})`,
+      args: confSocialEventIds,
+    });
+  }
+
+  // Build guestList per event
+  const guestListByEvent = new Map<number, Array<{
+    attendee_id: number; first_name: string; last_name: string; title: string | null;
+    company_name: string | null; company_id: number | null; company_type: string | null;
+    rsvp_status: string; assigned_user_names: string[];
+  }>>();
+  for (const r of confSocialRsvpsRes.rows) {
+    const eid = Number(r.social_event_id);
+    if (!guestListByEvent.has(eid)) guestListByEvent.set(eid, []);
+    guestListByEvent.get(eid)!.push({
+      attendee_id: Number(r.attendee_id),
+      first_name: String(r.first_name ?? ''),
+      last_name: String(r.last_name ?? ''),
+      title: r.title ? String(r.title) : null,
+      company_name: r.company_name ? String(r.company_name) : null,
+      company_id: r.company_id ? Number(r.company_id) : null,
+      company_type: r.company_type ? String(r.company_type) : null,
+      rsvp_status: String(r.rsvp_status ?? 'maybe'),
+      assigned_user_names: resolveIds(r.assigned_user),
+    });
+  }
+
+  const socialEventRows = confSocialEventsRes.rows.map(se => {
+    const gl = guestListByEvent.get(Number(se.id)) ?? [];
+    const statuses = gl.map(g => g.rsvp_status.split(',').map(s => s.trim()));
+    return {
+      id: Number(se.id),
+      event_type: se.event_type ? String(se.event_type) : null,
+      event_name: se.event_name ? String(se.event_name) : null,
+      host: se.host ? String(se.host) : null,
+      location: se.location ? String(se.location) : null,
+      event_date: se.event_date ? String(se.event_date) : null,
+      event_time: se.event_time ? String(se.event_time) : null,
+      invite_only: se.invite_only ? String(se.invite_only) : null,
+      notes: se.notes ? String(se.notes) : null,
+      internal_attendees: se.internal_attendees ? String(se.internal_attendees) : null,
+      attending_count: statuses.filter(s => s.includes('attended')).length,
+      declined_count: statuses.filter(s => s.includes('no')).length,
+      guestList: gl,
+    };
+  });
+
+  // ── Touchpoints per attendee ──────────────────────────────────────────────
+  const tpByAttendee = new Map<number, {
+    attendee_id: number; first_name: string; last_name: string; title: string | null;
+    company_name: string | null; company_id: number | null; totalCount: number;
+    options: { option_id: number; value: string; color: string | null; count: number }[];
+  }>();
+  for (const r of confTouchpointRowsRes.rows) {
+    const aid = Number(r.attendee_id);
+    if (!tpByAttendee.has(aid)) {
+      tpByAttendee.set(aid, {
+        attendee_id: aid,
+        first_name: String(r.first_name ?? ''),
+        last_name: String(r.last_name ?? ''),
+        title: r.title ? String(r.title) : null,
+        company_name: r.company_name ? String(r.company_name) : null,
+        company_id: r.company_id ? Number(r.company_id) : null,
+        totalCount: 0,
+        options: [],
+      });
+    }
+    const entry = tpByAttendee.get(aid)!;
+    const cnt = Number(r.cnt);
+    entry.totalCount += cnt;
+    entry.options.push({ option_id: Number(r.option_id), value: String(r.option_value), color: r.color ? String(r.color) : null, count: cnt });
+  }
+  const touchpointRows = Array.from(tpByAttendee.values()).sort((a, b) => b.totalCount - a.totalCount);
 
   // Index conferences by id
   const confById = new Map<number, { id: number; name: string; start_date: string }>();
@@ -1001,6 +1108,8 @@ export async function GET(
     followUps: followUpRows,
     repPerformance: repPerfRows,
     relationshipShifts: { improved, declined, unchanged },
+    socialEvents: socialEventRows,
+    touchpoints: touchpointRows,
     actionItems,
   });
 }

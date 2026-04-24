@@ -654,6 +654,21 @@ export function SocialEventsTable({
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
 
+  /* sync RSVP changes from other components (e.g. pre-conference review) */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { eventId, attendeeId, rsvpStatus } = (e as CustomEvent).detail as { eventId: number; attendeeId: number; rsvpStatus: string };
+      const key = `${eventId}:${attendeeId}`;
+      const statuses = rsvpStatus.split(',').map((s: string) => s.trim()).filter(Boolean) as RsvpStatus[];
+      setLocalRsvps(prev => {
+        if (JSON.stringify(prev[key]) === JSON.stringify(statuses)) return prev;
+        return { ...prev, [key]: statuses };
+      });
+    };
+    window.addEventListener('rsvp-updated', handler);
+    return () => window.removeEventListener('rsvp-updated', handler);
+  }, []);
+
   /* close dropdowns on outside click */
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -681,6 +696,7 @@ export function SocialEventsTable({
     })();
     const next = current.includes(status) ? current.filter(s => s !== status) : [...current, status];
     setLocalRsvps(prev => ({ ...prev, [key]: next }));
+    window.dispatchEvent(new CustomEvent('rsvp-updated', { detail: { eventId, attendeeId, rsvpStatus: next.length > 0 ? next.join(',') : 'maybe' } }));
     try {
       const res = await fetch(`/api/social-events/${eventId}/rsvp`, {
         method: 'PUT',
