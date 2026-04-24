@@ -173,7 +173,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes, formSubmissionsRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -209,6 +209,17 @@ export async function GET(
     }),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM form_submissions WHERE conference_id = ?`,
+      args: [confId],
+    }),
+    // Notes logged — all attendees, not just operators
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM entity_notes
+            WHERE conference_name = ? AND entity_type = 'attendee'`,
+      args: [confName],
+    }),
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM conference_attendee_details
+            WHERE conference_id = ? AND notes IS NOT NULL AND TRIM(notes) != ''`,
       args: [confId],
     }),
   ]);
@@ -273,9 +284,8 @@ export async function GET(
     }),
     db.execute({ sql: `SELECT id, name, start_date FROM conferences ORDER BY start_date ASC`, args: [] }),
     db.execute({
-      sql: `SELECT COUNT(*) as count FROM attendee_touchpoints
-            WHERE conference_id = ? AND attendee_id IN (${idPlaceholders})`,
-      args: [confId, ...attendeeIds],
+      sql: `SELECT COUNT(*) as count FROM attendee_touchpoints WHERE conference_id = ?`,
+      args: [confId],
     }),
   ]);
 
@@ -805,14 +815,10 @@ export async function GET(
   const icpCount = contactRows.filter(c => c.icp === 'Yes').length;
   const icpCaptureRate = attendees.length > 0 ? Math.round((icpCount / attendees.length) * 100) : 0;
 
-  // Notes logged for this conference (entity_notes + conference_attendee_details.notes)
-  const entityNotesCount = allNotesRes.rows.filter(r => String(r.conference_name) === confName).length;
-  const detailsNotesCount = allDetailsRes.rows.filter(r =>
-    Number(r.conference_id) === confId &&
-    attendeeIds.includes(Number(r.attendee_id)) &&
-    r.notes && String(r.notes).trim().length > 0
-  ).length;
-  const notesLoggedCount = entityNotesCount + detailsNotesCount;
+  // Notes logged for this conference — all attendees, not operator-filtered
+  const notesLoggedCount =
+    Number(confEntityNotesRes.rows[0]?.count ?? 0) +
+    Number(confDetailsNotesRes.rows[0]?.count ?? 0);
 
   // Touchpoints for this conference — from attendee_touchpoints table
   const touchpointCount = Number(confTouchpointsRes.rows[0]?.count ?? 0);
