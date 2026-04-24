@@ -1048,13 +1048,6 @@ export default function ConferenceDetailPage() {
               )}
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
-              <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
-              <PostConferenceReview
-                conferenceId={conference.id}
-                conferenceName={conference.name}
-                endDate={conference.end_date}
-                userRole={currentUser?.role ?? 'user'}
-              />
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
@@ -1070,8 +1063,8 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
-        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
+      <div className="border-b border-gray-200 flex items-center">
+        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap overflow-x-auto flex-1 min-w-0">
           {visibleConferenceTabs.map((tabKey) => {
             const baseLabel = conferenceTabConfig.getLabel(tabKey);
             const labelWithCount = tabKey === 'attendees'
@@ -1097,6 +1090,15 @@ export default function ConferenceDetailPage() {
             );
           })}
         </nav>
+        <div className="flex items-center gap-1 px-2 flex-shrink-0 border-l border-gray-100">
+          <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
+          <PostConferenceReview
+            conferenceId={conference.id}
+            conferenceName={conference.name}
+            endDate={conference.end_date}
+            userRole={currentUser?.role ?? 'user'}
+          />
+        </div>
       </div>
 
       {/* Attendees Tab */}
