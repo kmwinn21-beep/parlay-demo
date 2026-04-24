@@ -173,7 +173,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes, formSubmissionsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -205,6 +205,10 @@ export async function GET(
       sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
             JOIN social_events se ON r.social_event_id = se.id
             WHERE se.conference_id = ? AND r.rsvp_status LIKE '%attended%'`,
+      args: [confId],
+    }),
+    db.execute({
+      sql: `SELECT COUNT(*) as count FROM form_submissions WHERE conference_id = ?`,
       args: [confId],
     }),
   ]);
@@ -811,6 +815,9 @@ export async function GET(
   // Event attendees — all attendees with 'attended' RSVP status for this conference's social events
   const eventAttendeesCount = Number(eventAttendeesRes.rows[0]?.count ?? 0);
 
+  // Form submissions — all submissions for this conference
+  const formSubmissionsCount = Number(formSubmissionsRes.rows[0]?.count ?? 0);
+
   // ── Company type breakdown ────────────────────────────────────────────────
   const ctCount: Record<string, number> = {};
   for (const c of contactRows) {
@@ -853,6 +860,7 @@ export async function GET(
     followUpsCompleted: fuCompleted,
     followUpsInProgress: 0,
     followUpsNotStarted: fuNotStarted,
+    formSubmissions: formSubmissionsCount,
     relationshipsImproved: improved.length,
     relationshipsDeclined: declined.length,
     repsAttended: repsFromConf.length || repPerfRows.length,

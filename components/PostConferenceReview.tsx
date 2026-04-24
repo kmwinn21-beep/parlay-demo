@@ -70,6 +70,7 @@ export interface PostConferenceData {
     noShows: number; meetingsWithOutcome: number;
     followUpsCreated: number; followUpsCompleted: number;
     followUpsInProgress: number; followUpsNotStarted: number;
+    formSubmissions: number;
     relationshipsImproved: number; relationshipsDeclined: number; repsAttended: number;
     engagementByType: { meetingsHeld: number; socialConversations: number; touchpoints: number; notesLogged: number; zeroEngagement: number };
     companyTypeBreakdown: { label: string; count: number }[];
@@ -217,11 +218,12 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
                 </svg>
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }} className="mt-3">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }} className="mt-3">
               <StatPill label="Reps" value={data.summary.repsAttended} />
               <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
               <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
               <StatPill label="Follow-up Rate" value={`${fuRate}%`} />
+              <StatPill label="Form Submissions" value={data.summary.formSubmissions} />
               <StatPill label="ICP Capture Rate" value={`${data.summary.icpCaptureRate}%`} />
             </div>
           </div>
