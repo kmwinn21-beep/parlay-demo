@@ -173,7 +173,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, touchpointOptsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -201,6 +201,7 @@ export async function GET(
       args: [confId],
     }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
+    db.execute({ sql: `SELECT value FROM config_options WHERE LOWER(category) = 'touchpoint'`, args: [] }),
   ]);
 
   const operatorType = operatorTypeRes.rows[0]?.value ? String(operatorTypeRes.rows[0].value) : 'Operator';
@@ -217,6 +218,9 @@ export async function GET(
     if (r.value && r.action_key) actionKeyMap.set(String(r.value), String(r.action_key));
   }
   const unplannedValue = unplannedTypeRes.rows[0]?.value ? String(unplannedTypeRes.rows[0].value) : 'Unplanned';
+  const touchpointValues = new Set<string>(
+    touchpointOptsRes.rows.map(r => String(r.value).trim()).filter(Boolean)
+  );
 
   const attendeeIds = attendees.map(a => Number(a.id));
   // Use a sentinel that matches nothing when no operator attendees exist
@@ -484,13 +488,13 @@ export async function GET(
     const mtType = m.meeting_type ? String(m.meeting_type) : null;
     const isWalkIn = mtType === unplannedValue;
 
-    // Determine status from action_key
+    // Determine status from action_key — only 'held' when meeting_held is explicitly logged
     const detKey = `${aid}_${confId}`;
     const det = detailsByAttConf.get(detKey);
     const actionStr = det?.action ? String(det.action) : '';
     const actionKeys = actionStr.split(',').map(s => s.trim()).filter(Boolean)
       .map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    let status: MeetingRow['status'] = 'held';
+    let status: MeetingRow['status'] = 'rescheduled'; // default: scheduled but no outcome yet
     if (actionKeys.includes('no_show')) status = 'no_show';
     else if (actionKeys.includes('rescheduled')) status = 'rescheduled';
     else if (actionKeys.includes('cancelled')) status = 'cancelled';
@@ -788,6 +792,32 @@ export async function GET(
   const icpCount = contactRows.filter(c => c.icp === 'Yes').length;
   const icpCaptureRate = attendees.length > 0 ? Math.round((icpCount / attendees.length) * 100) : 0;
 
+  // Notes logged for this conference (entity_notes + conference_attendee_details.notes)
+  const entityNotesCount = allNotesRes.rows.filter(r => String(r.conference_name) === confName).length;
+  const detailsNotesCount = allDetailsRes.rows.filter(r =>
+    Number(r.conference_id) === confId &&
+    attendeeIds.includes(Number(r.attendee_id)) &&
+    r.notes && String(r.notes).trim().length > 0
+  ).length;
+  const notesLoggedCount = entityNotesCount + detailsNotesCount;
+
+  // Touchpoints for this conference — count touchpoint config_option values in action fields
+  let touchpointCount = 0;
+  for (const r of allDetailsRes.rows) {
+    if (Number(r.conference_id) !== confId) continue;
+    if (!attendeeIds.includes(Number(r.attendee_id))) continue;
+    if (!r.action) continue;
+    for (const v of String(r.action).split(',').map(s => s.trim()).filter(Boolean)) {
+      if (touchpointValues.has(v)) touchpointCount++;
+    }
+  }
+
+  // Event attendees — attending RSVPs for social events tied to this conference
+  const eventAttendeesCount = allSocialRes.rows.filter(r =>
+    Number(r.conference_id) === confId &&
+    String(r.rsvp_status).toLowerCase().includes('attending')
+  ).length;
+
   // ── Company type breakdown ────────────────────────────────────────────────
   const ctCount: Record<string, number> = {};
   for (const c of contactRows) {
@@ -835,9 +865,9 @@ export async function GET(
     repsAttended: repsFromConf.length || repPerfRows.length,
     engagementByType: {
       meetingsHeld,
-      socialConversations: 0, // social event RSVPs counted separately
-      touchpoints: 0,
-      notesLogged: 0,
+      socialConversations: eventAttendeesCount,
+      touchpoints: touchpointCount,
+      notesLogged: notesLoggedCount,
       zeroEngagement: stillUnengaged.length,
     },
     companyTypeBreakdown,
@@ -846,7 +876,7 @@ export async function GET(
       meetingsPerRep: { current: repPerfRows.length > 0 ? Math.round(meetingsHeld / Math.max(1, repPerfRows.length)) : 0, avg: 0 },
       icpCaptureRate: { current: icpCaptureRate, avg: 0 },
       followUpRate: { current: fuRate, avg: 0 },
-      notesPerContact: { current: 0, avg: 0 },
+      notesPerContact: { current: contactRows.length > 0 ? Math.round(notesLoggedCount / contactRows.length) : 0, avg: 0 },
     },
   };
 

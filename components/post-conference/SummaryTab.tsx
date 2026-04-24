@@ -180,7 +180,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
           <div className="space-y-2">
             {[
               { label: 'Meetings Held', value: summary.engagementByType.meetingsHeld, color: '#059669' },
-              { label: 'Social Conversations', value: summary.engagementByType.socialConversations, color: '#0f766e' },
+              { label: 'Event Attendees', value: summary.engagementByType.socialConversations, color: '#0f766e' },
               { label: 'Touchpoints', value: summary.engagementByType.touchpoints, color: '#1B76BC' },
               { label: 'Notes Logged', value: summary.engagementByType.notesLogged, color: '#7c3aed' },
               { label: 'Zero Engagement', value: summary.engagementByType.zeroEngagement, color: '#ef4444' },
