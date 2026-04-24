@@ -174,7 +174,6 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   }, [tabConfig]);
 
   const load = useCallback(async () => {
-    if (data) { setOpen(true); return; }
     setLoading(true);
     setError(null);
     try {
@@ -188,7 +187,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
     } finally {
       setLoading(false);
     }
-  }, [conferenceId, data]);
+  }, [conferenceId]);
 
   return (
     <>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { getPreset } from '@/lib/colors';
 import type { SocialEventRow, SocialEventGuest } from '../PreConferenceReview';
 import type { TouchpointAttendeeRow } from '../PostConferenceReview';
 
@@ -196,14 +197,27 @@ function EventCard({ event }: { event: SocialEventRow }) {
   );
 }
 
-// ── Touchpoint pill ─────────────────────────────────────────────────────────
+// ── Touchpoint pill (inline — matches TouchpointMap popup style) ─────────────
 function TouchpointPill({ value, color, count }: { value: string; color: string | null; count: number }) {
-  const hex = color || '#6b7280';
+  const { hex } = getPreset(color);
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border"
-      style={{ backgroundColor: `${hex}18`, borderColor: `${hex}60`, color: hex }}>
-      {value} {count}
-    </span>
+    <div className="inline-flex items-center gap-1.5 rounded-lg border-2 pl-2.5 pr-2 py-1 text-xs font-medium"
+      style={{ borderColor: hex, backgroundColor: `${hex}18`, color: hex }}>
+      <span>{value}</span>
+      <span className="font-bold">{count}</span>
+    </div>
+  );
+}
+
+// ── Summary callout pill (top row — taller card format) ──────────────────────
+function SummaryCalloutPill({ value, color, count }: { value: string; color: string | null; count: number }) {
+  const { hex } = getPreset(color);
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border-2 px-4 py-2.5 min-w-[72px]"
+      style={{ borderColor: hex, backgroundColor: `${hex}18`, color: hex }}>
+      <span className="text-xl font-bold leading-tight">{count}</span>
+      <span className="text-[11px] font-semibold mt-0.5 text-center leading-tight">{value}</span>
+    </div>
   );
 }
 
@@ -275,10 +289,10 @@ export function EventsTouchpointsTab({ socialEvents, touchpoints }: {
           <p className="text-sm text-gray-400 py-8 text-center">No touchpoints recorded for this conference.</p>
         ) : (
           <>
-            {/* Summary pills */}
+            {/* Summary callout pills */}
             <div className="flex flex-wrap gap-2">
               {typeSummary.map(t => (
-                <TouchpointPill key={t.value} value={t.value} color={t.color} count={t.count} />
+                <SummaryCalloutPill key={t.value} value={t.value} color={t.color} count={t.count} />
               ))}
             </div>
 

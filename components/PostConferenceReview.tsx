@@ -147,7 +147,6 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
 
   const handleOpen = async () => {
     if (!isAccessible) return;
-    if (data) { setOpen(true); return; }
     setLoading(true);
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/post-conference`);
