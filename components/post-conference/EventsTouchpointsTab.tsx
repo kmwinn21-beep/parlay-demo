@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { SocialEventRow, SocialEventGuest, TouchpointAttendeeRow } from '../PostConferenceReview';
+import type { SocialEventRow, SocialEventGuest } from '../PreConferenceReview';
+import type { TouchpointAttendeeRow } from '../PostConferenceReview';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
