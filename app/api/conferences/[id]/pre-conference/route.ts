@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
+import { classifySeniority } from '@/lib/parsers';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -224,11 +225,16 @@ export async function GET(
   for (const row of seniorityOptsRes.rows) {
     seniorityMap.set(row.id as number, String(row.value));
   }
-  const resolveSeniority = (raw: unknown): string | null => {
-    if (raw == null || raw === '') return null;
-    const n = Number(raw);
-    if (!isNaN(n) && seniorityMap.has(n)) return seniorityMap.get(n)!;
-    return String(raw);
+  // Matches effectiveSeniority() from lib/parsers.ts — stored value wins (resolving numeric IDs
+  // to labels where needed), otherwise infer from title via classifySeniority.
+  const resolveSeniority = (raw: unknown, title?: unknown): string => {
+    if (raw != null && raw !== '') {
+      const stored = String(raw);
+      const n = Number(stored);
+      if (!isNaN(n) && seniorityMap.has(n)) return seniorityMap.get(n)!;
+      return stored;
+    }
+    return classifySeniority(title != null ? String(title) : undefined);
   };
 
   // Build relationship_status ID → label lookup
@@ -394,7 +400,7 @@ export async function GET(
   for (const a of attendees) {
     const ct = String(a.company_type || 'Unknown');
     companyTypeCount[ct] = (companyTypeCount[ct] ?? 0) + 1;
-    const sen = resolveSeniority(a.seniority) ?? 'Unknown';
+    const sen = resolveSeniority(a.seniority, a.title);
     seniorityCount[sen] = (seniorityCount[sen] ?? 0) + 1;
     if (a.wse && a.company_id) wseCompanyIds.add(a.company_id as number);
   }
@@ -457,7 +463,7 @@ export async function GET(
     priorOverlapAttendees: priorOverlapAttendees.map((a) => ({
       id: a.id, first_name: a.first_name, last_name: a.last_name,
       title: a.title, company_name: a.company_name,
-      seniority: resolveSeniority(a.seniority),
+      seniority: resolveSeniority(a.seniority, a.title),
       company_id: a.company_id ? Number(a.company_id) : null,
       prior_conference: prevConfMap.get(a.id as number) ?? '',
       assigned_user_names: resolveUserIds(a.company_assigned_user),
@@ -481,7 +487,7 @@ export async function GET(
     const scores = c.attendeeList.map((a) => attendeeHealthMap.get(a.id as number) ?? 0);
     const avg = scores.length > 0 ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
     const assignedNames = resolveUserIds(c.attendeeList[0]?.company_assigned_user);
-    icpCompanies.push({ id: c.id, name: c.name, company_type: c.company_type, avgHealth: avg, assigned_user_names: assignedNames, attendees: c.attendeeList.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority), health: attendeeHealthMap.get(a.id as number) ?? 0 })) });
+    icpCompanies.push({ id: c.id, name: c.name, company_type: c.company_type, avgHealth: avg, assigned_user_names: assignedNames, attendees: c.attendeeList.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })) });
   });
   icpCompanies.sort((a, b) => b.avgHealth - a.avgHealth);
 
@@ -615,7 +621,7 @@ export async function GET(
         assigned_user_names: detail?.assigned_user_names ?? [],
         website: detail?.website ?? null,
         internal_relationships: companyRelsMap.get(cid) ?? [],
-        attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority), status: a.status, health: attendeeHealthMap.get(a.id as number) ?? 0 })),
+        attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), status: a.status, health: attendeeHealthMap.get(a.id as number) ?? 0 })),
         notes: notes.slice(0, 5).map((n) => ({ id: n.id, content: n.content, created_at: n.created_at, rep: n.rep, attendee_name: n.attendee_name, conference_name: n.conference_name })),
       });
     });
@@ -639,7 +645,7 @@ export async function GET(
       description: String(rel.description ?? ''),
       rep_names: resolveUserIds(rel.rep_ids),
       contact_names: contactNames,
-      attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority), health: attendeeHealthMap.get(a.id as number) ?? 0 })),
+      attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })),
       recentNotes: notes.slice(0, 3).map((n) => ({ id: n.id, content: n.content, created_at: n.created_at, rep: n.rep })),
     };
   });

@@ -161,7 +161,7 @@ export function LandscapeTab({
         {data.priorOverlapAttendees.length === 0 ? (
           <p className="text-sm text-gray-400">No returning {data.priorOverlapTypeLabel} attendees from prior conferences.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {data.priorOverlapAttendees.map((a) => {
               const isTarget = targetMap.has(Number(a.id));
               return (

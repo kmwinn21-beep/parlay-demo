@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { classifySeniority } from '@/lib/parsers';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,12 @@ function resolveIdsSingle(raw: unknown): string | null {
 function splitIds(raw: unknown): string[] {
   if (!raw) return [];
   return String(raw).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function resolveSeniority(raw: unknown, title?: unknown): string | null {
+  if (raw != null && raw !== '') return String(raw);
+  const inferred = classifySeniority(title != null ? String(title) : undefined);
+  return inferred !== 'Other' ? inferred : null;
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -654,7 +661,7 @@ export async function GET(
       company_id: a.company_id ? Number(a.company_id) : null,
       company_name: a.company_name ? String(a.company_name) : null,
       company_type: a.company_type ? String(a.company_type) : null,
-      seniority: a.seniority ? String(a.seniority) : null,
+      seniority: resolveSeniority(a.seniority, a.title),
       icp: a.icp ? String(a.icp) : null,
       assigned_user_names: resolveIds(a.company_assigned_user),
       firstSeenConference: firstSeen,
@@ -740,7 +747,7 @@ export async function GET(
       company_name: a.company_name ? String(a.company_name) : null,
       company_type: a.company_type ? String(a.company_type) : null,
       company_id: a.company_id ? Number(a.company_id) : null,
-      seniority: a.seniority ? String(a.seniority) : null,
+      seniority: resolveSeniority(a.seniority, a.title),
       meeting_date: m.meeting_date ? String(m.meeting_date) : null,
       meeting_time: m.meeting_time ? String(m.meeting_time) : null,
       location: m.location ? String(m.location) : null,
