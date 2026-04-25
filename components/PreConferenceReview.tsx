@@ -187,6 +187,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('landscape');
   const [targetMap, setTargetMap] = useState<Map<number, TargetEntry>>(new Map());
+  const [statsOpen, setStatsOpen] = useState(true);
 
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
@@ -296,13 +297,25 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   <p className="text-xs text-white/60 uppercase tracking-widest font-semibold mb-0.5">Pre-Conference Review</p>
                   <h2 className="text-lg font-bold text-white leading-tight">{conferenceName}</h2>
                 </div>
-                <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors mt-1">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-2 mt-1">
+                  {/* Collapse toggle — mobile only */}
+                  <button
+                    onClick={() => setStatsOpen(v => !v)}
+                    className="sm:hidden text-white/70 hover:text-white transition-colors"
+                    aria-label={statsOpen ? 'Collapse stats' : 'Expand stats'}
+                  >
+                    <svg className={`w-5 h-5 transition-transform duration-200 ${statsOpen ? '' : '-rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3">
+              <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
                 <StatPill label="Attendees" value={data.summary.totalAttendees} />
                 <StatPill label="Companies" value={data.summary.totalCompanies} />
                 <StatPill label="ICP" value={data.summary.icpCount} />

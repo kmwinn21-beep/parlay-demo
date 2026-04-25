@@ -15,7 +15,7 @@ export async function GET(
 
   await dbReady;
 
-  const [targetsRes, usersRes] = await Promise.all([
+  const [targetsRes, usersRes, seniorityRes] = await Promise.all([
     db.execute({
       sql: `SELECT ct.attendee_id, ct.tier,
                    a.first_name, a.last_name, a.title, a.seniority,
@@ -32,11 +32,20 @@ export async function GET(
       sql: `SELECT id, value FROM config_options WHERE category = 'user'`,
       args: [],
     }),
+    db.execute({
+      sql: `SELECT id, value FROM config_options WHERE category = 'seniority'`,
+      args: [],
+    }),
   ]);
 
   const userMap = new Map<number, string>();
   for (const u of usersRes.rows) {
     userMap.set(Number(u.id), String(u.value));
+  }
+
+  const seniorityMap = new Map<number, string>();
+  for (const s of seniorityRes.rows) {
+    seniorityMap.set(Number(s.id), String(s.value));
   }
 
   function resolveUsers(raw: unknown): string[] {
@@ -45,12 +54,19 @@ export async function GET(
       .map(id => userMap.get(Number(id)) ?? id);
   }
 
+  function resolveSeniority(raw: unknown): string | null {
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    if (!isNaN(n) && seniorityMap.has(n)) return seniorityMap.get(n)!;
+    return String(raw);
+  }
+
   const targets = targetsRes.rows.map(r => ({
     attendeeId: Number(r.attendee_id),
     firstName: String(r.first_name ?? ''),
     lastName: String(r.last_name ?? ''),
     title: r.title ? String(r.title) : null,
-    seniority: r.seniority ? String(r.seniority) : null,
+    seniority: resolveSeniority(r.seniority),
     companyName: r.company_name ? String(r.company_name) : null,
     companyId: r.company_id ? Number(r.company_id) : null,
     assignedUserNames: resolveUsers(r.assigned_user),
