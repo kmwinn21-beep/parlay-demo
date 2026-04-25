@@ -137,6 +137,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
   const [data, setData] = useState<PostConferenceData | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('summary');
+  const [statsOpen, setStatsOpen] = useState(true);
 
   const tabConfig = useSectionConfig('post_conference_review');
   const visibleTabs = TAB_ORDER.filter(k => tabConfig.orderedKeys.includes(k) && tabConfig.isVisible(k));
@@ -222,13 +223,26 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
                 <p className="text-xs font-semibold mb-0.5 uppercase tracking-widest" style={{ color: `${GREEN_DARK}99` }}>Post-Conference Review</p>
                 <h2 className="text-lg font-bold leading-tight" style={{ color: GREEN_DARK }}>{conferenceName}</h2>
               </div>
-              <button onClick={() => setOpen(false)} className="mt-1 transition-colors" style={{ color: `${GREEN_DARK}aa` }}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2 mt-1">
+                {/* Collapse toggle — mobile only */}
+                <button
+                  onClick={() => setStatsOpen(v => !v)}
+                  className="sm:hidden transition-colors"
+                  style={{ color: `${GREEN_DARK}aa` }}
+                  aria-label={statsOpen ? 'Collapse stats' : 'Expand stats'}
+                >
+                  <svg className={`w-5 h-5 transition-transform duration-200 ${statsOpen ? '' : '-rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <button onClick={() => setOpen(false)} className="transition-colors" style={{ color: `${GREEN_DARK}aa` }}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3">
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
               <StatPill label="Reps" value={data.summary.repsAttended} />
               <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
               <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
