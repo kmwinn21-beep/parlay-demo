@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { classifySeniority } from '@/lib/parsers';
 
 export async function GET(
   request: NextRequest,
@@ -54,11 +55,14 @@ export async function GET(
       .map(id => userMap.get(Number(id)) ?? id);
   }
 
-  function resolveSeniority(raw: unknown): string | null {
-    if (raw == null || raw === '') return null;
-    const n = Number(raw);
-    if (!isNaN(n) && seniorityMap.has(n)) return seniorityMap.get(n)!;
-    return String(raw);
+  function resolveSeniority(raw: unknown, title?: unknown): string | null {
+    if (raw != null && raw !== '') {
+      const stored = String(raw);
+      const n = Number(stored);
+      if (!isNaN(n) && seniorityMap.has(n)) return seniorityMap.get(n)!;
+      return stored;
+    }
+    return classifySeniority(title != null ? String(title) : undefined) || null;
   }
 
   const targets = targetsRes.rows.map(r => ({
@@ -66,7 +70,7 @@ export async function GET(
     firstName: String(r.first_name ?? ''),
     lastName: String(r.last_name ?? ''),
     title: r.title ? String(r.title) : null,
-    seniority: resolveSeniority(r.seniority),
+    seniority: resolveSeniority(r.seniority, r.title),
     companyName: r.company_name ? String(r.company_name) : null,
     companyId: r.company_id ? Number(r.company_id) : null,
     assignedUserNames: resolveUsers(r.assigned_user),
