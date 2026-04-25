@@ -31,6 +31,7 @@ import { useLogoConfig } from '@/lib/useLogoConfig';
 import { BatchCardScanModal } from '@/components/BatchCardScanModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
+import { ConferenceOfflineSync } from '@/components/ConferenceOfflineSync';
 
 interface Attendee {
   id: number;
@@ -996,6 +997,7 @@ export default function ConferenceDetailPage() {
                     endDate={conference.end_date}
                     userRole={currentUser?.role ?? 'user'}
                   />
+                  <ConferenceOfflineSync conferenceId={conference.id} className="hidden sm:flex" />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
