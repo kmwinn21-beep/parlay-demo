@@ -150,6 +150,7 @@ export function ParlayRecommendationsTab({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasFetched = useRef(false);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({ High: null, Medium: null, Watch: null });
 
   useEffect(() => {
     if (hasFetched.current) return;
@@ -227,8 +228,6 @@ export function ParlayRecommendationsTab({
   const watchRecs = recs.filter(r => r.priority === 'Watch');
   const reloadCount = data.reload_count ?? 0;
   const canReload = reloadCount < MAX_RELOADS;
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({ High: null, Medium: null, Watch: null });
-
   const scrollToTier = (tier: string) => {
     sectionRefs.current[tier]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
