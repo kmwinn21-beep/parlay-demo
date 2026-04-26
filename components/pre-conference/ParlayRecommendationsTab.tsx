@@ -227,53 +227,61 @@ export function ParlayRecommendationsTab({
   const watchRecs = recs.filter(r => r.priority === 'Watch');
   const reloadCount = data.reload_count ?? 0;
   const canReload = reloadCount < MAX_RELOADS;
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({ High: null, Medium: null, Watch: null });
+
+  const scrollToTier = (tier: string) => {
+    sectionRefs.current[tier]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Stat cards + reload button */}
-      <div className="flex items-start gap-3 flex-wrap">
-        <div className="grid grid-cols-3 gap-3 flex-1 min-w-0">
-          {(['High', 'Medium', 'Watch'] as const).map(tier => {
-            const count = recs.filter(r => r.priority === tier).length;
-            const s = PRIORITY_STYLES[tier];
-            return (
-              <div key={tier} className={`border-2 ${s.border} ${s.bg} rounded-xl p-3 text-center`}>
-                <div className={`text-2xl font-bold ${s.count}`}>{count}</div>
-                <div className="text-xs font-semibold text-gray-500">{s.label}</div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          {canReload ? (
+    <div className="space-y-4">
+      {/* Stat cards — clickable, scroll to section */}
+      <div className="grid grid-cols-3 gap-3">
+        {(['High', 'Medium', 'Watch'] as const).map(tier => {
+          const count = recs.filter(r => r.priority === tier).length;
+          const s = PRIORITY_STYLES[tier];
+          return (
             <button
-              onClick={generate}
-              disabled={generating}
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-secondary transition-colors disabled:opacity-50"
-              title="Regenerate recommendations"
+              key={tier}
+              onClick={() => scrollToTier(tier)}
+              className={`border-2 ${s.border} ${s.bg} rounded-xl p-3 text-center transition-opacity hover:opacity-75 active:opacity-60`}
             >
-              {generating ? (
-                <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              )}
-              {generating ? 'Regenerating…' : 'Reload'}
+              <div className={`text-2xl font-bold ${s.count}`}>{count}</div>
+              <div className="text-xs font-semibold text-gray-500">{s.label}</div>
             </button>
-          ) : null}
-          <span className="text-xs text-gray-400">
-            {reloadCount} of {MAX_RELOADS} regenerations used
-          </span>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
+          );
+        })}
       </div>
 
       {/* Generated timestamp */}
       <p className="text-xs text-gray-400">
         Generated {new Date(data.generated_at).toLocaleString()}
       </p>
+
+      {/* Reload controls — below cards so they don't crowd the layout */}
+      <div className="flex items-center gap-3">
+        {canReload ? (
+          <button
+            onClick={generate}
+            disabled={generating}
+            className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-secondary transition-colors disabled:opacity-50"
+            title="Regenerate recommendations"
+          >
+            {generating ? (
+              <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
+            {generating ? 'Regenerating…' : 'Reload'}
+          </button>
+        ) : null}
+        <span className="text-xs text-gray-400">
+          {reloadCount} of {MAX_RELOADS} regenerations used
+        </span>
+        {error && <p className="text-xs text-red-600 ml-auto">{error}</p>}
+      </div>
 
       {/* Three-column priority layout */}
       {recs.length === 0 ? (
@@ -284,7 +292,7 @@ export function ParlayRecommendationsTab({
             const tierRecs = tier === 'High' ? highRecs : tier === 'Medium' ? mediumRecs : watchRecs;
             const s = PRIORITY_STYLES[tier];
             return (
-              <div key={tier}>
+              <div key={tier} ref={el => { sectionRefs.current[tier] = el; }}>
                 <h3 className={`text-xs font-bold uppercase tracking-wide mb-3 ${s.text}`}>
                   {tier} · {tierRecs.length}
                 </h3>
