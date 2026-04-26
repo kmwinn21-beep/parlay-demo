@@ -949,8 +949,15 @@ export async function GET(
   // ── Action items ──────────────────────────────────────────────────────────
   const actionItems: ActionItem[] = [];
 
-  // Overdue follow-ups (high)
+  // Overdue follow-ups (high) — skip attendees with any completed follow-up; one item per attendee
+  const attendeesWithCompletedFU = new Set(
+    followUpRows.filter(f => f.status === 'completed').map(f => f.attendee_id)
+  );
+  const seenOverdueAttendees = new Set<number>();
   for (const f of followUpRows.filter(f => f.status === 'not_started' && f.daysSinceConference > 5)) {
+    if (attendeesWithCompletedFU.has(f.attendee_id)) continue;
+    if (seenOverdueAttendees.has(f.attendee_id)) continue;
+    seenOverdueAttendees.add(f.attendee_id);
     actionItems.push({
       type: 'overdue_followup', priority: 'high',
       title: `Overdue follow-up: ${f.attendeeName}`,
@@ -959,12 +966,12 @@ export async function GET(
     });
   }
 
-  // Missing outcome on held meetings (medium)
-  for (const m of meetingRows.filter(m => m.status === 'held' && (!m.outcome || m.outcome.trim() === ''))) {
+  // Missing outcome — meetings scheduled but no outcome recorded yet
+  for (const m of meetingRows.filter(m => !m.outcome)) {
     actionItems.push({
       type: 'missing_outcome', priority: 'medium',
       title: `Log outcome: meeting with ${m.attendeeName}`,
-      description: `Meeting held ${m.meeting_date ?? ''} — no outcome recorded yet`,
+      description: `Meeting on ${m.meeting_date ?? 'scheduled date'} — no outcome recorded yet`,
       repName: m.scheduled_by, attendeeName: m.attendeeName, companyName: m.company_name,
     });
   }
