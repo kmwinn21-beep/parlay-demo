@@ -440,6 +440,39 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
+function TagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (tags: string[]) => void; placeholder: string }) {
+  const [inputValue, setInputValue] = useState('');
+  const add = (raw: string) => {
+    const v = raw.trim().replace(/,$/, '').trim();
+    if (v && !tags.includes(v)) onChange([...tags, v]);
+    setInputValue('');
+  };
+  return (
+    <div
+      className="flex flex-wrap gap-1.5 border border-gray-200 rounded-lg p-2 min-h-[42px] cursor-text"
+      onClick={e => (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus()}
+    >
+      {tags.map(t => (
+        <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+          {t}
+          <button type="button" onClick={() => onChange(tags.filter(x => x !== t))} className="text-gray-400 hover:text-gray-600 leading-none">×</button>
+        </span>
+      ))}
+      <input
+        value={inputValue}
+        onChange={e => setInputValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(inputValue); }
+          if (e.key === 'Backspace' && !inputValue && tags.length) onChange(tags.slice(0, -1));
+        }}
+        onBlur={() => { if (inputValue.trim()) add(inputValue); }}
+        className="flex-1 min-w-[120px] text-sm outline-none bg-transparent"
+        placeholder={tags.length === 0 ? placeholder : ''}
+      />
+    </div>
+  );
+}
+
 // ─── Add Column Modal ─────────────────────────────────────────────────────────
 
 interface AddColumnPayload {
@@ -677,6 +710,24 @@ export default function AdminPage() {
   const [icpUnitTypeSaving, setIcpUnitTypeSaving] = useState(false);
   const [icpUnitTypeConnector, setIcpUnitTypeConnector] = useState<'AND' | 'OR'>('AND');
 
+  // ── ICP extended fields ───────────────────────────────────────────────────────
+  const [icpTargetTitles, setIcpTargetTitles] = useState<string[]>([]);
+  const [icpSeniorityPriority, setIcpSeniorityPriority] = useState<Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>>({});
+  const [icpDecisionMakerTitles, setIcpDecisionMakerTitles] = useState<string[]>([]);
+  const [icpInfluencerTitles, setIcpInfluencerTitles] = useState<string[]>([]);
+  const [savingBuyerPersona, setSavingBuyerPersona] = useState(false);
+  const [icpPainPoints, setIcpPainPoints] = useState<string[]>([]);
+  const [icpTriggerEvents, setIcpTriggerEvents] = useState<string[]>([]);
+  const [icpExclusionDescription, setIcpExclusionDescription] = useState('');
+  const [savingPainPoints, setSavingPainPoints] = useState(false);
+  const [icpUseCaseDescription, setIcpUseCaseDescription] = useState('');
+  const [savingUseCase, setSavingUseCase] = useState(false);
+  const [icpPursuitScore, setIcpPursuitScore] = useState('50');
+  const [icpWarmScore, setIcpWarmScore] = useState('75');
+  const [icpMinTouchpoints, setIcpMinTouchpoints] = useState('1');
+  const [icpIncludeNewCompanies, setIcpIncludeNewCompanies] = useState(true);
+  const [savingThresholds, setSavingThresholds] = useState(false);
+
   // ── Types tab ────────────────────────────────────────────────────────────────
 
   const fetchAll = async () => {
@@ -734,19 +785,92 @@ export default function AdminPage() {
   const fetchIcpConfig = async () => {
     setIcpLoading(true);
     try {
-      const res = await fetch('/api/admin/icp-rules', { cache: 'no-store' });
-      if (!res.ok) throw new Error();
-      const data = await res.json() as { rules: { id: number; category: string; conditions: { option_value: string; operator: 'AND' | 'OR' }[] }[]; unitTypeReq: { operator: IcpUnitTypeOperator | null; value1: number | null; value2: number | null; connector?: 'AND' | 'OR' } };
+      const [icpRes, settingsRes] = await Promise.all([
+        fetch('/api/admin/icp-rules', { cache: 'no-store' }),
+        fetch('/api/admin/settings'),
+      ]);
+      if (!icpRes.ok) throw new Error();
+      const data = await icpRes.json() as { rules: { id: number; category: string; conditions: { option_value: string; operator: 'AND' | 'OR' }[] }[]; unitTypeReq: { operator: IcpUnitTypeOperator | null; value1: number | null; value2: number | null; connector?: 'AND' | 'OR' } };
       setIcpRules(data.rules.map(r => ({ ...r, isEditing: false, isSaving: false })));
       setIcpUnitTypeOp(data.unitTypeReq.operator ?? '');
       setIcpUnitTypeV1(data.unitTypeReq.value1 != null ? String(data.unitTypeReq.value1) : '');
       setIcpUnitTypeV2(data.unitTypeReq.value2 != null ? String(data.unitTypeReq.value2) : '');
       setIcpUnitTypeConnector(data.unitTypeReq.connector ?? 'AND');
+      if (settingsRes.ok) {
+        const s = await settingsRes.json() as Record<string, string>;
+        const tryParse = <T,>(v: string | undefined, fallback: T): T => { try { return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
+        setIcpTargetTitles(tryParse(s['icp_target_titles'], []));
+        setIcpSeniorityPriority(tryParse(s['icp_seniority_priority'], {}));
+        setIcpDecisionMakerTitles(tryParse(s['icp_decision_maker_titles'], []));
+        setIcpInfluencerTitles(tryParse(s['icp_influencer_titles'], []));
+        setIcpPainPoints(tryParse(s['icp_pain_points'], []));
+        setIcpTriggerEvents(tryParse(s['icp_trigger_events'], []));
+        setIcpExclusionDescription(s['icp_exclusion_description'] ?? '');
+        setIcpUseCaseDescription(s['icp_use_case_description'] ?? '');
+        setIcpPursuitScore(s['icp_pursuit_score'] ?? '50');
+        setIcpWarmScore(s['icp_warm_score'] ?? '75');
+        setIcpMinTouchpoints(s['icp_min_touchpoints'] ?? '1');
+        setIcpIncludeNewCompanies(s['icp_include_new_companies'] !== 'false');
+      }
     } catch { toast.error('Failed to load ICP configuration.'); }
     finally { setIcpLoading(false); }
   };
 
   useEffect(() => { if (tab === 'icp') fetchIcpConfig(); }, [tab]);
+
+  const handleSaveBuyerPersona = async () => {
+    setSavingBuyerPersona(true);
+    try {
+      const res = await Promise.all([
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_target_titles', value: JSON.stringify(icpTargetTitles) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_seniority_priority', value: JSON.stringify(icpSeniorityPriority) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_decision_maker_titles', value: JSON.stringify(icpDecisionMakerTitles) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_influencer_titles', value: JSON.stringify(icpInfluencerTitles) }) }),
+      ]);
+      if (res.some(r => !r.ok)) throw new Error();
+      toast.success('Buyer persona saved!');
+    } catch { toast.error('Failed to save buyer persona.'); }
+    finally { setSavingBuyerPersona(false); }
+  };
+
+  const handleSavePainPoints = async () => {
+    setSavingPainPoints(true);
+    try {
+      const res = await Promise.all([
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_pain_points', value: JSON.stringify(icpPainPoints) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_trigger_events', value: JSON.stringify(icpTriggerEvents) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_exclusion_description', value: icpExclusionDescription }) }),
+      ]);
+      if (res.some(r => !r.ok)) throw new Error();
+      toast.success('Pain points saved!');
+    } catch { toast.error('Failed to save pain points.'); }
+    finally { setSavingPainPoints(false); }
+  };
+
+  const handleSaveUseCase = async () => {
+    setSavingUseCase(true);
+    try {
+      const res = await fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_use_case_description', value: icpUseCaseDescription.trim() }) });
+      if (!res.ok) throw new Error();
+      toast.success('Use case saved!');
+    } catch { toast.error('Failed to save use case.'); }
+    finally { setSavingUseCase(false); }
+  };
+
+  const handleSaveThresholds = async () => {
+    setSavingThresholds(true);
+    try {
+      const res = await Promise.all([
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_pursuit_score', value: icpPursuitScore }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_warm_score', value: icpWarmScore }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_min_touchpoints', value: icpMinTouchpoints }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_include_new_companies', value: String(icpIncludeNewCompanies) }) }),
+      ]);
+      if (res.some(r => !r.ok)) throw new Error();
+      toast.success('Thresholds saved!');
+    } catch { toast.error('Failed to save thresholds.'); }
+    finally { setSavingThresholds(false); }
+  };
 
   const handleSaveIcpUnitType = async () => {
     setIcpUnitTypeSaving(true);
@@ -2238,6 +2362,172 @@ export default function AdminPage() {
                 + ICP Parameter
               </button>
             </div>
+
+          {/* ── Card: Ideal Buyer Persona ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Ideal Buyer Persona</h2>
+            <p className="text-sm text-gray-500 mb-4">Define who you&apos;re trying to reach at ICP companies. Used by Parlay to identify the right contacts to prioritize at each conference — not just the right companies.</p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Titles</label>
+              <TagInput tags={icpTargetTitles} onChange={setIcpTargetTitles} placeholder="Add a job title…" />
+              <p className="text-xs text-gray-400 mt-1">Job titles that indicate a strong prospect contact.</p>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Priority</label>
+              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier. Parlay uses this to rank contacts within an ICP company.</p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-gray-500 border-b border-gray-100">
+                    <th className="text-left pb-1 font-medium">Seniority Level</th>
+                    <th className="text-left pb-1 font-medium">Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(optionsByCategory['seniority'] ?? []).map(s => (
+                    <tr key={s.value} className="border-b border-gray-50">
+                      <td className="py-1.5 pr-4">{s.value}</td>
+                      <td className="py-1.5">
+                        <select
+                          value={icpSeniorityPriority[s.value] ?? 'Medium'}
+                          onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                          className="input-field text-sm py-0.5"
+                        >
+                          {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Decision Maker vs. Influencer Titles</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-1">Decision Makers</p>
+                  <TagInput tags={icpDecisionMakerTitles} onChange={setIcpDecisionMakerTitles} placeholder="Add a title…" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-1">Influencers</p>
+                  <TagInput tags={icpInfluencerTitles} onChange={setIcpInfluencerTitles} placeholder="Add a title…" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+              <button className="btn-primary text-sm" onClick={handleSaveBuyerPersona} disabled={savingBuyerPersona}>
+                {savingBuyerPersona ? 'Saving…' : 'Save Buyer Persona'}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Card: Pain Points & Trigger Events ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Pain Points &amp; Trigger Events</h2>
+            <p className="text-sm text-gray-500 mb-4">Tell Parlay what problems your best customers are solving and what signals indicate buying readiness.</p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Primary Pain Points</label>
+              <TagInput tags={icpPainPoints} onChange={setIcpPainPoints} placeholder="Add a pain point…" />
+              <p className="text-xs text-gray-400 mt-1">What operational or strategic problems does your product solve?</p>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Trigger Events</label>
+              <TagInput tags={icpTriggerEvents} onChange={setIcpTriggerEvents} placeholder="Add a trigger event…" />
+              <p className="text-xs text-gray-400 mt-1">What signals indicate a company might be ready to buy? Parlay looks for these in conference context and company research.</p>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">What We Are Not</label>
+              <textarea
+                value={icpExclusionDescription}
+                onChange={e => setIcpExclusionDescription(e.target.value)}
+                rows={3}
+                className="input-field text-sm w-full"
+                placeholder="e.g. We do not serve single-facility operators, CCRC-only organizations, or vendors."
+              />
+              <p className="text-xs text-gray-400 mt-1">Parlay uses this to filter out false positives in its recommendations.</p>
+            </div>
+
+            <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+              <button className="btn-primary text-sm" onClick={handleSavePainPoints} disabled={savingPainPoints}>
+                {savingPainPoints ? 'Saving…' : 'Save Pain Points'}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Card: Ideal Use Case Description ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Ideal Use Case Description</h2>
+            <p className="text-sm text-gray-500 mb-4">A plain-language description of your best customer and why they bought. The single most important field for Parlay — gives the model a narrative template to match prospects against.</p>
+
+            <textarea
+              value={icpUseCaseDescription}
+              onChange={e => setIcpUseCaseDescription(e.target.value)}
+              className="input-field text-sm w-full"
+              style={{ minHeight: '120px' }}
+              placeholder="e.g. Our best customers are regional senior housing operators running 5–25 communities across multiple states…"
+            />
+            <p className="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg p-3 border border-gray-100">Write this like you&apos;re briefing a new sales rep before their first conference. The more specific and narrative, the more useful Parlay&apos;s recommendations will be.</p>
+
+            <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+              <button className="btn-primary text-sm" onClick={handleSaveUseCase} disabled={savingUseCase}>
+                {savingUseCase ? 'Saving…' : 'Save Use Case'}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Card: Engagement Thresholds ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Engagement Thresholds</h2>
+            <p className="text-sm text-gray-500 mb-4">Benchmarks Parlay uses when ranking prospects. Helps distinguish companies worth pursuing aggressively from those that need more nurturing.</p>
+
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Active Pursuit Score</label>
+                <input type="number" value={icpPursuitScore} onChange={e => setIcpPursuitScore(e.target.value)} className="input-field text-sm w-full" />
+                <p className="text-xs text-gray-400 mt-1">Min health score before Parlay recommends direct outreach.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Warm Relationship Score</label>
+                <input type="number" value={icpWarmScore} onChange={e => setIcpWarmScore(e.target.value)} className="input-field text-sm w-full" />
+                <p className="text-xs text-gray-400 mt-1">Health score indicating a strong existing relationship.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Prior Touchpoints</label>
+                <input type="number" value={icpMinTouchpoints} onChange={e => setIcpMinTouchpoints(e.target.value)} className="input-field text-sm w-full" />
+                <p className="text-xs text-gray-400 mt-1">Touchpoints needed before Parlay suggests active pursuit.</p>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Include Companies With No Prior History</p>
+                <p className="text-xs text-gray-400 mt-0.5">When enabled, Parlay will recommend net-new ICP companies even if your team has never engaged with them before.</p>
+              </div>
+              <Toggle checked={icpIncludeNewCompanies} onChange={setIcpIncludeNewCompanies} />
+            </div>
+
+            <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+              <button className="btn-primary text-sm" onClick={handleSaveThresholds} disabled={savingThresholds}>
+                {savingThresholds ? 'Saving…' : 'Save Thresholds'}
+              </button>
+            </div>
+          </div>
           </div>
         )
       )}
