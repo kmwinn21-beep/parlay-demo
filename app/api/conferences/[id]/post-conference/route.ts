@@ -709,6 +709,59 @@ export async function GET(
     return (senioritySortMap[a.seniority ?? ''] ?? 99) - (senioritySortMap[b.seniority ?? ''] ?? 99);
   };
   newlyEngaged.sort(sortContacts);
+
+  // ── Newly Engaged multi-rep attribution ──────────────────────────────────────
+  const newlyEngagedRepsMap = new Map<number, Set<string>>();
+  for (const c of newlyEngaged) newlyEngagedRepsMap.set(c.attendee_id, new Set<string>());
+
+  if (newlyEngaged.length > 0) {
+    const neAttendeeIds = newlyEngaged.map(c => c.attendee_id);
+    const nePh = neAttendeeIds.map(() => '?').join(',');
+    const neNotesRes = await db.execute({
+      sql: `SELECT entity_id as attendee_id, rep FROM entity_notes
+            WHERE entity_type = 'attendee' AND entity_id IN (${nePh})
+            AND conference_name = ? AND rep IS NOT NULL AND rep != ''`,
+      args: [...neAttendeeIds, confName],
+    });
+
+    for (const f of confFollowUpsRes.rows) {
+      const aid = Number(f.attendee_id);
+      if (!newlyEngagedRepsMap.has(aid)) continue;
+      for (const name of resolveIds(f.assigned_rep)) newlyEngagedRepsMap.get(aid)!.add(name);
+    }
+
+    for (const m of confMeetingsRes.rows) {
+      const aid = Number(m.attendee_id);
+      if (!newlyEngagedRepsMap.has(aid)) continue;
+      const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+      if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+        for (const name of resolveIds(m.scheduled_by)) newlyEngagedRepsMap.get(aid)!.add(name);
+      }
+    }
+
+    for (const n of neNotesRes.rows) {
+      const aid = Number(n.attendee_id);
+      if (!newlyEngagedRepsMap.has(aid)) continue;
+      const rep = String(n.rep).trim();
+      if (rep) newlyEngagedRepsMap.get(aid)!.add(rep);
+    }
+
+    for (const r of confSocialRsvpsRes.rows) {
+      const aid = Number(r.attendee_id);
+      if (!newlyEngagedRepsMap.has(aid)) continue;
+      if (!String(r.rsvp_status ?? '').includes('attended')) continue;
+      for (const name of resolveIds(r.assigned_user)) newlyEngagedRepsMap.get(aid)!.add(name);
+    }
+
+    // Fallback: if no engagement source found, attribute to company's assigned user
+    for (const c of newlyEngaged) {
+      const set = newlyEngagedRepsMap.get(c.attendee_id)!;
+      if (set.size === 0) {
+        for (const name of c.assigned_user_names) set.add(name);
+      }
+    }
+  }
+
   reEngagements.sort(sortContacts);
   // Unengaged: ICP first, then by priorConferenceCount desc
   stillUnengaged.sort((a, b) => {
@@ -852,7 +905,7 @@ export async function GET(
       });
     }
 
-    const repNewly = captured.filter(c => newlyEngaged.some(n => n.attendee_id === c.attendee_id)).length;
+    const repNewly = newlyEngaged.filter(c => newlyEngagedRepsMap.get(c.attendee_id)?.has(repName) ?? false).length;
     const repReEngage = captured.filter(c => reEngagements.some(r => r.attendee_id === c.attendee_id)).length;
 
     repPerfRows.push({
