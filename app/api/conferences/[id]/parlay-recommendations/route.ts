@@ -35,6 +35,8 @@ You will be given:
 2. A list of companies attending the conference with their attendees, titles, and seniority
 3. Existing relationship data from the database — health scores, touchpoint history, meeting history, notes, and follow-up completion rates
 
+For each recommended company, draw on your knowledge of the senior housing and care industry to surface trigger events or buying signals that are specifically relevant to the pain points and trigger events listed in the ICP configuration you are given. Focus your research on those exact signals — e.g. if the ICP lists "leadership change" as a trigger, look for recent leadership changes at that company. Every recommendation must include exactly one bullet dedicated to this — if no relevant signals are known, that bullet must say exactly: "No relevant trigger events, news or buying signals."
+
 Your output must be direct, specific, and written for a sales rep who has 90 seconds to scan it before walking into a conference. Do not use filler language. Do not summarize what you were given. Just tell them who to talk to and why.`;
 
 const MAX_RELOADS = 5;
@@ -416,7 +418,11 @@ Return ONLY a valid JSON object (no markdown fences, no preamble, no explanation
     {
       "company_name": "string — exact match to the company name provided above",
       "relationship_status": "New | Warming | Active | Strong",
-      "why_target": ["string — specific reason 1", "string — specific reason 2", "string — specific reason 3 (optional)"],
+      "why_target": [
+        "string — ICP fit or relationship reason (e.g. company type, size, services match)",
+        "string — engagement opportunity based on attendee seniority, prior touchpoints, or open follow-ups",
+        "string — trigger events or buying signals matching the ICP pain points and trigger events listed above: write a specific 1-sentence finding (e.g. 'Recently hired a new VP of Operations, a key trigger event for this ICP') OR exactly 'No relevant trigger events, news or buying signals'"
+      ],
       "who_to_talk_to": [{ "name": "string", "title": "string", "angle": "string — one sentence on why this person and how to open" }],
       "suggested_opening_angle": "string — one to two sentences, specific and non-generic, say-out-loud-ready",
       "priority": "High | Medium | Watch"
