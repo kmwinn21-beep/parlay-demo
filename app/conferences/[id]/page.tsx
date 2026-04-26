@@ -32,6 +32,7 @@ import { BatchCardScanModal } from '@/components/BatchCardScanModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
 import { ConferenceOfflineSync } from '@/components/ConferenceOfflineSync';
+import { AgendaTab } from '@/components/AgendaTab';
 
 interface Attendee {
   id: number;
@@ -117,9 +118,9 @@ interface ConferenceDetail {
   assigned_rep?: string;
 }
 
-type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes' | 'forms';
+type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes' | 'forms' | 'agenda';
 
-const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes', 'forms'];
+const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes', 'forms', 'agenda'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -1911,6 +1912,10 @@ export default function ConferenceDetailPage() {
           isAdmin={isAdminUser}
           currentUserEmail={currentUser?.email || ''}
         />
+      )}
+
+      {activeTab === 'agenda' && (
+        <AgendaTab conferenceId={Number(id)} />
       )}
 
       {showBatchScan && (

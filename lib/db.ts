@@ -473,6 +473,22 @@ export async function initDb(): Promise<void> {
     )`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('attendee_conference_status', 'Target', 1)`,
     `ALTER TABLE quick_notes ADD COLUMN tag TEXT`,
+    `CREATE TABLE IF NOT EXISTS conference_agenda_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL,
+      day_label TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      session_type TEXT,
+      title TEXT NOT NULL,
+      description TEXT,
+      location TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_agenda_conference ON conference_agenda_items(conference_id, sort_order)`,
+    `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('conference_details', 'agenda', 'Agenda', 9)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
