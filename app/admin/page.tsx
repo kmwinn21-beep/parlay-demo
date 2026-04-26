@@ -53,6 +53,10 @@ const TABLE_LABELS: Record<string, string> = {
   social_events:         'Social Events Table',
   conference_attendees:  'Conference Attendee Table',
   conference_companies:  'Conference Company Table',
+  attendee_meetings:     'Attendee Detail — Meetings',
+  attendee_follow_ups:   'Attendee Detail — Follow Ups',
+  company_meetings:      'Company Detail — Meetings',
+  company_follow_ups:    'Company Detail — Follow Ups',
 };
 
 type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms';

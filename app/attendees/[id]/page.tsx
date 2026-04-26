@@ -734,7 +734,7 @@ export default function AttendeeDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Schedule</span>
               </button>
             </div>
-            <MeetingsTable meetings={meetings} actionOptions={actionOptions.map(o => o.value)} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
+            <MeetingsTable meetings={meetings} actionOptions={actionOptions.map(o => o.value)} colorMap={colorMaps.action || {}} userOptions={userOptions} hideCompany tableName="attendee_meetings" onOutcomeChange={handleMeetingOutcome} onDelete={handleDeleteMeeting} onEdit={async (meetingId, data) => {
               setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
               try {
                 const res = await fetch(`/api/meetings/${meetingId}`, {
@@ -774,7 +774,7 @@ export default function AttendeeDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
             </button>
             </div>
-            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
+            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} tableName="attendee_follow_ups" />
           </div>
 
           {/* Notes */}
