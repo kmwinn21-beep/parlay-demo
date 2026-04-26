@@ -22,6 +22,34 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   }
 }
 
+// PUT = update note content (edit)
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
+  try {
+    await dbReady;
+    const { content } = await request.json() as { content: string };
+    if (!content?.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
+    const result = await db.execute({
+      sql: 'UPDATE quick_notes SET content = ? WHERE id = ? AND created_by = ? RETURNING id, content, created_at, created_by, tag',
+      args: [content.trim(), Number(params.id), user.email],
+    });
+    if (result.rows.length === 0) return NextResponse.json({ error: 'Note not found' }, { status: 404 });
+    const row = result.rows[0];
+    return NextResponse.json({
+      id: Number(row.id),
+      content: String(row.content),
+      created_at: String(row.created_at),
+      created_by: row.created_by ? String(row.created_by) : null,
+      tag: row.tag ? String(row.tag) : null,
+    });
+  } catch (error) {
+    console.error('PUT /api/quick-notes/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to update note' }, { status: 500 });
+  }
+}
+
 // PATCH = assign note to one or more entities, then delete from quick_notes
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);

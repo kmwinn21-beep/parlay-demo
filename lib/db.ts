@@ -472,6 +472,7 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('attendee_conference_status', 'Target', 1)`,
+    `ALTER TABLE quick_notes ADD COLUMN tag TEXT`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
