@@ -383,7 +383,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       <div className="flex gap-3 px-4 py-3">
         <div className="w-20 sm:w-28 shrink-0 pt-0.5">
           {(item.start_time || item.end_time) && (
-            <p className="text-sm text-gray-500 tabular-nums leading-snug">
+            <p className="text-xs text-gray-500 tabular-nums leading-snug">
               {item.start_time ?? ''}
               {item.start_time && item.end_time && <><br />–&nbsp;{item.end_time}</>}
               {!item.start_time && item.end_time ? item.end_time : ''}
@@ -412,7 +412,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         </div>
         <div className="shrink-0 pl-2 pt-0.5">
           {inMyAgenda ? (
-            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium">
+            <span className="inline-flex items-center gap-1  text-green-600 font-medium">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
@@ -421,7 +421,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           ) : (
             <button
               onClick={() => void handleAddToMyAgenda(item, dayLabel)}
-              className="inline-flex items-center gap-1 text-sm font-medium text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1  font-medium text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -452,7 +452,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         <div className="flex gap-3 px-4 py-3">
           <div className="w-20 sm:w-28 shrink-0 pt-0.5">
             {(item.start_time || item.end_time) && (
-              <p className="text-sm text-gray-500 tabular-nums leading-snug">
+              <p className=" text-gray-500 tabular-nums leading-snug">
                 {item.start_time ?? ''}
                 {item.start_time && item.end_time && <><br />–&nbsp;{item.end_time}</>}
                 {!item.start_time && item.end_time ? item.end_time : ''}
@@ -466,14 +466,14 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                   {item.session_type}
                 </span>
               )}
-              <p className="text-sm font-medium text-gray-800 leading-snug">{item.title}</p>
+              <p className=" font-medium text-gray-800 leading-snug">{item.title}</p>
             </div>
-            {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+            {subtitle && <p className=" text-gray-500">{subtitle}</p>}
             {item.description && (
-              <p className="mt-0.5 text-sm text-gray-500">{item.description}</p>
+              <p className="mt-0.5  text-gray-500">{item.description}</p>
             )}
             {item.location && (
-              <p className="mt-1 flex items-center gap-1 text-sm text-gray-500">
+              <p className="mt-1 flex items-center gap-1  text-gray-500">
                 <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -494,7 +494,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 if (s.has(item.key)) s.delete(item.key); else s.add(item.key);
                 return s;
               })}
-              className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1  text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -504,7 +504,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             {item.sourceType === 'agenda' && item.myItemId && (
               <button
                 onClick={() => void handleRemoveMyItem(item.myItemId!, item.sourceId)}
-                className="inline-flex items-center gap-1 text-sm text-red-400 hover:text-red-600 transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-1  text-red-400 hover:text-red-600 transition-colors whitespace-nowrap"
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -524,7 +524,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               onBlur={() => handleNoteBlur(item.key, meetingId)}
               placeholder="Add notes…"
               rows={3}
-              className="input-field resize-none w-full text-sm"
+              className="input-field resize-none w-full "
             />
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-400">
@@ -533,7 +533,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               {noteVal && !saving && (
                 <button
                   onClick={() => handleNoteBlur(item.key, meetingId)}
-                  className="text-sm font-medium text-brand-secondary hover:underline transition-colors"
+                  className=" font-medium text-brand-secondary hover:underline transition-colors"
                 >
                   Save
                 </button>
@@ -644,35 +644,35 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             <h3 className="text-base font-bold text-brand-primary font-serif">Full Agenda</h3>
             {days.length > 0 && !scanning && (
               <div className="flex items-center gap-2">
-                <button onClick={() => cameraRef.current?.click()} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => cameraRef.current?.click()} className="inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   Re-scan
                 </button>
-                <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                   Upload
                 </button>
                 {confirmClear ? (
                   <div className="flex items-center gap-1">
-                    <span className="text-sm text-gray-500">Clear all?</span>
-                    <button onClick={() => void handleClear()} className="text-sm text-red-500 hover:underline font-medium">Yes</button>
-                    <button onClick={() => setConfirmClear(false)} className="text-sm text-gray-400 hover:underline">No</button>
+                    <span className=" text-gray-500">Clear all?</span>
+                    <button onClick={() => void handleClear()} className=" text-red-500 hover:underline font-medium">Yes</button>
+                    <button onClick={() => setConfirmClear(false)} className=" text-gray-400 hover:underline">No</button>
                   </div>
                 ) : (
-                  <button onClick={() => setConfirmClear(true)} className="text-sm text-red-400 hover:text-red-600 transition-colors">Clear</button>
+                  <button onClick={() => setConfirmClear(true)} className=" text-red-400 hover:text-red-600 transition-colors">Clear</button>
                 )}
               </div>
             )}
           </div>
 
           {scanError && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2  text-red-700">
               <span className="flex-1">{scanError}</span>
               <button onClick={() => setScanError(null)} className="shrink-0 text-red-400 hover:text-red-600"><svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
             </div>
           )}
           {scanning && (
-            <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+            <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2  text-gray-500">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
               Scanning agenda with AI…
             </div>
@@ -685,15 +685,15 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 <svg className="h-6 w-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700">No agenda yet</p>
-                <p className="mt-1 text-sm text-gray-400">Upload a photo or screenshot of the conference agenda</p>
+                <p className=" font-medium text-gray-700">No agenda yet</p>
+                <p className="mt-1  text-gray-400">Upload a photo or screenshot of the conference agenda</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                <button onClick={() => cameraRef.current?.click()} className="btn-secondary text-sm inline-flex items-center gap-1.5">
+                <button onClick={() => cameraRef.current?.click()} className="btn-secondary  inline-flex items-center gap-1.5">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   Take Photo
                 </button>
-                <button onClick={() => fileRef.current?.click()} className="btn-primary text-sm inline-flex items-center gap-1.5">
+                <button onClick={() => fileRef.current?.click()} className="btn-primary  inline-flex items-center gap-1.5">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                   Upload Image
                 </button>
@@ -714,9 +714,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                           ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />}
                       </svg>
-                      <span className="text-sm font-semibold text-brand-primary">{day.day_label}</span>
+                      <span className=" font-semibold text-brand-primary">{day.day_label}</span>
                     </div>
-                    <span className="text-sm text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
+                    <span className=" text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {fullExpandedDays.has(day.day_label) && (
                     <div className="divide-y divide-gray-100 border-t border-brand-primary/20">
@@ -734,7 +734,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-base font-bold text-brand-primary font-serif">My Agenda</h3>
             {hasMyAgenda && (
-              <span className="text-sm text-gray-400">
+              <span className=" text-gray-400">
                 {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
               </span>
             )}
@@ -742,8 +742,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
 
           {!hasMyAgenda ? (
             <div className="rounded-xl border border-dashed border-gray-200 px-6 py-12 text-center">
-              <p className="text-sm font-medium text-gray-600">Nothing here yet</p>
-              <p className="mt-1 text-sm text-gray-400">
+              <p className="text-xs font-medium text-gray-600">Nothing here yet</p>
+              <p className="mt-1 text-xs text-gray-400">
                 {days.length > 0
                   ? 'Click "+ My Agenda" on sessions to the left to add them here.'
                   : 'Upload an agenda to get started. Your scheduled meetings will appear here automatically.'}
@@ -764,9 +764,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                           ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />}
                       </svg>
-                      <span className="text-sm font-semibold text-brand-primary">{group.day_label}</span>
+                      <span className="text-xs font-semibold text-brand-primary">{group.day_label}</span>
                     </div>
-                    <span className="text-sm text-gray-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                    <span className="text-xs text-gray-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {myExpandedDays.has(group.day_label) && (
                     <div className="divide-y divide-gray-100 border-t border-brand-secondary/30">
