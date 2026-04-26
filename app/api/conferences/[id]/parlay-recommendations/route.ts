@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
+import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 export interface ParlayRec {
   company_name: string;
@@ -52,9 +53,10 @@ type CompanyEntry = {
   company_id: number;
   company_name: string;
   company_type: string | null;
+  entity_structure: string | null;
+  profit_type: string | null;
   wse: number | null;
   services: string | null;
-  icp: string | null;
   attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null }[];
 };
 
@@ -224,7 +226,7 @@ export async function POST(
     confRow,
     settingsRow,
     attendeesRow,
-    icpRulesRow,
+    icpConfig,
     userOptsRow,
     relStatusOptsRow,
     internalRelsRow,
@@ -240,19 +242,14 @@ export async function POST(
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    c.id as company_id, c.name as company_name, c.company_type,
-                   c.wse, c.services, c.icp, c.assigned_user
+                   c.entity_structure, c.profit_type, c.wse, c.services, c.assigned_user
             FROM attendees a
             JOIN conference_attendees ca ON a.id = ca.attendee_id AND ca.conference_id = ?
             LEFT JOIN companies c ON a.company_id = c.id
             ORDER BY c.name, a.last_name, a.first_name`,
       args: [confId],
     }),
-    db.execute({
-      sql: `SELECT r.id, r.category, c.option_value, c.operator
-            FROM icp_rules r
-            JOIN icp_rule_conditions c ON c.rule_id = r.id`,
-      args: [],
-    }),
+    getIcpConfig(),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] }),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'rep_relationship_type'`, args: [] }),
     db.execute({
@@ -289,9 +286,10 @@ export async function POST(
     company_id: number;
     company_name: string;
     company_type: string | null;
+    entity_structure: string | null;
+    profit_type: string | null;
     wse: number | null;
     services: string | null;
-    icp: string | null;
     attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null }[];
   }>();
 
@@ -303,9 +301,10 @@ export async function POST(
         company_id: cid,
         company_name: String(a.company_name ?? ''),
         company_type: a.company_type ? String(a.company_type) : null,
+        entity_structure: a.entity_structure ? String(a.entity_structure) : null,
+        profit_type: a.profit_type ? String(a.profit_type) : null,
         wse: a.wse != null ? Number(a.wse) : null,
         services: a.services ? String(a.services) : null,
-        icp: a.icp ? String(a.icp) : null,
         attendees: [],
       });
     }
@@ -405,12 +404,11 @@ export async function POST(
     }
   }
 
-  // Build ICP rule summary for prompt
+  // Build ICP rule summary for prompt (derived from icpConfig)
   const icpRulesByCategory = new Map<string, string[]>();
-  for (const row of icpRulesRow.rows) {
-    const cat = String(row.category);
-    if (!icpRulesByCategory.has(cat)) icpRulesByCategory.set(cat, []);
-    icpRulesByCategory.get(cat)!.push(String(row.option_value));
+  for (const rule of icpConfig.rules) {
+    if (!icpRulesByCategory.has(rule.category)) icpRulesByCategory.set(rule.category, []);
+    for (const cond of rule.conditions) icpRulesByCategory.get(rule.category)!.push(cond.option_value);
   }
   const icpCompanyTypes = icpRulesByCategory.get('company_type')?.join(', ') || 'Not specified';
   const icpServices = icpRulesByCategory.get('services')?.join(', ') || 'Not specified';
@@ -423,9 +421,15 @@ export async function POST(
     ? unitTypeOp === 'between' ? `${unitTypeV1}–${unitTypeV2}` : `${unitTypeOp} ${unitTypeV1}`
     : 'Not specified';
 
-  // Only evaluate companies that meet the ICP criteria; sort by relationship health score
+  // Only evaluate companies that pass live ICP rule evaluation (same logic as ICP Companies tab)
   const companiesSorted = Array.from(companyMap.values())
-    .filter(c => c.icp === 'Yes')
+    .filter(c => evaluateIcpRules({
+      company_type: c.company_type ?? '',
+      entity_structure: c.entity_structure ?? '',
+      profit_type: c.profit_type ?? '',
+      services: c.services ?? '',
+      wse: String(c.wse ?? ''),
+    }, icpConfig) === 'Yes')
     .sort((a, b) => {
       const aMetrics = metricsMap.get(a.company_id);
       const bMetrics = metricsMap.get(b.company_id);
@@ -520,7 +524,7 @@ Return a recommendation for every company in this batch. Rank High first, then M
   type RawBatch = { recommendations: RawRec[]; watch_list: { company_name: string; reason: string }[]; exclusions: { company_name: string; reason: string }[] };
 
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000 });
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 150_000 });
 
     // Phase 1 — triage all ICP companies in one compact call (~10-20s)
     const triageMap = await runTriage(anthropic, promptPrefix, companiesSorted, metricsMap, irByCompany);
