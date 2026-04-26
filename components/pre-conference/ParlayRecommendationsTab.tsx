@@ -170,8 +170,8 @@ export function ParlayRecommendationsTab({
       }
       const json = await res.json() as { data: ParlayRecsData };
       setData(json.data);
-    } catch {
-      setError('Failed to generate recommendations.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate recommendations.');
     } finally {
       setGenerating(false);
     }

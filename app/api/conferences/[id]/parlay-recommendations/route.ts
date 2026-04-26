@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 120;
+
 export interface ParlayRec {
   company_name: string;
   company_id: number | null;
@@ -209,12 +211,12 @@ export async function POST(
       ? db.execute({
           sql: `SELECT a.company_id,
                        COUNT(DISTINCT m.id) as meeting_count,
-                       COUNT(DISTINCT at.id) as touchpoint_count,
+                       COUNT(DISTINCT tp.id) as touchpoint_count,
                        SUM(CASE WHEN f.completed = 0 THEN 1 ELSE 0 END) as open_followups
                 FROM attendees a
                 JOIN conference_attendees ca ON a.id = ca.attendee_id AND ca.conference_id = ?
                 LEFT JOIN meetings m ON m.attendee_id = a.id
-                LEFT JOIN attendee_touchpoints at ON at.attendee_id = a.id
+                LEFT JOIN attendee_touchpoints tp ON tp.attendee_id = a.id
                 LEFT JOIN follow_ups f ON f.attendee_id = a.id
                 WHERE a.company_id IN (${companyIds.map(() => '?').join(',')})
                 GROUP BY a.company_id`,
@@ -428,7 +430,10 @@ Return ONLY a valid JSON object (no markdown fences, no preamble, no explanation
 Maximum 25 entries in recommendations. Rank High first, then Medium, then Watch. Within each tier rank by relationship health score descending.`;
 
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      timeout: 120_000, // 2 min
+    });
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 8096,
@@ -491,7 +496,8 @@ Maximum 25 entries in recommendations. Rank High first, then Medium, then Watch.
 
     return NextResponse.json({ data });
   } catch (error) {
-    console.error('POST /api/conferences/[id]/parlay-recommendations error:', error);
-    return NextResponse.json({ error: 'Failed to generate recommendations' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('POST /api/conferences/[id]/parlay-recommendations error:', msg);
+    return NextResponse.json({ error: msg || 'Failed to generate recommendations' }, { status: 500 });
   }
 }
