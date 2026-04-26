@@ -308,17 +308,16 @@ export async function POST(
     ? unitTypeOp === 'between' ? `${unitTypeV1}–${unitTypeV2}` : `${unitTypeOp} ${unitTypeV1}`
     : 'Not specified';
 
-  // Format company block for prompt (limit to ICP companies first, then top others by health, max 50)
-  const companiesSorted = Array.from(companyMap.values()).sort((a, b) => {
-    const aIcp = a.icp === 'Yes' ? 1 : 0;
-    const bIcp = b.icp === 'Yes' ? 1 : 0;
-    if (aIcp !== bIcp) return bIcp - aIcp;
-    const aMetrics = metricsMap.get(a.company_id);
-    const bMetrics = metricsMap.get(b.company_id);
-    const aScore = Math.min(((aMetrics?.meeting_count ?? 0) * 25 + (aMetrics?.touchpoint_count ?? 0) * 10), 100);
-    const bScore = Math.min(((bMetrics?.meeting_count ?? 0) * 25 + (bMetrics?.touchpoint_count ?? 0) * 10), 100);
-    return bScore - aScore;
-  }).slice(0, 50);
+  // Only evaluate companies that meet the ICP criteria; sort by relationship health score
+  const companiesSorted = Array.from(companyMap.values())
+    .filter(c => c.icp === 'Yes')
+    .sort((a, b) => {
+      const aMetrics = metricsMap.get(a.company_id);
+      const bMetrics = metricsMap.get(b.company_id);
+      const aScore = Math.min(((aMetrics?.meeting_count ?? 0) * 25 + (aMetrics?.touchpoint_count ?? 0) * 10), 100);
+      const bScore = Math.min(((bMetrics?.meeting_count ?? 0) * 25 + (bMetrics?.touchpoint_count ?? 0) * 10), 100);
+      return bScore - aScore;
+    });
 
   const companiesBlock = companiesSorted.map(company => {
     const metrics = metricsMap.get(company.company_id);
