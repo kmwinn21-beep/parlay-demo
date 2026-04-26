@@ -1915,7 +1915,11 @@ export default function ConferenceDetailPage() {
       )}
 
       {activeTab === 'agenda' && (
-        <AgendaTab conferenceId={Number(id)} />
+        <AgendaTab
+          conferenceId={Number(id)}
+          conferenceName={conference?.name || ''}
+          userEmail={currentUser?.email || ''}
+        />
       )}
 
       {showBatchScan && (
