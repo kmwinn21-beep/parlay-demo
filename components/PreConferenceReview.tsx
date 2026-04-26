@@ -9,6 +9,8 @@ import { SocialEventsTab } from './pre-conference/SocialEventsTab';
 import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
+import { ParlayRecommendationsTab } from './pre-conference/ParlayRecommendationsTab';
+export type { ParlayRec, ParlayWatchItem, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
 
 export interface PreConferenceSummary {
   conference: { id: number; name: string; start_date: string | null; end_date: string | null; location: string | null };
@@ -160,7 +162,7 @@ export interface PreConferenceData {
   relationships: RelationshipRow[];
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'conference_targets';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'conference_targets' | 'parlay_recommendations';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -169,6 +171,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'by-rep', label: 'By Rep' },
   { key: 'relationships', label: 'Relationships' },
   { key: 'conference_targets', label: 'Conference Targets' },
+  { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
 ];
 
 function StatPill({ label, value }: { label: string; value: number | string }) {
@@ -361,6 +364,13 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   meetingAttendeeIds={meetingAttendeeIds}
                   onToggleTarget={toggleTarget}
                   onSetTier={setTargetTier}
+                />
+              )}
+              {activeTab === 'parlay_recommendations' && (
+                <ParlayRecommendationsTab
+                  conferenceId={conferenceId}
+                  targetMap={targetMap}
+                  onToggleTarget={toggleTarget}
                 />
               )}
             </div>

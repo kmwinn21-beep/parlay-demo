@@ -44,6 +44,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'by-rep', label: 'By Rep' },
     { key: 'relationships', label: 'Relationships' },
     { key: 'conference_targets', label: 'Conference Targets' },
+    { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
   ],
   post_conference_review: [
     { key: 'summary', label: 'Summary' },
