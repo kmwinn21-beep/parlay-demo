@@ -1086,6 +1086,7 @@ export default function CompanyDetailPage() {
               colorMap={colorMaps.action || {}}
               userOptions={userOptions}
               hideCompany
+              tableName="company_meetings"
               onOutcomeChange={async (meetingId, outcome) => {
                 setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {
@@ -1152,7 +1153,7 @@ export default function CompanyDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
               </button>
             </div>
-            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} />
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} tableName="company_follow_ups" />
           </div>
 
           {/* Notes */}

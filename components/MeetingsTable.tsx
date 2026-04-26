@@ -489,6 +489,7 @@ export function MeetingsTable({
   onEdit,
   userOptions = [],
   hideCompany = false,
+  tableName = 'meetings',
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -498,8 +499,9 @@ export function MeetingsTable({
   onEdit?: (meetingId: number, data: EditFormData) => void;
   userOptions?: UserOption[];
   hideCompany?: boolean;
+  tableName?: string;
 }) {
-  const { isVisible, orderedColumns } = useTableColumnConfig('meetings');
+  const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);

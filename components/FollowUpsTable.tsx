@@ -79,15 +79,17 @@ export function FollowUpsTable({
   onDelete,
   userOptions = [],
   onRepChange,
+  tableName = 'follow_ups',
 }: {
   followUps: FollowUp[];
   onToggle: (id: number, completed: boolean) => void;
   onDelete?: (id: number) => void;
   userOptions?: UserOption[];
   onRepChange?: (id: number, rep: string | null) => void;
+  tableName?: string;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
-  const { isVisible, orderedColumns } = useTableColumnConfig('follow_ups');
+  const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
 
