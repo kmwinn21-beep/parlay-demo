@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useCallback, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,10 +55,14 @@ interface ScannedCard {
 }
 
 interface Props {
-  conferenceId: number;
+  conferenceId?: number | null;
+  initialCards?: ScannedCard[];
   onClose: () => void;
   onDone: () => void;
 }
+
+export type { ScannedCard, CardDraft };
+export { makeCard };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -529,11 +534,13 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
 
 // ─── BatchCardScanModal — main export ─────────────────────────────────────────
 
-export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
-  const [cards, setCards] = useState<ScannedCard[]>([]);
+export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone }: Props) {
+  const [cards, setCards] = useState<ScannedCard[]>(initialCards ?? []);
   const [scanning, setScanning] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
+  const [conferences, setConferences] = useState<{ id: number; name: string }[]>([]);
+  const [activeConfId, setActiveConfId] = useState<number | null>(conferenceId ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -542,6 +549,18 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
       .then(data => setStatusOptions(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (conferenceId != null) return;
+    fetch('/api/conferences?nav=1')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: unknown) => {
+        const raw = data as { conferences?: unknown[] } | unknown[];
+        const list = Array.isArray(raw) ? raw : (raw as { conferences?: unknown[] }).conferences ?? [];
+        setConferences((list as { id: number; name: string }[]).filter(c => c.id && c.name));
+      })
+      .catch(() => {});
+  }, [conferenceId]);
 
   const updateCard = useCallback((localId: string, patch: Partial<ScannedCard>) => {
     setCards(prev => prev.map(c => c.localId === localId ? { ...c, ...patch } : c));
@@ -647,9 +666,10 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
       let companyId: number | null = null;
 
       if (action.type === 'confirm' && action.attendeeId) {
+        if (!activeConfId) { toast.error('Please select a conference first.'); return; }
         const res = await fetch('/api/card-scan/confirm', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendee_id: action.attendeeId, conference_id: conferenceId }),
+          body: JSON.stringify({ attendee_id: action.attendeeId, conference_id: activeConfId }),
         });
         if (!res.ok) return;
         attendeeId = action.attendeeId;
@@ -662,7 +682,7 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
             title: card.addDraft.title || undefined, email: card.addDraft.email || undefined,
             company_id: card.addDraft.company_id || undefined,
             company_name: !card.addDraft.company_id && card.addDraft.company ? card.addDraft.company : undefined,
-            conference_id: conferenceId,
+            conference_id: activeConfId,
           }),
         });
         if (!res.ok) return;
@@ -686,7 +706,7 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
           fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...noteBase, entity_type: 'attendee', entity_id: attendeeId }) }),
           fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...noteBase, entity_type: 'conference', entity_id: conferenceId }) }),
+            body: JSON.stringify({ ...noteBase, entity_type: 'conference', entity_id: activeConfId }) }),
         ];
         if (companyId) {
           noteReqs.push(fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -752,6 +772,21 @@ export function BatchCardScanModal({ conferenceId, onClose, onDone }: Props) {
             </svg>
           </button>
         </div>
+
+        {/* Conference picker — shown only when no conferenceId prop */}
+        {conferenceId == null && (
+          <div className="px-6 py-3 border-b border-gray-100 bg-blue-50/30 flex-shrink-0">
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Select Conference *</label>
+            <select
+              value={activeConfId ?? ''}
+              onChange={e => setActiveConfId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary bg-white"
+            >
+              <option value="">Select a conference…</option>
+              {conferences.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Drop / upload zone */}
         <div
