@@ -45,6 +45,50 @@ function settingsKey(confId: number) {
   return `parlay_recs_${confId}`;
 }
 
+const BATCH_SIZE = 15;
+
+type CompanyEntry = {
+  company_id: number;
+  company_name: string;
+  company_type: string | null;
+  wse: number | null;
+  services: string | null;
+  icp: string | null;
+  attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null }[];
+};
+
+function buildCompaniesBlock(
+  companies: CompanyEntry[],
+  metricsMap: Map<number, { meeting_count: number; touchpoint_count: number; open_followups: number }>,
+  irByCompany: Map<number, { rep_names: string[]; rel_status: string; description: string }>,
+  latestNoteMap: Map<number, string>,
+  lastConfMap: Map<number, string>,
+): string {
+  return companies.map(company => {
+    const metrics = metricsMap.get(company.company_id);
+    const healthScore = Math.min(((metrics?.meeting_count ?? 0) * 25 + (metrics?.touchpoint_count ?? 0) * 10), 100);
+    const ir = irByCompany.get(company.company_id);
+    const latestNote = latestNoteMap.get(company.company_id) || 'None';
+    const lastConf = lastConfMap.get(company.company_id) || 'None on record';
+    const attendeeLines = company.attendees
+      .map(a => `- ${a.first_name} ${a.last_name}${a.title ? `, ${a.title}` : ''}${a.seniority ? ` (${a.seniority})` : ''}`)
+      .join('\n');
+    return `### ${company.company_name}
+- Type: ${company.company_type ?? 'Unknown'}
+- WSE: ${company.wse ?? 'Unknown'}
+- Services: ${company.services ?? 'Unknown'}
+- Relationship health score: ${healthScore}
+- Prior touchpoints: ${metrics?.touchpoint_count ?? 0}
+- Last conference engaged: ${lastConf}
+- Open follow-ups: ${metrics?.open_followups ?? 0}
+- Rep notes: ${latestNote}
+${ir ? `- Relationship status: ${ir.rel_status}\n- Relationship description: ${ir.description}` : ''}
+
+**Attending contacts:**
+${attendeeLines || 'No contacts listed'}`;
+  }).join('\n\n');
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -321,52 +365,25 @@ export async function POST(
       return bScore - aScore;
     });
 
-  const companiesBlock = companiesSorted.map(company => {
-    const metrics = metricsMap.get(company.company_id);
-    const healthScore = Math.min(((metrics?.meeting_count ?? 0) * 25 + (metrics?.touchpoint_count ?? 0) * 10), 100);
-    const ir = irByCompany.get(company.company_id);
-    const latestNote = latestNoteMap.get(company.company_id) || 'None';
-    const lastConf = lastConfMap.get(company.company_id) || 'None on record';
-    const attendeeLines = company.attendees.map(a =>
-      `- ${a.first_name} ${a.last_name}${a.title ? `, ${a.title}` : ''}${a.seniority ? ` (${a.seniority})` : ''}`
-    ).join('\n');
+  if (companiesSorted.length === 0) {
+    return NextResponse.json({ error: 'No ICP-qualified companies found for this conference' }, { status: 422 });
+  }
 
-    return `### ${company.company_name}
-- Type: ${company.company_type ?? 'Unknown'}
-- WSE: ${company.wse ?? 'Unknown'}
-- Services: ${company.services ?? 'Unknown'}
-- ICP: ${company.icp ?? 'Unknown'}
-- Relationship health score: ${healthScore}
-- Prior touchpoints: ${metrics?.touchpoint_count ?? 0}
-- Last conference engaged: ${lastConf}
-- Open follow-ups: ${metrics?.open_followups ?? 0}
-- Rep notes: ${latestNote}
-${ir ? `- Relationship status: ${ir.rel_status}\n- Relationship description: ${ir.description}` : ''}
-
-**Attending contacts:**
-${attendeeLines || 'No contacts listed'}`;
-  }).join('\n\n');
-
-  // Build ICP profile section
+  // Build shared prompt sections
   const icpPainPoints = tryParseJson<string[]>(icpSettings['icp_pain_points'], []);
   const icpTriggerEvents = tryParseJson<string[]>(icpSettings['icp_trigger_events'], []);
   const icpTargetTitles = tryParseJson<string[]>(icpSettings['icp_target_titles'], []);
   const icpDecisionMakers = tryParseJson<string[]>(icpSettings['icp_decision_maker_titles'], []);
   const icpInfluencers = tryParseJson<string[]>(icpSettings['icp_influencer_titles'], []);
   const icpSeniorityPriority = tryParseJson<Record<string, string>>(icpSettings['icp_seniority_priority'], {});
-
   const seniorityPriorityText = Object.entries(icpSeniorityPriority)
     .map(([level, priority]) => `  - ${level}: ${priority}`)
     .join('\n') || '  Not configured';
 
-  const confName = String(conference.name ?? '');
-  const confDate = String(conference.start_date ?? 'TBD');
-  const confLocation = String(conference.location ?? 'TBD');
-
-  const userPrompt = `## Conference
-Name: ${confName}
-Date: ${confDate}
-Location: ${confLocation}
+  const promptPrefix = `## Conference
+Name: ${String(conference.name ?? '')}
+Date: ${String(conference.start_date ?? 'TBD')}
+Location: ${String(conference.location ?? 'TBD')}
 
 ---
 
@@ -400,17 +417,9 @@ ${icpSettings['icp_exclusion_description'] || 'Not specified'}
 - Recommend active outreach at health score >= ${icpSettings['icp_pursuit_score'] ?? '50'}
 - Consider warm relationship at health score >= ${icpSettings['icp_warm_score'] ?? '75'}
 - Minimum prior touchpoints before active pursuit: ${icpSettings['icp_min_touchpoints'] ?? '1'}
-- Include companies with no prior history: ${icpSettings['icp_include_new_companies'] ?? 'true'}
+- Include companies with no prior history: ${icpSettings['icp_include_new_companies'] ?? 'true'}`;
 
----
-
-## Attending Companies & Contacts
-
-${companiesBlock}
-
----
-
-## Output Format
+  const promptSuffix = `## Output Format
 
 Return ONLY a valid JSON object (no markdown fences, no preamble, no explanation):
 {
@@ -421,7 +430,7 @@ Return ONLY a valid JSON object (no markdown fences, no preamble, no explanation
       "why_target": [
         "string — ICP fit or relationship reason (e.g. company type, size, services match)",
         "string — engagement opportunity based on attendee seniority, prior touchpoints, or open follow-ups",
-        "string — trigger events or buying signals matching the ICP pain points and trigger events listed above: write a specific 1-sentence finding (e.g. 'Recently hired a new VP of Operations, a key trigger event for this ICP') OR exactly 'No relevant trigger events, news or buying signals'"
+        "string — trigger events or buying signals matching the ICP pain points and trigger events listed above: write a specific 1-sentence finding OR exactly 'No relevant trigger events, news or buying signals'"
       ],
       "who_to_talk_to": [{ "name": "string", "title": "string", "angle": "string — one sentence on why this person and how to open" }],
       "suggested_opening_angle": "string — one to two sentences, specific and non-generic, say-out-loud-ready",
@@ -432,64 +441,79 @@ Return ONLY a valid JSON object (no markdown fences, no preamble, no explanation
   "exclusions": [{ "company_name": "string", "reason": "string — one sentence" }]
 }
 
-Maximum 25 entries in recommendations. Rank High first, then Medium, then Watch. Within each tier rank by relationship health score descending.`;
+Return a recommendation for every company in this batch. Rank High first, then Medium, then Watch.`;
+
+  // Split into batches and call Claude in parallel
+  const batches: CompanyEntry[][] = [];
+  for (let i = 0; i < companiesSorted.length; i += BATCH_SIZE) {
+    batches.push(companiesSorted.slice(i, i + BATCH_SIZE));
+  }
+
+  type RawRec = {
+    company_name: string; relationship_status: string; why_target: string[];
+    who_to_talk_to: { name: string; title: string; angle: string }[];
+    suggested_opening_angle: string; priority: string;
+  };
+  type RawBatch = { recommendations: RawRec[]; watch_list: { company_name: string; reason: string }[]; exclusions: { company_name: string; reason: string }[] };
 
   try {
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      timeout: 120_000, // 2 min
-    });
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000 });
 
-    const raw = message.content[0].type === 'text' ? message.content[0].text.trim() : '{}';
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    const clean = jsonMatch ? jsonMatch[0] : '{}';
+    const batchResults = await Promise.all(batches.map(async (batch): Promise<RawBatch> => {
+      const companiesBlock = buildCompaniesBlock(batch, metricsMap, irByCompany, latestNoteMap, lastConfMap);
+      const batchPrompt = `${promptPrefix}\n\n---\n\n## Attending Companies & Contacts\n\n${companiesBlock}\n\n---\n\n${promptSuffix}`;
+      const msg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: batchPrompt }],
+      });
+      const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}';
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      return JSON.parse(jsonMatch ? jsonMatch[0] : '{}') as RawBatch;
+    }));
 
-    const parsed = JSON.parse(clean) as {
-      recommendations: { company_name: string; relationship_status: string; why_target: string[]; who_to_talk_to: { name: string; title: string; angle: string }[]; suggested_opening_angle: string; priority: string }[];
-      watch_list: { company_name: string; reason: string }[];
-      exclusions: { company_name: string; reason: string }[];
-    };
+    // Merge all batches
+    const mergedRecs = batchResults.flatMap(r => r.recommendations ?? []);
+    const mergedWatchList = batchResults.flatMap(r => r.watch_list ?? []);
+    const mergedExclusions = batchResults.flatMap(r => r.exclusions ?? []);
 
-    // Augment recommendations with attendee IDs and rep names from DB
-    const nameToCompany = new Map<string, typeof companiesSorted[0]>();
-    for (const c of companiesSorted) {
-      nameToCompany.set(c.company_name.toLowerCase().trim(), c);
-    }
+    // Augment with real DB data, sort by priority + health score, cap at 25
+    const nameToCompany = new Map<string, CompanyEntry>();
+    for (const c of companiesSorted) nameToCompany.set(c.company_name.toLowerCase().trim(), c);
 
-    const recommendations: ParlayRec[] = (parsed.recommendations ?? []).map(rec => {
-      const match = nameToCompany.get(rec.company_name.toLowerCase().trim());
-      const ir = match ? irByCompany.get(match.company_id) : undefined;
-      const metrics = match ? metricsMap.get(match.company_id) : undefined;
-      const healthScore = metrics
-        ? Math.min((metrics.meeting_count * 25 + metrics.touchpoint_count * 10), 100)
-        : 0;
-
-      return {
-        company_name: rec.company_name,
-        company_id: match?.company_id ?? null,
-        relationship_status: (['New', 'Warming', 'Active', 'Strong'].includes(rec.relationship_status)
-          ? rec.relationship_status
-          : 'New') as ParlayRec['relationship_status'],
-        why_target: Array.isArray(rec.why_target) ? rec.why_target : [],
-        who_to_talk_to: Array.isArray(rec.who_to_talk_to) ? rec.who_to_talk_to : [],
-        suggested_opening_angle: rec.suggested_opening_angle ?? '',
-        priority: (['High', 'Medium', 'Watch'].includes(rec.priority) ? rec.priority : 'Watch') as ParlayRec['priority'],
-        attendees: match?.attendees ?? [],
-        rep_names: ir?.rep_names ?? [],
-        health_score: healthScore,
-      };
-    });
+    const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Watch: 2 };
+    const recommendations: ParlayRec[] = mergedRecs
+      .map(rec => {
+        const match = nameToCompany.get(rec.company_name.toLowerCase().trim());
+        const ir = match ? irByCompany.get(match.company_id) : undefined;
+        const metrics = match ? metricsMap.get(match.company_id) : undefined;
+        const healthScore = metrics ? Math.min((metrics.meeting_count * 25 + metrics.touchpoint_count * 10), 100) : 0;
+        return {
+          company_name: rec.company_name,
+          company_id: match?.company_id ?? null,
+          relationship_status: (['New', 'Warming', 'Active', 'Strong'].includes(rec.relationship_status)
+            ? rec.relationship_status : 'New') as ParlayRec['relationship_status'],
+          why_target: Array.isArray(rec.why_target) ? rec.why_target : [],
+          who_to_talk_to: Array.isArray(rec.who_to_talk_to) ? rec.who_to_talk_to : [],
+          suggested_opening_angle: rec.suggested_opening_angle ?? '',
+          priority: (['High', 'Medium', 'Watch'].includes(rec.priority) ? rec.priority : 'Watch') as ParlayRec['priority'],
+          attendees: match?.attendees ?? [],
+          rep_names: ir?.rep_names ?? [],
+          health_score: healthScore,
+        };
+      })
+      .sort((a, b) => {
+        const pa = PRIORITY_ORDER[a.priority] ?? 2;
+        const pb = PRIORITY_ORDER[b.priority] ?? 2;
+        return pa !== pb ? pa - pb : b.health_score - a.health_score;
+      })
+      .slice(0, 25);
 
     const data: ParlayRecsData = {
       recommendations,
-      watch_list: Array.isArray(parsed.watch_list) ? parsed.watch_list : [],
-      exclusions: Array.isArray(parsed.exclusions) ? parsed.exclusions : [],
+      watch_list: mergedWatchList,
+      exclusions: mergedExclusions,
       generated_at: new Date().toISOString(),
       reload_count: existingReloadCount + 1,
     };
