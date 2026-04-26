@@ -421,12 +421,12 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           ) : (
             <button
               onClick={() => void handleAddToMyAgenda(item, dayLabel)}
-              className="inline-flex items-center gap-1  font-medium text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap"
+              title="Add to My Agenda"
+              className="inline-flex items-center text-brand-secondary hover:text-brand-primary transition-colors"
             >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
               </svg>
-              My Agenda
             </button>
           )}
         </div>
@@ -452,7 +452,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         <div className="flex gap-3 px-4 py-3">
           <div className="w-20 sm:w-28 shrink-0 pt-0.5">
             {(item.start_time || item.end_time) && (
-              <p className=" text-gray-500 tabular-nums leading-snug">
+              <p className="text-xs text-gray-500 tabular-nums leading-snug">
                 {item.start_time ?? ''}
                 {item.start_time && item.end_time && <><br />–&nbsp;{item.end_time}</>}
                 {!item.start_time && item.end_time ? item.end_time : ''}
@@ -466,15 +466,15 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                   {item.session_type}
                 </span>
               )}
-              <p className=" font-medium text-gray-800 leading-snug">{item.title}</p>
+              <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
             </div>
-            {subtitle && <p className=" text-gray-500">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
             {item.description && (
-              <p className="mt-0.5  text-gray-500">{item.description}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>
             )}
             {item.location && (
-              <p className="mt-1 flex items-center gap-1  text-gray-500">
-                <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -494,9 +494,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 if (s.has(item.key)) s.delete(item.key); else s.add(item.key);
                 return s;
               })}
-              className="inline-flex items-center gap-1  text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
             >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               {noteOpen ? 'Close' : 'Notes'}
@@ -504,9 +504,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             {item.sourceType === 'agenda' && item.myItemId && (
               <button
                 onClick={() => void handleRemoveMyItem(item.myItemId!, item.sourceId)}
-                className="inline-flex items-center gap-1  text-red-400 hover:text-red-600 transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors whitespace-nowrap"
               >
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 Remove
@@ -524,7 +524,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               onBlur={() => handleNoteBlur(item.key, meetingId)}
               placeholder="Add notes…"
               rows={3}
-              className="input-field resize-none w-full "
+              className="input-field resize-none w-full text-xs"
             />
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-400">
@@ -533,7 +533,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               {noteVal && !saving && (
                 <button
                   onClick={() => handleNoteBlur(item.key, meetingId)}
-                  className=" font-medium text-brand-secondary hover:underline transition-colors"
+                  className="text-xs font-medium text-brand-secondary hover:underline transition-colors"
                 >
                   Save
                 </button>
