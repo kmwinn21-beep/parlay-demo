@@ -464,7 +464,7 @@ Return a recommendation for every company in this batch. Rank High first, then M
       const batchPrompt = `${promptPrefix}\n\n---\n\n## Attending Companies & Contacts\n\n${companiesBlock}\n\n---\n\n${promptSuffix}`;
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: batchPrompt }],
       });
