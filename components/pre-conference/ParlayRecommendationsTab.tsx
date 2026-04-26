@@ -41,6 +41,8 @@ function ParlayRecCard({
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
 }) {
+  const [angleExpanded, setAngleExpanded] = useState(false);
+
   return (
     <div className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all flex flex-col gap-3 overflow-hidden min-w-0 bg-white">
       {/* Header */}
@@ -70,11 +72,19 @@ function ParlayRecCard({
         </ul>
       )}
 
-      {/* Opening angle */}
+      {/* Opening angle — expandable */}
       {rec.suggested_opening_angle && (
-        <p className="text-xs text-gray-500 italic border-l-2 border-brand-secondary/30 pl-2 line-clamp-3">
-          {rec.suggested_opening_angle}
-        </p>
+        <div className="border-l-2 border-brand-secondary/30 pl-2">
+          <p className={`text-xs text-gray-500 italic${angleExpanded ? '' : ' line-clamp-3'}`}>
+            {rec.suggested_opening_angle}
+          </p>
+          <button
+            onClick={() => setAngleExpanded(e => !e)}
+            className="text-xs text-brand-secondary/70 hover:text-brand-secondary mt-0.5 transition-colors"
+          >
+            {angleExpanded ? 'Show less' : 'Show more'}
+          </button>
+        </div>
       )}
 
       {/* Rep names */}
