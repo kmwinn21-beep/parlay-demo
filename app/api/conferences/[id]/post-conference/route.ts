@@ -166,16 +166,22 @@ export async function GET(
   const daysSinceEnd = Math.floor((today.getTime() - new Date(confEndDate + 'T00:00:00').getTime()) / 86400000);
 
   // ── Resolve user IDs → display names ─────────────────────────────────────
-  const usersRes = await db.execute({
-    sql: `SELECT u.id, u.config_id, COALESCE(co.value, u.display_name, CAST(u.id AS TEXT)) as display_name
-          FROM users u LEFT JOIN config_options co ON u.config_id = co.id`,
-    args: [],
-  });
+  const [usersRes, userConfigOptsRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT u.id, u.config_id, COALESCE(co.value, u.display_name, CAST(u.id AS TEXT)) as display_name
+            FROM users u LEFT JOIN config_options co ON u.config_id = co.id`,
+      args: [],
+    }),
+    db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] }),
+  ]);
   userIdToName = new Map<string, string>();
+  // Seed from config_options first so users table can override display names
+  for (const co of userConfigOptsRes.rows) {
+    userIdToName.set(String(co.id), String(co.value));
+  }
   for (const u of usersRes.rows) {
     const name = u.display_name ? String(u.display_name) : String(u.id);
     userIdToName.set(String(u.id), name);
-    // Also map by config_options ID so scheduled_by/assigned_rep that store co.id resolve correctly
     if (u.config_id != null) userIdToName.set(String(u.config_id), name);
   }
 
@@ -204,7 +210,7 @@ export async function GET(
                    COALESCE(co.value, f.next_steps) as next_steps
             FROM follow_ups f
             LEFT JOIN config_options co ON co.id = CAST(f.next_steps AS INTEGER) AND co.category = 'next_steps'
-            WHERE f.conference_id = ?`,
+            WHERE f.conference_id = ? AND f.next_steps IS NOT NULL AND f.next_steps != ''`,
       args: [confId],
     }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
@@ -949,8 +955,15 @@ export async function GET(
   // ── Action items ──────────────────────────────────────────────────────────
   const actionItems: ActionItem[] = [];
 
-  // Overdue follow-ups (high)
+  // Overdue follow-ups (high) — skip attendees with any completed follow-up; one item per attendee
+  const attendeesWithCompletedFU = new Set(
+    followUpRows.filter(f => f.status === 'completed').map(f => f.attendee_id)
+  );
+  const seenOverdueAttendees = new Set<number>();
   for (const f of followUpRows.filter(f => f.status === 'not_started' && f.daysSinceConference > 5)) {
+    if (attendeesWithCompletedFU.has(f.attendee_id)) continue;
+    if (seenOverdueAttendees.has(f.attendee_id)) continue;
+    seenOverdueAttendees.add(f.attendee_id);
     actionItems.push({
       type: 'overdue_followup', priority: 'high',
       title: `Overdue follow-up: ${f.attendeeName}`,
@@ -959,12 +972,12 @@ export async function GET(
     });
   }
 
-  // Missing outcome on held meetings (medium)
-  for (const m of meetingRows.filter(m => m.status === 'held' && (!m.outcome || m.outcome.trim() === ''))) {
+  // Missing outcome — meetings scheduled but no outcome recorded yet
+  for (const m of meetingRows.filter(m => !m.outcome)) {
     actionItems.push({
       type: 'missing_outcome', priority: 'medium',
       title: `Log outcome: meeting with ${m.attendeeName}`,
-      description: `Meeting held ${m.meeting_date ?? ''} — no outcome recorded yet`,
+      description: `Meeting on ${m.meeting_date ?? 'scheduled date'} — no outcome recorded yet`,
       repName: m.scheduled_by, attendeeName: m.attendeeName, companyName: m.company_name,
     });
   }
