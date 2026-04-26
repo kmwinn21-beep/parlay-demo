@@ -239,7 +239,7 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
       {sortedReps.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Activity by Rep</h4>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {sortedReps.map(rep => <RepCard key={rep.repName} rep={rep} />)}
           </div>
         </div>
