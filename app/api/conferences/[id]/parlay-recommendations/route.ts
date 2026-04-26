@@ -45,7 +45,8 @@ function settingsKey(confId: number) {
   return `parlay_recs_${confId}`;
 }
 
-const BATCH_SIZE = 15;
+const PHASE2_BATCH_SIZE = 15; // max companies per deep-analysis call
+const PHASE2_CAP = 30;        // max High+Medium companies entering Phase 2
 
 type CompanyEntry = {
   company_id: number;
@@ -87,6 +88,74 @@ ${ir ? `- Relationship status: ${ir.rel_status}\n- Relationship description: ${i
 **Attending contacts:**
 ${attendeeLines || 'No contacts listed'}`;
   }).join('\n\n');
+}
+
+function buildCompactLine(
+  company: CompanyEntry,
+  metrics: { meeting_count: number; touchpoint_count: number; open_followups: number } | undefined,
+  ir: { rep_names: string[]; rel_status: string; description: string } | undefined,
+): string {
+  const score = Math.min(((metrics?.meeting_count ?? 0) * 25 + (metrics?.touchpoint_count ?? 0) * 10), 100);
+  const attendeeCount = company.attendees.length;
+  const status = ir?.rel_status || 'New';
+  return `${company.company_name} | Type: ${company.company_type ?? 'Unknown'} | WSE: ${company.wse ?? '?'} | Svc: ${company.services ?? 'Unknown'} | Score: ${score} | Mtgs: ${metrics?.meeting_count ?? 0} | TPs: ${metrics?.touchpoint_count ?? 0} | Status: ${status} | Attendees: ${attendeeCount}`;
+}
+
+async function runTriage(
+  anthropic: Anthropic,
+  promptPrefix: string,
+  companies: CompanyEntry[],
+  metricsMap: Map<number, { meeting_count: number; touchpoint_count: number; open_followups: number }>,
+  irByCompany: Map<number, { rep_names: string[]; rel_status: string; description: string }>,
+): Promise<Map<string, 'High' | 'Medium' | 'Watch' | 'Skip'>> {
+  const compactBlock = companies
+    .map(c => buildCompactLine(c, metricsMap.get(c.company_id), irByCompany.get(c.company_id)))
+    .join('\n');
+
+  const triagePrompt = `${promptPrefix}
+
+---
+
+## Companies Attending (${companies.length} total)
+
+${compactBlock}
+
+---
+
+## Triage Task
+
+For each company assign a priority tier based on ICP fit, relationship health, and your knowledge of the senior housing and care industry.
+
+Return ONLY a valid JSON array (no markdown, no fences):
+[{ "company_name": "exact match to the name above", "priority": "High | Medium | Watch | Skip" }]
+
+- High: Strong ICP fit AND existing relationship (score > 0) or strong buying signals
+- Medium: Good fit with moderate signals, or cold but clearly viable prospect
+- Watch: Partial fit or unclear signals — worth knowing but not priority outreach
+- Skip: Poor ICP fit, wrong company type, or matches exclusion criteria
+
+One entry per company. No reasoning.`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: triagePrompt }],
+    });
+    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '[]';
+    const arrMatch = raw.match(/\[[\s\S]*\]/);
+    const parsed = JSON.parse(arrMatch ? arrMatch[0] : '[]') as { company_name: string; priority: string }[];
+    const result = new Map<string, 'High' | 'Medium' | 'Watch' | 'Skip'>();
+    for (const entry of parsed) {
+      if (['High', 'Medium', 'Watch', 'Skip'].includes(entry.priority)) {
+        result.set(entry.company_name.toLowerCase().trim(), entry.priority as 'High' | 'Medium' | 'Watch' | 'Skip');
+      }
+    }
+    return result;
+  } catch {
+    return new Map(); // caller falls back to top-N by health score
+  }
 }
 
 export async function GET(
@@ -443,12 +512,6 @@ Return ONLY a valid JSON object (no markdown fences, no preamble, no explanation
 
 Return a recommendation for every company in this batch. Rank High first, then Medium, then Watch.`;
 
-  // Split into batches and call Claude in parallel
-  const batches: CompanyEntry[][] = [];
-  for (let i = 0; i < companiesSorted.length; i += BATCH_SIZE) {
-    batches.push(companiesSorted.slice(i, i + BATCH_SIZE));
-  }
-
   type RawRec = {
     company_name: string; relationship_status: string; why_target: string[];
     who_to_talk_to: { name: string; title: string; angle: string }[];
@@ -459,7 +522,38 @@ Return a recommendation for every company in this batch. Rank High first, then M
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000 });
 
-    const batchResults = await Promise.all(batches.map(async (batch): Promise<RawBatch> => {
+    // Phase 1 — triage all ICP companies in one compact call (~10-20s)
+    const triageMap = await runTriage(anthropic, promptPrefix, companiesSorted, metricsMap, irByCompany);
+
+    // Filter to High + Medium; fall back to top PHASE2_CAP by health score if triage failed
+    let highMedium: CompanyEntry[];
+    if (triageMap.size === 0) {
+      highMedium = companiesSorted.slice(0, PHASE2_CAP);
+    } else {
+      highMedium = companiesSorted
+        .filter(c => ['High', 'Medium'].includes(triageMap.get(c.company_name.toLowerCase().trim()) ?? ''))
+        .slice(0, PHASE2_CAP);
+      if (highMedium.length === 0) highMedium = companiesSorted.slice(0, PHASE2_CAP);
+    }
+
+    // Empty High+Medium — save empty result and return early
+    if (highMedium.length === 0) {
+      const emptyData: ParlayRecsData = {
+        recommendations: [], watch_list: [], exclusions: [],
+        generated_at: new Date().toISOString(),
+        reload_count: existingReloadCount + 1,
+      };
+      await db.execute({ sql: 'INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)', args: [settingsKey(confId), JSON.stringify(emptyData)] });
+      return NextResponse.json({ data: emptyData });
+    }
+
+    // Phase 2 — deep analysis on filtered set, ≤2 parallel calls (~20-40s)
+    const phase2Batches: CompanyEntry[][] = [];
+    for (let i = 0; i < highMedium.length; i += PHASE2_BATCH_SIZE) {
+      phase2Batches.push(highMedium.slice(i, i + PHASE2_BATCH_SIZE));
+    }
+
+    const batchResults = await Promise.all(phase2Batches.map(async (batch): Promise<RawBatch> => {
       const companiesBlock = buildCompaniesBlock(batch, metricsMap, irByCompany, latestNoteMap, lastConfMap);
       const batchPrompt = `${promptPrefix}\n\n---\n\n## Attending Companies & Contacts\n\n${companiesBlock}\n\n---\n\n${promptSuffix}`;
       const msg = await anthropic.messages.create({
