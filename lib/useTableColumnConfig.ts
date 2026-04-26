@@ -102,6 +102,16 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'outcome',      label: 'Outcome' },
     { key: 'info',         label: 'Info' },
   ],
+  conference_meetings: [
+    { key: 'name',         label: 'Name' },
+    { key: 'title',        label: 'Title' },
+    { key: 'rep',          label: 'Rep' },
+    { key: 'company',      label: 'Company' },
+    { key: 'datetime',     label: 'Date/Time' },
+    { key: 'meeting_type', label: 'Meeting Type' },
+    { key: 'outcome',      label: 'Outcome' },
+    { key: 'info',         label: 'Info' },
+  ],
   company_follow_ups: [
     { key: 'name',       label: 'Name' },
     { key: 'title',      label: 'Title' },

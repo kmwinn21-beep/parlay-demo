@@ -1747,6 +1747,7 @@ export default function ConferenceDetailPage() {
             )}
 
             <MeetingsTable
+              tableName="conference_meetings"
               meetings={filteredMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
