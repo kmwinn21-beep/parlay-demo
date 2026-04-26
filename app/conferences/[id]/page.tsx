@@ -1747,6 +1747,7 @@ export default function ConferenceDetailPage() {
             )}
 
             <MeetingsTable
+              tableName="conference_meetings"
               meetings={filteredMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
@@ -1915,7 +1916,11 @@ export default function ConferenceDetailPage() {
       )}
 
       {activeTab === 'agenda' && (
-        <AgendaTab conferenceId={Number(id)} />
+        <AgendaTab
+          conferenceId={Number(id)}
+          conferenceName={conference?.name || ''}
+          userEmail={currentUser?.email || ''}
+        />
       )}
 
       {showBatchScan && (

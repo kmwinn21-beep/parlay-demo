@@ -489,6 +489,31 @@ export async function initDb(): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_agenda_conference ON conference_agenda_items(conference_id, sort_order)`,
     `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('conference_details', 'agenda', 'Agenda', 9)`,
+    `CREATE TABLE IF NOT EXISTS conference_my_agenda_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL,
+      user_email TEXT NOT NULL,
+      source_type TEXT NOT NULL DEFAULT 'agenda',
+      agenda_item_id INTEGER,
+      meeting_id INTEGER,
+      day_label TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      session_type TEXT,
+      title TEXT NOT NULL,
+      description TEXT,
+      location TEXT,
+      note_content TEXT,
+      entity_note_ids TEXT,
+      attendee_id INTEGER,
+      company_id INTEGER,
+      attendee_name TEXT,
+      company_name TEXT,
+      conference_name TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_my_agenda_conference_user ON conference_my_agenda_items(conference_id, user_email)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

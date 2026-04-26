@@ -57,6 +57,7 @@ const TABLE_LABELS: Record<string, string> = {
   attendee_follow_ups:   'Attendee Detail — Follow Ups',
   company_meetings:      'Company Detail — Meetings',
   company_follow_ups:    'Company Detail — Follow Ups',
+  conference_meetings:   'Conference Detail — Meetings',
 };
 
 type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms';
