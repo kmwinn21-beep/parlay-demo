@@ -323,7 +323,13 @@ async function RecentAgendaWrapper() {
     }
   }
 
-  const upcomingConferences = allConferences.filter(c => c.status !== 'past');
+  const upcomingConferences = allConferences
+    .filter(c => c.status !== 'past')
+    .sort((a, b) => {
+      if (a.status === 'in_progress' && b.status !== 'in_progress') return -1;
+      if (b.status === 'in_progress' && a.status !== 'in_progress') return 1;
+      return a.start_date.localeCompare(b.start_date);
+    });
 
   return (
     <RecentSection
