@@ -74,8 +74,33 @@ export function RecentSection({ upcomingConferences, awaitingUploadConferences, 
           </button>
         </div>
 
-        {tab === 'agenda' && selectedConference && (
-          <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View →</Link>
+        {tab === 'agenda' && allConferences.length > 0 && (
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedId ?? ''}
+              onChange={e => setSelectedId(Number(e.target.value))}
+              className="input-field text-sm"
+            >
+              {inProgressConfs.length > 0 && (
+                <optgroup label="In Progress">
+                  {inProgressConfs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+              )}
+              {upcomingConfs.length > 0 && (
+                <optgroup label="Upcoming">
+                  {upcomingConfs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+              )}
+              {pastConfs.length > 0 && (
+                <optgroup label="Past">
+                  {pastConfs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+              )}
+            </select>
+            {selectedConference && (
+              <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View →</Link>
+            )}
+          </div>
         )}
         {tab === 'upcoming' && (
           <AwaitingUploadModal conferences={awaitingUploadConferences} />
@@ -93,29 +118,6 @@ export function RecentSection({ upcomingConferences, awaitingUploadConferences, 
             </div>
           ) : (
             <>
-              <div className="mb-4">
-                <select
-                  value={selectedId ?? ''}
-                  onChange={e => setSelectedId(Number(e.target.value))}
-                  className="input-field text-sm w-full sm:w-auto"
-                >
-                  {inProgressConfs.length > 0 && (
-                    <optgroup label="In Progress">
-                      {inProgressConfs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </optgroup>
-                  )}
-                  {upcomingConfs.length > 0 && (
-                    <optgroup label="Upcoming">
-                      {upcomingConfs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </optgroup>
-                  )}
-                  {pastConfs.length > 0 && (
-                    <optgroup label="Past">
-                      {pastConfs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
               {selectedId && selectedConference ? (
                 <DashboardAgendaSection conferenceId={selectedId} conferenceName={selectedConference.name} />
               ) : (
