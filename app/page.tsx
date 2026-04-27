@@ -1,13 +1,13 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
-import { PriorityLeads, PriorityLead } from '@/components/PriorityLeads';
 import AttendeesTooltip from '@/components/AttendeesTooltip';
 import AwaitingUploadModal from '@/components/AwaitingUploadModal';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardBanner } from '@/components/DashboardBanner';
 import { RecentSection, type DashboardConference } from '@/components/RecentSection';
+import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -153,61 +153,6 @@ async function getAllConferences(): Promise<DashboardConference[]> {
   });
 }
 
-async function getPriorityLeads(): Promise<PriorityLead[]> {
-  await dbReady;
-  const sessionUser = await getServerSessionUser();
-  if (!sessionUser) return [];
-
-  const configResult = await db.execute({
-    sql: 'SELECT config_id FROM users WHERE id = ?',
-    args: [sessionUser.id],
-  });
-  const markerConfigId = configResult.rows[0]?.config_id != null
-    ? Number(configResult.rows[0].config_id)
-    : null;
-  if (markerConfigId == null) return [];
-
-  const result = await db.execute({
-    sql: `SELECT c.id, c.name, c.assigned_user, c.wse,
-            COALESCE(conf_agg.conference_count, 0) as conference_count,
-            conf_agg.conference_names
-          FROM companies c
-          INNER JOIN company_user_statuses cus ON cus.company_id = c.id
-          LEFT JOIN (
-            SELECT a2.company_id,
-                   COUNT(DISTINCT ca.conference_id) as conference_count,
-                   GROUP_CONCAT(DISTINCT conf.name) as conference_names
-            FROM attendees a2
-            JOIN conference_attendees ca ON a2.id = ca.attendee_id
-            JOIN conferences conf ON ca.conference_id = conf.id
-            GROUP BY a2.company_id
-          ) conf_agg ON c.id = conf_agg.company_id
-          WHERE cus.marked_by_config_id = ?
-          GROUP BY c.id
-          ORDER BY c.name ASC
-          LIMIT 10`,
-    args: [markerConfigId],
-  });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    assigned_user: r.assigned_user ? String(r.assigned_user) : null,
-    wse: r.wse != null ? Number(r.wse) : null,
-    conference_count: Number(r.conference_count ?? 0),
-    conference_names: r.conference_names ? String(r.conference_names) : undefined,
-  }));
-}
-
-
-function formatDate(dateStr: string) {
-  if (!dateStr) return '';
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 function formatMonthDay(dateStr: string) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -242,16 +187,16 @@ function StatsSkeleton() {
   );
 }
 
-function UpcomingSkeleton() {
+function RecentSkeleton() {
   return (
-    <div className="card animate-pulse">
-      <div className="h-6 w-48 bg-gray-200 rounded mb-5" />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[1, 2, 3].map((i) => (
+    <div className="card h-full animate-pulse">
+      <div className="h-8 w-48 bg-gray-200 rounded mb-5" />
+      <div className="grid grid-cols-2 gap-3">
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className="p-4 rounded-xl border border-gray-100">
-            <div className="h-5 w-40 bg-gray-200 rounded mb-2" />
-            <div className="h-3 w-32 bg-gray-200 rounded mb-1" />
-            <div className="h-3 w-24 bg-gray-200 rounded" />
+            <div className="h-5 w-32 bg-gray-200 rounded mb-2" />
+            <div className="h-3 w-24 bg-gray-200 rounded mb-1" />
+            <div className="h-3 w-20 bg-gray-200 rounded" />
           </div>
         ))}
       </div>
@@ -259,65 +204,30 @@ function UpcomingSkeleton() {
   );
 }
 
-function QuickNotesAndUpcomingSkeleton() {
+function TargetsAndUpcomingSkeleton() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
-      <div className="card lg:col-span-1">
-        <div className="h-6 w-28 bg-gray-200 rounded mb-5" />
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
+      <div className="lg:col-span-2 card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="h-6 w-24 bg-gray-200 rounded" />
+          <div className="h-9 w-48 bg-gray-200 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-16 bg-gray-200 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map(i => (
             <div key={i} className="h-20 bg-gray-100 rounded-xl" />
           ))}
         </div>
       </div>
-      <div className="card lg:col-span-2">
-        <div className="h-6 w-48 bg-gray-200 rounded mb-5" />
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="p-4 rounded-xl border border-gray-100">
-              <div className="h-5 w-40 bg-gray-200 rounded mb-2" />
-              <div className="h-3 w-32 bg-gray-200 rounded mb-1" />
-              <div className="h-3 w-24 bg-gray-200 rounded" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-async function QuickNotesAndUpcomingSection() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-      <div className="lg:col-span-1 h-full">
-        <QuickNotesSection className="h-full" />
-      </div>
-      <div className="lg:col-span-2 h-full">
-        <UpcomingSection />
-      </div>
-    </div>
-  );
-}
-
-function RecentAndPrioritySkeleton() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
-      <div className="lg:col-span-2 card">
-        <div className="h-6 w-24 bg-gray-200 rounded mb-5" />
-        <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="p-4 rounded-lg border border-gray-100">
-              <div className="h-5 w-48 bg-gray-200 rounded mb-2" />
-              <div className="h-3 w-36 bg-gray-200 rounded" />
-            </div>
-          ))}
-        </div>
-      </div>
       <div className="card">
-        <div className="h-6 w-32 bg-gray-200 rounded mb-5" />
+        <div className="h-6 w-36 bg-gray-200 rounded mb-5" />
         <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-12 bg-gray-200 rounded" />
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-20 bg-gray-100 rounded-xl" />
           ))}
         </div>
       </div>
@@ -387,92 +297,12 @@ async function StatsSection() {
   );
 }
 
-async function UpcomingSection() {
-  const [upcomingConferences, awaitingUploadConferences] = await Promise.all([
-    getUpcomingConferences(),
-    getAwaitingUploadConferences(),
-  ]);
-  return (
-    <div className="card h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
-          <svg className="w-5 h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Current &amp; Upcoming
-          <span className="text-sm font-normal text-gray-500">({upcomingConferences.length})</span>
-        </h2>
-        <AwaitingUploadModal conferences={awaitingUploadConferences} />
-      </div>
-      {upcomingConferences.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No current or upcoming conferences. <Link href="/conferences/new" className="text-brand-secondary hover:underline">Add one →</Link></p>
-      ) : (
-        <div
-          className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto [&::-webkit-scrollbar]:hidden"
-          style={{ scrollbarWidth: 'none', alignContent: 'start' }}
-        >
-          {upcomingConferences.map((conf) => {
-            const today = new Date().toISOString().slice(0, 10);
-            const isActive = conf.start_date <= today && conf.end_date >= today;
-            return (
-              <Link
-                key={conf.id}
-                href={`/conferences/${conf.id}`}
-                className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group"
-                style={{ borderColor: isActive ? '#1B76BC' : undefined }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      {isActive && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-2">
-                          <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
-                          In Progress
-                        </span>
-                      )}
-                      <p className="font-semibold text-gray-800 group-hover:text-brand-secondary transition-colors leading-tight">{conf.name}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {formatMonthDay(conf.start_date)} - {formatMonthDay(conf.end_date || conf.start_date)}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
-                    </div>
-                    {conf.internal_attendees.length > 0 && (
-                      <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
-                    )}
-                  </div>
-                  {conf.attendee_count === 0 && (
-                    <div className="mt-3">
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
-                        </svg>
-                        Awaiting Upload
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end mt-2 flex-shrink-0">
-                  <svg className="w-4 h-4 text-gray-300 group-hover:text-brand-secondary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-async function RecentAndPrioritySection() {
-  const [recentConferences, priorityLeads, allConferences] = await Promise.all([
-    getRecentConferences(),
-    getPriorityLeads(),
+async function RecentAgendaWrapper() {
+  const [allConferences, recentConferences] = await Promise.all([
     getAllConferences(),
+    getRecentConferences(),
   ]);
 
-  // Detect if the signed-in user is an internal attendee at an in-progress conference
   let defaultConferenceId: number | null = null;
   const inProgress = allConferences.filter(c => c.status === 'in_progress');
   if (inProgress.length > 0) {
@@ -497,31 +327,85 @@ async function RecentAndPrioritySection() {
   const recentWithStatus: DashboardConference[] = recentConferences.map(c => ({ ...c, status: 'past' as const }));
 
   return (
+    <RecentSection
+      recentConferences={recentWithStatus}
+      allConferences={allConferences}
+      defaultToMyAgenda={defaultConferenceId != null}
+      defaultConferenceId={defaultConferenceId}
+    />
+  );
+}
+
+async function TargetsAndUpcomingSection() {
+  const [upcomingConferences, awaitingUploadConferences, allConferences] = await Promise.all([
+    getUpcomingConferences(),
+    getAwaitingUploadConferences(),
+    getAllConferences(),
+  ]);
+
+  return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Priority Leads */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
-            Priority Leads
-            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
-              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
-              </svg>
-            </span>
-          </h2>
-          <Link href="/companies?status=Priority" className="text-sm text-brand-secondary hover:underline">View all &rarr;</Link>
-        </div>
-        <PriorityLeads leads={priorityLeads} />
+      {/* Targets — 2 cols */}
+      <div className="lg:col-span-2 card">
+        <DashboardTargetsSection allConferences={allConferences} />
       </div>
 
-      {/* Recent / My Agenda */}
-      <RecentSection
-        recentConferences={recentWithStatus}
-        allConferences={allConferences}
-        defaultToMyAgenda={defaultConferenceId != null}
-        defaultConferenceId={defaultConferenceId}
-      />
+      {/* Current & Upcoming — 1 col, stacked */}
+      <div className="card flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
+            <svg className="w-5 h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Current &amp; Upcoming
+            <span className="text-sm font-normal text-gray-500">({upcomingConferences.length})</span>
+          </h2>
+          <AwaitingUploadModal conferences={awaitingUploadConferences} />
+        </div>
+        {upcomingConferences.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            No current or upcoming conferences.{' '}
+            <Link href="/conferences/new" className="text-brand-secondary hover:underline">Add one →</Link>
+          </p>
+        ) : (
+          <div
+            className="flex-1 min-h-0 grid grid-cols-1 gap-3 content-start overflow-y-auto [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {upcomingConferences.map((conf) => {
+              const today = new Date().toISOString().slice(0, 10);
+              const isActive = conf.start_date <= today && conf.end_date >= today;
+              return (
+                <Link
+                  key={conf.id}
+                  href={`/conferences/${conf.id}`}
+                  className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group"
+                  style={{ borderColor: isActive ? '#1B76BC' : undefined }}
+                >
+                  {isActive && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-2">
+                      <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
+                      In Progress
+                    </span>
+                  )}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-800 group-hover:text-brand-secondary transition-colors leading-tight">{conf.name}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatMonthDay(conf.start_date)} – {formatMonthDay(conf.end_date || conf.start_date)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
+                    </div>
+                    {conf.internal_attendees.length > 0 && (
+                      <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -534,21 +418,21 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* Quick Notes + Current & Upcoming — side by side, same height, max 489px */}
+      {/* Quick Notes + Recent/My Agenda — side by side, max 489px */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         <div className="lg:col-span-1 max-h-[489px] flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
         <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
-          <Suspense fallback={<UpcomingSkeleton />}>
-            <UpcomingSection />
+          <Suspense fallback={<RecentSkeleton />}>
+            <RecentAgendaWrapper />
           </Suspense>
         </div>
       </div>
 
-      {/* Priority Leads + Recent Conferences */}
-      <Suspense fallback={<RecentAndPrioritySkeleton />}>
-        <RecentAndPrioritySection />
+      {/* Targets + Current & Upcoming */}
+      <Suspense fallback={<TargetsAndUpcomingSkeleton />}>
+        <TargetsAndUpcomingSection />
       </Suspense>
     </div>
   );
