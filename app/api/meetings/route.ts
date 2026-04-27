@@ -191,16 +191,21 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id and outcome are required' }, { status: 400 });
     }
 
+    // Fetch current state before update so we can detect Scheduled → other transition
+    const preMeeting = await db.execute({
+      sql: 'SELECT outcome, attendee_id, conference_id FROM meetings WHERE id = ?',
+      args: [id],
+    });
+    const oldOutcome = preMeeting.rows.length > 0 && preMeeting.rows[0].outcome
+      ? String(preMeeting.rows[0].outcome) : null;
+
     await db.execute({
       sql: 'UPDATE meetings SET outcome = ? WHERE id = ?',
       args: [outcome, id],
     });
 
     // Update the conference_attendee_details action to match outcome
-    const meeting = await db.execute({
-      sql: 'SELECT attendee_id, conference_id FROM meetings WHERE id = ?',
-      args: [id],
-    });
+    const meeting = preMeeting; // reuse — attendee_id/conference_id don't change
 
     if (meeting.rows.length > 0) {
       const { attendee_id, conference_id } = meeting.rows[0];
@@ -241,6 +246,43 @@ export async function PATCH(request: NextRequest) {
           sql: 'INSERT OR REPLACE INTO conference_attendee_details (attendee_id, conference_id, action) VALUES (?, ?, ?)',
           args: [attendee_id as number, conference_id as number, outcome],
         });
+      }
+    }
+
+    // Auto-create a Post-Mtg follow-up when outcome changes away from Scheduled
+    if (
+      oldOutcome && outcome && oldOutcome !== outcome &&
+      meeting.rows.length > 0 &&
+      meeting.rows[0].attendee_id != null &&
+      meeting.rows[0].conference_id != null
+    ) {
+      // Resolve old outcome's action_key
+      const oldKeyRes = await db.execute({
+        sql: "SELECT action_key FROM config_options WHERE category = 'action' AND value = ?",
+        args: [oldOutcome],
+      });
+      const oldActionKey = oldKeyRes.rows.length > 0 && oldKeyRes.rows[0].action_key
+        ? String(oldKeyRes.rows[0].action_key) : null;
+
+      if (oldActionKey === 'meeting_scheduled') {
+        // Look up the Post-Mtg next_steps option
+        const postMtgRes = await db.execute({
+          sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
+          args: [],
+        });
+        if (postMtgRes.rows.length > 0) {
+          const postMtgValue = String(postMtgRes.rows[0].value);
+          await db.execute({
+            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
+                  VALUES (?, ?, ?, ?, 0)`,
+            args: [
+              meeting.rows[0].attendee_id as number,
+              meeting.rows[0].conference_id as number,
+              postMtgValue,
+              `Auto-created from ${outcome} Meeting`,
+            ],
+          });
+        }
       }
     }
 
