@@ -407,8 +407,8 @@ export default function DashboardPage() {
       </Suspense>
 
       {/* Quick Notes + Recent/My Agenda — side by side, max 489px */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-        <div className="lg:col-span-1 max-h-[489px] flex flex-col min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
+        <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
         <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
