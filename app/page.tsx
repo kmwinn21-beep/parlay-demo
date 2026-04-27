@@ -2,7 +2,6 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
 import AttendeesTooltip from '@/components/AttendeesTooltip';
-import AwaitingUploadModal from '@/components/AwaitingUploadModal';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardBanner } from '@/components/DashboardBanner';
@@ -298,9 +297,9 @@ async function StatsSection() {
 }
 
 async function RecentAgendaWrapper() {
-  const [allConferences, recentConferences] = await Promise.all([
+  const [allConferences, awaitingUploadConferences] = await Promise.all([
     getAllConferences(),
-    getRecentConferences(),
+    getAwaitingUploadConferences(),
   ]);
 
   let defaultConferenceId: number | null = null;
@@ -324,22 +323,21 @@ async function RecentAgendaWrapper() {
     }
   }
 
-  const recentWithStatus: DashboardConference[] = recentConferences.map(c => ({ ...c, status: 'past' as const }));
+  const upcomingConferences = allConferences.filter(c => c.status !== 'past');
 
   return (
     <RecentSection
-      recentConferences={recentWithStatus}
+      upcomingConferences={upcomingConferences}
+      awaitingUploadConferences={awaitingUploadConferences}
       allConferences={allConferences}
-      defaultToMyAgenda={defaultConferenceId != null}
       defaultConferenceId={defaultConferenceId}
     />
   );
 }
 
-async function TargetsAndUpcomingSection() {
-  const [upcomingConferences, awaitingUploadConferences, allConferences] = await Promise.all([
-    getUpcomingConferences(),
-    getAwaitingUploadConferences(),
+async function TargetsAndRecentSection() {
+  const [recentConferences, allConferences] = await Promise.all([
+    getRecentConferences(),
     getAllConferences(),
   ]);
 
@@ -350,59 +348,43 @@ async function TargetsAndUpcomingSection() {
         <DashboardTargetsSection allConferences={allConferences} />
       </div>
 
-      {/* Current & Upcoming — 1 col, stacked */}
+      {/* Recent — 1 col, stacked past conferences */}
       <div className="card flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+        <div className="flex items-center mb-4 flex-shrink-0">
           <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
             <svg className="w-5 h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Current &amp; Upcoming
-            <span className="text-sm font-normal text-gray-500">({upcomingConferences.length})</span>
+            Recent
           </h2>
-          <AwaitingUploadModal conferences={awaitingUploadConferences} />
         </div>
-        {upcomingConferences.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">
-            No current or upcoming conferences.{' '}
-            <Link href="/conferences/new" className="text-brand-secondary hover:underline">Add one →</Link>
-          </p>
+        {recentConferences.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">No recent conferences.</p>
         ) : (
           <div
             className="flex-1 min-h-0 grid grid-cols-1 gap-3 content-start overflow-y-auto [&::-webkit-scrollbar]:hidden"
             style={{ scrollbarWidth: 'none' }}
           >
-            {upcomingConferences.map((conf) => {
-              const today = new Date().toISOString().slice(0, 10);
-              const isActive = conf.start_date <= today && conf.end_date >= today;
-              return (
-                <Link
-                  key={conf.id}
-                  href={`/conferences/${conf.id}`}
-                  className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group"
-                  style={{ borderColor: isActive ? '#1B76BC' : undefined }}
-                >
-                  {isActive && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-2">
-                      <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
-                      In Progress
-                    </span>
-                  )}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-800 group-hover:text-brand-secondary transition-colors leading-tight">{conf.name}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {formatMonthDay(conf.start_date)} – {formatMonthDay(conf.end_date || conf.start_date)}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
-                    </div>
-                    {conf.internal_attendees.length > 0 && (
-                      <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
-                    )}
+            {recentConferences.map((conf) => (
+              <Link
+                key={conf.id}
+                href={`/conferences/${conf.id}`}
+                className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 group-hover:text-brand-secondary transition-colors leading-tight">{conf.name}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formatMonthDay(conf.start_date)} – {formatMonthDay(conf.end_date || conf.start_date)}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{conf.location}</p>
                   </div>
-                </Link>
-              );
-            })}
+                  {conf.internal_attendees.length > 0 && (
+                    <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
+                  )}
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </div>
@@ -430,9 +412,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Targets + Current & Upcoming */}
+      {/* Targets + Recent */}
       <Suspense fallback={<TargetsAndUpcomingSkeleton />}>
-        <TargetsAndUpcomingSection />
+        <TargetsAndRecentSection />
       </Suspense>
     </div>
   );
