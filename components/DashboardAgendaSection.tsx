@@ -295,9 +295,11 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
   return (
     <div className="space-y-3">
       {/* My Agenda / Full Agenda toggle */}
+      <div className="flex justify-end">
       <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
         <button onClick={() => setView('my')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${view === 'my' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>My Agenda</button>
         <button onClick={() => setView('full')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${view === 'full' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Full Agenda</button>
+      </div>
       </div>
 
       {/* My Agenda */}
