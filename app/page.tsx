@@ -7,6 +7,7 @@ import AwaitingUploadModal from '@/components/AwaitingUploadModal';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardBanner } from '@/components/DashboardBanner';
+import { RecentSection, type DashboardConference } from '@/components/RecentSection';
 export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
@@ -120,6 +121,36 @@ async function getAwaitingUploadConferences(): Promise<RecentConference[]> {
     internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
     attendee_count: Number(r.attendee_count ?? 0),
   }));
+}
+
+async function getAllConferences(): Promise<DashboardConference[]> {
+  await dbReady;
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute({
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
+            (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
+          FROM conferences c
+          WHERE (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) > 0
+          ORDER BY c.start_date DESC`,
+    args: [],
+  });
+  return result.rows.map((r) => {
+    const startDate = String(r.start_date ?? '');
+    const endDate = String(r.end_date ?? '');
+    const status: 'in_progress' | 'upcoming' | 'past' =
+      startDate <= today && endDate >= today ? 'in_progress' :
+      endDate >= today ? 'upcoming' : 'past';
+    return {
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: startDate,
+      end_date: endDate,
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+      status,
+    };
+  });
 }
 
 async function getPriorityLeads(): Promise<PriorityLead[]> {
@@ -435,10 +466,36 @@ async function UpcomingSection() {
 }
 
 async function RecentAndPrioritySection() {
-  const [recentConferences, priorityLeads] = await Promise.all([
+  const [recentConferences, priorityLeads, allConferences] = await Promise.all([
     getRecentConferences(),
     getPriorityLeads(),
+    getAllConferences(),
   ]);
+
+  // Detect if the signed-in user is an internal attendee at an in-progress conference
+  let defaultConferenceId: number | null = null;
+  const inProgress = allConferences.filter(c => c.status === 'in_progress');
+  if (inProgress.length > 0) {
+    const sessionUser = await getServerSessionUser();
+    if (sessionUser) {
+      const configResult = await db.execute({
+        sql: 'SELECT co.value FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
+        args: [sessionUser.id],
+      });
+      if (configResult.rows.length > 0) {
+        const displayName = String(configResult.rows[0].value ?? '').trim().toLowerCase();
+        for (const conf of inProgress) {
+          if (conf.internal_attendees.some(a => a.toLowerCase() === displayName)) {
+            defaultConferenceId = conf.id;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  const recentWithStatus: DashboardConference[] = recentConferences.map(c => ({ ...c, status: 'past' as const }));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Priority Leads */}
@@ -458,65 +515,13 @@ async function RecentAndPrioritySection() {
         <PriorityLeads leads={priorityLeads} />
       </div>
 
-      {/* Recent Conferences */}
-      <div className="lg:col-span-2 card">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-brand-primary font-serif">Recent</h2>
-          <Link href="/conferences" className="text-sm text-brand-secondary hover:underline">
-            View all →
-          </Link>
-        </div>
-
-        {recentConferences.length === 0 ? (
-          <div className="text-center py-8">
-            <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p className="text-gray-400 text-sm">No conferences yet.</p>
-            <Link href="/conferences/new" className="btn-primary mt-3 inline-block text-sm">
-              Add Your First Conference
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {recentConferences.map((conf) => (
-              <Link
-                key={conf.id}
-                href={`/conferences/${conf.id}`}
-                className="block p-4 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-medium text-gray-800">{conf.name}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {formatDate(conf.start_date)}
-                      {conf.end_date && conf.end_date !== conf.start_date
-                        ? ` – ${formatDate(conf.end_date)}`
-                        : ''}
-                      {' · '}
-                      {conf.location}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                    {conf.attendee_count === 0 ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
-                        </svg>
-                        Awaiting Upload
-                      </span>
-                    ) : (
-                      conf.internal_attendees.length > 0 && (
-                        <AttendeesTooltip attendees={conf.internal_attendees} align="right" />
-                      )
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Recent / My Agenda */}
+      <RecentSection
+        recentConferences={recentWithStatus}
+        allConferences={allConferences}
+        defaultToMyAgenda={defaultConferenceId != null}
+        defaultConferenceId={defaultConferenceId}
+      />
     </div>
   );
 }
