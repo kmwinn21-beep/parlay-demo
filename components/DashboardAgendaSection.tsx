@@ -153,8 +153,7 @@ function ExpandableItemText({ children }: { children: ReactNode }) {
   );
 }
 
-export function DashboardAgendaSection({ conferenceId, conferenceName }: { conferenceId: number; conferenceName: string }) {
-  const [view, setView] = useState<'my' | 'full'>('my');
+export function DashboardAgendaSection({ conferenceId, conferenceName, view, onViewChange }: { conferenceId: number; conferenceName: string; view: 'my' | 'full'; onViewChange: (v: 'my' | 'full') => void }) {
   const [days, setDays] = useState<AgendaDay[]>([]);
   const [myItems, setMyItems] = useState<MyItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
@@ -294,14 +293,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
 
   return (
     <div className="space-y-3">
-      {/* My Agenda / Full Agenda toggle */}
-      <div className="flex justify-end">
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
-        <button onClick={() => setView('my')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${view === 'my' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>My Agenda</button>
-        <button onClick={() => setView('full')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${view === 'full' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Full Agenda</button>
-      </div>
-      </div>
-
       {/* My Agenda */}
       {view === 'my' && (
         displayItems.length === 0 ? (

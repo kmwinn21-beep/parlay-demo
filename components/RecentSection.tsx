@@ -41,6 +41,7 @@ function formatMonthDay(dateStr: string) {
 
 export function RecentSection({ upcomingConferences, awaitingUploadConferences, allConferences, defaultConferenceId }: Props) {
   const [tab, setTab] = useState<'agenda' | 'upcoming'>('agenda');
+  const [agendaView, setAgendaView] = useState<'my' | 'full'>('my');
 
   const firstAvailable =
     allConferences.find(c => c.status === 'in_progress')?.id ??
@@ -58,28 +59,38 @@ export function RecentSection({ upcomingConferences, awaitingUploadConferences, 
   return (
     <div className="card h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-shrink-0">
-        <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
-          <button
-            onClick={() => setTab('agenda')}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${tab === 'agenda' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            My Agenda
-          </button>
-          <button
-            onClick={() => setTab('upcoming')}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${tab === 'upcoming' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Current &amp; Upcoming
-          </button>
+      <div className="flex flex-col gap-2 mb-5 flex-shrink-0">
+        {/* Row 1: tab toggles + right-side action */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setTab('agenda')}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${tab === 'agenda' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              My Agenda
+            </button>
+            <button
+              onClick={() => setTab('upcoming')}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${tab === 'upcoming' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Current &amp; Upcoming
+            </button>
+          </div>
+          {tab === 'agenda' && selectedConference && (
+            <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View →</Link>
+          )}
+          {tab === 'upcoming' && (
+            <AwaitingUploadModal conferences={awaitingUploadConferences} />
+          )}
         </div>
 
+        {/* Row 2 (My Agenda tab only): conference dropdown + My/Full Agenda toggle */}
         {tab === 'agenda' && allConferences.length > 0 && (
           <div className="flex items-center gap-2">
             <select
               value={selectedId ?? ''}
               onChange={e => setSelectedId(Number(e.target.value))}
-              className="input-field text-sm"
+              className="input-field text-sm flex-1"
             >
               {inProgressConfs.length > 0 && (
                 <optgroup label="In Progress">
@@ -97,13 +108,21 @@ export function RecentSection({ upcomingConferences, awaitingUploadConferences, 
                 </optgroup>
               )}
             </select>
-            {selectedConference && (
-              <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View →</Link>
-            )}
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+              <button
+                onClick={() => setAgendaView('my')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${agendaView === 'my' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                My Agenda
+              </button>
+              <button
+                onClick={() => setAgendaView('full')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${agendaView === 'full' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Full Agenda
+              </button>
+            </div>
           </div>
-        )}
-        {tab === 'upcoming' && (
-          <AwaitingUploadModal conferences={awaitingUploadConferences} />
         )}
       </div>
 
@@ -119,7 +138,7 @@ export function RecentSection({ upcomingConferences, awaitingUploadConferences, 
           ) : (
             <>
               {selectedId && selectedConference ? (
-                <DashboardAgendaSection conferenceId={selectedId} conferenceName={selectedConference.name} />
+                <DashboardAgendaSection conferenceId={selectedId} conferenceName={selectedConference.name} view={agendaView} onViewChange={setAgendaView} />
               ) : (
                 <div className="text-center py-8">
                   <p className="text-sm text-gray-400">Select a conference above.</p>
