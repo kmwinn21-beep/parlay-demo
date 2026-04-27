@@ -256,7 +256,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       const data = await res.json() as { count?: number; error?: string };
       if (!res.ok) { setScanError(data.error ?? 'Failed to scan agenda'); return; }
       await fetchAgenda();
-    } catch { setScanError('Failed to scan image. Please try again.'); }
+    } catch { setScanError('Failed to scan file. Please try again.'); }
     finally { setScanning(false); }
   }, [conferenceId, fetchAgenda]);
 
@@ -628,7 +628,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
     <div className="space-y-4">
       {/* Hidden file inputs */}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleInputChange} />
-      <input ref={fileRef} type="file" accept="image/*,image/heic" className="hidden" onChange={handleInputChange} />
+      <input ref={fileRef} type="file" accept="image/*,image/heic,application/pdf" className="hidden" onChange={handleInputChange} />
 
       {/* Two-column layout — stacks on mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -646,7 +646,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 </button>
                 <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                  Upload
+                  Upload Image / PDF
                 </button>
                 {confirmClear ? (
                   <div className="flex items-center gap-1">
@@ -682,7 +682,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               </div>
               <div>
                 <p className=" font-medium text-gray-700">No agenda yet</p>
-                <p className="mt-1  text-gray-400">Upload a photo or screenshot of the conference agenda</p>
+                <p className="mt-1  text-gray-400">Upload a photo, screenshot, or PDF of the conference agenda</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
                 <button onClick={() => cameraRef.current?.click()} className="btn-secondary  inline-flex items-center gap-1.5">
@@ -691,7 +691,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 </button>
                 <button onClick={() => fileRef.current?.click()} className="btn-primary  inline-flex items-center gap-1.5">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                  Upload Image
+                  Upload Image / PDF
                 </button>
               </div>
             </div>
