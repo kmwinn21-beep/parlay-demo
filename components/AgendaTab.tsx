@@ -414,7 +414,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         </div>
         <div className="shrink-0 pl-2 pt-0.5">
           {inMyAgenda ? (
-            <span className="inline-flex items-center gap-1  text-green-600 font-medium">
+            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
