@@ -514,6 +514,10 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `CREATE INDEX IF NOT EXISTS idx_my_agenda_conference_user ON conference_my_agenda_items(conference_id, user_email)`,
+    `ALTER TABLE attendees ADD COLUMN linkedin_url TEXT`,
+    `ALTER TABLE attendees ADD COLUMN phone TEXT`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('next_steps', 'Post-Mtg', 10, 'post_mtg')`,
+    `UPDATE config_options SET action_key = 'post_mtg' WHERE category = 'next_steps' AND LOWER(value) LIKE '%post%mtg%' AND (action_key IS NULL OR action_key = '')`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
