@@ -50,7 +50,6 @@ export function RecentSection({ recentConferences, allConferences, defaultToMyAg
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-brand-primary font-serif">Recent</h2>
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
             <button
               onClick={() => setTab('recent')}
