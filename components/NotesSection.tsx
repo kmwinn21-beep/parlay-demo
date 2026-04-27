@@ -602,7 +602,7 @@ export function NotesSection({
                   </div>
                 </div>
                 {/* Note body */}
-                <p className={`text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
+                <p className={`text-sm text-gray-800 leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
                   {note.content}
                 </p>
                 {long && (
