@@ -58,12 +58,13 @@ export async function PUT(
     }
 
     const existingResult = await db.execute({
-      sql: 'SELECT id FROM attendees WHERE id = ?',
+      sql: 'SELECT id, status FROM attendees WHERE id = ?',
       args: [params.id],
     });
     if (existingResult.rows.length === 0) {
       return NextResponse.json({ error: 'Attendee not found' }, { status: 404 });
     }
+    const existingStatus = String(existingResult.rows[0].status ?? '');
 
     const updatedResult = await db.execute({
       sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
@@ -77,7 +78,7 @@ export async function PUT(
         action || null,
         next_steps || null,
         next_steps_notes || null,
-        status !== undefined ? status : '',
+        'status' in body ? (status !== undefined ? status : '') : existingStatus,
         seniority || null,
         linkedin_url || null,
         phone || null,
