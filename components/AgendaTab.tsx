@@ -193,7 +193,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       if (!res.ok) throw new Error();
       const data = await res.json() as { days: AgendaDay[] };
       setDays(data.days ?? []);
-      setFullExpandedDays(new Set((data.days ?? []).map(d => d.day_label)));
+      setFullExpandedDays(new Set());
     } catch {
       // silent — scanError handles feedback
     } finally {
@@ -229,10 +229,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         return next;
       });
       // Expand all My Agenda days
-      const allDays = new Set<string>();
-      for (const item of (data.myItems ?? [])) allDays.add(item.day_label);
-      for (const m of (data.meetings ?? [])) allDays.add(formatMeetingDayLabel(m.meeting_date));
-      setMyExpandedDays(allDays);
+      setMyExpandedDays(new Set());
     } catch { /* silent */ } finally {
       setLoadingMy(false);
     }
@@ -309,7 +306,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           company_name: null, conference_name: conferenceName,
         }];
       });
-      setMyExpandedDays(prev => new Set(Array.from(prev).concat(dayLabel)));
     }
   }, [conferenceId, conferenceName]);
 
