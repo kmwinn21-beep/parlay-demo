@@ -86,7 +86,7 @@ export function RecentSection({ recentConferences, allConferences, defaultToMyAg
               <Link href="/conferences/new" className="btn-primary mt-3 inline-block text-sm">Add Your First Conference</Link>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {recentConferences.map(conf => (
                 <Link key={conf.id} href={`/conferences/${conf.id}`}
                   className="block p-4 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
