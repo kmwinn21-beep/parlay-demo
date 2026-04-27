@@ -76,6 +76,18 @@ interface DisplayItem {
   company_name: string | null;
 }
 
+function formatTime12h(time: string | null): string {
+  if (!time) return '';
+  const t = time.trim().toUpperCase();
+  if (t.includes('AM') || t.includes('PM')) return t; // already 12h
+  const parts = time.trim().split(':').map(Number);
+  let h = parts[0] ?? 0; const m = parts[1] ?? 0;
+  const suffix = h < 12 ? 'AM' : 'PM';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
 function parseMinutes(time: string | null): number {
   if (!time) return 9999;
   const t = time.trim().toUpperCase();
@@ -285,7 +297,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
                     <span className="text-xs text-gray-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {expanded && (
-                    <div className="divide-y divide-gray-100 border-t border-brand-secondary/30">
+                    <div className="divide-y divide-gray-200 border-t border-brand-secondary/30">
                       {group.items.map(item => {
                         const noteOpen = expandedNotes.has(item.key);
                         const saving = savingNotes.has(item.key);
@@ -296,7 +308,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
                           <div key={item.key}>
                             <div className="flex gap-3 px-4 py-2.5">
                               <div className="w-20 shrink-0 pt-0.5">
-                                {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{item.start_time}</p>}
+                                {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{formatTime12h(item.start_time)}</p>}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
@@ -360,13 +372,13 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
                     <span className="text-xs text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {expanded && (
-                    <div className="divide-y divide-gray-100 border-t border-brand-primary/20">
+                    <div className="divide-y divide-gray-200 border-t border-brand-primary/20">
                       {day.items.map(item => {
                         const inMyAgenda = myAgendaItemIds.has(item.id);
                         return (
                           <div key={item.id} className="flex gap-3 px-4 py-2.5">
                             <div className="w-20 shrink-0 pt-0.5">
-                              {item.start_time && <p className="text-xs text-gray-500 tabular-nums">{item.start_time}</p>}
+                              {item.start_time && <p className="text-xs text-gray-500 tabular-nums">{formatTime12h(item.start_time)}</p>}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
