@@ -739,7 +739,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         </div>
       )}
 
-      {showAddModal && <AddNoteModal onClose={() => setShowAddModal(false)} onSave={content => handleSaveNote(content).then(() => {})} />}
+      {showAddModal && <AddNoteModal onClose={() => setShowAddModal(false)} onSave={async (content) => { const note = await handleSaveNote(content); if (note) setShowAddModal(false); }} />}
       {assigningNote && (
         <AssignNoteModal note={assigningNote} onClose={() => setAssigningNote(null)}
           onAssigned={id => { setNotes(prev => prev.filter(n => n.id !== id)); setAssigningNote(null); }} />

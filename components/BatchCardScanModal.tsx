@@ -671,10 +671,11 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ attendee_id: action.attendeeId, conference_id: activeConfId }),
         });
-        if (!res.ok) return;
+        if (!res.ok) { toast.error('Failed to confirm attendee. Please try again.'); return; }
         attendeeId = action.attendeeId;
         companyId = action.companyId ?? null;
       } else if (action.type === 'add') {
+        if (!activeConfId) { toast.error('Please select a conference first.'); return; }
         const res = await fetch('/api/card-scan/add-new', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -685,7 +686,7 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
             conference_id: activeConfId,
           }),
         });
-        if (!res.ok) return;
+        if (!res.ok) { toast.error('Failed to add attendee. Please try again.'); return; }
         const data = await res.json();
         attendeeId = data.attendee_id;
         companyId = data.company_id ?? null;
@@ -724,7 +725,7 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
 
       updateCard(localId, { status: action.type === 'confirm' ? 'confirmed' : 'added', pendingAction: null });
     } finally { setSavingId(null); }
-  }, [cards, conferenceId, updateCard]);
+  }, [cards, activeConfId, updateCard]);
 
   const handleAttendeeSelect = useCallback((localId: string, r: SearchResult) => {
     const parts = r.name.split(' ');
