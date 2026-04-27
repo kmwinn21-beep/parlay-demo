@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 interface AgendaItem {
@@ -123,6 +124,33 @@ function sessionBadgeClass(type: string | null): string {
   const key = type.toLowerCase();
   for (const [p, cls] of Object.entries(SESSION_TYPE_COLORS)) { if (key.includes(p)) return cls; }
   return 'bg-gray-100 text-gray-600';
+}
+
+function ExpandableItemText({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el) setOverflow(el.scrollHeight > el.clientHeight + 2);
+  }, []);
+
+  return (
+    <>
+      <div ref={ref} className={expanded ? '' : 'line-clamp-4'}>
+        {children}
+      </div>
+      {overflow && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="mt-1 text-xs text-brand-secondary hover:underline focus:outline-none"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
 }
 
 export function DashboardAgendaSection({ conferenceId, conferenceName }: { conferenceId: number; conferenceName: string }) {
@@ -311,18 +339,20 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
                                 {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{formatTime12h(item.start_time)}</p>}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                                  {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
-                                  <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
-                                </div>
-                                {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-                                {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
-                                {item.location && (
-                                  <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
-                                    <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    {item.location}
-                                  </p>
-                                )}
+                                <ExpandableItemText>
+                                  <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                                    {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
+                                    <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
+                                  </div>
+                                  {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+                                  {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
+                                  {item.location && (
+                                    <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
+                                      <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                      {item.location}
+                                    </p>
+                                  )}
+                                </ExpandableItemText>
                                 {!noteOpen && noteVal && <p className="mt-1 text-xs text-gray-400 italic line-clamp-1">{noteVal}</p>}
                               </div>
                               <div className="shrink-0 pl-1 pt-0.5">
@@ -381,17 +411,19 @@ export function DashboardAgendaSection({ conferenceId, conferenceName }: { confe
                               {item.start_time && <p className="text-xs text-gray-500 tabular-nums">{formatTime12h(item.start_time)}</p>}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                                {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
-                                <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
-                              </div>
-                              {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
-                              {item.location && (
-                                <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
-                                  <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                  {item.location}
-                                </p>
-                              )}
+                              <ExpandableItemText>
+                                <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                                  {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
+                                  <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
+                                </div>
+                                {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
+                                {item.location && (
+                                  <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
+                                    <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    {item.location}
+                                  </p>
+                                )}
+                              </ExpandableItemText>
                             </div>
                             <div className="shrink-0 pl-1 pt-0.5">
                               {inMyAgenda ? (
