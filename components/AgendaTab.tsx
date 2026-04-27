@@ -244,6 +244,12 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
 
   const handleFile = useCallback(async (file: File) => {
     setScanError(null);
+    const isPdf = file.type === 'application/pdf';
+    const maxBytes = isPdf ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setScanError(`File is too large. ${isPdf ? 'PDFs' : 'Images'} must be under ${isPdf ? '20' : '10'} MB.`);
+      return;
+    }
     setScanning(true);
     try {
       const image_base64 = await fileToBase64(file);
@@ -408,7 +414,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         </div>
         <div className="shrink-0 pl-2 pt-0.5">
           {inMyAgenda ? (
-            <span className="inline-flex items-center gap-1  text-green-600 font-medium">
+            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
@@ -670,7 +676,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           {scanning && (
             <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2  text-gray-500">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-              Scanning agenda with AI…
+              Scanning agenda…
             </div>
           )}
 
