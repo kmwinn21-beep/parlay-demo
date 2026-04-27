@@ -70,7 +70,7 @@ export function RecentSection({ recentConferences, allConferences, defaultToMyAg
           <Link href="/conferences" className="text-sm text-brand-secondary hover:underline">View all →</Link>
         )}
         {tab === 'agenda' && selectedConference && (
-          <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View conference →</Link>
+          <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View →</Link>
         )}
       </div>
 
