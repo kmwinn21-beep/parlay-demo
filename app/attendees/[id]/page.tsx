@@ -43,7 +43,7 @@ interface Attendee {
   id: number; first_name: string; last_name: string; title?: string;
   company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
   email?: string; notes?: string; action?: string; next_steps?: string;
-  next_steps_notes?: string; status?: string; seniority?: string; created_at: string; conferences: Conference[];
+  next_steps_notes?: string; status?: string; seniority?: string; linkedin_url?: string; phone?: string; created_at: string; conferences: Conference[];
 }
 
 interface Company { id: number; name: string; }
@@ -77,7 +77,8 @@ export default function AttendeeDetailPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string }>({});
+  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string }>({});
+  const [showPhonePopup, setShowPhonePopup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -214,7 +215,7 @@ export default function AttendeeDetailPage() {
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setRelTypeOptions(relTypeData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '' });
+      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '' });
     } catch {
       toast.error('Failed to load attendee');
       routerRef.current.push('/attendees');
@@ -627,6 +628,8 @@ export default function AttendeeDetailPage() {
                       {seniorityOptions.map(val => <option key={val} value={val}>{val}</option>)}
                     </select>
                   </div>
+                  <div><label className="label">LinkedIn URL</label><input type="url" value={editData.linkedin_url || ''} onChange={e => setEditData(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/…" className="input-field" /></div>
+                  <div><label className="label">Phone Number</label><input type="tel" value={editData.phone || ''} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" className="input-field" /></div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <button onClick={handleSave} disabled={isSaving} className="btn-primary">{isSaving ? 'Saving...' : 'Save'}</button>
@@ -644,12 +647,46 @@ export default function AttendeeDetailPage() {
                     <div>
                       <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
                       {attendee.title && <p className="text-gray-600 mt-1">{attendee.title}</p>}
-                      <div className="flex flex-wrap gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
                         {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
                           <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{s}</span>
                         )) : <span className="text-sm text-gray-400">—</span>}
                         {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
+                        {/* LinkedIn icon */}
+                        {attendee.linkedin_url ? (
+                          <a href={attendee.linkedin_url} target="_blank" rel="noopener noreferrer" title="LinkedIn profile" className="flex-shrink-0">
+                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="#0A66C2" aria-label="LinkedIn">
+                              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                          </a>
+                        ) : (
+                          <svg viewBox="0 0 24 24" className="h-5 w-5 flex-shrink-0" fill="#9CA3AF" aria-label="No LinkedIn">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                          </svg>
+                        )}
+                        {/* Phone icon — only shown if phone exists */}
+                        {attendee.phone && (
+                          <div className="relative flex-shrink-0">
+                            <button
+                              onClick={() => setShowPhonePopup(p => !p)}
+                              title="Show phone number"
+                              className="flex items-center"
+                            >
+                              <svg className="h-5 w-5 text-gray-500 hover:text-brand-secondary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                            </button>
+                            {showPhonePopup && (
+                              <div className="absolute left-0 top-7 z-10 min-w-max rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-lg">
+                                <p className="text-xs text-gray-400 mb-1">Phone</p>
+                                <a href={`callto:${attendee.phone}`} className="text-sm font-medium text-brand-secondary hover:underline whitespace-nowrap">
+                                  {attendee.phone}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

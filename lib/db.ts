@@ -514,6 +514,8 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `CREATE INDEX IF NOT EXISTS idx_my_agenda_conference_user ON conference_my_agenda_items(conference_id, user_email)`,
+    `ALTER TABLE attendees ADD COLUMN linkedin_url TEXT`,
+    `ALTER TABLE attendees ADD COLUMN phone TEXT`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

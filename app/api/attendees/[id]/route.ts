@@ -51,7 +51,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority } = body;
+    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone } = body;
 
     if (!first_name || !last_name) {
       return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
@@ -66,7 +66,7 @@ export async function PUT(
     }
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [
         first_name,
         last_name,
@@ -79,6 +79,8 @@ export async function PUT(
         next_steps_notes || null,
         status !== undefined ? status : '',
         seniority || null,
+        linkedin_url || null,
+        phone || null,
         params.id,
       ],
     });
