@@ -371,7 +371,7 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
         </div>
       ) : (
         <>
-          <p className={`text-sm text-gray-700 whitespace-pre-wrap leading-relaxed ${!expanded && isLong ? 'line-clamp-4' : ''}`}>{note.content}</p>
+          <p className={`text-sm text-gray-700 leading-relaxed ${!expanded && isLong ? 'line-clamp-4' : ''}`}>{note.content}</p>
           {isLong && (
             <button type="button" onClick={() => setExpanded(v => !v)} className="text-xs text-brand-secondary hover:underline mt-1.5">
               {expanded ? 'Show less' : 'Show more'}
