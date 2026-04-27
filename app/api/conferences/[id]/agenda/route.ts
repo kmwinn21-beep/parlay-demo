@@ -93,8 +93,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     if (!image_base64) return NextResponse.json({ error: 'image_base64 required' }, { status: 400 });
 
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const safeType = validTypes.includes(media_type) ? media_type : 'image/jpeg';
+    const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const isPdf = media_type === 'application/pdf';
+    const safeImageType = validImageTypes.includes(media_type) ? media_type : 'image/jpeg';
+
+    const fileContentBlock = isPdf
+      ? ({
+          type: 'document' as const,
+          source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: image_base64 },
+        })
+      : ({
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: safeImageType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: image_base64 },
+        });
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const message = await anthropic.messages.create({
@@ -103,17 +114,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       messages: [{
         role: 'user',
         content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: safeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: image_base64,
-            },
-          },
+          fileContentBlock,
           {
             type: 'text',
-            text: `You are parsing a conference agenda image. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
+            text: `You are parsing a conference agenda. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
 
 Schema:
 {
@@ -152,12 +156,12 @@ Rules:
       const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
       parsed = JSON.parse(cleaned) as ParsedAgenda;
     } catch {
-      return NextResponse.json({ error: 'Failed to parse agenda from image' }, { status: 422 });
+      return NextResponse.json({ error: 'Failed to parse agenda from file' }, { status: 422 });
     }
 
     const days = Array.isArray(parsed?.days) ? parsed.days : [];
     if (days.length === 0) {
-      return NextResponse.json({ error: 'No agenda items detected in image' }, { status: 422 });
+      return NextResponse.json({ error: 'No agenda items detected in file' }, { status: 422 });
     }
 
     if (!append) {
