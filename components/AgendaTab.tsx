@@ -244,6 +244,12 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
 
   const handleFile = useCallback(async (file: File) => {
     setScanError(null);
+    const isPdf = file.type === 'application/pdf';
+    const maxBytes = isPdf ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setScanError(`File is too large. ${isPdf ? 'PDFs' : 'Images'} must be under ${isPdf ? '20' : '10'} MB.`);
+      return;
+    }
     setScanning(true);
     try {
       const image_base64 = await fileToBase64(file);

@@ -3,6 +3,12 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 
+// Anthropic's PDF limit is 32 MB of raw data; base64 adds ~33% overhead.
+// We guard at 20 MB of raw file so the encoded payload stays well under 32 MB.
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+// Images are sent as base64 too, but are typically small.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 interface AgendaItem {
   id: number;
   start_time: string | null;
@@ -96,6 +102,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     const isPdf = media_type === 'application/pdf';
     const safeImageType = validImageTypes.includes(media_type) ? media_type : 'image/jpeg';
+
+    // Validate size from base64 length (base64 length * 0.75 ≈ raw bytes)
+    const approxBytes = Math.floor(image_base64.length * 0.75);
+    const limit = isPdf ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
+    if (approxBytes > limit) {
+      const limitMb = Math.round(limit / 1024 / 1024);
+      return NextResponse.json(
+        { error: `File is too large. ${isPdf ? 'PDF' : 'Image'} files must be under ${limitMb} MB.` },
+        { status: 413 },
+      );
+    }
 
     const fileContentBlock = isPdf
       ? ({
@@ -202,6 +219,10 @@ Rules:
     return NextResponse.json({ count });
   } catch (error) {
     console.error('POST /api/conferences/[id]/agenda error:', error);
+    // Surface Anthropic API errors directly so the client can show something useful
+    if (error instanceof Anthropic.APIError) {
+      return NextResponse.json({ error: `AI error: ${error.message}` }, { status: error.status ?? 500 });
+    }
     return NextResponse.json({ error: 'Failed to scan agenda' }, { status: 500 });
   }
 }
