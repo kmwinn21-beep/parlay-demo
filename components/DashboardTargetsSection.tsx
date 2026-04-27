@@ -228,7 +228,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               setSelectedConfId(Number(e.target.value));
               setSelectedTiers(new Set(['1']));
             }}
-            className="input-field text-sm w-full col-span-1 sm:col-span-3"
+            className="input-field text-sm w-full col-span-1 sm:col-span-2"
           >
             {sortedConferences.map(conf => (
               <option key={conf.id} value={conf.id}>
