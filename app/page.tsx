@@ -369,7 +369,7 @@ async function TargetsAndUpcomingSection() {
           </p>
         ) : (
           <div
-            className="flex-1 min-h-0 space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden"
+            className="flex-1 min-h-0 grid grid-cols-1 gap-3 content-start overflow-y-auto [&::-webkit-scrollbar]:hidden"
             style={{ scrollbarWidth: 'none' }}
           >
             {upcomingConferences.map((conf) => {
@@ -379,7 +379,7 @@ async function TargetsAndUpcomingSection() {
                 <Link
                   key={conf.id}
                   href={`/conferences/${conf.id}`}
-                  className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group block"
+                  className="flex flex-col p-4 rounded-xl border hover:shadow-md transition-all hover:border-brand-secondary group"
                   style={{ borderColor: isActive ? '#1B76BC' : undefined }}
                 >
                   {isActive && (
