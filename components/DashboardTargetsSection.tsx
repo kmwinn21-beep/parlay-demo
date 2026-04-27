@@ -199,8 +199,8 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   return (
     <div className="flex flex-col gap-4">
       {/* Header row: title + conference dropdown */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
+      <div className="flex items-center gap-3 min-w-0">
+        <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 flex-shrink-0">
           Targets
           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
             <svg
@@ -228,7 +228,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               setSelectedConfId(Number(e.target.value));
               setSelectedTiers(new Set(['1']));
             }}
-            className="input-field text-sm min-w-0"
+            className="input-field text-sm flex-1 min-w-0 ml-auto"
           >
             {sortedConferences.map(conf => (
               <option key={conf.id} value={conf.id}>
