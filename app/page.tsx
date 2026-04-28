@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { db, dbReady } from '@/lib/db';
 import AttendeesTooltip from '@/components/AttendeesTooltip';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
