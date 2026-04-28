@@ -650,7 +650,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   Re-scan
                 </button>
-                <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                   Upload Image / PDF
                 </button>
@@ -661,7 +661,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                     <button onClick={() => setConfirmClear(false)} className=" text-gray-400 hover:underline">No</button>
                   </div>
                 ) : (
-                  <button onClick={() => setConfirmClear(true)} className=" text-red-400 hover:text-red-600 transition-colors">Clear</button>
+                  <button onClick={() => setConfirmClear(true)} className=" text-sm text-red-400 hover:text-red-600 transition-colors">Clear</button>
                 )}
               </div>
             )}
@@ -695,9 +695,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   Take Photo
                 </button>
-                <button onClick={() => fileRef.current?.click()} className="btn-primary  inline-flex items-center gap-1.5">
+                <button onClick={() => fileRef.current?.click()} className="btn-primary  text- sm inline-flex items-center gap-1.5">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                  Upload Image / PDF
+                  Upload
                 </button>
               </div>
             </div>
@@ -716,9 +716,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                           ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />}
                       </svg>
-                      <span className=" font-semibold text-brand-primary">{day.day_label}</span>
+                      <span className=" font-semibold text-sm text-brand-primary">{day.day_label}</span>
                     </div>
-                    <span className=" text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
+                    <span className=" text-sm text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {fullExpandedDays.has(day.day_label) && (
                     <div className="divide-y divide-gray-100 border-t border-brand-primary/20">
@@ -736,7 +736,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-base font-bold text-brand-primary font-serif">My Agenda</h3>
             {hasMyAgenda && (
-              <span className=" text-gray-400">
+              <span className="text-sm text-gray-400">
                 {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
               </span>
             )}
@@ -755,7 +755,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             /* My Agenda day sections — border brand-secondary */
             <div className="space-y-2">
               {myDayGroups.map(group => (
-                <div key={group.day_label} className="rounded-xl border border-brand-secondary bg-white overflow-hidden">
+                <div key={group.day_label} className="rounded-xl border border-brand-primary/30 bg-white overflow-hidden">
                   <button
                     onClick={() => setMyExpandedDays(prev => { const s = new Set(prev); s.has(group.day_label) ? s.delete(group.day_label) : s.add(group.day_label); return s; })}
                     className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-blue-50/30 transition-colors"
