@@ -411,7 +411,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
-        <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
+        <div className="lg:col-span-2 flex flex-col min-h-0">
           <Suspense fallback={<RecentSkeleton />}>
             <RecentAgendaWrapper />
           </Suspense>
