@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { getPreset } from '@/lib/colors';
-import { useConfigColors } from '@/lib/useConfigColors';
 import { useUser } from '@/components/UserContext';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { MentionTextarea } from '@/components/MentionTextarea';
-import { useUserOptions, getRepInitials } from '@/lib/useUserOptions';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { NoteCard } from '@/components/NoteCard';
 
 export interface EntityNote {
   id: number;
@@ -21,24 +19,11 @@ export interface EntityNote {
   rep?: string | null;
   attendee_name?: string | null;
   tagged_users?: string | null;
+  lets_talk?: number;
+  author_user_id?: number | null;
+  comment_count?: number;
 }
 
-function formatDateTime(dt: string) {
-  const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
-  if (isNaN(d.getTime())) return dt;
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-function isLongNote(content: string) {
-  return content.length > 300 || content.split('\n').length > 4;
-}
 
 export function NotesSection({
   entityType,
@@ -77,14 +62,12 @@ export function NotesSection({
   const [isAdding, setIsAdding] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [pinOnSubmit, setPinOnSubmit] = useState(false);
 
   const [pinModalNoteId, setPinModalNoteId] = useState<number | null>(null);
   const [pinConference, setPinConference] = useState('');
   const [pinAttendeeId, setPinAttendeeId] = useState('');
   const { user } = useUser();
-  const colorMaps = useConfigColors();
   const userOptionsWithIds = useUserOptions();
 
   useEffect(() => {
@@ -320,14 +303,6 @@ export function NotesSection({
     }
   };
 
-  const toggleExpand = (id: number) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
   const handlePinClick = (noteId: number) => {
     if (!onPin) return;
     const note = notes.find(n => n.id === noteId);
@@ -518,118 +493,18 @@ export function NotesSection({
         <p className="text-sm text-gray-400 text-center py-6">No notes yet. Click &quot;Add Note&quot; to get started.</p>
       ) : (
         <div className="space-y-3">
-          {notes.map(note => {
-            const expanded = expandedIds.has(note.id);
-            const long = isLongNote(note.content);
-            const repInitials = (() => {
-              if (!note.rep) return null;
-              if (note.rep.includes('@')) {
-                const u = note.rep.split('@')[0];
-                return ((u[0] || '') + (u[1] || '')).toUpperCase() || null;
-              }
-              return note.rep.split(/\s+/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).join('') || null;
-            })();
-
-            // Resolve tagged users
-            const taggedIds = note.tagged_users
-              ? note.tagged_users.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
-              : [];
-            const taggedNames = taggedIds
-              .map(id => userOptionsWithIds.find(u => u.id === id)?.value)
-              .filter(Boolean) as string[];
-
-            return (
-              <div key={note.id} className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-all">
-                {/* Meta row */}
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex flex-wrap items-center gap-2 min-w-0">
-                    <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
-                    {note.conference_name && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap">
-                        {note.conference_name}
-                      </span>
-                    )}
-                    {note.attendee_name && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 whitespace-nowrap">
-                        {note.attendee_name}
-                      </span>
-                    )}
-                    {note.company_name && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-medium border border-teal-200 whitespace-nowrap">
-                        {note.company_name}
-                      </span>
-                    )}
-                    {/* Tagged users pills */}
-                    {taggedNames.map(name => (
-                      <span
-                        key={name}
-                        className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-xs font-medium border border-violet-200 whitespace-nowrap"
-                        title={`@${name}`}
-                      >
-                        @{getRepInitials(name)}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {repInitials && (
-                      <span
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold flex-shrink-0 ${getPreset(colorMaps.user?.[note.rep ?? '']).badgeClass}`}
-                        title={note.rep || undefined}
-                      >
-                        {repInitials}
-                      </span>
-                    )}
-                    {showPinnedIndicator && pinnedNoteIds.has(note.id) && (
-                      <span className="text-brand-highlight flex-shrink-0" title="Pinned in Company or Attendee details">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                        </svg>
-                      </span>
-                    )}
-                    {onPin && (entityType === 'attendee' || entityType === 'company') && (
-                      <button
-                        type="button"
-                        onClick={() => handlePinClick(note.id)}
-                        className={`transition-colors flex-shrink-0 ${pinnedNoteIds.has(note.id) ? 'text-brand-highlight' : 'text-gray-300 hover:text-brand-highlight'}`}
-                        title={pinnedNoteIds.has(note.id) ? 'Already pinned' : 'Pin note'}
-                        disabled={pinnedNoteIds.has(note.id)}
-                      >
-                        <svg className="w-4 h-4" fill={pinnedNoteIds.has(note.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={pinnedNoteIds.has(note.id) ? 0 : 2}>
-                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Note body */}
-                <p className={`text-sm text-gray-800 leading-relaxed break-words ${!expanded && long ? 'line-clamp-4' : ''}`}>
-                  {note.content}
-                </p>
-                {long && (
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(note.id)}
-                    className="mt-2 text-xs text-brand-secondary hover:underline font-medium"
-                  >
-                    {expanded ? 'Show Less' : 'Show Full Note'}
-                  </button>
-                )}
-                <div className="flex justify-end mt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(note.id)}
-                    className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
-                    title="Delete note"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {notes.map(note => (
+            <NoteCard
+              key={note.id}
+              note={note}
+              entityType={entityType}
+              conferences={conferences}
+              onDelete={handleDelete}
+              onPin={onPin ? handlePinClick : undefined}
+              pinnedNoteIds={pinnedNoteIds}
+              showPinnedIndicator={showPinnedIndicator}
+            />
+          ))}
         </div>
       )}
 

@@ -29,23 +29,29 @@ export async function GET(request: NextRequest) {
       const joinCompany = entityType === 'company';
       result = await db.execute({
         sql: joinCompany
-          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, co.name AS joined_company_name
+          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, co.name AS joined_company_name, COUNT(nc.id) AS comment_count
                 FROM entity_notes en
                 LEFT JOIN companies co ON en.entity_id = co.id
+                LEFT JOIN note_comments nc ON nc.note_id = en.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
+                GROUP BY en.id
                 ORDER BY en.created_at DESC`
-          : `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users
-                FROM entity_notes
-                WHERE entity_type = ? AND entity_id IN (${ids.map(() => '?').join(',')})
-                ORDER BY created_at DESC`,
+          : `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, COUNT(nc.id) AS comment_count
+                FROM entity_notes en
+                LEFT JOIN note_comments nc ON nc.note_id = en.id
+                WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
+                GROUP BY en.id
+                ORDER BY en.created_at DESC`,
         args: [entityType, ...ids],
       });
     } else {
       result = await db.execute({
-        sql: `SELECT id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users
-              FROM entity_notes
-              WHERE entity_type = ? AND entity_id = ?
-              ORDER BY created_at DESC`,
+        sql: `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, COUNT(nc.id) AS comment_count
+              FROM entity_notes en
+              LEFT JOIN note_comments nc ON nc.note_id = en.id
+              WHERE en.entity_type = ? AND en.entity_id = ?
+              GROUP BY en.id
+              ORDER BY en.created_at DESC`,
         args: [entityType, entityId!],
       });
     }
@@ -64,6 +70,9 @@ export async function GET(request: NextRequest) {
           ? String(r.joined_company_name)
           : (r.company_name != null ? String(r.company_name) : null),
         tagged_users: r.tagged_users != null ? String(r.tagged_users) : null,
+        lets_talk: Number(r.lets_talk ?? 0),
+        author_user_id: r.author_user_id != null ? Number(r.author_user_id) : null,
+        comment_count: Number(r.comment_count ?? 0),
       }))
     );
   } catch (error) {
@@ -109,14 +118,14 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users`,
+      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id`,
       args: [
         entity_type, entity_id, content.trim(),
         conference_name || null, resolvedRep,
         attendee_name || null, company_name || null,
-        tagged_users || null,
+        tagged_users || null, user.id,
       ],
     });
 
@@ -132,6 +141,9 @@ export async function POST(request: NextRequest) {
       attendee_name: row.attendee_name != null ? String(row.attendee_name) : null,
       company_name: row.company_name != null ? String(row.company_name) : null,
       tagged_users: row.tagged_users != null ? String(row.tagged_users) : null,
+      lets_talk: 0,
+      author_user_id: Number(user.id),
+      comment_count: 0,
     };
 
     // Fire standard notifications (best-effort) — skipped on cross-posts to avoid duplicates
