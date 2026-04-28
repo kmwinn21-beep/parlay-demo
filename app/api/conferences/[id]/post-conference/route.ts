@@ -613,7 +613,7 @@ export async function GET(
   ]);
 
   const engagedTargetIds = new Set<number>();
-  for (const aid of targetAttendeeIds) {
+  for (const aid of Array.from(targetAttendeeIds)) {
     if (
       confMeetingAttIds.has(aid) || confFuAttIds.has(aid) ||
       confSocialAttendedIds.has(aid) || confTouchpointAttIds.has(aid) ||
@@ -812,7 +812,7 @@ export async function GET(
 
   // ── Targets Engaged multi-rep attribution ─────────────────────────────────
   const targetsEngagedRepsMap = new Map<number, Set<string>>();
-  for (const aid of engagedTargetIds) targetsEngagedRepsMap.set(aid, new Set<string>());
+  for (const aid of Array.from(engagedTargetIds)) targetsEngagedRepsMap.set(aid, new Set<string>());
 
   if (engagedTargetIds.size > 0) {
     const engTargetIds = Array.from(engagedTargetIds);
