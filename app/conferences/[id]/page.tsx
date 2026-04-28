@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -33,6 +33,7 @@ import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
 import { ConferenceOfflineSync } from '@/components/ConferenceOfflineSync';
 import { AgendaTab } from '@/components/AgendaTab';
+import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTargetsTab';
 
 interface Attendee {
   id: number;
@@ -118,9 +119,9 @@ interface ConferenceDetail {
   assigned_rep?: string;
 }
 
-type ConferenceTabKey = 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes' | 'forms' | 'agenda';
+type ConferenceTabKey = 'targets' | 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes' | 'forms' | 'agenda';
 
-const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes', 'forms', 'agenda'];
+const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['targets', 'attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes', 'forms', 'agenda'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -266,6 +267,7 @@ export default function ConferenceDetailPage() {
   const [confPinnedNoteIds, setConfPinnedNoteIds] = useState<Set<number>>(new Set());
   const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
+  const meetingAttendeeIds = useMemo(() => new Set(confMeetings.map(m => m.attendee_id)), [confMeetings]);
   const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
@@ -1912,6 +1914,14 @@ export default function ConferenceDetailPage() {
           brandLogoUrl={logoConfig.logoDarkUrl}
           isAdmin={isAdminUser}
           currentUserEmail={currentUser?.email || ''}
+        />
+      )}
+
+      {activeTab === 'targets' && (
+        <ConferenceDetailsTargetsTab
+          conferenceId={Number(id)}
+          conferenceName={conference?.name || ''}
+          meetingAttendeeIds={meetingAttendeeIds}
         />
       )}
 

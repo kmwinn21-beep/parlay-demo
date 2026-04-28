@@ -23,6 +23,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'operator_capital', label: 'Operator / Capital Relationships' },
   ],
   conference_details: [
+    { key: 'targets', label: 'Targets' },
     { key: 'attendees', label: 'Attendees' },
     { key: 'companies', label: 'Companies' },
     { key: 'meetings', label: 'Meetings' },
