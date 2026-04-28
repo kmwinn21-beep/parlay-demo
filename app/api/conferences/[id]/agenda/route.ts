@@ -3,11 +3,75 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 60;
+
 // Anthropic's PDF limit is 32 MB of raw data; base64 adds ~33% overhead.
 // We guard at 20 MB of raw file so the encoded payload stays well under 32 MB.
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 // Images are sent as base64 too, but are typically small.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+async function fetchUrlContent(rawUrl: string): Promise<string> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('URL must use http or https');
+  }
+
+  let text = '';
+  try {
+    const res = await fetch(rawUrl, {
+      signal: AbortSignal.timeout(12_000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AgendaBot/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    if (!res.ok) throw new Error(`Page returned ${res.status} ${res.statusText}`);
+    const html = await res.text();
+
+    text = html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Page returned')) throw err;
+    throw new Error('Failed to fetch page — it may be blocking automated requests');
+  }
+
+  // Jina fallback for JS-heavy pages that render little content server-side
+  if (text.length < 1000) {
+    try {
+      const jinaRes = await fetch(`https://r.jina.ai/${encodeURIComponent(rawUrl)}`, {
+        signal: AbortSignal.timeout(15_000),
+        headers: { Accept: 'text/plain' },
+      });
+      if (jinaRes.ok) {
+        const jinaText = (await jinaRes.text()).trim();
+        if (jinaText.length > text.length) text = jinaText;
+      }
+    } catch { /* silent — use whatever we have */ }
+  }
+
+  if (text.length > 80_000) {
+    text = text.slice(0, 80_000) + '\n[Content truncated at 80,000 characters]';
+  }
+  return text;
+}
 
 interface AgendaItem {
   id: number;
@@ -91,50 +155,85 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   try {
     await dbReady;
     const conferenceId = Number(params.id);
-    const { image_base64, media_type, append } = await request.json() as {
-      image_base64: string;
-      media_type: string;
+    const { image_base64, media_type, append, url } = await request.json() as {
+      image_base64?: string;
+      media_type?: string;
       append?: boolean;
+      url?: string;
     };
 
-    if (!image_base64) return NextResponse.json({ error: 'image_base64 required' }, { status: 400 });
-
-    const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const isPdf = media_type === 'application/pdf';
-    const safeImageType = validImageTypes.includes(media_type) ? media_type : 'image/jpeg';
-
-    // Validate size from base64 length (base64 length * 0.75 ≈ raw bytes)
-    const approxBytes = Math.floor(image_base64.length * 0.75);
-    const limit = isPdf ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
-    if (approxBytes > limit) {
-      const limitMb = Math.round(limit / 1024 / 1024);
-      return NextResponse.json(
-        { error: `File is too large. ${isPdf ? 'PDF' : 'Image'} files must be under ${limitMb} MB.` },
-        { status: 413 },
-      );
+    if (!image_base64 && !url) {
+      return NextResponse.json({ error: 'image_base64 or url required' }, { status: 400 });
     }
 
-    const fileContentBlock = isPdf
-      ? ({
-          type: 'document' as const,
-          source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: image_base64 },
-        })
-      : ({
-          type: 'image' as const,
-          source: { type: 'base64' as const, media_type: safeImageType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: image_base64 },
-        });
+    const sourceLabel = url ? 'URL' : 'file';
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8096,
-      messages: [{
-        role: 'user',
-        content: [
-          fileContentBlock,
-          {
-            type: 'text',
-            text: `You are parsing a conference agenda. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
+    type ContentBlock =
+      | { type: 'text'; text: string }
+      | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } }
+      | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } };
+
+    let fileContentBlock: ContentBlock;
+    let promptText: string;
+
+    if (url) {
+      let pageText: string;
+      try {
+        pageText = await fetchUrlContent(url);
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'Failed to fetch URL' },
+          { status: 422 },
+        );
+      }
+      fileContentBlock = { type: 'text', text: pageText };
+      promptText = `You are parsing a conference agenda from webpage content. Ignore navigation menus, headers, footers, ads, and any non-schedule content — focus only on schedule and session information. If the page has multiple days (even content from hidden tabs that may all be present in the HTML), extract all of them. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
+
+Schema:
+{
+  "days": [
+    {
+      "day_label": "string (e.g. 'Monday, April 14' or 'Day 1')",
+      "items": [
+        {
+          "start_time": "string or null",
+          "end_time": "string or null",
+          "session_type": "string or null (e.g. 'Keynote', 'Workshop', 'Break', 'Panel')",
+          "title": "string",
+          "description": "string or null",
+          "location": "string or null"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Preserve original time formats (e.g. '9:00 AM', '14:30')
+- If no explicit day labels exist, use 'Day 1', 'Day 2', etc.
+- If the entire agenda is one day, wrap it in a single day object
+- Use null for fields you cannot determine, not empty string
+- Return valid JSON only`;
+    } else {
+      const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      const isPdf = media_type === 'application/pdf';
+      const safeImageType = validImageTypes.includes(media_type ?? '') ? media_type! : 'image/jpeg';
+
+      const approxBytes = Math.floor((image_base64 ?? '').length * 0.75);
+      const limit = isPdf ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
+      if (approxBytes > limit) {
+        const limitMb = Math.round(limit / 1024 / 1024);
+        return NextResponse.json(
+          { error: `File is too large. ${isPdf ? 'PDF' : 'Image'} files must be under ${limitMb} MB.` },
+          { status: 413 },
+        );
+      }
+
+      fileContentBlock = isPdf
+        ? ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64! } })
+        : ({ type: 'image', source: { type: 'base64', media_type: safeImageType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: image_base64! } });
+
+      promptText = `You are parsing a conference agenda. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
 
 Schema:
 {
@@ -160,8 +259,18 @@ Rules:
 - If no explicit day labels exist, use 'Day 1', 'Day 2', etc.
 - If the entire agenda is one day, wrap it in a single day object
 - Omit fields you cannot determine (use null, not empty string)
-- Return valid JSON only`,
-          },
+- Return valid JSON only`;
+    }
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 8096,
+      messages: [{
+        role: 'user',
+        content: [
+          fileContentBlock,
+          { type: 'text', text: promptText },
         ],
       }],
     });
@@ -183,12 +292,12 @@ Rules:
       if (start === -1 || end === -1 || end <= start) throw new Error('no json object found');
       parsed = JSON.parse(rawText.slice(start, end + 1)) as ParsedAgenda;
     } catch {
-      return NextResponse.json({ error: 'Failed to parse agenda from file' }, { status: 422 });
+      return NextResponse.json({ error: `Failed to parse agenda from ${sourceLabel}` }, { status: 422 });
     }
 
     const days = Array.isArray(parsed?.days) ? parsed.days : [];
     if (days.length === 0) {
-      return NextResponse.json({ error: 'No agenda items detected in file' }, { status: 422 });
+      return NextResponse.json({ error: `No agenda items detected in ${sourceLabel}` }, { status: 422 });
     }
 
     if (!append) {

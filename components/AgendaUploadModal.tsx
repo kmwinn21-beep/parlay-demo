@@ -30,6 +30,9 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<Step>('select');
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
+  const [mode, setMode] = useState<'file' | 'url'>('file');
+  const [urlInput, setUrlInput] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -84,6 +87,40 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
       setStep('success');
     } catch {
       setError('Failed to upload file. Please try again.');
+      setStep('select');
+    }
+  };
+
+  const handleUrl = async () => {
+    if (!selectedConfId) return;
+    setUrlError(null);
+    setError(null);
+    const trimmed = urlInput.trim();
+    if (!trimmed) { setUrlError('Please enter a URL.'); return; }
+    try {
+      const p = new URL(trimmed);
+      if (p.protocol !== 'http:' && p.protocol !== 'https:') throw new Error();
+    } catch {
+      setUrlError('Please enter a valid http or https URL.');
+      return;
+    }
+    setStep('scanning');
+    try {
+      const res = await fetch(`/api/conferences/${selectedConfId}/agenda`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: trimmed }),
+      });
+      const data = await res.json() as { count?: number; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to import agenda from URL.');
+        setStep('select');
+        return;
+      }
+      setCount(data.count ?? 0);
+      setStep('success');
+    } catch {
+      setError('Failed to connect. Please try again.');
       setStep('select');
     }
   };
@@ -169,42 +206,104 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
                 )}
               </div>
 
+              {/* Tab switcher */}
+              <div className="flex border border-gray-200 rounded-xl overflow-hidden mb-4">
+                <button
+                  type="button"
+                  onClick={() => { setMode('file'); setUrlError(null); }}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    mode === 'file' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('url'); setError(null); }}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    mode === 'url' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  From Link
+                </button>
+              </div>
+
               {/* Upload zone */}
               <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-3 text-center">
-                <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Upload a photo, screenshot, or PDF</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Images up to 10 MB · PDFs up to 20 MB</p>
-                </div>
-                <div className="flex gap-3 w-full mt-1">
-                  <button
-                    type="button"
-                    disabled={!selectedConfId || loadingConfs}
-                    onClick={() => cameraRef.current?.click()}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:border-brand-secondary hover:text-brand-secondary hover:bg-blue-50/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Take Photo
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!selectedConfId || loadingConfs}
-                    onClick={() => fileRef.current?.click()}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Upload
-                  </button>
-                </div>
+                {mode === 'file' ? (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Upload a photo, screenshot, or PDF</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Images up to 10 MB · PDFs up to 20 MB</p>
+                    </div>
+                    <div className="flex gap-3 w-full mt-1">
+                      <button
+                        type="button"
+                        disabled={!selectedConfId || loadingConfs}
+                        onClick={() => cameraRef.current?.click()}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:border-brand-secondary hover:text-brand-secondary hover:bg-blue-50/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Take Photo
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!selectedConfId || loadingConfs}
+                        onClick={() => fileRef.current?.click()}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Upload
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Paste the URL of the conference agenda page</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Works best when the full schedule is visible in the page HTML</p>
+                    </div>
+                    <div className="w-full flex flex-col gap-2">
+                      <input
+                        type="url"
+                        className="input-field w-full text-sm"
+                        placeholder="https://example.com/agenda"
+                        value={urlInput}
+                        onChange={e => { setUrlInput(e.target.value); setUrlError(null); }}
+                        onKeyDown={e => { if (e.key === 'Enter') void handleUrl(); }}
+                      />
+                      {urlError && (
+                        <p className="text-xs text-red-600 text-left">{urlError}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!selectedConfId || loadingConfs || !urlInput.trim()}
+                        onClick={() => void handleUrl()}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        Scan Agenda
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
 
               {error && (
