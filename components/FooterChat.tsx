@@ -142,7 +142,7 @@ function ChatWindow({
   };
 
   return (
-    <div className="flex flex-col w-72 bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden">
+    <div className="flex flex-col w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden">
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -488,7 +488,7 @@ export function FooterChat() {
       <div className="flex flex-col items-end">
         {/* Expanded panel */}
         {panelOpen && (
-          <div className="mb-0 w-[440px] bg-white rounded-t-xl shadow-2xl border border-gray-200 border-b-0 flex flex-col max-h-[420px]">
+          <div className="mb-0 w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 border-b-0 flex flex-col max-h-[420px]">
             {/* Panel header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               {view === 'new' ? (
@@ -635,7 +635,7 @@ export function FooterChat() {
         <button
           type="button"
           onClick={() => { setPanelOpen(!panelOpen); if (!panelOpen) { setView('conversations'); setConvLoading(false); } }}
-          className="flex items-center justify-between gap-2 w-[440px] px-6 py-2.5 bg-white border border-gray-200 border-b-0 rounded-t-xl shadow-lg hover:bg-gray-50 transition-colors select-none"
+          className="flex items-center justify-between gap-2 w-[420px] px-6 py-2.5 bg-white border border-gray-200 border-b-0 rounded-t-xl shadow-lg hover:bg-gray-50 transition-colors select-none"
         >
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
