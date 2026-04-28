@@ -45,7 +45,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<{ d
 // ─── Email templates ──────────────────────────────────────────────────────────
 
 const baseStyle = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a`;
-const btnStyle = `display:inline-block;padding:12px 28px;background:#1B76BC;color:#ffffff;` +
+const btnStyle = `display:inline-block;padding:12px 28px;background:#0B3C62;color:#ffffff;` +
   `text-decoration:none;border-radius:6px;font-weight:600;font-size:15px`;
 const footerStyle = `color:#888;font-size:12px;margin-top:24px`;
 
