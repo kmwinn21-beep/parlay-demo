@@ -347,10 +347,14 @@ function BadgeScanResultsModal({
 
 function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
   const [conferences, setConferences] = useState<Conference[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [touchpointOptions, setTouchpointOptions] = useState<TouchpointOption[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Cascade state — rebuilt each time conference changes
+  const [confAttendees, setConfAttendees] = useState<Attendee[]>([]);
+  const [confCompanies, setConfCompanies] = useState<Company[]>([]);
+  const [loadingCascade, setLoadingCascade] = useState(false);
 
   const [selectedConference, setSelectedConference] = useState<Conference | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -358,15 +362,15 @@ function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
   const [selectedTouchpointId, setSelectedTouchpointId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Load conferences, all companies, and touchpoint options on mount
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const [confRes, compRes, attRes, optRes] = await Promise.all([
+        const [confRes, compRes, optRes] = await Promise.all([
           fetch('/api/conferences?nav=1').then(r => r.ok ? r.json() : []),
           fetch('/api/companies?limit=2000').then(r => r.ok ? r.json() : []),
-          fetch('/api/attendees?limit=5000').then(r => r.ok ? r.json() : []),
           fetch('/api/config?category=touchpoints').then(r => r.ok ? r.json() : []),
         ]);
         const confs: Conference[] = (Array.isArray(confRes) ? confRes : []).map((c: Conference) => ({
@@ -375,24 +379,65 @@ function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
             ? 'in_progress' : c.start_date > today ? 'upcoming' : 'past',
         }));
         setConferences(confs);
-        setCompanies(Array.isArray(compRes) ? compRes : []);
-        setAttendees(Array.isArray(attRes) ? attRes : []);
+        setAllCompanies(Array.isArray(compRes) ? compRes : []);
         setTouchpointOptions(
           (Array.isArray(optRes) ? (optRes as TouchpointOption[]) : [])
             .sort((a, b) => a.sort_order - b.sort_order)
         );
-        const active = confs.find(c => c.status === 'in_progress');
-        if (active) setSelectedConference(active);
-        else if (confs[0]) setSelectedConference(confs[0]);
+        const active = confs.find(c => c.status === 'in_progress') ?? confs[0] ?? null;
+        if (active) {
+          setSelectedConference(active);
+          await loadConferenceCascade(active.id, Array.isArray(compRes) ? compRes : []);
+        }
       } catch { toast.error('Failed to load options.'); }
       finally { setLoading(false); }
     };
     void load();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadConferenceCascade = async (confId: number, companies: Company[]) => {
+    setLoadingCascade(true);
+    setConfAttendees([]);
+    setConfCompanies([]);
+    setSelectedCompany(null);
+    setSelectedAttendees([]);
+    try {
+      const confData = await fetch(`/api/conferences/${confId}`).then(r => r.json()) as {
+        attendees?: Array<{ id: number; first_name: string; last_name: string; company_id?: number | null }>;
+      };
+      const atts: Attendee[] = (confData.attendees ?? []).map(a => ({
+        id: Number(a.id),
+        first_name: String(a.first_name),
+        last_name: String(a.last_name),
+        company_id: a.company_id ?? null,
+      }));
+      setConfAttendees(atts);
+      const companyIdSet = new Set(atts.map(a => a.company_id).filter(Boolean) as number[]);
+      setConfCompanies(companies.filter(c => companyIdSet.has(c.id)));
+    } catch { toast.error('Failed to load conference attendees.'); }
+    finally { setLoadingCascade(false); }
+  };
+
+  const handleConferenceChange = (conf: Conference | null) => {
+    setSelectedConference(conf);
+    if (conf) {
+      void loadConferenceCascade(conf.id, allCompanies);
+    } else {
+      setConfAttendees([]);
+      setConfCompanies([]);
+      setSelectedCompany(null);
+      setSelectedAttendees([]);
+    }
+  };
+
+  const handleCompanyChange = (company: Company | null) => {
+    setSelectedCompany(company);
+    setSelectedAttendees([]);
+  };
 
   const filteredAttendees = selectedCompany
-    ? attendees.filter(a => a.company_id === selectedCompany.id)
-    : attendees;
+    ? confAttendees.filter(a => a.company_id === selectedCompany.id)
+    : confAttendees;
 
   const handleSubmit = async () => {
     if (!selectedConference || selectedAttendees.length === 0 || !selectedTouchpointId) {
@@ -423,7 +468,8 @@ function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
     finally { setSubmitting(false); }
   };
 
-  const canSubmit = !submitting && !loading && !!selectedConference && selectedAttendees.length > 0 && !!selectedTouchpointId;
+  const isBusy = loading || loadingCascade;
+  const canSubmit = !submitting && !isBusy && !!selectedConference && selectedAttendees.length > 0 && !!selectedTouchpointId;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -449,32 +495,47 @@ function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
               <SearchableSelect
                 options={conferences}
                 value={selectedConference}
-                onChange={setSelectedConference}
+                onChange={handleConferenceChange}
                 getLabel={c => c.name}
                 placeholder="Select conference…"
               />
             </div>
-            {/* Company */}
+            {/* Company — filtered to conference attendees */}
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Company</label>
-              <SearchableSelect
-                options={companies}
-                value={selectedCompany}
-                onChange={v => { setSelectedCompany(v); setSelectedAttendees([]); }}
-                getLabel={c => c.name}
-                placeholder="Filter by company…"
-              />
+              {loadingCascade ? (
+                <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  Loading companies…
+                </div>
+              ) : (
+                <SearchableSelect
+                  options={confCompanies}
+                  value={selectedCompany}
+                  onChange={handleCompanyChange}
+                  getLabel={c => c.name}
+                  placeholder={selectedConference ? 'Filter by company…' : 'Select a conference first'}
+                  disabled={!selectedConference}
+                />
+              )}
             </div>
-            {/* Attendee multiselect */}
+            {/* Attendee multiselect — filtered to conference attendees (+ company if selected) */}
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Attendee *</label>
-              <SearchableMultiSelect
-                options={filteredAttendees}
-                selected={selectedAttendees}
-                onChange={setSelectedAttendees}
-                getLabel={a => `${a.first_name} ${a.last_name}`}
-                placeholder="Select attendee(s)…"
-              />
+              {loadingCascade ? (
+                <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  Loading attendees…
+                </div>
+              ) : (
+                <SearchableMultiSelect<Attendee>
+                  options={filteredAttendees}
+                  selected={selectedAttendees}
+                  onChange={setSelectedAttendees}
+                  getLabel={a => `${a.first_name} ${a.last_name}`}
+                  placeholder={selectedConference ? 'Select attendee(s)…' : 'Select a conference first'}
+                />
+              )}
             </div>
             {/* Touchpoint type buttons */}
             <div>
