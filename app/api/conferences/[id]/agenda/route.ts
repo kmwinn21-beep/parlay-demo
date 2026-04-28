@@ -127,7 +127,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      max_tokens: 8096,
       messages: [{
         role: 'user',
         content: [
@@ -166,12 +166,22 @@ Rules:
       }],
     });
 
+    // Surface truncation before attempting to parse — a cut-off JSON object will never parse
+    if (message.stop_reason === 'max_tokens') {
+      return NextResponse.json(
+        { error: 'Agenda is too large to process at once. Try uploading a smaller section or fewer pages.' },
+        { status: 422 },
+      );
+    }
+
     const rawText = message.content[0].type === 'text' ? message.content[0].text.trim() : '';
     let parsed: ParsedAgenda;
     try {
-      // Strip markdown code fences if Claude wrapped output anyway
-      const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-      parsed = JSON.parse(cleaned) as ParsedAgenda;
+      // Extract the outermost JSON object — handles Claude adding prose or markdown around it
+      const start = rawText.indexOf('{');
+      const end = rawText.lastIndexOf('}');
+      if (start === -1 || end === -1 || end <= start) throw new Error('no json object found');
+      parsed = JSON.parse(rawText.slice(start, end + 1)) as ParsedAgenda;
     } catch {
       return NextResponse.json({ error: 'Failed to parse agenda from file' }, { status: 422 });
     }
@@ -188,15 +198,15 @@ Rules:
       });
     }
 
+    const insertStatements: { sql: string; args: (string | number | null)[] }[] = [];
     let sortOrder = 0;
-    let count = 0;
     for (const day of days) {
       const dayLabel = String(day.day_label ?? 'Day 1').trim();
       const items = Array.isArray(day.items) ? day.items : [];
       for (const item of items) {
         const title = String(item.title ?? '').trim();
         if (!title) continue;
-        await db.execute({
+        insertStatements.push({
           sql: `INSERT INTO conference_agenda_items
                   (conference_id, day_label, start_time, end_time, session_type, title, description, location, sort_order)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -212,11 +222,14 @@ Rules:
             sortOrder++,
           ],
         });
-        count++;
       }
     }
 
-    return NextResponse.json({ count });
+    if (insertStatements.length > 0) {
+      await db.batch(insertStatements, 'write');
+    }
+
+    return NextResponse.json({ count: insertStatements.length });
   } catch (error) {
     console.error('POST /api/conferences/[id]/agenda error:', error);
     // Surface Anthropic API errors directly so the client can show something useful
