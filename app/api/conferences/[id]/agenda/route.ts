@@ -3,13 +3,15 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 // Anthropic's PDF limit is 32 MB of raw data; base64 adds ~33% overhead.
 // We guard at 20 MB of raw file so the encoded payload stays well under 32 MB.
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 // Images are sent as base64 too, but are typically small.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const MAX_CONTENT_CHARS = 200_000;
 
 async function fetchUrlContent(rawUrl: string): Promise<string> {
   let url: URL;
@@ -22,6 +24,24 @@ async function fetchUrlContent(rawUrl: string): Promise<string> {
     throw new Error('URL must use http or https');
   }
 
+  // Jina Reader is the primary approach — it handles JS-rendered pages, CSS-hidden
+  // day tabs, and returns clean LLM-readable text without nav/footer noise.
+  try {
+    const jinaRes = await fetch(`https://r.jina.ai/${rawUrl}`, {
+      signal: AbortSignal.timeout(25_000),
+      headers: { Accept: 'text/plain', 'X-No-Cache': 'true' },
+    });
+    if (jinaRes.ok) {
+      const jinaText = (await jinaRes.text()).trim();
+      if (jinaText.length >= 500) {
+        return jinaText.length > MAX_CONTENT_CHARS
+          ? jinaText.slice(0, MAX_CONTENT_CHARS) + '\n[Content truncated]'
+          : jinaText;
+      }
+    }
+  } catch { /* fall through to direct fetch */ }
+
+  // Direct fetch fallback — strip HTML to plain text
   let text = '';
   try {
     const res = await fetch(rawUrl, {
@@ -53,22 +73,10 @@ async function fetchUrlContent(rawUrl: string): Promise<string> {
     throw new Error('Failed to fetch page — it may be blocking automated requests');
   }
 
-  // Jina fallback for JS-heavy pages that render little content server-side
-  if (text.length < 1000) {
-    try {
-      const jinaRes = await fetch(`https://r.jina.ai/${encodeURIComponent(rawUrl)}`, {
-        signal: AbortSignal.timeout(15_000),
-        headers: { Accept: 'text/plain' },
-      });
-      if (jinaRes.ok) {
-        const jinaText = (await jinaRes.text()).trim();
-        if (jinaText.length > text.length) text = jinaText;
-      }
-    } catch { /* silent — use whatever we have */ }
-  }
+  if (!text) throw new Error('Could not extract any content from the page');
 
-  if (text.length > 80_000) {
-    text = text.slice(0, 80_000) + '\n[Content truncated at 80,000 characters]';
+  if (text.length > MAX_CONTENT_CHARS) {
+    text = text.slice(0, MAX_CONTENT_CHARS) + '\n[Content truncated]';
   }
   return text;
 }
@@ -265,7 +273,7 @@ Rules:
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8096,
+      max_tokens: 16000,
       messages: [{
         role: 'user',
         content: [
