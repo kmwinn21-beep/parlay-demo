@@ -674,11 +674,11 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             <h3 className="text-base font-bold text-brand-primary font-serif">Full Agenda</h3>
             {days.length > 0 && !scanning && (
               <div className="flex items-center gap-2">
-                <button onClick={() => cameraRef.current?.click()} className="inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => cameraRef.current?.click()} className="text-xs inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   Re-scan
                 </button>
-                <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => fileRef.current?.click()} className="text-xs inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                   Upload Image / PDF
                 </button>
@@ -698,7 +698,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                     <button onClick={() => setConfirmClear(false)} className=" text-gray-400 hover:underline">No</button>
                   </div>
                 ) : (
-                  <button onClick={() => setConfirmClear(true)} className=" text-sm text-red-400 hover:text-red-600 transition-colors">Clear</button>
+                  <button onClick={() => setConfirmClear(true)} className=" text-xs text-red-400 hover:text-red-600 transition-colors">Clear</button>
                 )}
               </div>
             )}
@@ -761,7 +761,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 <button
                   type="button"
                   onClick={() => { setUrlPanelOpen(true); setScanError(null); }}
-                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${urlPanelOpen ? 'bg-white text-gray-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-colors ${urlPanelOpen ? 'bg-white text-gray-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
                 >
                   From Link
                 </button>
@@ -773,15 +773,15 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                       <svg className="h-6 w-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-700">No agenda yet</p>
-                      <p className="mt-1 text-gray-400">Upload a photo, screenshot, or PDF of the conference agenda</p>
+                      <p className="text-sm font-medium text-gray-700">No agenda yet</p>
+                      <p className="text-sm mt-1 text-gray-400">Upload a photo, screenshot, or PDF of the conference agenda</p>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2">
-                      <button onClick={() => cameraRef.current?.click()} className="btn-secondary inline-flex items-center gap-1.5">
+                      <button onClick={() => cameraRef.current?.click()} className="btn-secondary text-sm inline-flex items-center gap-1.5">
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                         Take Photo
                       </button>
-                      <button onClick={() => fileRef.current?.click()} className="btn-primary inline-flex items-center gap-1.5">
+                      <button onClick={() => fileRef.current?.click()} className="btn-primary text-sm inline-flex items-center gap-1.5">
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                         Upload
                       </button>
@@ -841,7 +841,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                       </svg>
                       <span className=" font-semibold text-sm text-brand-primary">{day.day_label}</span>
                     </div>
-                    <span className=" text-sm text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
+                    <span className=" text-xs text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {fullExpandedDays.has(day.day_label) && (
                     <div className="divide-y divide-gray-100 border-t border-brand-primary/20">
@@ -859,7 +859,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-base font-bold text-brand-primary font-serif">My Agenda</h3>
             {hasMyAgenda && (
-              <span className="text-sm text-gray-400">
+              <span className="text-xs text-gray-400">
                 {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
               </span>
             )}
@@ -867,8 +867,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
 
           {!hasMyAgenda ? (
             <div className="rounded-xl border border-dashed border-gray-200 px-6 py-12 text-center">
-              <p className="text-xs font-medium text-gray-600">Nothing here yet</p>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="text-sm font-medium text-gray-600">Nothing here yet</p>
+              <p className="mt-1 text-sm text-gray-400">
                 {days.length > 0
                   ? 'Click "+ My Agenda" on sessions to the left to add them here.'
                   : 'Upload an agenda to get started. Your scheduled meetings will appear here automatically.'}
