@@ -472,7 +472,7 @@ export function FooterChat() {
         <button
           type="button"
           onClick={() => { setPanelOpen(v => !v); if (!panelOpen) { setView('conversations'); setConvLoading(false); } }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 border-b-0 rounded-t-xl shadow-lg hover:bg-gray-50 transition-colors select-none"
+          className="flex items-center gap-2 px-10 py-2.5 bg-white border border-gray-200 border-b-0 rounded-t-xl shadow-lg hover:bg-gray-50 transition-colors select-none"
         >
           <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
