@@ -40,6 +40,7 @@ export interface FollowUpRow {
 }
 export interface RepPerformanceRow {
   repName: string; contactsCaptured: number; newlyEngaged: number;
+  targetsEngaged: number;
   reEngagements: number; meetingsHeld: number; walkInMeetings: number;
   followUpsCreated: number; followUpsCompleted: number; followUpRate: number;
   companies: {
@@ -73,7 +74,9 @@ export interface ActionItem {
 export interface PostConferenceData {
   summary: {
     conference: { id: number; name: string; start_date: string; end_date: string; location: string };
-    totalCaptured: number; newlyEngaged: number; reEngagements: number;
+    totalCaptured: number; newlyEngaged: number;
+    targetsEngaged: number; totalTargets: number; targetsEngagedPct: number;
+    reEngagements: number;
     stillUnengaged: number; icpContacts: number; icpCaptureRate: number;
     meetingsScheduled: number; meetingsHeld: number; walkInMeetings: number;
     noShows: number; meetingsWithOutcome: number;
@@ -89,6 +92,7 @@ export interface PostConferenceData {
       icpCaptureRate: { current: number; avg: number | null };
       followUpRate: { current: number; avg: number | null };
       notesPerContact: { current: number; avg: number | null };
+      targetsEngagedPct: { current: number; avg: number | null };
     };
   };
   contacts: { newlyEngaged: ContactRow[]; reEngagements: ContactRow[]; stillUnengaged: ContactRow[] };

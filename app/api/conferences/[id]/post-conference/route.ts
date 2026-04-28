@@ -31,6 +31,7 @@ interface FollowUpRow {
 }
 interface RepPerformanceRow {
   repName: string; contactsCaptured: number; newlyEngaged: number;
+  targetsEngaged: number;
   reEngagements: number; meetingsHeld: number; walkInMeetings: number;
   followUpsCreated: number; followUpsCompleted: number; followUpRate: number;
   companies: {
@@ -258,7 +259,8 @@ export async function GET(
 
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
-    allSocialRes, allConfsRes, confTouchpointsRes, confSocialEventsRes, confTouchpointRowsRes] = await Promise.all([
+    allSocialRes, allConfsRes, confTouchpointsRes, confSocialEventsRes, confTouchpointRowsRes,
+    confTargetsRes, confEngDetailsRes, confEngEntityNotesRes] = await Promise.all([
     db.execute({
       sql: `SELECT ca.attendee_id, ca.conference_id
             FROM conference_attendees ca
@@ -319,6 +321,23 @@ export async function GET(
             GROUP BY at.attendee_id, at.option_id
             ORDER BY a.last_name, a.first_name`,
       args: [confId],
+    }),
+    db.execute({
+      sql: `SELECT attendee_id FROM conference_targets WHERE conference_id = ?`,
+      args: [confId],
+    }),
+    db.execute({
+      sql: `SELECT DISTINCT attendee_id FROM conference_attendee_details
+            WHERE conference_id = ? AND (
+              (notes IS NOT NULL AND TRIM(notes) != '') OR
+              (action IS NOT NULL AND TRIM(action) != '')
+            )`,
+      args: [confId],
+    }),
+    db.execute({
+      sql: `SELECT DISTINCT entity_id as attendee_id FROM entity_notes
+            WHERE conference_name = ? AND entity_type = 'attendee'`,
+      args: [confName],
     }),
   ]);
 
@@ -575,6 +594,35 @@ export async function GET(
     socialByAttConf.get(key)!.push({ rsvp_status: String(r.rsvp_status) });
   }
 
+  // ── Conference targets engagement ─────────────────────────────────────────
+  const targetAttendeeIds = new Set(confTargetsRes.rows.map(r => Number(r.attendee_id)));
+  const totalTargets = targetAttendeeIds.size;
+
+  // Conference-scoped engagement sets (cover ALL attendees, not just operators)
+  const confMeetingAttIds = new Set(confMeetingsRes.rows.map(r => Number(r.attendee_id)));
+  const confFuAttIds = new Set(confFollowUpsRes.rows.map(r => Number(r.attendee_id)));
+  const confSocialAttendedIds = new Set(
+    confSocialRsvpsRes.rows
+      .filter(r => String(r.rsvp_status ?? '').split(',').map((s: string) => s.trim()).includes('attended'))
+      .map(r => Number(r.attendee_id)),
+  );
+  const confTouchpointAttIds = new Set(confTouchpointRowsRes.rows.map(r => Number(r.attendee_id)));
+  const confEngNoteAttIds = new Set([
+    ...confEngDetailsRes.rows.map(r => Number(r.attendee_id)),
+    ...confEngEntityNotesRes.rows.map(r => Number(r.attendee_id)),
+  ]);
+
+  const engagedTargetIds = new Set<number>();
+  for (const aid of targetAttendeeIds) {
+    if (
+      confMeetingAttIds.has(aid) || confFuAttIds.has(aid) ||
+      confSocialAttendedIds.has(aid) || confTouchpointAttIds.has(aid) ||
+      confEngNoteAttIds.has(aid)
+    ) engagedTargetIds.add(aid);
+  }
+  const targetsEngaged = engagedTargetIds.size;
+  const targetsEngagedPct = totalTargets > 0 ? Math.round((targetsEngaged / totalTargets) * 100) : 0;
+
   // Helper: build per-conf maps for a given attendee_id
   function buildAttMaps(aid: number, confs: number[]) {
     const detailsByConf = new Map<number, { action: string | null; notes: string | null }>();
@@ -762,6 +810,47 @@ export async function GET(
     }
   }
 
+  // ── Targets Engaged multi-rep attribution ─────────────────────────────────
+  const targetsEngagedRepsMap = new Map<number, Set<string>>();
+  for (const aid of engagedTargetIds) targetsEngagedRepsMap.set(aid, new Set<string>());
+
+  if (engagedTargetIds.size > 0) {
+    const engTargetIds = Array.from(engagedTargetIds);
+    const engPh = engTargetIds.map(() => '?').join(',');
+    const engTargetNotesRes = await db.execute({
+      sql: `SELECT entity_id as attendee_id, rep FROM entity_notes
+            WHERE entity_type = 'attendee' AND entity_id IN (${engPh})
+            AND conference_name = ? AND rep IS NOT NULL AND rep != ''`,
+      args: [...engTargetIds, confName],
+    });
+
+    for (const f of confFollowUpsRes.rows) {
+      const aid = Number(f.attendee_id);
+      if (!targetsEngagedRepsMap.has(aid)) continue;
+      for (const name of resolveIds(f.assigned_rep)) targetsEngagedRepsMap.get(aid)!.add(name);
+    }
+    for (const m of confMeetingsRes.rows) {
+      const aid = Number(m.attendee_id);
+      if (!targetsEngagedRepsMap.has(aid)) continue;
+      const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+      if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+        for (const name of resolveIds(m.scheduled_by)) targetsEngagedRepsMap.get(aid)!.add(name);
+      }
+    }
+    for (const n of engTargetNotesRes.rows) {
+      const aid = Number(n.attendee_id);
+      if (!targetsEngagedRepsMap.has(aid)) continue;
+      const rep = String(n.rep).trim();
+      if (rep) targetsEngagedRepsMap.get(aid)!.add(rep);
+    }
+    for (const r of confSocialRsvpsRes.rows) {
+      const aid = Number(r.attendee_id);
+      if (!targetsEngagedRepsMap.has(aid)) continue;
+      if (!String(r.rsvp_status ?? '').split(',').map((s: string) => s.trim()).includes('attended')) continue;
+      for (const name of resolveIds(r.assigned_user)) targetsEngagedRepsMap.get(aid)!.add(name);
+    }
+  }
+
   reEngagements.sort(sortContacts);
   // Unengaged: ICP first, then by priorConferenceCount desc
   stillUnengaged.sort((a, b) => {
@@ -907,11 +996,14 @@ export async function GET(
 
     const repNewly = newlyEngaged.filter(c => newlyEngagedRepsMap.get(c.attendee_id)?.has(repName) ?? false).length;
     const repReEngage = captured.filter(c => reEngagements.some(r => r.attendee_id === c.attendee_id)).length;
+    const repTargetsEngaged = Array.from(engagedTargetIds)
+      .filter(aid => targetsEngagedRepsMap.get(aid)?.has(repName) ?? false).length;
 
     repPerfRows.push({
       repName,
       contactsCaptured: captured.length,
       newlyEngaged: repNewly,
+      targetsEngaged: repTargetsEngaged,
       reEngagements: repReEngage,
       meetingsHeld: heldMeetings.length,
       walkInMeetings: walkIns.length,
@@ -1140,6 +1232,9 @@ export async function GET(
     },
     totalCaptured: newlyEngaged.length + reEngagements.length,
     newlyEngaged: newlyEngaged.length,
+    targetsEngaged,
+    totalTargets,
+    targetsEngagedPct,
     reEngagements: reEngagements.length,
     stillUnengaged: stillUnengaged.length,
     icpContacts: icpCount,
@@ -1171,6 +1266,7 @@ export async function GET(
       icpCaptureRate: { current: icpCaptureRate, avg: priorAvg.icpCaptureRate },
       followUpRate: { current: fuRate, avg: priorAvg.followUpRate },
       notesPerContact: { current: contactRows.length > 0 ? Math.round(notesLoggedCount / contactRows.length) : 0, avg: priorAvg.notesPerContact },
+      targetsEngagedPct: { current: targetsEngagedPct, avg: null },
     },
   };
 
