@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useUser } from './UserContext';
 
@@ -53,6 +54,11 @@ export function OutstandingFollowUps() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pendingIds, setPendingIds] = useState<number[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => setMounted(true), []);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -71,7 +77,10 @@ export function OutstandingFollowUps() {
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const inButton = containerRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+      if (!inButton && !inDropdown) setOpen(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -131,7 +140,25 @@ export function OutstandingFollowUps() {
       {/* Icon button with count badge */}
       <button
         type="button"
-        onClick={() => { setOpen(v => !v); if (!open) fetchItems(); }}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) {
+            fetchItems();
+            if (containerRef.current) {
+              const rect = containerRef.current.getBoundingClientRect();
+              const width = Math.min(384, window.innerWidth - 16);
+              setDropStyle({
+                position: 'fixed',
+                top: rect.bottom + 8,
+                right: Math.max(4, window.innerWidth - rect.right),
+                width,
+                maxHeight: 'min(80vh, 600px)',
+                zIndex: 9999,
+              });
+            }
+          }
+        }}
         className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
         title="Outstanding Follow Ups"
       >
@@ -146,11 +173,12 @@ export function OutstandingFollowUps() {
         )}
       </button>
 
-      {/* Dropdown */}
-      {open && (
+      {/* Dropdown — rendered in portal for mobile viewport safety */}
+      {open && mounted && createPortal(
         <div
-          className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-1rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl z-[200] overflow-hidden flex flex-col"
-          style={{ maxHeight: 'min(80vh, 600px)' }}
+          ref={dropdownRef}
+          className="bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          style={dropStyle}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
@@ -272,7 +300,8 @@ export function OutstandingFollowUps() {
               })}
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
