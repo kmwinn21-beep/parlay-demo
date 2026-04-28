@@ -795,8 +795,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                       </svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-700">Paste the URL of the conference agenda page</p>
-                      <p className="mt-1 text-gray-400">Works best when the full schedule is visible in the page HTML</p>
+                      <p className="text-sm font-medium text-gray-700">Paste the URL of the conference agenda page</p>
+                      <p className="mt-1 text-sm text-gray-400">Works best when the full schedule is visible in the page HTML</p>
                     </div>
                     <div className="w-full max-w-sm space-y-2">
                       <input
@@ -812,7 +812,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                       <button
                         onClick={() => void handleUrl()}
                         disabled={!urlInput.trim()}
-                        className="btn-primary w-full inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="btn-primary text-sm w-full inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0" />
