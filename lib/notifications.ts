@@ -3,6 +3,9 @@
  * Errors are swallowed so a notification failure never breaks a primary mutation.
  */
 import { db } from './db';
+import { sendNotificationEmail } from './email';
+
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 
 export type NotifType = 'company' | 'attendee' | 'conference';
 
@@ -94,6 +97,38 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
           p.entityType, p.entityId,
         ],
       });
+    }
+
+    // Send email notifications (best-effort, non-blocking)
+    try {
+      const ph2 = eligibleIds.map(() => '?').join(',');
+      const emailOptOutRows = await db.execute({
+        sql: `SELECT user_id FROM notification_preferences
+              WHERE user_id IN (${ph2}) AND email_notifications = 0`,
+        args: eligibleIds,
+      });
+      const emailOptedOut = new Set(emailOptOutRows.rows.map(r => Number(r.user_id)));
+      const emailIds = eligibleIds.filter(id => !emailOptedOut.has(id));
+
+      if (emailIds.length > 0) {
+        const ph3 = emailIds.map(() => '?').join(',');
+        const userRows = await db.execute({
+          sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
+          args: emailIds,
+        });
+        const typeToPath: Record<string, string> = {
+          attendee: '/attendees', company: '/companies', conference: '/conferences',
+        };
+        const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
+        const path = typeToPath[p.entityType] ?? null;
+        const link = path ? `${BASE}${path}/${p.entityId}` : null;
+        const subject = `[${APP_NAME}] ${p.recordName}`;
+        for (const row of userRows.rows) {
+          await sendNotificationEmail(String(row.email), subject, p.message, link);
+        }
+      }
+    } catch (err) {
+      console.error('[notifications] email send error:', err);
     }
   } catch (err) {
     console.error('[notifications] insert error:', err);
