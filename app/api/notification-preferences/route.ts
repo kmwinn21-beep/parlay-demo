@@ -12,7 +12,9 @@ export async function GET(request: NextRequest) {
     await dbReady;
 
     const result = await db.execute({
-      sql: 'SELECT company_status_change, follow_up_assigned, note_tagged FROM notification_preferences WHERE user_id = ?',
+      sql: `SELECT company_status_change, follow_up_assigned, note_tagged,
+                   company_status_change_email, follow_up_assigned_email, note_tagged_email
+            FROM notification_preferences WHERE user_id = ?`,
       args: [user.id],
     });
 
@@ -21,6 +23,9 @@ export async function GET(request: NextRequest) {
         company_status_change: true,
         follow_up_assigned: true,
         note_tagged: true,
+        company_status_change_email: true,
+        follow_up_assigned_email: true,
+        note_tagged_email: true,
       });
     }
 
@@ -29,6 +34,9 @@ export async function GET(request: NextRequest) {
       company_status_change: Boolean(row.company_status_change),
       follow_up_assigned: Boolean(row.follow_up_assigned),
       note_tagged: Boolean(row.note_tagged),
+      company_status_change_email: row.company_status_change_email == null ? true : Boolean(row.company_status_change_email),
+      follow_up_assigned_email: row.follow_up_assigned_email == null ? true : Boolean(row.follow_up_assigned_email),
+      note_tagged_email: row.note_tagged_email == null ? true : Boolean(row.note_tagged_email),
     });
   } catch (err) {
     console.error('Get notification preferences error:', err);
@@ -44,7 +52,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const allowed = ['company_status_change', 'follow_up_assigned', 'note_tagged'] as const;
+    const allowed = [
+      'company_status_change', 'follow_up_assigned', 'note_tagged',
+      'company_status_change_email', 'follow_up_assigned_email', 'note_tagged_email',
+    ] as const;
 
     const updates: string[] = [];
     const args: (number | string)[] = [];
@@ -63,8 +74,10 @@ export async function PATCH(request: NextRequest) {
     await dbReady;
 
     await db.execute({
-      sql: `INSERT INTO notification_preferences (user_id, company_status_change, follow_up_assigned, note_tagged)
-            VALUES (?, 1, 1, 1)
+      sql: `INSERT INTO notification_preferences
+              (user_id, company_status_change, follow_up_assigned, note_tagged,
+               company_status_change_email, follow_up_assigned_email, note_tagged_email)
+            VALUES (?, 1, 1, 1, 1, 1, 1)
             ON CONFLICT(user_id) DO NOTHING`,
       args: [user.id],
     });

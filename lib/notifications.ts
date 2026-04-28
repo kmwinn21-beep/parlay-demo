@@ -102,9 +102,10 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
     // Send email notifications (best-effort, non-blocking)
     try {
       const ph2 = eligibleIds.map(() => '?').join(',');
+      const emailColCheck = p.prefKey ? `${p.prefKey}_email = 0` : `email_notifications = 0`;
       const emailOptOutRows = await db.execute({
         sql: `SELECT user_id FROM notification_preferences
-              WHERE user_id IN (${ph2}) AND email_notifications = 0`,
+              WHERE user_id IN (${ph2}) AND ${emailColCheck}`,
         args: eligibleIds,
       });
       const emailOptedOut = new Set(emailOptOutRows.rows.map(r => Number(r.user_id)));

@@ -14,6 +14,9 @@ interface NotifPrefs {
   company_status_change: boolean;
   follow_up_assigned: boolean;
   note_tagged: boolean;
+  company_status_change_email: boolean;
+  follow_up_assigned_email: boolean;
+  note_tagged_email: boolean;
 }
 
 function formatMemberSince(raw: string | null): string {
@@ -258,6 +261,28 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
 
 // ─── Section: Notification Preferences ───────────────────────────────────────
 
+function Toggle({ checked, disabled, onClick }: { checked: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onClick}
+      className={`relative flex-shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary ${
+        checked ? 'bg-brand-secondary' : 'bg-gray-200'
+      }`}
+      style={{ height: '22px', width: '40px' }}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-transform ${
+          checked ? 'translate-x-[18px]' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+}
+
 function NotificationPrefsSection() {
   const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
   const [saving, setSaving] = useState(false);
@@ -292,47 +317,41 @@ function NotificationPrefsSection() {
     }
   };
 
-  const prefItems: { key: keyof NotifPrefs; label: string; description: string }[] = [
-    { key: 'company_status_change', label: 'Company Status Changes', description: 'When a company you\'re assigned to changes status.' },
-    { key: 'follow_up_assigned', label: 'Follow-up Assigned', description: 'When a follow-up task is assigned to you.' },
-    { key: 'note_tagged', label: 'Note Mentions', description: 'When someone @mentions you in a note.' },
+  const prefItems: { key: keyof NotifPrefs; emailKey: keyof NotifPrefs; label: string; description: string }[] = [
+    { key: 'company_status_change', emailKey: 'company_status_change_email', label: 'Company Status Changes', description: 'When a company you\'re assigned to changes status.' },
+    { key: 'follow_up_assigned', emailKey: 'follow_up_assigned_email', label: 'Follow-up Assigned', description: 'When a follow-up task is assigned to you.' },
+    { key: 'note_tagged', emailKey: 'note_tagged_email', label: 'Note Mentions', description: 'When someone @mentions you in a note.' },
   ];
 
   return (
     <div className="card">
       <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Notification Preferences</h2>
-      <p className="text-xs text-gray-400 mb-4">Choose which in-app notifications you receive.</p>
+      <p className="text-xs text-gray-400 mb-4">Choose which notifications you receive.</p>
       {prefs === null ? (
         <div className="space-y-3">
           {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />)}
         </div>
       ) : (
-        <div className="space-y-3">
-          {prefItems.map(({ key, label, description }) => (
-            <label key={key} className="flex items-center justify-between gap-4 cursor-pointer select-none">
-              <div>
-                <p className="text-sm font-medium text-gray-800">{label}</p>
-                <p className="text-xs text-gray-400">{description}</p>
+        <div>
+          {/* Column headers */}
+          <div className="flex items-center justify-end gap-6 mb-3 pr-0.5">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide" style={{ width: '40px', textAlign: 'center' }}>In-App</span>
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide" style={{ width: '40px', textAlign: 'center' }}>Email</span>
+          </div>
+          <div className="space-y-4">
+            {prefItems.map(({ key, emailKey, label, description }) => (
+              <div key={key} className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{label}</p>
+                  <p className="text-xs text-gray-400">{description}</p>
+                </div>
+                <div className="flex items-center gap-6 flex-shrink-0">
+                  <Toggle checked={prefs[key]} disabled={saving} onClick={() => toggle(key)} />
+                  <Toggle checked={prefs[emailKey]} disabled={saving} onClick={() => toggle(emailKey)} />
+                </div>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={prefs[key]}
-                disabled={saving}
-                onClick={() => toggle(key)}
-                className={`relative flex-shrink-0 w-10 h-5.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary ${
-                  prefs[key] ? 'bg-brand-secondary' : 'bg-gray-200'
-                }`}
-                style={{ height: '22px', width: '40px' }}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-transform ${
-                    prefs[key] ? 'translate-x-[18px]' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </label>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
