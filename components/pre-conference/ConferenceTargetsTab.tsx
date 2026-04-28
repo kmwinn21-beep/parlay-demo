@@ -1,9 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
 import type { TargetEntry } from '../PreConferenceReview';
+
+export interface AddableAttendee {
+  id: number;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  seniority: string | null;
+  companyName: string | null;
+  companyId: number | null;
+}
+
+export interface AddableGroup {
+  label: string;
+  attendees: AddableAttendee[];
+}
 
 const TIERS = [
   {
@@ -144,15 +159,60 @@ export function ConferenceTargetsTab({
   meetingAttendeeIds,
   onToggleTarget,
   onSetTier,
+  addableGroups,
+  onAddTargets,
+  loadingAddAttendees,
 }: {
   conferenceName: string;
   targetMap: Map<number, TargetEntry>;
   meetingAttendeeIds: Set<number>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   onSetTier: (attendeeId: number, tier: string) => Promise<void>;
+  addableGroups?: AddableGroup[];
+  onAddTargets?: (entries: Array<Omit<TargetEntry, 'tier'>>) => Promise<void>;
+  loadingAddAttendees?: boolean;
 }) {
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
+
+  // Add-target dropdown state
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [addPending, setAddPending] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showAdd) return;
+    const handler = (e: MouseEvent) => {
+      if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
+        setShowAdd(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAdd]);
+
+  const handleAddConfirm = useCallback(async () => {
+    if (!onAddTargets || selectedIds.size === 0) return;
+    setAddPending(true);
+    const entries = (addableGroups ?? [])
+      .flatMap(g => g.attendees)
+      .filter(a => selectedIds.has(a.id))
+      .map(a => ({
+        attendeeId: a.id,
+        firstName: a.firstName,
+        lastName: a.lastName,
+        title: a.title,
+        seniority: a.seniority,
+        companyName: a.companyName,
+        companyId: a.companyId,
+        assignedUserNames: [] as string[],
+      }));
+    await onAddTargets(entries);
+    setSelectedIds(new Set());
+    setShowAdd(false);
+    setAddPending(false);
+  }, [onAddTargets, selectedIds, addableGroups]);
 
   const targets = Array.from(targetMap.values());
 
@@ -219,7 +279,95 @@ export function ConferenceTargetsTab({
 
       {/* Kanban */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">{conferenceName} Targets</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700">{conferenceName} Targets</h3>
+
+          {onAddTargets && (
+            <div className="relative" ref={addDropdownRef}>
+              <button
+                type="button"
+                onClick={() => { setShowAdd(prev => !prev); setSelectedIds(new Set()); }}
+                disabled={loadingAddAttendees || addPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-wait"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                Target
+              </button>
+
+              {showAdd && (
+                <div className="absolute right-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-30 flex flex-col max-h-[480px]">
+                  {/* Dropdown header */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                    <span className="text-sm font-semibold text-gray-800">Add Targets</span>
+                    <span className="text-xs text-gray-400">{selectedIds.size} selected</span>
+                  </div>
+
+                  {/* Attendee list */}
+                  {(addableGroups ?? []).length === 0 ? (
+                    <p className="px-4 py-8 text-center text-xs text-gray-400">
+                      All conference attendees are already targets.
+                    </p>
+                  ) : (
+                    <div className="overflow-y-auto flex-1">
+                      {(addableGroups ?? []).map(group => (
+                        <div key={group.label}>
+                          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group.label}</span>
+                          </div>
+                          {group.attendees.map(a => (
+                            <label key={a.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(a.id)}
+                                onChange={() => setSelectedIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                                  return next;
+                                })}
+                                className="mt-0.5 flex-shrink-0 accent-brand-primary"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-800 leading-tight">
+                                  {a.firstName} {a.lastName}
+                                  {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
+                                </p>
+                                {a.companyName && <p className="text-xs text-gray-400 truncate">{a.companyName}</p>}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dropdown footer */}
+                  <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { setShowAdd(false); setSelectedIds(new Set()); }}
+                      className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleAddConfirm()}
+                      disabled={selectedIds.size === 0 || addPending}
+                      className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {addPending
+                        ? 'Adding…'
+                        : `Add${selectedIds.size > 0 ? ` ${selectedIds.size}` : ''} Target${selectedIds.size !== 1 ? 's' : ''}`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {TIERS.map(tier => {
             const tierCards = targets.filter(t => t.tier === tier.key);
