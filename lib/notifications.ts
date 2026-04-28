@@ -123,7 +123,7 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
         const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
         const path = typeToPath[p.entityType] ?? null;
         const link = path ? `${BASE}${path}/${p.entityId}` : null;
-        const subject = `[${APP_NAME}] ${p.recordName}`;
+        const subject = `${APP_NAME} - ${p.recordName} Notification`;
         for (const row of userRows.rows) {
           await sendNotificationEmail(String(row.email), subject, p.message, link);
         }

@@ -190,9 +190,13 @@ export function MentionTextarea({
   }, [value, mentionStartIdx, onChange, onMentionAdd]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSuggestions && e.key === 'Escape') {
+    if (!showSuggestions) return;
+    if (e.key === 'Escape') {
       e.preventDefault();
       setShowSuggestions(false);
+    } else if (e.key === 'Tab' && filteredUsers.length > 0) {
+      e.preventDefault();
+      handleSelectUser(filteredUsers[0]);
     }
   };
 
@@ -215,7 +219,7 @@ export function MentionTextarea({
       <p className="px-3 py-1.5 text-[10px] text-gray-400 uppercase tracking-wide border-b border-gray-100 font-semibold sticky top-0 bg-white">
         Tag a user
       </p>
-      {filteredUsers.map(u => (
+      {filteredUsers.map((u, idx) => (
         <button
           key={u.id}
           type="button"
@@ -228,7 +232,10 @@ export function MentionTextarea({
           <span className="w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
             {getRepInitials(u.value)}
           </span>
-          {u.value}
+          <span className="flex-1">{u.value}</span>
+          {idx === 0 && (
+            <span className="text-[9px] font-semibold text-gray-400 bg-gray-100 rounded px-1 py-0.5 flex-shrink-0">Tab</span>
+          )}
         </button>
       ))}
     </div>,
