@@ -766,9 +766,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                           ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />}
                       </svg>
-                      <span className="text-xs font-semibold text-brand-primary">{group.day_label}</span>
+                      <span className="text-sm font-semibold text-brand-primary">{group.day_label}</span>
                     </div>
-                    <span className="text-xs text-gray-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                    <span className="text-sm text-gray-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
                   </button>
                   {myExpandedDays.has(group.day_label) && (
                     <div className="divide-y divide-gray-100 border-t border-brand-secondary/30">
