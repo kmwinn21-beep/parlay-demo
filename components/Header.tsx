@@ -15,6 +15,7 @@ import { NotificationBell } from './NotificationBell';
 import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { useUser } from './UserContext';
+import { useChatPanel } from './ChatPanelContext';
 import { useAppName } from '@/lib/useAppName';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
@@ -82,6 +83,7 @@ export function Header() {
   const { user } = useUser();
   const appName = useAppName();
   const { navHidden, setNavHidden } = useFloatingNavHidden();
+  const { setPanelOpen } = useChatPanel();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -163,6 +165,17 @@ export function Header() {
             </svg>
           </button>
         )}
+        {/* Chat — mobile only */}
+        <button
+          type="button"
+          onClick={() => setPanelOpen(true)}
+          className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Messaging"
+        >
+          <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </button>
         {/* Notification Bell */}
         <NotificationBell />
         {/* Outstanding Follow Ups */}

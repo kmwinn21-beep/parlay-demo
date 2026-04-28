@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser } from '@/components/UserContext';
+import { useChatPanel } from '@/components/ChatPanelContext';
 
 interface ChatUser {
   id: number;
@@ -141,7 +142,7 @@ function ChatWindow({
   };
 
   return (
-    <div className="flex flex-col w-72 bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden">
+    <div className="flex flex-col w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden">
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -232,7 +233,7 @@ function ChatWindow({
 // The main footer messaging hub
 export function FooterChat() {
   const { user, loading: userLoading } = useUser();
-  const [panelOpen, setPanelOpen] = useState(false);
+  const { panelOpen, setPanelOpen } = useChatPanel();
   const [view, setView] = useState<'conversations' | 'new'>('conversations');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [allUsers, setAllUsers] = useState<ChatUser[]>([]);
@@ -309,7 +310,169 @@ export function FooterChat() {
   if (userLoading || !user) return null;
 
   return (
-    <div className="fixed bottom-0 right-4 z-50 flex flex-row-reverse items-end gap-2">
+    <>
+      {/* Mobile bottom-sheet overlay */}
+      {panelOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30" onClick={() => setPanelOpen(false)} />
+          {/* Sheet */}
+          <div className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh]">
+            {/* Sheet header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              {view === 'new' ? (
+                <button
+                  type="button"
+                  onClick={() => { setView('conversations'); setUserSearch(''); }}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 hover:text-brand-secondary"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  New Message
+                </button>
+              ) : (
+                <span className="text-sm font-semibold text-gray-800">Messaging</span>
+              )}
+              <div className="flex items-center gap-1">
+                {view === 'conversations' && (
+                  <button
+                    type="button"
+                    onClick={handleOpenNewPanel}
+                    className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors"
+                    title="New message"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(false)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* New message search */}
+            {view === 'new' && (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="px-3 py-2 border-b border-gray-100">
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={e => setUserSearch(e.target.value)}
+                    placeholder="Search teammates…"
+                    autoFocus
+                    className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary"
+                  />
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {filteredUsers.length === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>
+                  )}
+                  {filteredUsers.map(u => {
+                    const name = getDisplayName(u.email, u.displayName);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors"
+                      >
+                        <Avatar name={name} size="sm" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
+                          <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Conversations list */}
+            {view === 'conversations' && (
+              <div className="flex-1 overflow-y-auto">
+                {conversations.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <p className="text-sm text-gray-400">No conversations yet.</p>
+                    <button
+                      type="button"
+                      onClick={handleOpenNewPanel}
+                      className="mt-2 text-xs text-brand-secondary hover:underline font-medium"
+                    >
+                      Start one
+                    </button>
+                  </div>
+                )}
+                {conversations.map(conv => {
+                  const name = getDisplayName(conv.otherEmail, conv.otherDisplayName);
+                  const isMe = conv.lastSenderId === user.id;
+                  return (
+                    <button
+                      key={conv.otherId}
+                      type="button"
+                      onClick={() => { openChatFromConversation(conv); setPanelOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0"
+                    >
+                      <div className="relative flex-shrink-0">
+                        <Avatar name={name} size="sm" />
+                        {conv.unreadCount > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+                            {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>
+                            {name}
+                          </p>
+                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
+                            {formatTime(conv.lastCreatedAt)}
+                          </span>
+                        </div>
+                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>
+                          {isMe ? 'You: ' : ''}{conv.lastContent}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile chat windows (open from conversations) */}
+      {openChats.map(other => (
+        <div key={other.id} className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/30" onClick={() => closeChat(other.id)} />
+          <div className="relative">
+            <ChatWindow
+              other={other}
+              currentUserId={user.id}
+              onClose={() => closeChat(other.id)}
+              onNewMessage={handleNewMessageSent}
+            />
+          </div>
+        </div>
+      ))}
+
+      {/* Desktop layout */}
+      <div className="hidden lg:flex fixed bottom-0 right-4 z-50 flex-row-reverse items-end gap-2">
       {/* Open chat windows */}
       {openChats.map(other => (
         <ChatWindow
@@ -325,7 +488,7 @@ export function FooterChat() {
       <div className="flex flex-col items-end">
         {/* Expanded panel */}
         {panelOpen && (
-          <div className="mb-0 w-72 bg-white rounded-t-xl shadow-2xl border border-gray-200 border-b-0 flex flex-col max-h-[420px]">
+          <div className="mb-0 w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 border-b-0 flex flex-col max-h-[420px]">
             {/* Panel header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               {view === 'new' ? (
@@ -471,18 +634,20 @@ export function FooterChat() {
         {/* Tab bar button */}
         <button
           type="button"
-          onClick={() => { setPanelOpen(v => !v); if (!panelOpen) { setView('conversations'); setConvLoading(false); } }}
-          className="flex items-center gap-2 px-10 py-2.5 bg-white border border-gray-200 border-b-0 rounded-t-xl shadow-lg hover:bg-gray-50 transition-colors select-none"
+          onClick={() => { setPanelOpen(!panelOpen); if (!panelOpen) { setView('conversations'); setConvLoading(false); } }}
+          className="flex items-center justify-between gap-2 w-[420px] px-6 py-2.5 bg-white border border-gray-200 border-b-0 rounded-t-xl shadow-lg hover:bg-gray-50 transition-colors select-none"
         >
-          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <span className="text-sm font-semibold text-gray-800">Messaging</span>
-          {totalUnread > 0 && (
-            <span className="min-w-[18px] h-[18px] px-1 bg-brand-secondary text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
-              {totalUnread > 99 ? '99+' : totalUnread}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span className="text-sm font-semibold text-gray-800">Messaging</span>
+            {totalUnread > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 bg-brand-secondary text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                {totalUnread > 99 ? '99+' : totalUnread}
+              </span>
+            )}
+          </div>
           <svg
             className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${panelOpen ? 'rotate-180' : ''}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -491,6 +656,7 @@ export function FooterChat() {
           </svg>
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
