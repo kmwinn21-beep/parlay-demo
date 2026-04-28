@@ -230,11 +230,31 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             }}
             className="input-field text-sm w-full col-span-1 sm:col-start-3 sm:col-span-2"
           >
-            {sortedConferences.map(conf => (
-              <option key={conf.id} value={conf.id}>
-                {conf.status === 'in_progress' ? '● ' : ''}{conf.name}
-              </option>
-            ))}
+            {allConferences.some(c => c.status === 'in_progress') && (
+              <optgroup label="In Progress">
+                {allConferences.filter(c => c.status === 'in_progress').map(conf => (
+                  <option key={conf.id} value={conf.id}>{conf.name}</option>
+                ))}
+              </optgroup>
+            )}
+            {allConferences.some(c => c.status === 'upcoming') && (
+              <optgroup label="Upcoming">
+                {allConferences.filter(c => c.status === 'upcoming')
+                  .sort((a, b) => a.start_date.localeCompare(b.start_date))
+                  .map(conf => (
+                    <option key={conf.id} value={conf.id}>{conf.name}</option>
+                  ))}
+              </optgroup>
+            )}
+            {allConferences.some(c => c.status === 'past') && (
+              <optgroup label="Past">
+                {allConferences.filter(c => c.status === 'past')
+                  .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                  .map(conf => (
+                    <option key={conf.id} value={conf.id}>{conf.name}</option>
+                  ))}
+              </optgroup>
+            )}
           </select>
         )}
       </div>
