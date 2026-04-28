@@ -34,7 +34,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<{ d
     return { devLink };
   }
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? `"${APP_NAME}" <noreply@procarehr.com>`,
+    from: process.env.SMTP_FROM ?? `"${APP_NAME}" <noreply@example.com>`,
     to,
     subject,
     html,
@@ -102,6 +102,24 @@ export async function sendEmailChangeVerification(
       <p style="${footerStyle}">If you didn't request this change, you can safely ignore this email — your current email address will remain unchanged.</p>
     </div>`
   );
+}
+
+export async function sendNotificationEmail(
+  email: string,
+  subject: string,
+  message: string,
+  link: string | null,
+): Promise<void> {
+  await sendEmail(
+    email,
+    subject,
+    `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">New Notification</h2>
+      <p style="margin:0 0 16px">${message}</p>
+      ${link ? `<p style="margin:24px 0"><a href="${link}" style="${btnStyle}">View Details</a></p>` : ''}
+      <p style="${footerStyle}">You are receiving this because you have email notifications enabled. Manage your preferences in account settings.</p>
+    </div>`
+  ).catch(() => {}); // best-effort — never throws
 }
 
 export async function sendEmailChangeNotification(
