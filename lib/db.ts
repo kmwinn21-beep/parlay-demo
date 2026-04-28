@@ -519,6 +519,9 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('next_steps', 'Post-Mtg', 10, 'post_mtg')`,
     `UPDATE config_options SET action_key = 'post_mtg' WHERE category = 'next_steps' AND LOWER(value) LIKE '%post%mtg%' AND (action_key IS NULL OR action_key = '')`,
     `ALTER TABLE notification_preferences ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE notification_preferences ADD COLUMN company_status_change_email INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE notification_preferences ADD COLUMN follow_up_assigned_email INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_tagged_email INTEGER NOT NULL DEFAULT 1`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
