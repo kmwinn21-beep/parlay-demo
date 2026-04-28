@@ -345,7 +345,7 @@ function BadgeScanResultsModal({
 
 // ── TouchpointQuickModal ──────────────────────────────────────────────────────
 
-function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
+export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [touchpointOptions, setTouchpointOptions] = useState<TouchpointOption[]>([]);
