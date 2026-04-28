@@ -12,6 +12,7 @@ import { AgendaUploadModal } from './AgendaUploadModal';
 import { TouchpointQuickModal } from './DashboardActionCard';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
+import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
@@ -164,6 +165,8 @@ export function Header() {
         )}
         {/* Notification Bell */}
         <NotificationBell />
+        {/* Outstanding Follow Ups */}
+        <OutstandingFollowUps />
         {/* Global Search — desktop only; mobile uses FloatingNav */}
         <button
           type="button"
