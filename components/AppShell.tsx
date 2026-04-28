@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { FloatingNav } from './FloatingNav';
+import { FooterChat } from './FooterChat';
 import { BottomNavProvider } from './BottomNavContext';
 import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
 import { UserProvider } from './UserContext';
@@ -38,6 +39,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Floating nav — mobile only */}
           <div className="lg:hidden">
             <FloatingNav />
+          </div>
+
+          {/* Footer chat — desktop only */}
+          <div className="hidden lg:block">
+            <FooterChat />
           </div>
         </div>
       </BottomNavProvider>
