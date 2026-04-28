@@ -246,8 +246,9 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
                 </button>
               </div>
             </div>
-            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
+            <div className={`grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
               <StatPill label="Reps" value={data.summary.repsAttended} />
+              <StatPill label="Targets Engaged %" value={`${data.summary.targetsEngagedPct}%`} />
               <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
               <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
               <StatPill label="Follow-up Rate" value={`${fuRate}%`} />

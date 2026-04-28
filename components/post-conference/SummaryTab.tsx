@@ -131,10 +131,8 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
   );
 
   const compareItems: { label: string; current: number; avg: number | null }[] = [
-    { label: 'Contacts per Rep', current: summary.priorAverageComparison.contactsPerRep.current, avg: summary.priorAverageComparison.contactsPerRep.avg },
     { label: 'Follow-up Rate %', current: summary.priorAverageComparison.followUpRate.current, avg: summary.priorAverageComparison.followUpRate.avg },
     { label: 'Meetings per Rep', current: summary.priorAverageComparison.meetingsPerRep.current, avg: summary.priorAverageComparison.meetingsPerRep.avg },
-    { label: 'Notes per Contact', current: summary.priorAverageComparison.notesPerContact.current, avg: summary.priorAverageComparison.notesPerContact.avg },
     { label: 'ICP Capture Rate %', current: summary.priorAverageComparison.icpCaptureRate.current, avg: summary.priorAverageComparison.icpCaptureRate.avg },
     { label: 'Newly Engaged', current: summary.newlyEngaged, avg: null },
     { label: 'Targets Engaged %', current: summary.priorAverageComparison.targetsEngagedPct.current, avg: summary.priorAverageComparison.targetsEngagedPct.avg },
@@ -147,16 +145,14 @@ export function SummaryTab({ summary, repPerformance }: { summary: Summary; repP
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="Contacts Captured" value={summary.totalCaptured} sub={`${summary.newlyEngaged} newly engaged`} color="#223A5E" />
         <StatCard label="Newly Engaged" value={summary.newlyEngaged} color="#059669" />
         <StatCard label="Targets Engaged" value={summary.targetsEngaged} sub={`of ${summary.totalTargets} targets`} color="#059669" />
-        <StatCard label="Targets Engaged %" value={`${summary.targetsEngagedPct}%`} color={summary.targetsEngagedPct >= 50 ? '#059669' : '#d97706'} />
         <StatCard label="Meetings Held" value={summary.meetingsHeld} sub={`${summary.walkInMeetings} unplanned`} color="#059669" />
         <StatCard label="Follow-up Rate" value={`${fuRate}%`} sub={`${summary.followUpsCompleted} / ${summary.followUpsCreated}`}
           color={fuRate >= 40 ? '#059669' : '#d97706'} />
         <StatCard label="Relationships Improved" value={summary.relationshipsImproved} color="#059669" />
-        <StatCard label="ICP Contacts" value={summary.icpContacts} color="#223A5E" />
       </div>
 
       {/* Charts + comparison — 3-column row */}
