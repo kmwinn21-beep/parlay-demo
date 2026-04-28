@@ -8,6 +8,7 @@ import { NewMeetingModal } from './NewMeetingModal';
 import { NewNoteModal } from './NewNoteModal';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
+import { AgendaUploadModal } from './AgendaUploadModal';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
@@ -89,6 +90,7 @@ export function Header() {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
+  const [showAgendaModal, setShowAgendaModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -237,13 +239,23 @@ export function Header() {
                 <Link
                   href="/conferences/new"
                   onClick={() => setShowAddNew(false)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
                 >
                   <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <span className="text-sm font-medium text-gray-800">Conference</span>
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddNew(false); setShowAgendaModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-800">Agenda</span>
+                </button>
               </div>
             </div>
           )}
@@ -358,6 +370,7 @@ export function Header() {
       <NewNoteModal isOpen={showNoteModal} onClose={() => setShowNoteModal(false)} />
       <AssignFollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onSuccess={() => {}} />
       <NewRelationshipModal isOpen={showRelationshipModal} onClose={() => setShowRelationshipModal(false)} />
+      {showAgendaModal && <AgendaUploadModal onClose={() => setShowAgendaModal(false)} />}
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
     </header>
   );
