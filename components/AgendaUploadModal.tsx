@@ -8,6 +8,7 @@ interface Conference {
   name: string;
   start_date: string;
   end_date: string;
+  status: 'in_progress' | 'upcoming' | 'past';
 }
 
 type Step = 'select' | 'scanning' | 'success';
@@ -35,11 +36,18 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     fetch('/api/conferences?nav=1')
       .then(r => (r.ok ? r.json() : []))
-      .then((data: Conference[]) => {
-        const list = Array.isArray(data) ? data : [];
-        setConferences(list);
+      .then((raw: Omit<Conference, 'status'>[]) => {
         const today = new Date().toISOString().slice(0, 10);
-        const active = list.find(c => c.start_date <= today && c.end_date >= today);
+        const list: Conference[] = (Array.isArray(raw) ? raw : []).map(c => ({
+          ...c,
+          status: (c.start_date <= today && c.end_date >= today)
+            ? 'in_progress'
+            : c.start_date > today
+            ? 'upcoming'
+            : 'past',
+        }));
+        setConferences(list);
+        const active = list.find(c => c.status === 'in_progress');
         const first = list[0];
         if (active) setSelectedConfId(active.id);
         else if (first) setSelectedConfId(first.id);
@@ -136,9 +144,27 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
                     onChange={e => setSelectedConfId(Number(e.target.value))}
                     className="input-field text-sm w-full"
                   >
-                    {conferences.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    {conferences.some(c => c.status === 'in_progress') && (
+                      <optgroup label="In Progress">
+                        {conferences.filter(c => c.status === 'in_progress').map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {conferences.some(c => c.status === 'upcoming') && (
+                      <optgroup label="Upcoming">
+                        {conferences.filter(c => c.status === 'upcoming')
+                          .sort((a, b) => a.start_date.localeCompare(b.start_date))
+                          .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
+                    )}
+                    {conferences.some(c => c.status === 'past') && (
+                      <optgroup label="Past">
+                        {conferences.filter(c => c.status === 'past')
+                          .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                          .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                 )}
               </div>
