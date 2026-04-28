@@ -9,6 +9,7 @@ import { NewNoteModal } from './NewNoteModal';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
 import { AgendaUploadModal } from './AgendaUploadModal';
+import { TouchpointQuickModal } from './DashboardActionCard';
 import { GlobalSearchModal } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
@@ -91,6 +92,7 @@ export function Header() {
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [showAgendaModal, setShowAgendaModal] = useState(false);
+  const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -249,12 +251,27 @@ export function Header() {
                 <button
                   type="button"
                   onClick={() => { setShowAddNew(false); setShowAgendaModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
                 >
                   <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
                   <span className="text-sm font-medium text-gray-800">Agenda</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddNew(false); setShowTouchpointsModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="4" />
+                    <line x1="12" y1="2" x2="12" y2="6" />
+                    <line x1="12" y1="18" x2="12" y2="22" />
+                    <line x1="2" y1="12" x2="6" y2="12" />
+                    <line x1="18" y1="12" x2="22" y2="12" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-800">Touchpoints</span>
                 </button>
               </div>
             </div>
@@ -371,6 +388,7 @@ export function Header() {
       <AssignFollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onSuccess={() => {}} />
       <NewRelationshipModal isOpen={showRelationshipModal} onClose={() => setShowRelationshipModal(false)} />
       {showAgendaModal && <AgendaUploadModal onClose={() => setShowAgendaModal(false)} />}
+      {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} />}
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
     </header>
   );
