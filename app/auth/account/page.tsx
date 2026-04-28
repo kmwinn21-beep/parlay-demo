@@ -17,6 +17,16 @@ interface NotifPrefs {
   company_status_change_email: boolean;
   follow_up_assigned_email: boolean;
   note_tagged_email: boolean;
+  note_comment_received: boolean;
+  note_comment_received_email: boolean;
+  note_comment_thread: boolean;
+  note_comment_thread_email: boolean;
+  note_reaction_received: boolean;
+  note_reaction_received_email: boolean;
+  note_lets_talk: boolean;
+  note_lets_talk_email: boolean;
+  comment_reaction_received: boolean;
+  comment_reaction_received_email: boolean;
 }
 
 function formatMemberSince(raw: string | null): string {
@@ -317,10 +327,20 @@ function NotificationPrefsSection() {
     }
   };
 
-  const prefItems: { key: keyof NotifPrefs; emailKey: keyof NotifPrefs; label: string; description: string }[] = [
+  type PrefItem = { key: keyof NotifPrefs; emailKey: keyof NotifPrefs; label: string; description: string };
+
+  const prefItemsOptOut: PrefItem[] = [
     { key: 'company_status_change', emailKey: 'company_status_change_email', label: 'Company Status Changes', description: 'When a company you\'re assigned to changes status.' },
     { key: 'follow_up_assigned', emailKey: 'follow_up_assigned_email', label: 'Follow-up Assigned', description: 'When a follow-up task is assigned to you.' },
     { key: 'note_tagged', emailKey: 'note_tagged_email', label: 'Note Mentions', description: 'When someone @mentions you in a note.' },
+  ];
+
+  const prefItemsOptIn: PrefItem[] = [
+    { key: 'note_comment_received', emailKey: 'note_comment_received_email', label: 'Comment on My Note', description: 'When someone comments on a note you wrote.' },
+    { key: 'note_comment_thread', emailKey: 'note_comment_thread_email', label: 'Thread Update', description: 'When a new comment is added to a note thread you\'ve joined.' },
+    { key: 'note_reaction_received', emailKey: 'note_reaction_received_email', label: 'Note Reaction', description: 'When someone likes or dislikes your note.' },
+    { key: 'note_lets_talk', emailKey: 'note_lets_talk_email', label: 'Let\'s Talk', description: 'When the Let\'s Talk button is triggered on a note you\'re involved in.' },
+    { key: 'comment_reaction_received', emailKey: 'comment_reaction_received_email', label: 'Comment Reaction', description: 'When someone likes or dislikes your comment.' },
   ];
 
   return (
@@ -332,14 +352,16 @@ function NotificationPrefsSection() {
           {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />)}
         </div>
       ) : (
-        <div>
+        <div className="space-y-5">
           {/* Column headers */}
-          <div className="flex items-center justify-end gap-6 mb-3 pr-0.5">
+          <div className="flex items-center justify-end gap-6 pr-0.5">
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide" style={{ width: '40px', textAlign: 'center' }}>In-App</span>
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide" style={{ width: '40px', textAlign: 'center' }}>Email</span>
           </div>
+
+          {/* Opt-out section */}
           <div className="space-y-4">
-            {prefItems.map(({ key, emailKey, label, description }) => (
+            {prefItemsOptOut.map(({ key, emailKey, label, description }) => (
               <div key={key} className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{label}</p>
@@ -351,6 +373,25 @@ function NotificationPrefsSection() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Note engagement section */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Note Engagement</p>
+            <div className="space-y-4">
+              {prefItemsOptIn.map(({ key, emailKey, label, description }) => (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{label}</p>
+                    <p className="text-xs text-gray-400">{description}</p>
+                  </div>
+                  <div className="flex items-center gap-6 flex-shrink-0">
+                    <Toggle checked={prefs[key]} disabled={saving} onClick={() => toggle(key)} />
+                    <Toggle checked={prefs[emailKey]} disabled={saving} onClick={() => toggle(emailKey)} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

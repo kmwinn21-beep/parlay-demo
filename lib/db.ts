@@ -522,6 +522,51 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE notification_preferences ADD COLUMN company_status_change_email INTEGER NOT NULL DEFAULT 1`,
     `ALTER TABLE notification_preferences ADD COLUMN follow_up_assigned_email INTEGER NOT NULL DEFAULT 1`,
     `ALTER TABLE notification_preferences ADD COLUMN note_tagged_email INTEGER NOT NULL DEFAULT 1`,
+    // Note comments, reactions, let's talk
+    `CREATE TABLE IF NOT EXISTS note_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      note_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      tagged_users TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (note_id) REFERENCES entity_notes(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_note_comments_note_id ON note_comments(note_id)`,
+    `CREATE TABLE IF NOT EXISTS note_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      note_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      reaction_type TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(note_id, user_id),
+      FOREIGN KEY (note_id) REFERENCES entity_notes(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS comment_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      comment_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      reaction_type TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(comment_id, user_id),
+      FOREIGN KEY (comment_id) REFERENCES note_comments(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `ALTER TABLE entity_notes ADD COLUMN lets_talk INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE entity_notes ADD COLUMN author_user_id INTEGER`,
+    // New opt-in notification prefs (DEFAULT 0 = opted out by default)
+    `ALTER TABLE notification_preferences ADD COLUMN note_comment_received INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_comment_received_email INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_comment_thread INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_comment_thread_email INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_reaction_received INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_reaction_received_email INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_lets_talk INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN note_lets_talk_email INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN comment_reaction_received INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE notification_preferences ADD COLUMN comment_reaction_received_email INTEGER NOT NULL DEFAULT 0`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

@@ -250,6 +250,209 @@ export async function notifyMentionedUsers(opts: {
   }
 }
 
+// ─── Opt-in notification engine (default OFF — user must explicitly enable) ──
+
+interface CreateOptInNotificationsInput {
+  userIds: number[];
+  prefKey: string;
+  emailPrefKey: string;
+  type: NotifType;
+  recordId: number;
+  recordName: string;
+  message: string;
+  changedByEmail: string;
+  changedByConfigId?: number | null;
+  entityType: string;
+  entityId: number;
+}
+
+async function createOptInNotifications(p: CreateOptInNotificationsInput): Promise<void> {
+  if (p.userIds.length === 0) return;
+  try {
+    const ph = p.userIds.map(() => '?').join(',');
+    const optInRows = await db.execute({
+      sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph}) AND ${p.prefKey} = 1`,
+      args: p.userIds,
+    });
+    const eligibleIds = optInRows.rows.map(r => Number(r.user_id));
+    if (eligibleIds.length === 0) return;
+
+    for (const uid of eligibleIds) {
+      await db.execute({
+        sql: `INSERT INTO notifications
+              (user_id, type, record_id, record_name, message,
+               changed_by_config_id, changed_by_email, entity_type, entity_id, is_read)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        args: [
+          uid, p.type, p.recordId, p.recordName, p.message,
+          p.changedByConfigId ?? null, p.changedByEmail,
+          p.entityType, p.entityId,
+        ],
+      });
+    }
+
+    try {
+      const ph2 = eligibleIds.map(() => '?').join(',');
+      const emailOptInRows = await db.execute({
+        sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph2}) AND ${p.emailPrefKey} = 1`,
+        args: eligibleIds,
+      });
+      const emailIds = emailOptInRows.rows.map(r => Number(r.user_id));
+      if (emailIds.length > 0) {
+        const ph3 = emailIds.map(() => '?').join(',');
+        const userRows = await db.execute({
+          sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
+          args: emailIds,
+        });
+        const typeToPath: Record<string, string> = {
+          attendee: '/attendees', company: '/companies', conference: '/conferences',
+        };
+        const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
+        const path = typeToPath[p.entityType] ?? null;
+        const link = path ? `${BASE}${path}/${p.entityId}` : null;
+        const subject = `${APP_NAME} - ${p.recordName} Notification`;
+        for (const row of userRows.rows) {
+          await sendNotificationEmail(String(row.email), subject, p.message, link);
+        }
+      }
+    } catch (err) {
+      console.error('[notifications] opt-in email error:', err);
+    }
+  } catch (err) {
+    console.error('[notifications] createOptInNotifications error:', err);
+  }
+}
+
+export async function notifyNoteComment(opts: {
+  noteId: number;
+  noteAuthorUserId: number | null;
+  commenterUserId: number;
+  commenterName: string;
+  commenterEmail: string;
+  commenterConfigId: number | null;
+  previousCommenterUserIds: number[];
+  recordName: string;
+  entityType: string;
+  entityId: number;
+}): Promise<void> {
+  const base = {
+    type: opts.entityType as NotifType,
+    recordId: opts.noteId,
+    recordName: opts.recordName,
+    changedByEmail: opts.commenterEmail,
+    changedByConfigId: opts.commenterConfigId,
+    entityType: opts.entityType,
+    entityId: opts.entityId,
+  };
+  if (opts.noteAuthorUserId && opts.noteAuthorUserId !== opts.commenterUserId) {
+    createOptInNotifications({
+      ...base,
+      userIds: [opts.noteAuthorUserId],
+      prefKey: 'note_comment_received',
+      emailPrefKey: 'note_comment_received_email',
+      message: `${opts.commenterName} commented on your note about ${opts.recordName}`,
+    });
+  }
+  const threadIds = opts.previousCommenterUserIds.filter(
+    id => id !== opts.commenterUserId && id !== opts.noteAuthorUserId,
+  );
+  if (threadIds.length > 0) {
+    createOptInNotifications({
+      ...base,
+      userIds: threadIds,
+      prefKey: 'note_comment_thread',
+      emailPrefKey: 'note_comment_thread_email',
+      message: `${opts.commenterName} added a comment to a note thread you're following (${opts.recordName})`,
+    });
+  }
+}
+
+export async function notifyNoteReaction(opts: {
+  noteId: number;
+  noteAuthorUserId: number | null;
+  reactorUserId: number;
+  reactorName: string;
+  reactorEmail: string;
+  reactorConfigId: number | null;
+  reactionType: 'like' | 'dislike';
+  recordName: string;
+  entityType: string;
+  entityId: number;
+}): Promise<void> {
+  if (!opts.noteAuthorUserId || opts.noteAuthorUserId === opts.reactorUserId) return;
+  const emoji = opts.reactionType === 'like' ? '👍' : '👎';
+  createOptInNotifications({
+    userIds: [opts.noteAuthorUserId],
+    prefKey: 'note_reaction_received',
+    emailPrefKey: 'note_reaction_received_email',
+    type: opts.entityType as NotifType,
+    recordId: opts.noteId,
+    recordName: opts.recordName,
+    message: `${opts.reactorName} reacted ${emoji} to your note about ${opts.recordName}`,
+    changedByEmail: opts.reactorEmail,
+    changedByConfigId: opts.reactorConfigId,
+    entityType: opts.entityType,
+    entityId: opts.entityId,
+  });
+}
+
+export async function notifyNoteLetsTalk(opts: {
+  noteId: number;
+  triggerUserId: number;
+  triggerName: string;
+  triggerEmail: string;
+  triggerConfigId: number | null;
+  recipientUserIds: number[];
+  recordName: string;
+  entityType: string;
+  entityId: number;
+}): Promise<void> {
+  const recipients = opts.recipientUserIds.filter(id => id !== opts.triggerUserId);
+  if (recipients.length === 0) return;
+  createOptInNotifications({
+    userIds: recipients,
+    prefKey: 'note_lets_talk',
+    emailPrefKey: 'note_lets_talk_email',
+    type: opts.entityType as NotifType,
+    recordId: opts.noteId,
+    recordName: opts.recordName,
+    message: `${opts.triggerName} wants to talk about a note on ${opts.recordName}. Commenting has been closed.`,
+    changedByEmail: opts.triggerEmail,
+    changedByConfigId: opts.triggerConfigId,
+    entityType: opts.entityType,
+    entityId: opts.entityId,
+  });
+}
+
+export async function notifyCommentReaction(opts: {
+  commentAuthorUserId: number;
+  reactorUserId: number;
+  reactorName: string;
+  reactorEmail: string;
+  reactorConfigId: number | null;
+  reactionType: 'like' | 'dislike';
+  recordName: string;
+  entityType: string;
+  entityId: number;
+  noteId: number;
+}): Promise<void> {
+  if (opts.commentAuthorUserId === opts.reactorUserId) return;
+  const emoji = opts.reactionType === 'like' ? '👍' : '👎';
+  createOptInNotifications({
+    userIds: [opts.commentAuthorUserId],
+    prefKey: 'comment_reaction_received',
+    emailPrefKey: 'comment_reaction_received_email',
+    type: opts.entityType as NotifType,
+    recordId: opts.noteId,
+    recordName: opts.recordName,
+    message: `${opts.reactorName} reacted ${emoji} to your comment on a note about ${opts.recordName}`,
+    changedByEmail: opts.reactorEmail,
+    changedByConfigId: opts.reactorConfigId,
+    entityType: opts.entityType,
+    entityId: opts.entityId,
+  });
+}
+
 export async function notifyForAttendee(opts: {
   attendeeId: number;
   attendeeName: string;
