@@ -586,6 +586,29 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE users ADD COLUMN invite_expires INTEGER`,
     `ALTER TABLE users ADD COLUMN first_name TEXT`,
     `ALTER TABLE users ADD COLUMN last_name TEXT`,
+    // Email outreach: per-user OAuth connections (Google / Microsoft)
+    `CREATE TABLE IF NOT EXISTS oauth_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('google', 'microsoft')),
+      provider_email TEXT,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_expires_at INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE (user_id, provider),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    // Email outreach: admin-managed reusable templates
+    `CREATE TABLE IF NOT EXISTS email_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

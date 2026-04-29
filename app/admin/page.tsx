@@ -60,7 +60,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1549,14 +1549,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : 'User Management'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : 'Email Templates'}
             </button>
           ))}
         </nav>
@@ -2593,6 +2593,9 @@ export default function AdminPage() {
       {/* ── Custom Forms tab ── */}
       {tab === 'forms' && <AdminFormsTab />}
 
+      {/* ── Email Templates tab ── */}
+      {tab === 'email-templates' && <AdminEmailTemplatesTab />}
+
       {/* ── User Management tab ── */}
       {tab === 'users' && (
         <div className="space-y-6">
@@ -3233,6 +3236,174 @@ function AdminFormsTab() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Admin Email Templates Tab ────────────────────────────────────────────────
+
+interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  body: string;
+  created_at: string;
+}
+
+function AdminEmailTemplatesTab() {
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ name: '', subject: '', body: '' });
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', subject: '', body: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const fetchTemplates = useCallback(() => {
+    setLoading(true);
+    fetch('/api/email-templates')
+      .then(r => r.ok ? r.json() : [])
+      .then(setTemplates)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.subject.trim() || !form.body.trim()) {
+      toast.error('All fields are required.'); return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/email-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed to create.'); return; }
+      toast.success('Template created.');
+      setForm({ name: '', subject: '', body: '' });
+      fetchTemplates();
+    } catch { toast.error('Network error.'); }
+    finally { setSaving(false); }
+  };
+
+  const handleEdit = (tmpl: EmailTemplate) => {
+    setEditId(tmpl.id);
+    setEditForm({ name: tmpl.name, subject: tmpl.subject, body: tmpl.body });
+  };
+
+  const handleSaveEdit = async (id: number) => {
+    if (!editForm.name.trim() || !editForm.subject.trim() || !editForm.body.trim()) {
+      toast.error('All fields are required.'); return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/email-templates/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed to save.'); return; }
+      toast.success('Template saved.');
+      setEditId(null);
+      fetchTemplates();
+    } catch { toast.error('Network error.'); }
+    finally { setSavingEdit(false); }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this template? This cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/email-templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) { toast.error('Failed to delete.'); return; }
+      toast.success('Template deleted.');
+      fetchTemplates();
+    } catch { toast.error('Network error.'); }
+    finally { setDeletingId(null); }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Create form */}
+      <div className="card">
+        <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">New Template</h2>
+        <p className="text-sm text-gray-500 mb-4">Create reusable email templates for outreach. Team members can select these when composing emails.</p>
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Template Name</label>
+            <input className="input-field w-full text-sm" placeholder="e.g. Initial Outreach" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Subject</label>
+            <input className="input-field w-full text-sm" placeholder="Email subject line" value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Body (HTML supported)</label>
+            <textarea
+              className="input-field w-full text-sm font-mono"
+              rows={6}
+              placeholder="<p>Hi {{name}},</p><p>...</p>"
+              value={form.body}
+              onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+              required
+            />
+            <p className="text-xs text-gray-400 mt-1">HTML is rendered in the compose editor. Plain text is also accepted.</p>
+          </div>
+          <button type="submit" disabled={saving} className="btn-primary text-sm">
+            {saving ? 'Creating…' : 'Create Template'}
+          </button>
+        </form>
+      </div>
+
+      {/* Existing templates */}
+      <div className="card p-0 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Templates</h2>
+        </div>
+        {loading ? (
+          <div className="px-6 py-8 space-y-3">
+            {[1, 2].map(i => <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />)}
+          </div>
+        ) : templates.length === 0 ? (
+          <p className="px-6 py-8 text-sm text-gray-400 text-center">No templates yet. Create one above.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {templates.map(tmpl => (
+              <div key={tmpl.id} className="px-6 py-4">
+                {editId === tmpl.id ? (
+                  <div className="space-y-3">
+                    <input className="input-field w-full text-sm" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="Template Name" />
+                    <input className="input-field w-full text-sm" value={editForm.subject} onChange={e => setEditForm(f => ({ ...f, subject: e.target.value }))} placeholder="Subject" />
+                    <textarea className="input-field w-full text-sm font-mono" rows={5} value={editForm.body} onChange={e => setEditForm(f => ({ ...f, body: e.target.value }))} placeholder="Body (HTML)" />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => handleSaveEdit(tmpl.id)} disabled={savingEdit} className="btn-primary text-xs px-3 py-1.5">{savingEdit ? 'Saving…' : 'Save'}</button>
+                      <button type="button" onClick={() => setEditId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">{tmpl.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{tmpl.subject}</p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button type="button" onClick={() => handleEdit(tmpl)} className="text-xs text-brand-secondary hover:underline font-medium">Edit</button>
+                      <button type="button" onClick={() => handleDelete(tmpl.id)} disabled={deletingId === tmpl.id} className="text-xs text-red-500 hover:underline font-medium">
+                        {deletingId === tmpl.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

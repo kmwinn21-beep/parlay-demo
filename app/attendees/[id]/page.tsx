@@ -21,6 +21,7 @@ import { useUserOptions, resolveRepInitials, getRepInitials } from '@/lib/useUse
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { TouchpointsSection } from '@/components/TouchpointsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -93,6 +94,7 @@ export default function AttendeeDetailPage() {
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
+  const [showComposeEmail, setShowComposeEmail] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
 
   // Follow-ups
@@ -727,13 +729,25 @@ export default function AttendeeDetailPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
                     {attendee.email ? (
-                      <a
-                        href={`mailto:${attendee.email}`}
-                        className="text-sm text-brand-secondary hover:underline block truncate"
-                        title={attendee.email}
-                      >
-                        {attendee.email}
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`mailto:${attendee.email}`}
+                          className="text-sm text-brand-secondary hover:underline truncate"
+                          title={attendee.email}
+                        >
+                          {attendee.email}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setShowComposeEmail(true)}
+                          title="Send email"
+                          className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      </div>
                     ) : <p className="text-sm text-gray-400">—</p>}
                   </div>
                   <div>
@@ -1137,6 +1151,14 @@ export default function AttendeeDetailPage() {
         defaultCompanyId={attendee?.company_id}
         availableConferences={attendee?.conferences}
       />
+
+      {showComposeEmail && attendee?.email && (
+        <ComposeEmailModal
+          contactEmail={attendee.email}
+          contactName={`${attendee.first_name} ${attendee.last_name}`}
+          onClose={() => setShowComposeEmail(false)}
+        />
+      )}
 
       {/* Add to Guest List Modal */}
       {showInviteModal && (
