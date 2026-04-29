@@ -144,7 +144,7 @@ function ChatWindow({
   };
 
   return (
-    <div className={`flex flex-col ${mobile ? 'w-full' : 'w-[420px]'} bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden`}>
+    <div className={`flex flex-col ${mobile ? 'w-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -177,7 +177,7 @@ function ChatWindow({
       {!minimized && (
         <>
           {/* Messages */}
-          <div className="flex-1 h-64 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50">
+          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? 'h-[50vh]' : 'h-64'}`}>
             {loading && (
               <div className="flex justify-center items-center h-full">
                 <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
@@ -221,7 +221,7 @@ function ChatWindow({
               className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-brand-secondary text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
               title="Send"
             >
-              <svg className="w-4 h-4 rotate-90" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 -rotate-90" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
               </svg>
             </button>
@@ -460,9 +460,9 @@ export function FooterChat() {
 
       {/* Mobile chat windows (open from conversations) */}
       {openChats.map(other => (
-        <div key={other.id} className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/30" onClick={() => closeChat(other.id)} />
-          <div className="relative w-full">
+        <div key={other.id} className="lg:hidden fixed inset-0 z-[60]">
+          <div className="absolute inset-0 bg-black/20" onClick={() => closeChat(other.id)} />
+          <div className="absolute top-16 left-4 right-4">
             <ChatWindow
               other={other}
               currentUserId={user.id}
