@@ -59,7 +59,7 @@ export default function ForgotPasswordPage() {
             <>
               <h1 className="text-2xl font-bold text-brand-primary font-serif mb-1">Forgot password?</h1>
               <p className="text-sm text-gray-500 mb-6">
-                Enter your Procare email and we&apos;ll send a reset link.
+                Enter your email and we&apos;ll send a reset link.
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
