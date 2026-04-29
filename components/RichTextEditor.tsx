@@ -6,7 +6,7 @@ import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
-import TextStyle from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import FontFamily from '@tiptap/extension-font-family';
 import { Color } from '@tiptap/extension-color';
 import Image from '@tiptap/extension-image';
@@ -31,15 +31,14 @@ export const FontSize = Extension.create({
       },
     }];
   },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  addCommands(): Record<string, any> {
+  addCommands(): Record<string, unknown> {
     return {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      /* eslint-disable */
       setFontSize: (fontSize: string) => ({ chain }: { chain: any }) =>
         chain().setMark('textStyle', { fontSize }).run(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       unsetFontSize: () => ({ chain }: { chain: any }) =>
         chain().setMark('textStyle', { fontSize: null }).run(),
+      /* eslint-enable */
     };
   },
 });
@@ -60,7 +59,7 @@ export const FONT_SIZES = ['8px', '10px', '11px', '12px', '14px', '16px', '18px'
 // ─── Extension Factory ────────────────────────────────────────────────────────
 
 export function getEditorExtensions({ withImage = false }: { withImage?: boolean } = {}) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /* eslint-disable */
   const exts: any[] = [
     StarterKit,
     Underline,
@@ -70,6 +69,7 @@ export function getEditorExtensions({ withImage = false }: { withImage?: boolean
     Color,
     FontSize,
   ];
+  /* eslint-enable */
   if (withImage) exts.push(Image.configure({ inline: false, allowBase64: true }));
   return exts;
 }
@@ -115,7 +115,7 @@ export function RichTextToolbar({ editor, withImage = false }: RichTextToolbarPr
     const reader = new FileReader();
     reader.onload = ev => {
       const src = ev.target?.result as string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      /* eslint-disable-next-line */
       (editor.chain().focus() as any).setImage({ src }).run();
     };
     reader.readAsDataURL(file);
@@ -156,12 +156,12 @@ export function RichTextToolbar({ editor, withImage = false }: RichTextToolbarPr
         value={activeFontSize}
         onMouseDown={e => e.stopPropagation()}
         onChange={e => {
+          /* eslint-disable-next-line */
+          const c = editor.chain().focus() as any;
           if (e.target.value) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (editor.chain().focus() as any).setFontSize(e.target.value).run();
+            c.setFontSize(e.target.value).run();
           } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (editor.chain().focus() as any).unsetFontSize().run();
+            c.unsetFontSize().run();
           }
         }}
         className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-700 h-7 w-16"
