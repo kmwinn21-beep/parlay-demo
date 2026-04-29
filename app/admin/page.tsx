@@ -2681,7 +2681,7 @@ export default function AdminPage() {
                     {usersList.map(u => (
                       <tr key={u.id} className="hover:bg-gray-50/50">
                         <td className="py-3 pr-4">
-                          <p className="font-medium text-gray-800">{u.displayName ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || '—'}</p>
+                          <p className="font-medium text-gray-800">{u.displayName ?? (`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || '—')}</p>
                           {!u.emailVerified && <span className="text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5 mt-0.5 inline-block">Pending Invite</span>}
                         </td>
                         <td className="py-3 pr-4 text-gray-600">{u.email}</td>
