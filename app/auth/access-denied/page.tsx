@@ -16,7 +16,7 @@ export default function AccessDeniedPage() {
           </div>
           <h1 className="text-2xl font-bold text-brand-primary font-serif mb-2">Access Denied</h1>
           <p className="text-sm text-gray-500 mb-6">
-            This area requires administrator access. Contact your Procare HR administrator to request elevated permissions.
+            This area requires administrator access. Contact your administrator to request elevated permissions.
           </p>
           <Link
             href="/"
