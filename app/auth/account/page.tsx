@@ -433,6 +433,8 @@ function ConnectedAccountsSection() {
         microsoft_denied: 'Microsoft authorization was denied.',
         google_token_failed: 'Failed to connect Google account.',
         microsoft_token_failed: 'Failed to connect Microsoft account.',
+        google_not_configured: 'Google OAuth credentials are not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment variables.',
+        microsoft_not_configured: 'Microsoft OAuth credentials are not configured. Add MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET to your environment variables.',
         invalid_state: 'OAuth state mismatch. Please try again.',
       };
       toast.error(messages[errorParam] ?? 'OAuth error. Please try again.');

@@ -5,12 +5,12 @@ export async function GET(request: NextRequest) {
   const user = await requireAuth(request);
   if (user instanceof NextResponse) return user;
 
+  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
-    return NextResponse.json({ error: 'Google OAuth is not configured.' }, { status: 503 });
+    return NextResponse.redirect(`${base}/auth/account?error=google_not_configured`);
   }
 
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const redirectUri = `${base}/api/oauth/google/callback`;
 
   const params = new URLSearchParams({
