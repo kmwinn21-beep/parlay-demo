@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { verifyToken, COOKIE_NAME } from '@/lib/auth';
 
 // Paths that don't require a session
-const PUBLIC_PREFIXES = ['/auth/', '/api/auth/', '/api/logo-config', '/api/tagline', '/api/app-name'];
+const PUBLIC_PREFIXES = ['/auth/', '/api/auth/', '/api/logo-config', '/api/tagline', '/api/app-name', '/setup', '/api/setup'];
 
 // Paths that require administrator role
 const ADMIN_PREFIXES = ['/admin'];

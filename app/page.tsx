@@ -312,13 +312,11 @@ async function RecentSectionLoader() {
     }
   }
 
-  const recentWithStatus: DashboardConference[] = recentConferences.map(c => ({ ...c, status: 'past' as const }));
-
   return (
     <RecentSection
-      recentConferences={recentWithStatus}
+      upcomingConferences={[]}
+      awaitingUploadConferences={[]}
       allConferences={allConferences}
-      defaultToMyAgenda={defaultConferenceId != null}
       defaultConferenceId={defaultConferenceId}
     />
   );

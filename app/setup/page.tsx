@@ -1,77 +1,68 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from 'react';
 import { LogoImage } from '@/components/LogoImage';
 import { useTagline } from '@/lib/useTagline';
 import { useAppName } from '@/lib/useAppName';
+import toast from 'react-hot-toast';
 
-function LoginForm() {
-  const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/';
+export default function SetupPage() {
   const tagline = useTagline();
   const appName = useAppName();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     fetch('/api/setup')
       .then((r) => r.json())
-      .then((d) => setSetupNeeded(d.needed))
-      .catch(() => {});
+      .then((d) => {
+        if (!d.needed) {
+          window.location.href = '/';
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error || 'Login failed.');
+        toast.error(data.error || 'Setup failed.');
         setLoading(false);
         return;
       }
-      // Full page navigation ensures clean server state with the new auth cookie.
-      // Using router.push() + router.refresh() together can cause client-side
-      // navigation race conditions that surface as "Application error".
-      window.location.href = next;
+      window.location.href = '/';
     } catch {
       toast.error('Network error. Please try again.');
       setLoading(false);
     }
   };
 
+  if (checking) return null;
+
   return (
     <div className="min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="sidebar" width={160} height={48} className="object-contain mb-2" alt="Logo" />
           {tagline && <p className="text-white/60 text-sm italic">{tagline}</p>}
         </div>
 
-        {setupNeeded && (
-          <div className="mb-4 bg-white/10 border border-white/30 rounded-xl px-4 py-3 text-sm text-white">
-            No accounts found.{' '}
-            <Link href="/setup" className="font-semibold underline hover:text-white/80">
-              Set up your first admin →
-            </Link>
-          </div>
-        )}
-
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h1 className="text-2xl font-bold text-brand-primary font-serif mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-500 mb-6">Sign in to {appName}</p>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif mb-1">Create first admin</h1>
+          <p className="text-sm text-gray-500 mb-6">Set up your {appName} administrator account</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -82,30 +73,26 @@ function LoginForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={`you@${process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? 'yourcompany.com'}`}
+                placeholder="admin@yourcompany.com"
                 required
                 autoComplete="email"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent"
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                  Password
-                </label>
-                <Link href="/auth/forgot-password" className="text-xs text-brand-secondary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent"
               />
+              <p className="text-xs text-gray-400 mt-1">Minimum 8 characters</p>
             </div>
             <button
               type="submit"
@@ -118,32 +105,11 @@ function LoginForm() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               )}
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading ? 'Creating account…' : 'Create Admin Account'}
             </button>
           </form>
-
-          <p className="text-center text-sm text-gray-500 mt-6">
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/signup" className="text-brand-secondary font-medium hover:underline">
-              Sign up
-            </Link>
-          </p>
         </div>
-
-        {process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN && (
-          <p className="text-center text-white/50 text-xs mt-6">
-            Only @{process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN} accounts are permitted.
-          </p>
-        )}
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
   );
 }
