@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { LogoImage } from '@/components/LogoImage';
@@ -9,6 +9,7 @@ import { useTagline } from '@/lib/useTagline';
 import { useAppName } from '@/lib/useAppName';
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/';
   const tagline = useTagline();
@@ -17,6 +18,16 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redirect to setup if no users exist yet
+  useEffect(() => {
+    fetch('/api/auth/setup')
+      .then(r => r.ok ? r.json() : { needsSetup: false })
+      .then((data: { needsSetup: boolean }) => {
+        if (data.needsSetup) router.replace('/auth/setup');
+      })
+      .catch(() => {});
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
