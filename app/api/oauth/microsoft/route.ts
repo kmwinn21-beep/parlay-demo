@@ -5,12 +5,12 @@ export async function GET(request: NextRequest) {
   const user = await requireAuth(request);
   if (user instanceof NextResponse) return user;
 
+  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   if (!clientId) {
-    return NextResponse.json({ error: 'Microsoft OAuth is not configured.' }, { status: 503 });
+    return NextResponse.redirect(`${base}/auth/account?error=microsoft_not_configured`);
   }
 
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const tenant = process.env.MICROSOFT_TENANT_ID ?? 'common';
   const redirectUri = `${base}/api/oauth/microsoft/callback`;
 
