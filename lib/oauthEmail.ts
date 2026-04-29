@@ -1,4 +1,5 @@
 import { db, dbReady } from './db';
+import { getGoogleCredentials, getMicrosoftCredentials } from './oauthCredentials';
 
 export type OAuthProvider = 'google' | 'microsoft';
 
@@ -16,12 +17,13 @@ export interface OAuthConnection {
 
 async function refreshGoogle(conn: OAuthConnection): Promise<string> {
   if (!conn.refresh_token) throw new Error('No refresh token available. Reconnect your Google account.');
+  const { clientId, clientSecret } = await getGoogleCredentials();
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: conn.refresh_token,
       grant_type: 'refresh_token',
     }),
@@ -38,13 +40,13 @@ async function refreshGoogle(conn: OAuthConnection): Promise<string> {
 
 async function refreshMicrosoft(conn: OAuthConnection): Promise<string> {
   if (!conn.refresh_token) throw new Error('No refresh token available. Reconnect your Microsoft account.');
-  const tenant = process.env.MICROSOFT_TENANT_ID ?? 'common';
-  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+  const { clientId, clientSecret, tenantId } = await getMicrosoftCredentials();
+  const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: process.env.MICROSOFT_CLIENT_ID!,
-      client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: conn.refresh_token,
       grant_type: 'refresh_token',
       scope: 'https://graph.microsoft.com/mail.send offline_access',
