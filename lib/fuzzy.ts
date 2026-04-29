@@ -2,15 +2,22 @@ import { db, dbReady } from './db';
 import {
   matchCompany,
   matchAttendee,
+  confirmAttendeeMatch,
 } from './matching';
 
 export async function findMatchingAttendee(
   firstName: string,
-  lastName: string
+  lastName: string,
+  email?: string | null,
+  website?: string | null,
+  companyName?: string | null,
 ): Promise<{ id: number; first_name: string; last_name: string } | null> {
   await dbReady;
   const result = await db.execute({
-    sql: 'SELECT id, first_name, last_name FROM attendees',
+    sql: `SELECT a.id, a.first_name, a.last_name, a.email,
+                 c.name AS company_name, c.website AS company_website
+          FROM attendees a
+          LEFT JOIN companies c ON a.company_id = c.id`,
     args: [],
   });
 
@@ -18,18 +25,20 @@ export async function findMatchingAttendee(
     id: Number(r.id),
     first_name: String(r.first_name ?? ''),
     last_name: String(r.last_name ?? ''),
+    full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(),
+    email: r.email ? String(r.email) : null,
+    website: r.company_website ? String(r.company_website) : null,
+    company_name: r.company_name ? String(r.company_name) : null,
   }));
 
   if (attendees.length === 0) return null;
 
-  const searchList = attendees.map((a) => ({
-    ...a,
-    full_name: `${a.first_name} ${a.last_name}`,
-  }));
+  const confirmFn = (candidate: typeof attendees[number]) =>
+    confirmAttendeeMatch(candidate, email, website, companyName);
 
-  const hit = matchAttendee(firstName, lastName, searchList);
+  const hit = matchAttendee(firstName, lastName, attendees, undefined, confirmFn);
   if (hit) {
-    return { id: hit.match.id, first_name: hit.match.full_name.split(' ')[0] ?? '', last_name: hit.match.full_name.split(' ').slice(1).join(' ') };
+    return { id: hit.match.id, first_name: hit.match.first_name, last_name: hit.match.last_name };
   }
 
   return null;
@@ -83,13 +92,24 @@ export async function getOrCreateAttendee(
   lastName: string,
   title?: string,
   companyId?: number,
-  email?: string
+  email?: string,
+  companyName?: string,
 ): Promise<number> {
   await dbReady;
-  const match = await findMatchingAttendee(firstName, lastName);
+
+  // Resolve company name for secondary matching when only an ID is provided
+  let resolvedCompanyName = companyName;
+  if (!resolvedCompanyName && companyId) {
+    const coRow = await db.execute({
+      sql: 'SELECT name FROM companies WHERE id = ?',
+      args: [companyId],
+    });
+    if (coRow.rows.length) resolvedCompanyName = String(coRow.rows[0].name);
+  }
+
+  const match = await findMatchingAttendee(firstName, lastName, email, undefined, resolvedCompanyName);
 
   if (match) {
-    // Update with any new info if provided
     const updates: string[] = [];
     const params: (string | number | null)[] = [];
 

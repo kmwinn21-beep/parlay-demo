@@ -7,6 +7,7 @@ import {
   buildAttendeeMatcher,
   matchCompany,
   matchAttendee,
+  confirmAttendeeMatch,
 } from '@/lib/matching';
 
 export const dynamic = 'force-dynamic';
@@ -112,7 +113,13 @@ export async function POST(request: NextRequest) {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes] = await Promise.all([
           db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user FROM companies', args: [] }),
-          db.execute({ sql: 'SELECT id, first_name, last_name FROM attendees', args: [] }),
+          db.execute({
+            sql: `SELECT a.id, a.first_name, a.last_name, a.email,
+                         c.name AS company_name, c.website AS company_website
+                  FROM attendees a
+                  LEFT JOIN companies c ON a.company_id = c.id`,
+            args: [],
+          }),
         ]);
 
         // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
@@ -237,11 +244,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ── Step 4: Build attendee lookup (exact + normalised + fuzzy) ──
-        type AtRow = { id: number; full_name: string };
+        // ── Step 4: Build attendee lookup (exact name match + secondary confirmation) ──
+        type AtRow = { id: number; full_name: string; email: string | null; website: string | null; company_name: string | null };
         const existingAttendees: AtRow[] = existingAtRes.rows.map((r) => ({
           id: Number(r.id),
           full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(),
+          email: r.email ? String(r.email) : null,
+          website: r.company_website ? String(r.company_website) : null,
+          company_name: r.company_name ? String(r.company_name) : null,
         }));
         const attendeeMatcher = buildAttendeeMatcher(existingAttendees);
 
@@ -260,7 +270,9 @@ export async function POST(request: NextRequest) {
           if (seen.has(key)) continue;
           seen.add(key);
 
-          const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher);
+          const confirmFn = (candidate: AtRow) =>
+            confirmAttendeeMatch(candidate, p.email?.trim(), p.website?.trim(), p.company?.trim());
+          const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher, confirmFn);
           if (hit) {
             attendeeIdCache.set(key, hit.match.id);
             // Update the existing attendee's company, title, and email from the CSV
