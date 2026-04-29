@@ -8,6 +8,7 @@ import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { GlobalSearchModal } from './GlobalSearch';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
+import { useUnreadChatCount } from '@/lib/useUnreadChatCount';
 import { useConferenceOfflineSync } from './ConferenceOfflineSync';
 import { useChatPanel } from './ChatPanelContext';
 
@@ -154,6 +155,7 @@ export function FloatingNav() {
   const { hidden } = useBottomNav();
   const { navHidden, setNavHidden } = useFloatingNavHidden();
   const unreadCount = useUnreadNotificationCount();
+  const unreadChatCount = useUnreadChatCount();
   const { setPanelOpen } = useChatPanel();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [open, setOpen] = useState(false);
@@ -403,7 +405,14 @@ export function FloatingNav() {
                   }}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border w-full min-w-[152px] transition-colors ${pillCls}`}
                 >
-                  {item.icon}
+                  {item.key === 'chat' && unreadChatCount > 0 ? (
+                    <span className="relative flex-shrink-0">
+                      {item.icon}
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                      </span>
+                    </span>
+                  ) : item.icon}
                   <span className="text-sm font-medium leading-none">{item.label}</span>
                 </button>
               )}
@@ -478,13 +487,13 @@ export function FloatingNav() {
             </svg>
           )}
         </div>
-        {/* Unread notification badge on FAB */}
-        {!open && unreadCount > 0 && (
+        {/* Unread badge on FAB — shows total of notifications + chat messages */}
+        {!open && (unreadCount + unreadChatCount) > 0 && (
           <span
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none"
+            className="absolute min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none"
             style={{ position: 'absolute', top: -4, right: -4 }}
           >
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {(unreadCount + unreadChatCount) > 99 ? '99+' : unreadCount + unreadChatCount}
           </span>
         )}
       </div>
