@@ -122,6 +122,25 @@ export async function sendNotificationEmail(
   ).catch(() => {}); // best-effort — never throws
 }
 
+export async function sendInviteEmail(
+  email: string,
+  firstName: string,
+  token: string
+): Promise<{ devLink?: string }> {
+  const link = `${BASE_URL}/auth/accept-invite?token=${encodeURIComponent(token)}`;
+  return sendEmail(
+    email,
+    `You've been invited to ${APP_NAME}`,
+    `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">Welcome to ${APP_NAME}, ${firstName}!</h2>
+      <p>An administrator has created an account for you. Click the button below to set your password and get started.</p>
+      <p style="margin:24px 0"><a href="${link}" style="${btnStyle}">Set Your Password</a></p>
+      <p style="${footerStyle}">Or copy this link into your browser:<br>${link}</p>
+      <p style="${footerStyle}">This invitation expires in 72 hours. If you weren't expecting this, you can safely ignore it.</p>
+    </div>`
+  );
+}
+
 export async function sendEmailChangeNotification(
   oldEmail: string,
   newEmail: string

@@ -60,7 +60,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users';
 
 interface IcpRuleDraft {
   id?: number;
@@ -692,11 +692,22 @@ export default function AdminPage() {
 
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
-  const [allowedDomain, setAllowedDomain] = useState('');
-  const [domainInput, setDomainInput] = useState('');
   const [loadingPerms, setLoadingPerms] = useState(false);
   const [savingPerms, setSavingPerms] = useState(false);
-  const [savingDomain, setSavingDomain] = useState(false);
+
+  // User Management tab
+  type AdminUserRow = {
+    id: number; email: string; firstName: string | null; lastName: string | null;
+    displayName: string | null; role: string; emailVerified: boolean; active: boolean;
+    configId: number | null; createdAt: string;
+  };
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersList, setUsersList] = useState<AdminUserRow[]>([]);
+  const [inviteForm, setInviteForm] = useState({ firstName: '', lastName: '', email: '', role: 'user' as 'user' | 'administrator' });
+  const [inviteSending, setInviteSending] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<AdminUserRow | null>(null);
+  const [reassignToId, setReassignToId] = useState<number | ''>('');
+  const [deleting, setDeleting] = useState(false);
 
   // ── Unit Type (Types tab) ─────────────────────────────────────────────────────
   const [unitTypeLabel, setUnitTypeLabel] = useState('Units');
@@ -1405,9 +1416,6 @@ export default function AdminPage() {
       if (!res.ok) throw new Error();
       const data = await res.json() as Record<string, string>;
       setAllowUpload(data['allow_attendee_upload'] !== 'false');
-      const domain = data['allowed_email_domain'] ?? '';
-      setAllowedDomain(domain);
-      setDomainInput(domain);
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoadingPerms(false); }
   };
@@ -1433,21 +1441,99 @@ export default function AdminPage() {
     } finally { setSavingPerms(false); }
   };
 
-  const handleSaveDomain = async () => {
-    const trimmed = domainInput.trim().replace(/^@/, '');
-    setSavingDomain(true);
+  // ── User Management tab ───────────────────────────────────────────────────────
+
+  const fetchUsers = async () => {
+    setUsersLoading(true);
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
+      const res = await fetch('/api/admin/users');
+      if (!res.ok) throw new Error();
+      setUsersList(await res.json());
+    } catch { toast.error('Failed to load users.'); }
+    finally { setUsersLoading(false); }
+  };
+
+  useEffect(() => { if (tab === 'users') fetchUsers(); }, [tab]);
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteSending(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'allowed_email_domain', value: trimmed }),
+        body: JSON.stringify(inviteForm),
+      });
+      const data = await res.json() as { error?: string; devInviteLink?: string };
+      if (!res.ok) { toast.error(data.error ?? 'Failed to send invite.'); return; }
+      toast.success(`Invite sent to ${inviteForm.email}.`);
+      if (data.devInviteLink) {
+        console.log('DEV invite link:', data.devInviteLink);
+        toast(`DEV link logged to console`, { icon: '🔗' });
+      }
+      setInviteForm({ firstName: '', lastName: '', email: '', role: 'user' });
+      fetchUsers();
+    } catch { toast.error('Network error.'); }
+    finally { setInviteSending(false); }
+  };
+
+  const handleRoleChange = async (userId: number, role: 'user' | 'administrator') => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
       });
       if (!res.ok) throw new Error();
-      setAllowedDomain(trimmed);
-      setDomainInput(trimmed);
-      toast.success(trimmed ? `Domain restriction set to @${trimmed}.` : 'Domain restriction removed.');
-    } catch { toast.error('Failed to save domain setting.'); }
-    finally { setSavingDomain(false); }
+      setUsersList(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+      toast.success('Role updated.');
+    } catch { toast.error('Failed to update role.'); }
+  };
+
+  const handleToggleActive = async (userId: number, active: boolean) => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) throw new Error();
+      setUsersList(prev => prev.map(u => u.id === userId ? { ...u, active } : u));
+      toast.success(active ? 'Access restored.' : 'Access suspended.');
+    } catch { toast.error('Failed to update access.'); }
+  };
+
+  const handleResendInvite = async (userId: number) => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resendInvite: true }),
+      });
+      const data = await res.json() as { error?: string; devInviteLink?: string };
+      if (!res.ok) { toast.error(data.error ?? 'Failed to resend.'); return; }
+      toast.success('Invite resent.');
+      if (data.devInviteLink) { console.log('DEV invite link:', data.devInviteLink); toast(`DEV link logged to console`, { icon: '🔗' }); }
+    } catch { toast.error('Network error.'); }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal || !reassignToId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/users/${deleteModal.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reassignToUserId: reassignToId }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) { toast.error(data.error ?? 'Failed to delete.'); return; }
+      toast.success(`${deleteModal.displayName ?? deleteModal.email} deleted and records reassigned.`);
+      setDeleteModal(null);
+      setReassignToId('');
+      fetchUsers();
+    } catch { toast.error('Network error.'); }
+    finally { setDeleting(false); }
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1463,14 +1549,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : 'Custom Forms'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : 'User Management'}
             </button>
           ))}
         </nav>
@@ -2071,35 +2157,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="card">
-              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Email Domain Restriction</h2>
-              <p className="text-sm text-gray-500 mb-4">Restrict new account sign-ups to a specific email domain. Leave blank to allow any email address.</p>
-              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
-                <span className="text-sm text-gray-500 flex-shrink-0">@</span>
-                <input
-                  type="text"
-                  value={domainInput}
-                  onChange={e => setDomainInput(e.target.value.replace(/^@/, ''))}
-                  placeholder="yourcompany.com"
-                  className="input-field flex-1 text-sm"
-                  onKeyDown={e => { if (e.key === 'Enter') handleSaveDomain(); }}
-                />
-                <button
-                  type="button"
-                  onClick={handleSaveDomain}
-                  disabled={savingDomain || domainInput.trim().replace(/^@/, '') === allowedDomain}
-                  className="btn-primary text-sm flex-shrink-0"
-                >
-                  {savingDomain ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-              {allowedDomain && (
-                <p className="text-xs text-gray-400 mt-2">Currently restricted to <span className="font-medium text-gray-600">@{allowedDomain}</span></p>
-              )}
-              {!allowedDomain && (
-                <p className="text-xs text-gray-400 mt-2">No restriction — any email address may sign up.</p>
-              )}
-            </div>
           </div>
         )
       )}
@@ -2535,6 +2592,190 @@ export default function AdminPage() {
 
       {/* ── Custom Forms tab ── */}
       {tab === 'forms' && <AdminFormsTab />}
+
+      {/* ── User Management tab ── */}
+      {tab === 'users' && (
+        <div className="space-y-6">
+          {/* Invite New User */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Invite New User</h2>
+            <p className="text-sm text-gray-500 mb-4">Send an invitation email to a new team member. They will set their own password.</p>
+            <form onSubmit={handleInviteSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">First Name</label>
+                <input
+                  type="text"
+                  value={inviteForm.firstName}
+                  onChange={e => setInviteForm(f => ({ ...f, firstName: e.target.value }))}
+                  required
+                  className="input-field w-full text-sm"
+                  placeholder="Jane"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={inviteForm.lastName}
+                  onChange={e => setInviteForm(f => ({ ...f, lastName: e.target.value }))}
+                  required
+                  className="input-field w-full text-sm"
+                  placeholder="Smith"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Email</label>
+                <input
+                  type="email"
+                  value={inviteForm.email}
+                  onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                  required
+                  className="input-field w-full text-sm"
+                  placeholder="jane@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Role</label>
+                <select
+                  value={inviteForm.role}
+                  onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as 'user' | 'administrator' }))}
+                  className="input-field w-full text-sm"
+                >
+                  <option value="user">User</option>
+                  <option value="administrator">Administrator</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2 flex justify-end">
+                <button type="submit" disabled={inviteSending} className="btn-primary text-sm">
+                  {inviteSending ? 'Sending…' : 'Send Invite'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Users List */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-brand-primary font-serif">Team Members</h2>
+              <button type="button" onClick={fetchUsers} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">Refresh</button>
+            </div>
+            {usersLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
+              </div>
+            ) : usersList.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No users found.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide pb-2 pr-4">Name</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide pb-2 pr-4">Email</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide pb-2 pr-4">Role</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide pb-2 pr-4">Status</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide pb-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {usersList.map(u => (
+                      <tr key={u.id} className="hover:bg-gray-50/50">
+                        <td className="py-3 pr-4">
+                          <p className="font-medium text-gray-800">{u.displayName ?? (`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || '—')}</p>
+                          {!u.emailVerified && <span className="text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5 mt-0.5 inline-block">Pending Invite</span>}
+                        </td>
+                        <td className="py-3 pr-4 text-gray-600">{u.email}</td>
+                        <td className="py-3 pr-4">
+                          <select
+                            value={u.role}
+                            onChange={e => handleRoleChange(u.id, e.target.value as 'user' | 'administrator')}
+                            className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-brand-secondary"
+                          >
+                            <option value="user">User</option>
+                            <option value="administrator">Administrator</option>
+                          </select>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleActive(u.id, !u.active)}
+                            className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${u.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
+                          >
+                            {u.active ? 'Active' : 'Suspended'}
+                          </button>
+                        </td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            {!u.emailVerified && (
+                              <button
+                                type="button"
+                                onClick={() => handleResendInvite(u.id)}
+                                className="text-xs text-brand-secondary hover:text-brand-primary transition-colors font-medium"
+                              >
+                                Resend
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => { setDeleteModal(u); setReassignToId(''); }}
+                              className="text-xs text-red-500 hover:text-red-700 transition-colors font-medium"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete User Modal ── */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/40 z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-brand-primary font-serif mb-2">Delete User</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              You are about to delete <span className="font-semibold">{deleteModal.displayName ?? deleteModal.email}</span>. All of their assigned companies and incomplete follow-ups will be reassigned to another user.
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Reassign records to</label>
+              <select
+                value={reassignToId}
+                onChange={e => setReassignToId(e.target.value ? Number(e.target.value) : '')}
+                className="input-field w-full text-sm"
+              >
+                <option value="">Select a user…</option>
+                {usersList.filter(u => u.id !== deleteModal.id).map(u => (
+                  <option key={u.id} value={u.id}>{u.displayName ?? u.email}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setDeleteModal(null); setReassignToId(''); }}
+                className="btn-secondary text-sm"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={!reassignToId || deleting}
+                className="text-sm font-semibold px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Deleting…' : 'Delete & Reassign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
