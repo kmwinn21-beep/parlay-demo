@@ -23,6 +23,7 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -164,6 +165,7 @@ export default function CompanyDetailPage() {
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
   const [opCapRelExpanded, setOpCapRelExpanded] = useState(false);
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
+  const [composeTarget, setComposeTarget] = useState<{ email: string; name: string } | null>(null);
   const [showMeeting, setShowMeeting] = useState(false);
   const [relateSearch, setRelateSearch] = useState('');
   const [relateResults, setRelateResults] = useState<{ id: number; name: string; company_type: string | null }[]>([]);
@@ -946,11 +948,16 @@ export default function CompanyDetailPage() {
                         {attendee.first_name} {attendee.last_name}
                       </Link>
                       {attendee.email && (
-                        <a href={`mailto:${attendee.email}`} title={attendee.email} className="text-gray-400 hover:text-brand-secondary">
+                        <button
+                          type="button"
+                          title={`Send email to ${attendee.email}`}
+                          onClick={() => setComposeTarget({ email: attendee.email!, name: `${attendee.first_name} ${attendee.last_name}` })}
+                          className="text-gray-400 hover:text-brand-secondary transition-colors"
+                        >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
-                        </a>
+                        </button>
                       )}
                     </div>
                     <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
@@ -1003,11 +1010,16 @@ export default function CompanyDetailPage() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         {attendee.email ? (
-                          <a href={`mailto:${attendee.email}`} title={attendee.email} className="inline-flex items-center justify-center text-gray-400 hover:text-brand-secondary transition-colors">
+                          <button
+                            type="button"
+                            title={`Send email to ${attendee.email}`}
+                            onClick={() => setComposeTarget({ email: attendee.email!, name: `${attendee.first_name} ${attendee.last_name}` })}
+                            className="inline-flex items-center justify-center text-gray-400 hover:text-brand-secondary transition-colors"
+                          >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                             </svg>
-                          </a>
+                          </button>
                         ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
@@ -1441,6 +1453,14 @@ export default function CompanyDetailPage() {
         defaultCompanyId={Number(id)}
         availableConferences={company?.conferences}
       />
+
+      {composeTarget && (
+        <ComposeEmailModal
+          contactEmail={composeTarget.email}
+          contactName={composeTarget.name}
+          onClose={() => setComposeTarget(null)}
+        />
+      )}
 
       <CompanyTouchpointMatrix
         companyId={id}

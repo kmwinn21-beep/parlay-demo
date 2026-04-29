@@ -1,0 +1,27 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+
+export async function GET(request: NextRequest) {
+  const user = await requireAuth(request);
+  if (user instanceof NextResponse) return user;
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    return NextResponse.json({ error: 'Google OAuth is not configured.' }, { status: 503 });
+  }
+
+  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
+  const redirectUri = `${base}/api/oauth/google/callback`;
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
+    access_type: 'offline',
+    prompt: 'consent',
+    state: String(user.id),
+  });
+
+  return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+}
