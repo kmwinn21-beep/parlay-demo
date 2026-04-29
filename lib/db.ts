@@ -611,6 +611,35 @@ export async function initDb(): Promise<void> {
     )`,
     // Per-user email signature (rich HTML)
     `ALTER TABLE users ADD COLUMN signature_html TEXT`,
+    // Group chat tables
+    `CREATE TABLE IF NOT EXISTS group_conversations (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT NOT NULL,
+      created_by INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS group_conversation_members (
+      group_id     INTEGER NOT NULL,
+      user_id      INTEGER NOT NULL,
+      last_read_at TEXT,
+      joined_at    TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (group_id, user_id),
+      FOREIGN KEY (group_id) REFERENCES group_conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id)  REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS group_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id   INTEGER NOT NULL,
+      sender_id  INTEGER NOT NULL,
+      content    TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (group_id)  REFERENCES group_conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_group_members_user_id        ON group_conversation_members(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_group_members_group_id       ON group_conversation_members(group_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_group_messages_group_created ON group_messages(group_id, created_at)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

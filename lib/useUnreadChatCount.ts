@@ -12,12 +12,21 @@ export function useUnreadChatCount(): number {
 
     async function fetchCount() {
       try {
-        const res = await fetch('/api/chat/conversations', { credentials: 'include' });
-        if (!res.ok || cancelled) return;
-        const data = await res.json() as { unreadCount: number }[];
-        if (!cancelled) {
-          setCount(Array.isArray(data) ? data.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0) : 0);
+        const [dmRes, groupRes] = await Promise.all([
+          fetch('/api/chat/conversations', { credentials: 'include' }),
+          fetch('/api/chat/groups',         { credentials: 'include' }),
+        ]);
+        if (cancelled) return;
+        let total = 0;
+        if (dmRes.ok) {
+          const dmData = await dmRes.json() as { unreadCount: number }[];
+          total += Array.isArray(dmData) ? dmData.reduce((s, c) => s + (c.unreadCount ?? 0), 0) : 0;
         }
+        if (groupRes.ok) {
+          const groupData = await groupRes.json() as { unreadCount: number }[];
+          total += Array.isArray(groupData) ? groupData.reduce((s, g) => s + (g.unreadCount ?? 0), 0) : 0;
+        }
+        if (!cancelled) setCount(total);
       } catch {
         // non-fatal
       }
