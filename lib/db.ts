@@ -609,6 +609,8 @@ export async function initDb(): Promise<void> {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
+    // Per-user email signature (rich HTML)
+    `ALTER TABLE users ADD COLUMN signature_html TEXT`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

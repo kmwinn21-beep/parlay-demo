@@ -2,10 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
-import Underline from '@tiptap/extension-underline';
+import { useEditor } from '@tiptap/react';
+import { RichTextEditor, getEditorExtensions } from '@/components/RichTextEditor';
 
 type OAuthProvider = 'google' | 'microsoft';
 
@@ -26,24 +24,6 @@ interface Props {
   onClose: () => void;
 }
 
-function ToolbarButton({ onClick, active, title, children }: {
-  onClick: () => void;
-  active?: boolean;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onMouseDown={e => { e.preventDefault(); onClick(); }}
-      title={title}
-      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${active ? 'bg-brand-secondary text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-    >
-      {children}
-    </button>
-  );
-}
-
 export function ComposeEmailModal({ contactEmail, contactName, onClose }: Props) {
   const [connected, setConnected] = useState<Partial<Record<OAuthProvider, ConnectedAccount>>>({});
   const [provider, setProvider] = useState<OAuthProvider | null>(null);
@@ -53,13 +33,10 @@ export function ComposeEmailModal({ contactEmail, contactName, onClose }: Props)
   const [attachments, setAttachments] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const signatureLoadedRef = useRef(false);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
-      Link.configure({ openOnClick: false }),
-    ],
+    extensions: getEditorExtensions(),
     content: '',
     editorProps: {
       attributes: {
@@ -83,6 +60,24 @@ export function ComposeEmailModal({ contactEmail, contactName, onClose }: Props)
       .catch(() => {});
   }, []);
 
+  // Load signature once editor is ready
+  useEffect(() => {
+    if (!editor || signatureLoadedRef.current) return;
+    signatureLoadedRef.current = true;
+    fetch('/api/user/signature')
+      .then(r => r.ok ? r.json() : { signature: '' })
+      .then((data: { signature: string }) => {
+        if (data.signature) {
+          editor.commands.setContent(
+            `<p></p><p>--</p>${data.signature}`
+          );
+          // Move cursor to the very beginning so the user types above the signature
+          editor.commands.focus('start');
+        }
+      })
+      .catch(() => {});
+  }, [editor]);
+
   const applyTemplate = useCallback((id: string) => {
     const tmpl = templates.find(t => String(t.id) === id);
     if (!tmpl || !editor) return;
@@ -90,13 +85,6 @@ export function ComposeEmailModal({ contactEmail, contactName, onClose }: Props)
     editor.commands.setContent(tmpl.body);
     setSelectedTemplate(id);
   }, [templates, editor]);
-
-  const setLink = () => {
-    if (!editor) return;
-    const url = window.prompt('Enter URL');
-    if (!url) return;
-    editor.chain().focus().setLink({ href: url }).run();
-  };
 
   const handleAddFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -218,26 +206,10 @@ export function ComposeEmailModal({ contactEmail, contactName, onClose }: Props)
                 />
               </div>
 
-              {/* Body — TipTap */}
+              {/* Body */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Body</label>
-                {/* Toolbar */}
-                <div className="flex flex-wrap items-center gap-1 border border-gray-200 border-b-0 rounded-t-lg px-2 py-1.5 bg-gray-50">
-                  <ToolbarButton title="Bold" onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive('bold')}>B</ToolbarButton>
-                  <ToolbarButton title="Italic" onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive('italic')}><em>I</em></ToolbarButton>
-                  <ToolbarButton title="Underline" onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive('underline')}><span className="underline">U</span></ToolbarButton>
-                  <span className="w-px h-4 bg-gray-200 mx-1" />
-                  <ToolbarButton title="Bullet list" onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive('bulletList')}>• List</ToolbarButton>
-                  <ToolbarButton title="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive('orderedList')}>1. List</ToolbarButton>
-                  <span className="w-px h-4 bg-gray-200 mx-1" />
-                  <ToolbarButton title="Insert link" onClick={setLink} active={editor?.isActive('link')}>Link</ToolbarButton>
-                  {editor?.isActive('link') && (
-                    <ToolbarButton title="Remove link" onClick={() => editor.chain().focus().unsetLink().run()}>Unlink</ToolbarButton>
-                  )}
-                </div>
-                <div className="border border-gray-200 rounded-b-lg overflow-auto" style={{ minHeight: '160px' }}>
-                  <EditorContent editor={editor} />
-                </div>
+                <RichTextEditor editor={editor} minHeight="160px" />
               </div>
 
               {/* Attachments */}

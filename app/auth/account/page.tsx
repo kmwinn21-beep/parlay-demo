@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { useEditor } from '@tiptap/react';
 import { useUser } from '@/components/UserContext';
 import { BackButton } from '@/components/BackButton';
+import { RichTextEditor, getEditorExtensions } from '@/components/RichTextEditor';
 
 interface ConfigOption {
   id: number;
@@ -587,6 +589,72 @@ function ChangePasswordSection() {
   );
 }
 
+// ─── Section: Email Signature ─────────────────────────────────────────────────
+
+function EmailSignatureSection() {
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const editor = useEditor({
+    extensions: getEditorExtensions({ withImage: true }),
+    content: '',
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none min-h-[120px] p-3 focus:outline-none',
+      },
+    },
+  });
+
+  useEffect(() => {
+    if (!editor || loaded) return;
+    fetch('/api/user/signature')
+      .then(r => r.ok ? r.json() : { signature: '' })
+      .then((data: { signature: string }) => {
+        if (data.signature) editor.commands.setContent(data.signature);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [editor, loaded]);
+
+  const handleSave = async () => {
+    if (!editor) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/user/signature', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature_html: editor.getHTML() }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Signature saved.');
+    } catch {
+      toast.error('Failed to save signature.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Email Signature</h2>
+      <p className="text-xs text-gray-400 mb-3">
+        Automatically appended to every new email you compose. Supports rich formatting and your logo.
+      </p>
+      <RichTextEditor editor={editor} withImage minHeight="120px" />
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !loaded}
+          className="btn-primary text-sm"
+        >
+          {saving ? 'Saving…' : 'Save Signature'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AccountPage() {
@@ -616,6 +684,7 @@ export default function AccountPage() {
 
       <ProfileSection onRefresh={refresh} />
       <ConnectedAccountsSection />
+      <EmailSignatureSection />
       <NotificationPrefsSection />
       <ChangePasswordSection />
 
