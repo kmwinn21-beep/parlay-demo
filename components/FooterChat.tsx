@@ -76,11 +76,13 @@ function ChatWindow({
   currentUserId,
   onClose,
   onNewMessage,
+  mobile,
 }: {
   other: ChatUser;
   currentUserId: number;
   onClose: () => void;
   onNewMessage: () => void;
+  mobile?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +144,7 @@ function ChatWindow({
   };
 
   return (
-    <div className="flex flex-col w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden">
+    <div className={`flex flex-col ${mobile ? 'w-full' : 'w-[420px]'} bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden`}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -460,12 +462,13 @@ export function FooterChat() {
       {openChats.map(other => (
         <div key={other.id} className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/30" onClick={() => closeChat(other.id)} />
-          <div className="relative">
+          <div className="relative w-full">
             <ChatWindow
               other={other}
               currentUserId={user.id}
               onClose={() => closeChat(other.id)}
               onNewMessage={handleNewMessageSent}
+              mobile
             />
           </div>
         </div>
