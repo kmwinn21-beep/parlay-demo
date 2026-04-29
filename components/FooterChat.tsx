@@ -559,7 +559,7 @@ export function FooterChat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newGroupName.trim(),
-          memberIds: [...newGroupMemberIds],
+          memberIds: Array.from(newGroupMemberIds),
           ...(newGroupConferenceId ? { conferenceId: newGroupConferenceId } : {}),
         }),
       });
