@@ -149,7 +149,7 @@ export function OutstandingFollowUps() {
       {/* Dropdown */}
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-1rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl z-[200] overflow-hidden flex flex-col"
+          className="fixed left-2 right-2 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl z-[200] overflow-hidden flex flex-col"
           style={{ maxHeight: 'min(80vh, 600px)' }}
         >
           {/* Header */}
