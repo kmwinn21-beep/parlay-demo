@@ -30,6 +30,32 @@ interface Message {
   mine: boolean;
 }
 
+interface GroupConversation {
+  id: number;
+  name: string;
+  createdBy: number;
+  createdAt: string;
+  lastContent: string | null;
+  lastCreatedAt: string | null;
+  lastSenderId: number | null;
+  unreadCount: number;
+}
+
+interface GroupMessage {
+  id: number;
+  groupId: number;
+  senderId: number;
+  senderName: string;
+  content: string;
+  createdAt: string;
+  mine: boolean;
+}
+
+interface ConferenceOption {
+  id: number;
+  name: string;
+}
+
 function getDisplayName(email: string, displayName: string | null): string {
   return displayName || email.split('@')[0];
 }
@@ -242,10 +268,165 @@ function ChatWindow({
   );
 }
 
+// Group chat window — mirrors ChatWindow with sender labels on non-mine messages
+function GroupChatWindow({
+  group,
+  currentUserId,
+  onClose,
+  onNewMessage,
+  mobile,
+}: {
+  group: GroupConversation;
+  currentUserId: number;
+  onClose: () => void;
+  onNewMessage: () => void;
+  mobile?: boolean;
+}) {
+  const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/chat/groups/${group.id}/messages`);
+      if (!res.ok) return;
+      setMessages(await res.json() as GroupMessage[]);
+    } catch { /* silently ignore */ }
+  }, [group.id]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchMessages().finally(() => setLoading(false));
+    pollRef.current = setInterval(fetchMessages, 8000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [fetchMessages]);
+
+  useEffect(() => {
+    if (!minimized) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, minimized]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = text ? `${Math.min(el.scrollHeight, 120)}px` : '';
+  }, [text]);
+
+  const handleSend = async () => {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    if (textareaRef.current) textareaRef.current.style.height = '';
+    try {
+      const res = await fetch(`/api/chat/groups/${group.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text.trim() }),
+      });
+      if (!res.ok) return;
+      const msg = await res.json() as GroupMessage;
+      setMessages(prev => [...prev, msg]);
+      setText('');
+      onNewMessage();
+    } catch { /* silently ignore */ } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  };
+
+  return (
+    <div className={`flex flex-col ${mobile ? 'w-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
+      {/* Header */}
+      <div
+        className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
+        onClick={() => setMinimized(v => !v)}
+      >
+        <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center flex-shrink-0">
+          <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+        <span className="flex-1 font-semibold text-sm text-gray-800 truncate">{group.name}</span>
+        <button type="button" onClick={e => { e.stopPropagation(); setMinimized(v => !v); }} className="text-gray-400 hover:text-gray-600 p-0.5" title={minimized ? 'Expand' : 'Minimize'}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={minimized ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+          </svg>
+        </button>
+        <button type="button" onClick={e => { e.stopPropagation(); onClose(); }} className="text-gray-400 hover:text-gray-600 p-0.5" title="Close">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {!minimized && (
+        <>
+          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? 'h-[50vh]' : 'h-64'}`}>
+            {loading && (
+              <div className="flex justify-center items-center h-full">
+                <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
+              </div>
+            )}
+            {!loading && messages.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-8">No messages yet. Say hello!</p>
+            )}
+            {!loading && messages.map(msg => (
+              <div key={msg.id} className={`flex flex-col ${msg.mine ? 'items-end' : 'items-start'}`}>
+                {!msg.mine && (
+                  <p className="text-[10px] text-gray-400 mb-0.5 ml-1">{msg.senderName}</p>
+                )}
+                <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
+                  msg.mine
+                    ? 'bg-brand-secondary text-white rounded-br-sm'
+                    : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm'
+                }`}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+          <div className="px-2 py-2 bg-white border-t border-gray-100 flex items-end gap-1.5">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Write a message…"
+              rows={1}
+              className="flex-1 resize-none rounded-2xl border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-secondary text-gray-800 placeholder-gray-400 overflow-hidden"
+              style={{ lineHeight: '1.4' }}
+            />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!text.trim() || sending}
+              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-brand-secondary text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
+              title="Send"
+            >
+              <svg className="w-4 h-4 -rotate-90" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // The main footer messaging hub
 export function FooterChat() {
   const { user, loading: userLoading } = useUser();
   const { panelOpen, setPanelOpen } = useChatPanel();
+  // Direct message state
   const [view, setView] = useState<'conversations' | 'new'>('conversations');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [allUsers, setAllUsers] = useState<ChatUser[]>([]);
@@ -253,37 +434,55 @@ export function FooterChat() {
   const [userSearch, setUserSearch] = useState('');
   const [convLoading, setConvLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Group chat state
+  const [panelTab, setPanelTab] = useState<'direct' | 'groups'>('direct');
+  const [groups, setGroups] = useState<GroupConversation[]>([]);
+  const [openGroups, setOpenGroups] = useState<GroupConversation[]>([]);
+  const [groupView, setGroupView] = useState<'list' | 'new-group'>('list');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupConferenceId, setNewGroupConferenceId] = useState<number | null>(null);
+  const [newGroupMemberIds, setNewGroupMemberIds] = useState<Set<number>>(new Set());
+  const [conferences, setConferences] = useState<ConferenceOption[]>([]);
+  const [groupCreating, setGroupCreating] = useState(false);
 
-  const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
+  const dmUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
+  const groupUnread = groups.reduce((s, g) => s + g.unreadCount, 0);
+  const totalUnread = dmUnread + groupUnread;
 
   const fetchConversations = useCallback(async () => {
     try {
       const res = await fetch('/api/chat/conversations');
       if (!res.ok) return;
-      const data = await res.json() as Conversation[];
-      setConversations(data);
+      setConversations(await res.json() as Conversation[]);
     } catch { /* silently ignore */ }
   }, []);
 
-  // Load conversations when panel opens; poll for updates
+  const fetchGroups = useCallback(async () => {
+    try {
+      const res = await fetch('/api/chat/groups');
+      if (!res.ok) return;
+      setGroups(await res.json() as GroupConversation[]);
+    } catch { /* silently ignore */ }
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     fetchConversations();
-    pollRef.current = setInterval(fetchConversations, 10000);
+    fetchGroups();
+    pollRef.current = setInterval(() => { fetchConversations(); fetchGroups(); }, 10000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [user, fetchConversations]);
+  }, [user, fetchConversations, fetchGroups]);
 
-  const openChat = useCallback(async (other: ChatUser) => {
+  const openChat = useCallback((other: ChatUser) => {
     setOpenChats(prev => {
       if (prev.find(c => c.id === other.id)) return prev;
-      // Cap at 3 open windows
-      const next = prev.length >= 3 ? prev.slice(1) : prev;
+      const totalOpen = prev.length + openGroups.length;
+      const next = totalOpen >= 3 ? prev.slice(1) : prev;
       return [...next, other];
     });
     setPanelOpen(false);
-    // Optimistically clear unread badge
     setConversations(prev => prev.map(c => c.otherId === other.id ? { ...c, unreadCount: 0 } : c));
-  }, []);
+  }, [openGroups.length]);
 
   const openChatFromConversation = useCallback((conv: Conversation) => {
     openChat({ id: conv.otherId, email: conv.otherEmail, displayName: conv.otherDisplayName });
@@ -293,9 +492,25 @@ export function FooterChat() {
     setOpenChats(prev => prev.filter(c => c.id !== userId));
   }, []);
 
+  const openGroupChat = useCallback((group: GroupConversation) => {
+    setOpenGroups(prev => {
+      if (prev.find(g => g.id === group.id)) return prev;
+      const totalOpen = openChats.length + prev.length;
+      const next = totalOpen >= 3 ? prev.slice(1) : prev;
+      return [...next, group];
+    });
+    setPanelOpen(false);
+    setGroups(prev => prev.map(g => g.id === group.id ? { ...g, unreadCount: 0 } : g));
+  }, [openChats.length]);
+
+  const closeGroupChat = useCallback((groupId: number) => {
+    setOpenGroups(prev => prev.filter(g => g.id !== groupId));
+  }, []);
+
   const handleNewMessageSent = useCallback(() => {
     fetchConversations();
-  }, [fetchConversations]);
+    fetchGroups();
+  }, [fetchConversations, fetchGroups]);
 
   const loadUsers = useCallback(async () => {
     if (allUsers.length > 0) return;
@@ -306,9 +521,65 @@ export function FooterChat() {
     } catch { /* silently ignore */ }
   }, [allUsers.length]);
 
+  const loadConferences = useCallback(async () => {
+    if (conferences.length > 0) return;
+    try {
+      const res = await fetch('/api/conferences?nav=1');
+      if (!res.ok) return;
+      const data = await res.json() as { id: number; name: string }[];
+      setConferences(data.map(c => ({ id: c.id, name: c.name })));
+    } catch { /* silently ignore */ }
+  }, [conferences.length]);
+
   const handleOpenNewPanel = () => {
     setView('new');
     loadUsers();
+  };
+
+  const handleOpenNewGroup = () => {
+    setGroupView('new-group');
+    loadUsers();
+    loadConferences();
+  };
+
+  const toggleGroupMember = (uid: number) => {
+    setNewGroupMemberIds(prev => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid); else next.add(uid);
+      return next;
+    });
+  };
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim() || groupCreating) return;
+    setGroupCreating(true);
+    try {
+      const res = await fetch('/api/chat/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newGroupName.trim(),
+          memberIds: Array.from(newGroupMemberIds),
+          ...(newGroupConferenceId ? { conferenceId: newGroupConferenceId } : {}),
+        }),
+      });
+      if (!res.ok) return;
+      const newGroup = await res.json() as { id: number; name: string; memberCount: number };
+      await fetchGroups();
+      setNewGroupName('');
+      setNewGroupConferenceId(null);
+      setNewGroupMemberIds(new Set());
+      setGroupView('list');
+      // Open the new group immediately
+      const created: GroupConversation = {
+        id: newGroup.id, name: newGroup.name, createdBy: user!.id,
+        createdAt: new Date().toISOString(), lastContent: null,
+        lastCreatedAt: null, lastSenderId: null, unreadCount: 0,
+      };
+      openGroupChat(created);
+    } catch { /* silently ignore */ } finally {
+      setGroupCreating(false);
+    }
   };
 
   const filteredUsers = userSearch.trim()
@@ -332,39 +603,43 @@ export function FooterChat() {
           <div className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh]">
             {/* Sheet header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              {view === 'new' ? (
+              {(view === 'new' || groupView === 'new-group') ? (
                 <button
                   type="button"
-                  onClick={() => { setView('conversations'); setUserSearch(''); }}
+                  onClick={() => { setView('conversations'); setGroupView('list'); setUserSearch(''); }}
                   className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 hover:text-brand-secondary"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  New Message
+                  {view === 'new' ? 'New Message' : 'New Group'}
                 </button>
               ) : (
-                <span className="text-sm font-semibold text-gray-800">Messaging</span>
+                <div className="flex gap-1">
+                  <button onClick={() => setPanelTab('direct')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'direct' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                    Direct{dmUnread > 0 && <span className="ml-1 text-[9px]">({dmUnread})</span>}
+                  </button>
+                  <button onClick={() => setPanelTab('groups')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'groups' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                    Groups{groupUnread > 0 && <span className="ml-1 text-[9px]">({groupUnread})</span>}
+                  </button>
+                </div>
               )}
               <div className="flex items-center gap-1">
-                {view === 'conversations' && (
-                  <button
-                    type="button"
-                    onClick={handleOpenNewPanel}
-                    className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors"
-                    title="New message"
-                  >
+                {view === 'conversations' && panelTab === 'direct' && groupView === 'list' && (
+                  <button type="button" onClick={handleOpenNewPanel} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New message">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setPanelOpen(false)}
-                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-                  title="Close"
-                >
+                {panelTab === 'groups' && groupView === 'list' && (
+                  <button type="button" onClick={handleOpenNewGroup} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New group">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                )}
+                <button type="button" onClick={() => setPanelOpen(false)} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors" title="Close">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -372,32 +647,18 @@ export function FooterChat() {
               </div>
             </div>
 
-            {/* New message search */}
-            {view === 'new' && (
+            {/* New DM search */}
+            {panelTab === 'direct' && view === 'new' && (
               <div className="flex flex-col flex-1 overflow-hidden">
                 <div className="px-3 py-2 border-b border-gray-100">
-                  <input
-                    type="text"
-                    value={userSearch}
-                    onChange={e => setUserSearch(e.target.value)}
-                    placeholder="Search teammates…"
-                    autoFocus
-                    className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary"
-                  />
+                  <input type="text" value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search teammates…" autoFocus className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  {filteredUsers.length === 0 && (
-                    <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>
-                  )}
+                  {filteredUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>}
                   {filteredUsers.map(u => {
                     const name = getDisplayName(u.email, u.displayName);
                     return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors"
-                      >
+                      <button key={u.id} type="button" onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors">
                         <Avatar name={name} size="sm" />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
@@ -410,8 +671,8 @@ export function FooterChat() {
               </div>
             )}
 
-            {/* Conversations list */}
-            {view === 'conversations' && (
+            {/* Direct conversations list */}
+            {panelTab === 'direct' && view === 'conversations' && (
               <div className="flex-1 overflow-y-auto">
                 {conversations.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -419,82 +680,137 @@ export function FooterChat() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                     <p className="text-sm text-gray-400">No conversations yet.</p>
-                    <button
-                      type="button"
-                      onClick={handleOpenNewPanel}
-                      className="mt-2 text-xs text-brand-secondary hover:underline font-medium"
-                    >
-                      Start one
-                    </button>
+                    <button type="button" onClick={handleOpenNewPanel} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Start one</button>
                   </div>
                 )}
                 {conversations.map(conv => {
                   const name = getDisplayName(conv.otherEmail, conv.otherDisplayName);
                   const isMe = conv.lastSenderId === user.id;
                   return (
-                    <button
-                      key={conv.otherId}
-                      type="button"
-                      onClick={() => { openChatFromConversation(conv); setPanelOpen(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0"
-                    >
+                    <button key={conv.otherId} type="button" onClick={() => { openChatFromConversation(conv); setPanelOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0">
                       <div className="relative flex-shrink-0">
                         <Avatar name={name} size="sm" />
-                        {conv.unreadCount > 0 && (
-                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
-                            {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
-                          </span>
-                        )}
+                        {conv.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{conv.unreadCount > 9 ? '9+' : conv.unreadCount}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
-                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>
-                            {name}
-                          </p>
-                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
-                            {formatTime(conv.lastCreatedAt)}
-                          </span>
+                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{name}</p>
+                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(conv.lastCreatedAt)}</span>
                         </div>
-                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>
-                          {isMe ? 'You: ' : ''}{conv.lastContent}
-                        </p>
+                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{isMe ? 'You: ' : ''}{conv.lastContent}</p>
                       </div>
                     </button>
                   );
                 })}
               </div>
             )}
+
+            {/* Groups list */}
+            {panelTab === 'groups' && groupView === 'list' && (
+              <div className="flex-1 overflow-y-auto">
+                {groups.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <p className="text-sm text-gray-400">No group chats yet.</p>
+                    <button type="button" onClick={handleOpenNewGroup} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Create one</button>
+                  </div>
+                )}
+                {groups.map(group => (
+                  <button key={group.id} type="button" onClick={() => { openGroupChat(group); setPanelOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0">
+                    <div className="relative flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </div>
+                      {group.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{group.unreadCount > 9 ? '9+' : group.unreadCount}</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-sm truncate ${group.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{group.name}</p>
+                        {group.lastCreatedAt && <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(group.lastCreatedAt)}</span>}
+                      </div>
+                      {group.lastContent && <p className={`text-xs truncate ${group.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{group.lastContent}</p>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* New group form */}
+            {panelTab === 'groups' && groupView === 'new-group' && (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Group name</label>
+                    <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="e.g. AHCA 2025 Team" autoFocus className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Conference (optional — auto-adds internal attendees)</label>
+                    <select value={newGroupConferenceId ?? ''} onChange={e => setNewGroupConferenceId(e.target.value ? Number(e.target.value) : null)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary bg-white">
+                      <option value="">None (ad-hoc group)</option>
+                      {conferences.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Add members</label>
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                      {allUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-3">Loading…</p>}
+                      {allUsers.map(u => {
+                        const name = getDisplayName(u.email, u.displayName);
+                        return (
+                          <label key={u.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                            <input type="checkbox" checked={newGroupMemberIds.has(u.id)} onChange={() => toggleGroupMember(u.id)} className="accent-brand-secondary" />
+                            <Avatar name={name} size="sm" />
+                            <span className="text-sm text-gray-800 truncate">{name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="px-4 py-3 border-t border-gray-100">
+                  <button type="button" onClick={handleCreateGroup} disabled={!newGroupName.trim() || groupCreating} className="w-full btn-primary text-sm py-2 disabled:opacity-40">
+                    {groupCreating ? 'Creating…' : 'Create Group'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Mobile chat windows (open from conversations) */}
+      {/* Mobile DM windows */}
       {openChats.map(other => (
         <div key={other.id} className="lg:hidden fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/20" onClick={() => closeChat(other.id)} />
           <div className="absolute top-16 left-4 right-4">
-            <ChatWindow
-              other={other}
-              currentUserId={user.id}
-              onClose={() => closeChat(other.id)}
-              onNewMessage={handleNewMessageSent}
-              mobile
-            />
+            <ChatWindow other={other} currentUserId={user.id} onClose={() => closeChat(other.id)} onNewMessage={handleNewMessageSent} mobile />
+          </div>
+        </div>
+      ))}
+
+      {/* Mobile group chat windows */}
+      {openGroups.map(group => (
+        <div key={group.id} className="lg:hidden fixed inset-0 z-[60]">
+          <div className="absolute inset-0 bg-black/20" onClick={() => closeGroupChat(group.id)} />
+          <div className="absolute top-16 left-4 right-4">
+            <GroupChatWindow group={group} currentUserId={user.id} onClose={() => closeGroupChat(group.id)} onNewMessage={handleNewMessageSent} mobile />
           </div>
         </div>
       ))}
 
       {/* Desktop layout */}
       <div className="hidden lg:flex fixed bottom-0 right-4 z-50 flex-row-reverse items-end gap-2">
-      {/* Open chat windows */}
+      {/* Open DM windows */}
       {openChats.map(other => (
-        <ChatWindow
-          key={other.id}
-          other={other}
-          currentUserId={user.id}
-          onClose={() => closeChat(other.id)}
-          onNewMessage={handleNewMessageSent}
-        />
+        <ChatWindow key={other.id} other={other} currentUserId={user.id} onClose={() => closeChat(other.id)} onNewMessage={handleNewMessageSent} />
+      ))}
+      {/* Open group windows */}
+      {openGroups.map(group => (
+        <GroupChatWindow key={group.id} group={group} currentUserId={user.id} onClose={() => closeGroupChat(group.id)} onNewMessage={handleNewMessageSent} />
       ))}
 
       {/* Messaging hub panel + tab */}
@@ -504,39 +820,39 @@ export function FooterChat() {
           <div className="mb-0 w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 border-b-0 flex flex-col max-h-[420px]">
             {/* Panel header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              {view === 'new' ? (
-                <button
-                  type="button"
-                  onClick={() => { setView('conversations'); setUserSearch(''); }}
-                  className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 hover:text-brand-secondary"
-                >
+              {(view === 'new' || groupView === 'new-group') ? (
+                <button type="button" onClick={() => { setView('conversations'); setGroupView('list'); setUserSearch(''); }} className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 hover:text-brand-secondary">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  New Message
+                  {view === 'new' ? 'New Message' : 'New Group'}
                 </button>
               ) : (
-                <span className="text-sm font-semibold text-gray-800">Messaging</span>
+                <div className="flex gap-1">
+                  <button onClick={() => setPanelTab('direct')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'direct' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                    Direct{dmUnread > 0 && <span className="ml-1 text-[9px]">({dmUnread})</span>}
+                  </button>
+                  <button onClick={() => setPanelTab('groups')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'groups' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                    Groups{groupUnread > 0 && <span className="ml-1 text-[9px]">({groupUnread})</span>}
+                  </button>
+                </div>
               )}
               <div className="flex items-center gap-1">
-                {view === 'conversations' && (
-                  <button
-                    type="button"
-                    onClick={handleOpenNewPanel}
-                    className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors"
-                    title="New message"
-                  >
+                {view === 'conversations' && panelTab === 'direct' && groupView === 'list' && (
+                  <button type="button" onClick={handleOpenNewPanel} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New message">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setPanelOpen(false)}
-                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-                  title="Close"
-                >
+                {panelTab === 'groups' && groupView === 'list' && (
+                  <button type="button" onClick={handleOpenNewGroup} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New group">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                )}
+                <button type="button" onClick={() => setPanelOpen(false)} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors" title="Close">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -544,32 +860,18 @@ export function FooterChat() {
               </div>
             </div>
 
-            {/* New message — user search */}
-            {view === 'new' && (
+            {/* New DM search */}
+            {panelTab === 'direct' && view === 'new' && (
               <div className="flex flex-col flex-1 overflow-hidden">
                 <div className="px-3 py-2 border-b border-gray-100">
-                  <input
-                    type="text"
-                    value={userSearch}
-                    onChange={e => setUserSearch(e.target.value)}
-                    placeholder="Search teammates…"
-                    autoFocus
-                    className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary"
-                  />
+                  <input type="text" value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search teammates…" autoFocus className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  {filteredUsers.length === 0 && (
-                    <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>
-                  )}
+                  {filteredUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>}
                   {filteredUsers.map(u => {
                     const name = getDisplayName(u.email, u.displayName);
                     return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors"
-                      >
+                      <button key={u.id} type="button" onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors">
                         <Avatar name={name} size="sm" />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
@@ -582,63 +884,111 @@ export function FooterChat() {
               </div>
             )}
 
-            {/* Conversations list */}
-            {view === 'conversations' && (
+            {/* Direct conversations list */}
+            {panelTab === 'direct' && view === 'conversations' && (
               <div className="flex-1 overflow-y-auto">
-                {convLoading && (
-                  <div className="flex justify-center py-8">
-                    <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-                  </div>
-                )}
                 {!convLoading && conversations.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
                     <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                     <p className="text-sm text-gray-400">No conversations yet.</p>
-                    <button
-                      type="button"
-                      onClick={handleOpenNewPanel}
-                      className="mt-2 text-xs text-brand-secondary hover:underline font-medium"
-                    >
-                      Start one
-                    </button>
+                    <button type="button" onClick={handleOpenNewPanel} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Start one</button>
                   </div>
                 )}
                 {conversations.map(conv => {
                   const name = getDisplayName(conv.otherEmail, conv.otherDisplayName);
                   const isMe = conv.lastSenderId === user.id;
                   return (
-                    <button
-                      key={conv.otherId}
-                      type="button"
-                      onClick={() => openChatFromConversation(conv)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors"
-                    >
+                    <button key={conv.otherId} type="button" onClick={() => openChatFromConversation(conv)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors">
                       <div className="relative flex-shrink-0">
                         <Avatar name={name} size="sm" />
-                        {conv.unreadCount > 0 && (
-                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
-                            {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
-                          </span>
-                        )}
+                        {conv.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{conv.unreadCount > 9 ? '9+' : conv.unreadCount}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
-                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>
-                            {name}
-                          </p>
-                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
-                            {formatTime(conv.lastCreatedAt)}
-                          </span>
+                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{name}</p>
+                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(conv.lastCreatedAt)}</span>
                         </div>
-                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>
-                          {isMe ? 'You: ' : ''}{conv.lastContent}
-                        </p>
+                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{isMe ? 'You: ' : ''}{conv.lastContent}</p>
                       </div>
                     </button>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Groups list */}
+            {panelTab === 'groups' && groupView === 'list' && (
+              <div className="flex-1 overflow-y-auto">
+                {groups.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <p className="text-sm text-gray-400">No group chats yet.</p>
+                    <button type="button" onClick={handleOpenNewGroup} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Create one</button>
+                  </div>
+                )}
+                {groups.map(group => (
+                  <button key={group.id} type="button" onClick={() => openGroupChat(group)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors">
+                    <div className="relative flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </div>
+                      {group.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{group.unreadCount > 9 ? '9+' : group.unreadCount}</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-sm truncate ${group.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{group.name}</p>
+                        {group.lastCreatedAt && <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(group.lastCreatedAt)}</span>}
+                      </div>
+                      {group.lastContent && <p className={`text-xs truncate ${group.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{group.lastContent}</p>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* New group form */}
+            {panelTab === 'groups' && groupView === 'new-group' && (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Group name</label>
+                    <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="e.g. AHCA 2025 Team" autoFocus className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Conference (optional — auto-adds internal attendees)</label>
+                    <select value={newGroupConferenceId ?? ''} onChange={e => setNewGroupConferenceId(e.target.value ? Number(e.target.value) : null)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary bg-white">
+                      <option value="">None (ad-hoc group)</option>
+                      {conferences.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Add members</label>
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                      {allUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-3">Loading…</p>}
+                      {allUsers.map(u => {
+                        const name = getDisplayName(u.email, u.displayName);
+                        return (
+                          <label key={u.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                            <input type="checkbox" checked={newGroupMemberIds.has(u.id)} onChange={() => toggleGroupMember(u.id)} className="accent-brand-secondary" />
+                            <Avatar name={name} size="sm" />
+                            <span className="text-sm text-gray-800 truncate">{name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="px-4 py-3 border-t border-gray-100">
+                  <button type="button" onClick={handleCreateGroup} disabled={!newGroupName.trim() || groupCreating} className="w-full btn-primary text-sm py-2 disabled:opacity-40">
+                    {groupCreating ? 'Creating…' : 'Create Group'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
