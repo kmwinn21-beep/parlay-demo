@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     await dbReady;
 
     const result = await db.execute({
-      sql: 'SELECT id, email, password_hash, role, email_verified FROM users WHERE email = ?',
+      sql: 'SELECT id, email, password_hash, role, email_verified, active FROM users WHERE email = ?',
       args: [email],
     });
 
@@ -30,6 +30,10 @@ export async function POST(request: NextRequest) {
     const valid = await bcrypt.compare(password, String(user.password_hash));
     if (!valid) {
       return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
+    }
+
+    if (user.active === 0 || user.active === '0') {
+      return NextResponse.json({ error: 'Your account has been deactivated. Please contact an administrator.' }, { status: 403 });
     }
 
     const sessionUser = {

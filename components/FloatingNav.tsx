@@ -8,7 +8,9 @@ import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { GlobalSearchModal } from './GlobalSearch';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
+import { useUnreadChatCount } from '@/lib/useUnreadChatCount';
 import { useConferenceOfflineSync } from './ConferenceOfflineSync';
+import { useChatPanel } from './ChatPanelContext';
 
 const STORAGE_KEY = 'floatingNavPos';
 const BTN = 56; // diameter in px (w-14)
@@ -153,6 +155,8 @@ export function FloatingNav() {
   const { hidden } = useBottomNav();
   const { navHidden, setNavHidden } = useFloatingNavHidden();
   const unreadCount = useUnreadNotificationCount();
+  const unreadChatCount = useUnreadChatCount();
+  const { setPanelOpen } = useChatPanel();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -277,6 +281,18 @@ export function FloatingNav() {
       action: 'search' as const,
     },
     {
+      key: 'chat',
+      label: 'Chat',
+      icon: (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      ),
+      href: null,
+      active: false,
+      action: 'chat' as const,
+    },
+    {
       key: 'quick-note',
       label: 'Quick Note',
       icon: (
@@ -384,11 +400,19 @@ export function FloatingNav() {
                   onClick={() => {
                     setOpen(false);
                     if (item.key === 'quick-note') setShowQuickNote(true);
+                    else if (item.key === 'chat') setPanelOpen(true);
                     else setShowSearch(true);
                   }}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border w-full min-w-[152px] transition-colors ${pillCls}`}
                 >
-                  {item.icon}
+                  {item.key === 'chat' && unreadChatCount > 0 ? (
+                    <span className="relative flex-shrink-0">
+                      {item.icon}
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                      </span>
+                    </span>
+                  ) : item.icon}
                   <span className="text-sm font-medium leading-none">{item.label}</span>
                 </button>
               )}
@@ -463,13 +487,13 @@ export function FloatingNav() {
             </svg>
           )}
         </div>
-        {/* Unread notification badge on FAB */}
-        {!open && unreadCount > 0 && (
+        {/* Unread badge on FAB — shows total of notifications + chat messages */}
+        {!open && (unreadCount + unreadChatCount) > 0 && (
           <span
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none"
+            className="absolute min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none"
             style={{ position: 'absolute', top: -4, right: -4 }}
           >
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {(unreadCount + unreadChatCount) > 99 ? '99+' : unreadCount + unreadChatCount}
           </span>
         )}
       </div>

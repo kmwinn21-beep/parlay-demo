@@ -567,6 +567,48 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE notification_preferences ADD COLUMN note_lets_talk_email INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE notification_preferences ADD COLUMN comment_reaction_received INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE notification_preferences ADD COLUMN comment_reaction_received_email INTEGER NOT NULL DEFAULT 0`,
+    `CREATE TABLE IF NOT EXISTS direct_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id INTEGER NOT NULL,
+      receiver_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      read_at TEXT,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_direct_messages_sender ON direct_messages(sender_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_direct_messages_receiver ON direct_messages(receiver_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_direct_messages_conversation ON direct_messages(sender_id, receiver_id)`,
+    // Invite-only user management
+    `ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE users ADD COLUMN invite_token TEXT`,
+    `ALTER TABLE users ADD COLUMN invite_expires INTEGER`,
+    `ALTER TABLE users ADD COLUMN first_name TEXT`,
+    `ALTER TABLE users ADD COLUMN last_name TEXT`,
+    // Email outreach: per-user OAuth connections (Google / Microsoft)
+    `CREATE TABLE IF NOT EXISTS oauth_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('google', 'microsoft')),
+      provider_email TEXT,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_expires_at INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE (user_id, provider),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    // Email outreach: admin-managed reusable templates
+    `CREATE TABLE IF NOT EXISTS email_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

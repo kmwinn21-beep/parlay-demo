@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { FloatingNav } from './FloatingNav';
+import { FooterChat } from './FooterChat';
+import { ChatPanelProvider } from './ChatPanelContext';
 import { BottomNavProvider } from './BottomNavContext';
 import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
 import { UserProvider } from './UserContext';
@@ -19,6 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <UserProvider>
+      <ChatPanelProvider>
       <FloatingNavHiddenProvider>
       <BottomNavProvider>
         <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -40,8 +43,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <FloatingNav />
           </div>
         </div>
+
+        {/* Footer chat — handles its own desktop/mobile rendering */}
+        <FooterChat />
       </BottomNavProvider>
       </FloatingNavHiddenProvider>
+      </ChatPanelProvider>
     </UserProvider>
   );
 }
