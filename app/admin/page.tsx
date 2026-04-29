@@ -60,7 +60,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1549,14 +1549,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates', 'integrations'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : 'Email Templates'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -2596,6 +2596,9 @@ export default function AdminPage() {
       {/* ── Email Templates tab ── */}
       {tab === 'email-templates' && <AdminEmailTemplatesTab />}
 
+      {/* ── Integrations tab ── */}
+      {tab === 'integrations' && <AdminIntegrationsTab />}
+
       {/* ── User Management tab ── */}
       {tab === 'users' && (
         <div className="space-y-6">
@@ -3405,5 +3408,204 @@ function AdminEmailTemplatesTab() {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Admin Integrations Tab ───────────────────────────────────────────────────
+
+interface OAuthConfigState {
+  // Client IDs are shown in full; secrets are booleans (true = already set)
+  oauth_google_client_id: string;
+  oauth_google_client_secret: boolean;
+  oauth_microsoft_client_id: string;
+  oauth_microsoft_client_secret: boolean;
+  oauth_microsoft_tenant_id: string;
+}
+
+function AdminIntegrationsTab() {
+  const [config, setConfig] = useState<OAuthConfigState | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Editable field values — secrets start blank (blank = "keep existing")
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [msClientId, setMsClientId] = useState('');
+  const [msClientSecret, setMsClientSecret] = useState('');
+  const [msTenantId, setMsTenantId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/oauth-config')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: OAuthConfigState | null) => {
+        if (!data) return;
+        setConfig(data);
+        setGoogleClientId(data.oauth_google_client_id ?? '');
+        setMsClientId(data.oauth_microsoft_client_id ?? '');
+        setMsTenantId(data.oauth_microsoft_tenant_id ?? '');
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const body: Record<string, string> = {
+        oauth_google_client_id: googleClientId.trim(),
+        oauth_microsoft_client_id: msClientId.trim(),
+        oauth_microsoft_tenant_id: msTenantId.trim() || 'common',
+      };
+      // Only send secrets if the user typed something; blank = keep existing
+      if (googleClientSecret.trim()) body.oauth_google_client_secret = googleClientSecret.trim();
+      if (msClientSecret.trim()) body.oauth_microsoft_client_secret = msClientSecret.trim();
+
+      const res = await fetch('/api/admin/oauth-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { toast.error('Failed to save.'); return; }
+      toast.success('Integration settings saved.');
+      setGoogleClientSecret('');
+      setMsClientSecret('');
+      // Re-fetch to update "is set" indicators
+      const updated = await fetch('/api/admin/oauth-config').then(r => r.ok ? r.json() : null);
+      if (updated) setConfig(updated);
+    } catch { toast.error('Network error.'); }
+    finally { setSaving(false); }
+  };
+
+  const base = typeof window !== 'undefined' ? window.location.origin : '';
+
+  if (loading) return (
+    <div className="space-y-4">
+      {[1, 2].map(i => <div key={i} className="card h-40 animate-pulse bg-gray-50" />)}
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSave} className="space-y-6">
+      <div className="card space-y-5">
+        <div>
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Email Outreach — OAuth Credentials</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Enter your own Google and/or Microsoft OAuth app credentials so your team can connect their work email accounts.
+            Credentials are stored in your database and never shared externally.
+          </p>
+        </div>
+
+        {/* Google */}
+        <div className="space-y-3 pt-2 border-t border-gray-100">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            <h3 className="text-sm font-semibold text-gray-800">Google (Gmail)</h3>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-4 py-3 text-xs text-gray-500 space-y-1">
+            <p className="font-medium text-gray-600">Setup steps:</p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>console.cloud.google.com → New Project → Enable <strong>Gmail API</strong></li>
+              <li>OAuth consent screen → External → add scope <code className="bg-gray-200 px-1 rounded">gmail.send</code></li>
+              <li>Credentials → OAuth 2.0 Client ID → Web application</li>
+              <li>Authorized redirect URI: <code className="bg-gray-200 px-1 rounded break-all">{base}/api/oauth/google/callback</code></li>
+            </ol>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Client ID</label>
+              <input
+                className="input-field w-full text-sm"
+                placeholder="12345-abc.apps.googleusercontent.com"
+                value={googleClientId}
+                onChange={e => setGoogleClientId(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Client Secret
+                {config?.oauth_google_client_secret && <span className="ml-2 text-green-600 font-normal normal-case">● Set</span>}
+              </label>
+              <input
+                type="password"
+                className="input-field w-full text-sm"
+                placeholder={config?.oauth_google_client_secret ? 'Leave blank to keep existing' : 'Paste secret here'}
+                value={googleClientSecret}
+                onChange={e => setGoogleClientSecret(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Microsoft */}
+        <div className="space-y-3 pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+              <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
+              <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
+              <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
+              <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
+            </svg>
+            <h3 className="text-sm font-semibold text-gray-800">Microsoft (Outlook / M365)</h3>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-4 py-3 text-xs text-gray-500 space-y-1">
+            <p className="font-medium text-gray-600">Setup steps:</p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>portal.azure.com → Azure Active Directory → App registrations → New registration</li>
+              <li>API permissions → Microsoft Graph → Delegated → <code className="bg-gray-200 px-1 rounded">Mail.Send</code> + <code className="bg-gray-200 px-1 rounded">offline_access</code></li>
+              <li>Certificates &amp; secrets → New client secret → copy it immediately</li>
+              <li>Redirect URI: <code className="bg-gray-200 px-1 rounded break-all">{base}/api/oauth/microsoft/callback</code></li>
+            </ol>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Client ID (Application ID)</label>
+              <input
+                className="input-field w-full text-sm"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={msClientId}
+                onChange={e => setMsClientId(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Client Secret
+                {config?.oauth_microsoft_client_secret && <span className="ml-2 text-green-600 font-normal normal-case">● Set</span>}
+              </label>
+              <input
+                type="password"
+                className="input-field w-full text-sm"
+                placeholder={config?.oauth_microsoft_client_secret ? 'Leave blank to keep existing' : 'Paste secret here'}
+                value={msClientSecret}
+                onChange={e => setMsClientSecret(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tenant ID</label>
+              <input
+                className="input-field w-full text-sm"
+                placeholder="common"
+                value={msTenantId}
+                onChange={e => setMsTenantId(e.target.value)}
+              />
+              <p className="text-xs text-gray-400 mt-1">Use <code className="bg-gray-100 px-1 rounded">common</code> to allow any Microsoft/M365 account, or your specific tenant ID to restrict to one org.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-gray-100">
+          <button type="submit" disabled={saving} className="btn-primary text-sm">
+            {saving ? 'Saving…' : 'Save Credentials'}
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }

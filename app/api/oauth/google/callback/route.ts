@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { getGoogleCredentials } from '@/lib/oauthCredentials';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
-  const state = searchParams.get('state'); // user ID
+  const state = searchParams.get('state');
   const error = searchParams.get('error');
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
@@ -15,11 +16,9 @@ export async function GET(request: NextRequest) {
   const userId = parseInt(state, 10);
   if (isNaN(userId)) return NextResponse.redirect(`${base}/auth/account?error=invalid_state`);
 
-  const clientId = process.env.GOOGLE_CLIENT_ID!;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
+  const { clientId, clientSecret } = await getGoogleCredentials();
   const redirectUri = `${base}/api/oauth/google/callback`;
 
-  // Exchange code for tokens
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -29,7 +28,6 @@ export async function GET(request: NextRequest) {
   if (!tokenRes.ok) return NextResponse.redirect(`${base}/auth/account?error=google_token_failed`);
   const tokens = await tokenRes.json();
 
-  // Fetch the provider email
   let providerEmail: string | null = null;
   try {
     const infoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { getMicrosoftCredentials } from '@/lib/oauthCredentials';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,12 +16,10 @@ export async function GET(request: NextRequest) {
   const userId = parseInt(state, 10);
   if (isNaN(userId)) return NextResponse.redirect(`${base}/auth/account?error=invalid_state`);
 
-  const clientId = process.env.MICROSOFT_CLIENT_ID!;
-  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET!;
-  const tenant = process.env.MICROSOFT_TENANT_ID ?? 'common';
+  const { clientId, clientSecret, tenantId } = await getMicrosoftCredentials();
   const redirectUri = `${base}/api/oauth/microsoft/callback`;
 
-  const tokenRes = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+  const tokenRes = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
