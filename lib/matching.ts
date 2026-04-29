@@ -240,36 +240,85 @@ export function buildCompanyMatcher<T extends { id: number; name: string; websit
 }
 
 /**
- * Multi-stage attendee matching:
- *  1. Exact match on raw lowercase "first last"
- *  2. Exact match on normalised name
- *  3. Fuzzy match via Fuse.js on normalised names
+ * Multi-stage attendee matching — name match PLUS secondary confirmation.
+ *
+ * Rules:
+ *  1. First+last name must match exactly (case-insensitive). Fuzzy name
+ *     matching is intentionally disabled — "Brian Smith" and "Bryan Smith"
+ *     are NOT the same person.
+ *  2. A name match alone is never sufficient. At least one of the following
+ *     must also hold (enforced via `confirmFn` when supplied):
+ *       a. Email addresses match (case-insensitive exact)
+ *       b. Corporate domain matches (extracted from email or website)
+ *       c. Company name is a close match (same normalisation rules as company matching)
+ *  3. If `confirmFn` is omitted the function falls back to name-only matching
+ *     (kept for call-sites that haven't been migrated to carry secondary data).
  */
 export function matchAttendee<T extends { id: number; full_name: string }>(
   firstName: string,
   lastName: string,
   existing: T[],
-  matcher?: AttendeeMatcher<T>
+  matcher?: AttendeeMatcher<T>,
+  /** Secondary-confirmation predicate — must return true for the match to be accepted. */
+  confirmFn?: (candidate: T) => boolean,
 ): MatchResult<T> {
   const m = matcher ?? buildAttendeeMatcher(existing);
   const rawKey = `${firstName} ${lastName}`.trim().toLowerCase();
   const normKey = normalizeAttendeeName(firstName, lastName);
 
-  // Stage 1: exact on raw lowercase
-  const exact = m.exactMap.get(rawKey);
-  if (exact) return { match: exact, score: 0 };
+  // Stage 1: exact on raw lowercase ("brian smith")
+  let candidate: T | undefined = m.exactMap.get(rawKey);
 
-  // Stage 2: exact on normalised
-  const normExact = m.normMap.get(normKey);
-  if (normExact) return { match: normExact, score: 0.05 };
+  // Stage 2: exact on normalised (strips periods/commas — handles "J. Smith" vs "J Smith")
+  if (!candidate) candidate = m.normMap.get(normKey);
 
-  // Stage 3: fuzzy on normalised names
-  const hits = m.fuse.search(normKey);
-  if (hits.length > 0 && (hits[0].score ?? 1) <= ATTENDEE_FUZZY_THRESHOLD) {
-    return { match: hits[0].item._original, score: hits[0].score ?? ATTENDEE_FUZZY_THRESHOLD };
+  // No fuzzy stage — mismatched first names (Brian/Bryan) must NOT auto-match.
+
+  if (!candidate) return null;
+
+  // Secondary confirmation: email, domain, or company must also match.
+  if (confirmFn && !confirmFn(candidate)) return null;
+
+  return { match: candidate, score: 0 };
+}
+
+/**
+ * Secondary confirmation for a name-matched attendee candidate.
+ *
+ * Returns true if ANY of the following holds:
+ *  1. Incoming email === candidate email (case-insensitive)
+ *  2. Corporate domain extracted from (incoming email | website) matches
+ *     corporate domain extracted from (candidate email | company website)
+ *  3. Incoming company name close-matches candidate company name
+ *     (same normalisation as matchCompany — strips LLC, Inc, etc., plus fuzzy)
+ *
+ * Returns false when no secondary data is present at all — per the matching
+ * rules a name match without confirmable secondary data should produce a new
+ * record, not silently merge with an existing one.
+ */
+export function confirmAttendeeMatch(
+  candidate: { email?: string | null; website?: string | null; company_name?: string | null },
+  incomingEmail?: string | null,
+  incomingWebsite?: string | null,
+  incomingCompanyName?: string | null,
+): boolean {
+  // 1. Email exact match
+  if (incomingEmail?.trim() && candidate.email?.trim()) {
+    if (incomingEmail.trim().toLowerCase() === candidate.email.trim().toLowerCase()) return true;
   }
 
-  return null;
+  // 2. Corporate domain match (email domain or website domain)
+  const incDomain = extractDomain(incomingEmail ?? undefined, incomingWebsite ?? undefined);
+  const candDomain = extractDomain(candidate.email ?? undefined, candidate.website ?? undefined);
+  if (incDomain && candDomain && incDomain === candDomain) return true;
+
+  // 3. Company name close match (normalised + fuzzy via matchCompany)
+  if (incomingCompanyName?.trim() && candidate.company_name?.trim()) {
+    const hit = matchCompany(incomingCompanyName, [{ id: -1, name: candidate.company_name }]);
+    if (hit) return true;
+  }
+
+  return false;
 }
 
 export interface AttendeeMatcher<T extends { id: number; full_name: string }> {

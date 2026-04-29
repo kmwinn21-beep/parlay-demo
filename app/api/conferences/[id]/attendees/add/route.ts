@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getConfigIdByEmail, notifyCompanyAssignees } from '@/lib/notifications';
+import { confirmAttendeeMatch } from '@/lib/matching';
 
 export async function POST(
   request: NextRequest,
@@ -13,12 +14,13 @@ export async function POST(
   try {
     await dbReady;
     const body = await request.json();
-    const { first_name, last_name, title, company, email } = body as {
+    const { first_name, last_name, title, company, email, website } = body as {
       first_name: string;
       last_name: string;
       title?: string;
       company?: string;
       email?: string;
+      website?: string;
     };
 
     if (!first_name || !last_name) {
@@ -34,23 +36,33 @@ export async function POST(
       return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
     }
 
-    // Fuzzy match: case-insensitive first+last name check
-    const existingResult = await db.execute({
-      sql: `SELECT a.*, c.name as company_name, c.company_type
+    // Name match — requires secondary confirmation (email, domain, or company) per matching rules.
+    // Load all name matches (could be >1 person named "John Smith") then apply secondary check.
+    const nameMatchResult = await db.execute({
+      sql: `SELECT a.*, c.name as company_name, c.website as company_website, c.company_type
             FROM attendees a
             LEFT JOIN companies c ON a.company_id = c.id
-            WHERE LOWER(a.first_name) = LOWER(?) AND LOWER(a.last_name) = LOWER(?)
-            LIMIT 1`,
+            WHERE LOWER(a.first_name) = LOWER(?) AND LOWER(a.last_name) = LOWER(?)`,
       args: [first_name, last_name],
     });
+
+    // Find first candidate that also passes secondary confirmation
+    const confirmedRow = nameMatchResult.rows.find(row =>
+      confirmAttendeeMatch(
+        { email: row.email as string | null, website: row.company_website as string | null, company_name: row.company_name as string | null },
+        email,
+        website,
+        company,
+      )
+    );
 
     let attendeeId: number;
     let attendeeRow: Record<string, unknown>;
 
-    if (existingResult.rows.length > 0) {
-      // Found existing attendee — tag with conference
-      attendeeId = Number(existingResult.rows[0].id);
-      attendeeRow = { ...existingResult.rows[0] };
+    if (confirmedRow) {
+      // Confirmed match — tag with conference using existing attendee
+      attendeeId = Number(confirmedRow.id);
+      attendeeRow = { ...confirmedRow };
     } else {
       // Create new attendee
       let companyId: number | null = null;
