@@ -70,6 +70,23 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
     }
   }, [user]);
 
+  // Auto-select and silently save the rep profile when it isn't set but a
+  // config_options entry exists whose value matches the user's display name.
+  // Covers existing users who activated before the auto-link was added.
+  useEffect(() => {
+    if (configId !== '' || repOptions.length === 0 || !user) return;
+    const nameToMatch = (user.displayName ?? '').toLowerCase().trim();
+    if (!nameToMatch) return;
+    const match = repOptions.find(opt => opt.value.toLowerCase().trim() === nameToMatch);
+    if (!match) return;
+    setConfigId(match.id);
+    fetch('/api/auth/update-profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ configId: match.id }),
+    }).catch(() => {});
+  }, [repOptions, user, configId]);
+
   if (!user) return null;
 
   const handleSaveProfile = async (e: React.FormEvent) => {

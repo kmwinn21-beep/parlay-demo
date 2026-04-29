@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   await dbReady;
   const result = await db.execute({
-    sql: 'SELECT id, email, role, first_name, last_name, invite_expires FROM users WHERE invite_token = ?',
+    sql: 'SELECT id, email, role, first_name, last_name, config_id, invite_expires FROM users WHERE invite_token = ?',
     args: [token],
   });
 
@@ -65,6 +65,25 @@ export async function POST(request: NextRequest) {
           WHERE id = ?`,
     args: [password_hash, Number(user.id)],
   });
+
+  // Ensure the user is linked to their rep profile in config_options.
+  // Normally set during invite creation, but may be null for users created before
+  // that workflow existed — look up by display name and link automatically.
+  if (user.config_id == null) {
+    const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+    if (displayName) {
+      const coRes = await db.execute({
+        sql: `SELECT id FROM config_options WHERE category = 'user' AND LOWER(value) = LOWER(?) LIMIT 1`,
+        args: [displayName],
+      });
+      if (coRes.rows.length) {
+        await db.execute({
+          sql: 'UPDATE users SET config_id = ? WHERE id = ?',
+          args: [Number(coRes.rows[0].id), Number(user.id)],
+        });
+      }
+    }
+  }
 
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || null;
   const sessionUser = {
