@@ -117,9 +117,19 @@ function ChatWindow({
     }
   }, [messages, minimized]);
 
+  // Auto-resize textarea as the user types; reset to single row when cleared
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = text ? `${Math.min(el.scrollHeight, 120)}px` : '';
+  }, [text]);
+
   const handleSend = async () => {
     if (!text.trim() || sending) return;
     setSending(true);
+    // Reset textarea height immediately before the state clear
+    if (textareaRef.current) textareaRef.current.style.height = '';
     try {
       const res = await fetch('/api/chat/messages', {
         method: 'POST',
@@ -211,7 +221,7 @@ function ChatWindow({
               onKeyDown={handleKeyDown}
               placeholder="Write a message…"
               rows={1}
-              className="flex-1 resize-none rounded-full border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-secondary text-gray-800 placeholder-gray-400 max-h-24 overflow-y-auto"
+              className="flex-1 resize-none rounded-2xl border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-secondary text-gray-800 placeholder-gray-400 overflow-hidden"
               style={{ lineHeight: '1.4' }}
             />
             <button
