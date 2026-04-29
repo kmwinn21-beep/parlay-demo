@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
   const groupId = Number(groupResult.rows[0].id);
 
   // Add all members
-  for (const uid of memberSet) {
+  for (const uid of Array.from(memberSet)) {
     await db.execute({
       sql: `INSERT OR IGNORE INTO group_conversation_members (group_id, user_id) VALUES (?, ?)`,
       args: [groupId, uid],
