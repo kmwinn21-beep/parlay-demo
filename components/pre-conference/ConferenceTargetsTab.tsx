@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
 import type { TargetEntry } from '../PreConferenceReview';
+import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 
 export interface AddableAttendee {
   id: number;
@@ -94,15 +95,21 @@ function TargetCard({
   entry,
   hasMeeting,
   isDragging,
+  avgCostPerUnit,
   onDragStart,
   onToggleTarget,
 }: {
   entry: TargetEntry;
   hasMeeting: boolean;
   isDragging: boolean;
+  avgCostPerUnit: number;
   onDragStart: () => void;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
 }) {
+  const valuePill = (entry.companyWse != null && avgCostPerUnit > 0)
+    ? '$' + Math.round(entry.companyWse * avgCostPerUnit).toLocaleString('en-US')
+    : null;
+
   return (
     <div
       draggable
@@ -136,16 +143,22 @@ function TargetCard({
             seniority: entry.seniority,
             companyName: entry.companyName,
             companyId: entry.companyId,
+            companyWse: entry.companyWse,
             assignedUserNames: entry.assignedUserNames,
           })}
         />
       </div>
-      <div className="flex flex-wrap gap-1 mt-1">
+      <div className="flex flex-wrap items-center gap-1 mt-1">
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
         {entry.assignedUserNames[0] && <UserPill name={entry.assignedUserNames[0]} />}
         {hasMeeting && (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
             Meeting Scheduled
+          </span>
+        )}
+        {valuePill && (
+          <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+            {valuePill}
           </span>
         )}
       </div>
@@ -172,6 +185,7 @@ export function ConferenceTargetsTab({
   onAddTargets?: (entries: Array<Omit<TargetEntry, 'tier'>>) => Promise<void>;
   loadingAddAttendees?: boolean;
 }) {
+  const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
 
@@ -215,6 +229,24 @@ export function ConferenceTargetsTab({
   }, [onAddTargets, selectedIds, addableGroups]);
 
   const targets = Array.from(targetMap.values());
+
+  // Distinct-company value sums per tier.
+  // Each company is attributed only to the highest tier any of its attendees belongs to,
+  // so the same company value is never double-counted across tiers.
+  const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
+  const companyBestTier = new Map<number, { tier: string; wse: number }>();
+  for (const t of targets) {
+    if (t.companyId == null || t.companyWse == null) continue;
+    const existing = companyBestTier.get(t.companyId);
+    if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+      companyBestTier.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+    }
+  }
+  const tierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of companyBestTier.values()) {
+    tierValueSum[tier] = (tierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const hasValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
 
   // Seniority breakdown from targets
   const senCount: Record<string, number> = {};
@@ -383,7 +415,15 @@ export function ConferenceTargetsTab({
               >
                 <div className="flex items-center justify-between mb-3">
                   <span className={`text-lg font-bold uppercase tracking-wider ${tier.labelClass}`}>{tier.label}</span>
-                  <span className="text-lg font-bold text-gray-400">{tierCards.length}</span>
+                  {hasValues ? (
+                    <span className="text-sm font-semibold text-gray-500">
+                      {tierValueSum[tier.key]
+                        ? '$' + tierValueSum[tier.key].toLocaleString('en-US')
+                        : '$0'}
+                    </span>
+                  ) : (
+                    <span className="text-lg font-bold text-gray-400">{tierCards.length}</span>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {tierCards.map(entry => (
@@ -392,6 +432,7 @@ export function ConferenceTargetsTab({
                       entry={entry}
                       hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
                       isDragging={draggingId === entry.attendeeId}
+                      avgCostPerUnit={avgCostPerUnit}
                       onDragStart={() => setDraggingId(entry.attendeeId)}
                       onToggleTarget={onToggleTarget}
                     />

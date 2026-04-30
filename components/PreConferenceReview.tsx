@@ -149,6 +149,7 @@ export interface TargetEntry {
   seniority: string | null;
   companyName: string | null;
   companyId: number | null;
+  companyWse: number | null;
   assignedUserNames: string[];
   tier: string;
 }

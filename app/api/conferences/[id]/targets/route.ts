@@ -21,7 +21,7 @@ export async function GET(
       sql: `SELECT ct.attendee_id, ct.tier,
                    a.first_name, a.last_name, a.title, a.seniority,
                    c.name as company_name, c.id as company_id,
-                   c.assigned_user
+                   c.assigned_user, c.wse as company_wse
             FROM conference_targets ct
             JOIN attendees a ON a.id = ct.attendee_id
             LEFT JOIN companies c ON c.id = a.company_id
@@ -73,6 +73,7 @@ export async function GET(
     seniority: resolveSeniority(r.seniority, r.title),
     companyName: r.company_name ? String(r.company_name) : null,
     companyId: r.company_id ? Number(r.company_id) : null,
+    companyWse: r.company_wse != null ? Number(r.company_wse) : null,
     assignedUserNames: resolveUsers(r.assigned_user),
     tier: String(r.tier ?? 'unassigned'),
   }));
