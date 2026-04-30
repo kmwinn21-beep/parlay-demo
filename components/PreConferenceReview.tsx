@@ -173,6 +173,7 @@ export interface ProductIcpCompany {
 
 export interface ProductIcpEntry {
   product: string;
+  color: string | null;
   companies: ProductIcpCompany[];
 }
 

@@ -38,7 +38,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes, productColorsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -92,12 +92,18 @@ export async function GET(
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key='prior_overlap_company_type'`, args: [] }),
+    db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
   ]);
 
   const attendees = attendeesRes.rows;
   const meetings = meetingsRes.rows;
   const socialEvents = socialRes.rows;
   const followUps = followUpsRes.rows;
+
+  const productColorMap = new Map<string, string | null>();
+  for (const r of productColorsRes.rows) {
+    productColorMap.set(String(r.value), r.color ? String(r.color) : null);
+  }
 
   const companyIds = uniqueNumbers(attendees.map((a) => a.company_id as number | null));
 
@@ -686,6 +692,7 @@ export async function GET(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([product, compMap]) => ({
       product,
+      color: productColorMap.get(product) ?? null,
       companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
     }));
 

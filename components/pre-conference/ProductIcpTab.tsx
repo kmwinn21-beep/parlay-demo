@@ -9,6 +9,14 @@ function HealthDot({ score }: { score: number }) {
   return <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />;
 }
 
+function hexIsLight(hex: string): boolean {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 155;
+}
+
 export function ProductIcpTab({
   productIcp,
   targetMap,
@@ -36,16 +44,28 @@ export function ProductIcpTab({
       <div className="flex gap-4 overflow-x-auto pb-2">
         {productIcp.map((entry) => {
           const totalAttendees = entry.companies.reduce((sum, c) => sum + c.attendees.length, 0);
+          const bgColor = entry.color ?? null;
+          const isLight = bgColor ? hexIsLight(bgColor) : true;
+          const headerStyle = bgColor
+            ? { backgroundColor: bgColor, borderColor: bgColor }
+            : {};
+          const headerTextColor = bgColor ? (isLight ? '#1e293b' : '#ffffff') : undefined;
+          const headerSubColor = bgColor ? (isLight ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)') : undefined;
           return (
             <div
               key={entry.product}
               className="flex-shrink-0 w-72 flex flex-col gap-3"
             >
               {/* Product column header */}
-              <div className="bg-brand-primary/10 border border-brand-primary/20 rounded-xl px-4 py-2.5">
-                <h3 className="font-semibold text-brand-primary text-sm">{entry.product}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {entry.companies.length} {entry.companies.length === 1 ? 'company' : 'companies'} · {totalAttendees} {totalAttendees === 1 ? 'attendee' : 'attendees'}
+              <div
+                className={`rounded-xl px-4 py-2.5 border ${bgColor ? 'border-transparent' : 'bg-brand-primary/10 border-brand-primary/20'}`}
+                style={headerStyle}
+              >
+                <h3 className="font-semibold text-sm" style={{ color: headerTextColor ?? undefined }}>{entry.product}</h3>
+                <p className="text-xs mt-0.5" style={{ color: headerSubColor ?? undefined }}>
+                  <span className={!headerSubColor ? 'text-gray-500' : ''}>
+                    {entry.companies.length} {entry.companies.length === 1 ? 'company' : 'companies'} · {totalAttendees} {totalAttendees === 1 ? 'attendee' : 'attendees'}
+                  </span>
                 </p>
               </div>
 
