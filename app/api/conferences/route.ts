@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, parseFileWithMapping, classifyCompanyType, type ColumnMapping } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -101,13 +101,54 @@ export async function POST(request: NextRequest) {
     let parsedCount = 0;
 
     if (file && file.size > 0) {
-      const companyTypeOptions = await getConfigOptionValues('company_type');
+      const [companyTypeOptions, servicesOptions, functionOptions, productOptions] = await Promise.all([
+        getConfigOptionValues('company_type'),
+        getConfigOptionValues('services'),
+        getConfigOptionValues('function'),
+        getConfigOptionValues('products'),
+      ]);
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const parsed = mapping
         ? await parseFileWithMapping(buffer, file.name, mapping)
         : await parseFile(buffer, file.name);
       const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
+
+      // Resolve config-driven fields via fuzzy matching against canonical config_options values
+      if (companyTypeOptions.length > 0) {
+        for (const p of valid) {
+          if (p.company_type) {
+            p.company_type = matchConfigOption(p.company_type, companyTypeOptions) ?? undefined;
+          }
+        }
+      }
+      if (servicesOptions.length > 0) {
+        for (const p of valid) {
+          if (p.services) {
+            const matched = p.services.split(',').map(s => s.trim()).filter(Boolean)
+              .map(s => matchConfigOption(s, servicesOptions)).filter((v): v is string => v !== null);
+            p.services = matched.length > 0 ? matched.join(',') : undefined;
+          }
+        }
+      }
+      if (functionOptions.length > 0) {
+        for (const p of valid) {
+          if (p.function) {
+            const matched = p.function.split(',').map(s => s.trim()).filter(Boolean)
+              .map(s => matchConfigOption(s, functionOptions)).filter((v): v is string => v !== null);
+            p.function = matched.length > 0 ? matched.join(',') : undefined;
+          }
+        }
+      }
+      if (productOptions.length > 0) {
+        for (const p of valid) {
+          if (p.product) {
+            const matched = p.product.split(',').map(s => s.trim()).filter(Boolean)
+              .map(s => matchConfigOption(s, productOptions)).filter((v): v is string => v !== null);
+            p.product = matched.length > 0 ? matched.join(',') : undefined;
+          }
+        }
+      }
 
       if (valid.length > 0) {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
@@ -257,9 +298,9 @@ export async function POST(request: NextRequest) {
 
         // Resolve each attendee row (deduplicated by name)
         const attendeeIdCache = new Map<string, number>(); // "first last" lowercase -> id
-        type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string };
+        type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string };
         const newAttendees: NewAttendee[] = [];
-        type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null };
+        type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string };
         const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
         const seen = new Set<string>();
 
@@ -275,15 +316,19 @@ export async function POST(request: NextRequest) {
           const hit = matchAttendee(fname, lname, existingAttendees, attendeeMatcher, confirmFn);
           if (hit) {
             attendeeIdCache.set(key, hit.match.id);
-            // Update the existing attendee's company, title, and email from the CSV
+            // Update the existing attendee's company, title, email, function and product from the CSV
             const companyId = p.company?.trim()
               ? (companyIdCache.get(p.company.trim()) ?? null)
               : null;
+            const functionVal = p.function?.trim() || undefined;
+            const productVal = p.product?.trim() || undefined;
             existingAttendeeUpdates.push({
               id: hit.match.id,
               company_id: companyId && companyId > 0 ? companyId : null,
               title: p.title?.trim() || null,
               email: p.email?.trim() || null,
+              function: functionVal,
+              product: productVal,
             });
           } else {
             // Mark for insertion
@@ -291,12 +336,16 @@ export async function POST(request: NextRequest) {
             const companyId = p.company?.trim()
               ? (companyIdCache.get(p.company.trim()) ?? null)
               : null;
+            const functionVal = p.function?.trim() || undefined;
+            const productVal = p.product?.trim() || undefined;
             newAttendees.push({
               first_name: fname,
               last_name: lname,
               title: p.title?.trim() || undefined,
               company_id: companyId && companyId > 0 ? companyId : null,
               email: p.email?.trim() || undefined,
+              function: functionVal,
+              product: productVal,
             });
           }
         }
@@ -304,16 +353,27 @@ export async function POST(request: NextRequest) {
         // ── Step 4b: Batch-update existing matched attendees with CSV fields ──
         if (existingAttendeeUpdates.length > 0) {
           await batchInsert(existingAttendeeUpdates, (u) => ({
-            sql: 'UPDATE attendees SET company_id = COALESCE(?, company_id), title = COALESCE(?, title), email = COALESCE(?, email) WHERE id = ?',
-            args: [u.company_id, u.title, u.email, u.id],
+            sql: `UPDATE attendees SET
+              company_id = COALESCE(?, company_id),
+              title = COALESCE(?, title),
+              email = COALESCE(?, email)
+              ${u.function !== undefined ? ', "function" = ?' : ''}
+              ${u.product !== undefined ? ', products = CASE WHEN (products IS NULL OR products = \'\') THEN ? ELSE products END' : ''}
+              WHERE id = ?`,
+            args: [
+              u.company_id, u.title, u.email,
+              ...(u.function !== undefined ? [u.function] : []),
+              ...(u.product !== undefined ? [u.product] : []),
+              u.id,
+            ],
           }));
         }
 
         // ── Step 5: Batch-insert new attendees ──
         if (newAttendees.length > 0) {
           const results = await batchInsert(newAttendees, (a) => ({
-            sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id',
-            args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null],
+            sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null],
           }));
           for (let i = 0; i < newAttendees.length; i++) {
             const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();
