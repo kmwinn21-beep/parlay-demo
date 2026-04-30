@@ -160,6 +160,16 @@ export async function DELETE(
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
+    const check = await db.execute({
+      sql: 'SELECT is_system FROM config_options WHERE id = ?',
+      args: [params.id],
+    });
+    if (check.rows.length === 0) {
+      return NextResponse.json({ error: 'Option not found' }, { status: 404 });
+    }
+    if (Number(check.rows[0].is_system) === 1) {
+      return NextResponse.json({ error: 'System options cannot be deleted.' }, { status: 403 });
+    }
     await db.execute({
       sql: 'DELETE FROM config_options WHERE id = ?',
       args: [params.id],

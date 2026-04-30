@@ -389,36 +389,57 @@ export function classifyCompanyType(companyName?: string, validOptions?: string[
 
 /**
  * Parse a raw services string from a CSV/Excel cell into a comma-separated
- * string of canonical service codes (IL, AL, MC, SNF, CCRC, Other).
+ * string of canonical service codes (IL, AL, MC, SNF, CCRC, Other, N/A, or
+ * any admin-configured custom value).
  *
  * Values may be separated by semicolons, commas, colons, dashes, slashes,
  * pipes, or other delimiters. Each token is matched against known variations.
+ *
+ * When `validValues` is provided the output is filtered to only include values
+ * present in that list, and unrecognised tokens are also matched against it via
+ * exact case-insensitive comparison (supports custom admin-added services).
  */
-export function parseServicesValue(raw: string): string {
-  // Split on common delimiters: ; , : / \ | and also whitespace-padded -
+export function parseServicesValue(raw: string, validValues?: string[]): string {
   const tokens = raw.split(/[;,:\\/|]+|\s+-\s+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+
+  const validMap = validValues
+    ? new Map(validValues.map(v => [v.toLowerCase(), v]))
+    : null;
 
   const matched = new Set<string>();
 
   for (const token of tokens) {
-    // Exact abbreviation matches
-    if (token === 'il') { matched.add('IL'); continue; }
-    if (token === 'al') { matched.add('AL'); continue; }
-    if (token === 'mc') { matched.add('MC'); continue; }
-    if (token === 'snf') { matched.add('SNF'); continue; }
-    if (token === 'ccrc') { matched.add('CCRC'); continue; }
+    let hit = false;
 
+    // Exact abbreviation matches
+    if (token === 'il')   { matched.add('IL');   hit = true; }
+    else if (token === 'al')   { matched.add('AL');   hit = true; }
+    else if (token === 'mc')   { matched.add('MC');   hit = true; }
+    else if (token === 'snf')  { matched.add('SNF');  hit = true; }
+    else if (token === 'ccrc') { matched.add('CCRC'); hit = true; }
     // Full-text / variation matches
-    if (/\bindependent\s*living\b/.test(token)) { matched.add('IL'); continue; }
-    if (/\bassisted\s*living\b/.test(token)) { matched.add('AL'); continue; }
-    if (/\bmemory\s*care\b/.test(token)) { matched.add('MC'); continue; }
-    if (/\bskilled\s*nursing\b/.test(token)) { matched.add('SNF'); continue; }
-    if (/\bnursing\s*home\b/.test(token)) { matched.add('SNF'); continue; }
-    if (/\bcontinuing\s*care\s*retirement\s*communit/.test(token)) { matched.add('CCRC'); continue; }
-    if (/\blife\s*plan\s*communit/.test(token)) { matched.add('CCRC'); continue; }
+    else if (/\bindependent\s*living\b/.test(token))                    { matched.add('IL');   hit = true; }
+    else if (/\bassisted\s*living\b/.test(token))                       { matched.add('AL');   hit = true; }
+    else if (/\bmemory\s*care\b/.test(token))                           { matched.add('MC');   hit = true; }
+    else if (/\bskilled\s*nursing\b/.test(token))                       { matched.add('SNF');  hit = true; }
+    else if (/\bnursing\s*home\b/.test(token))                          { matched.add('SNF');  hit = true; }
+    else if (/\bcontinuing\s*care\s*retirement\s*communit/.test(token)) { matched.add('CCRC'); hit = true; }
+    else if (/\blife\s*plan\s*communit/.test(token))                    { matched.add('CCRC'); hit = true; }
+
+    // Fallback: exact match against configured values (handles "Other", "N/A",
+    // and any custom admin-added service not covered by the aliases above)
+    if (!hit && validMap) {
+      const canonical = validMap.get(token);
+      if (canonical) matched.add(canonical);
+    }
   }
 
   if (matched.size === 0) return '';
+
+  // When validValues provided, filter output to only include configured values
+  if (validMap) {
+    return Array.from(matched).filter(v => validMap.has(v.toLowerCase())).join(',');
+  }
   return Array.from(matched).join(',');
 }
 

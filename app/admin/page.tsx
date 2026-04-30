@@ -25,6 +25,7 @@ interface ConfigOption {
   visible_forms?: string[];
   scope?: string; // 'global' | 'user' — only meaningful for status category
   auto_follow_up?: number; // 1 = yes, 0 = no — only meaningful for touchpoints category
+  is_system?: number; // 1 = seeded system value, cannot be deleted
 }
 
 const CATEGORIES = [
@@ -299,7 +300,9 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                         )}
                       </span>
                       <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
-                      <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
+                      {!opt.is_system && (
+                        <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
+                      )}
                     </div>
                     {isOptionExpanded && (
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
