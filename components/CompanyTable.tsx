@@ -17,6 +17,7 @@ import { RepMultiSelect } from './RepMultiSelect';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 
 interface Company {
   id: number;
@@ -171,6 +172,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   const unitTypeLabel = useUnitTypeLabel();
+  const avgCostPerUnit = useAvgCostPerUnit();
   const userOptionsFull = useUserOptions();
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
@@ -864,6 +866,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       {Number(company.wse).toLocaleString()}
                     </span>
                   )}
+                  {(() => {
+                    const pill = formatValuePill(company.wse, avgCostPerUnit);
+                    return pill ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                        {pill}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             </div>
@@ -950,6 +960,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     case 'attendees': return <th key="attendees" className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>;
                     case 'conferences': return <th key="conferences" className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>;
                     case 'wse': return <th key="wse" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>{unitTypeLabel}&apos;s</th>;
+                    case 'value': return <th key="value" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 100 }}>Value</th>;
                     case 'updated_on': return <th key="updated_on" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>;
                     case 'relationships': return <th key="relationships" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>;
                     default: return null;
@@ -1086,6 +1097,18 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           </button>
                         )}
                       </td>;
+                      case 'value': return (
+                        <td key="value" className="px-3 py-3">
+                          {(() => {
+                            const pill = formatValuePill(company.wse, avgCostPerUnit);
+                            return pill ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                                {pill}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>;
+                          })()}
+                        </td>
+                      );
                       case 'updated_on': return <td key="updated_on" className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>;
                       case 'relationships': return (
                         <td key="relationships" className="px-3 py-3">
