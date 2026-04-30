@@ -400,6 +400,137 @@ export function classifyCompanyType(companyName?: string, validOptions?: string[
 }
 
 /**
+ * Common single-word abbreviations mapped to their expanded forms.
+ * Used by matchConfigOption for fuzzy matching against admin-configured values.
+ */
+const WORD_ABBREVS: Record<string, string> = {
+  // Management / organizational
+  mgt: 'management', mgmt: 'management', mgr: 'manager',
+  dept: 'department', depts: 'departments',
+  dir: 'director', dirs: 'directors',
+  vp: 'vice president', evp: 'executive vice president', svp: 'senior vice president',
+  pres: 'president', ceo: 'chief executive officer', coo: 'chief operating officer',
+  cfo: 'chief financial officer', cto: 'chief technology officer',
+  asst: 'assistant', assoc: 'associate',
+  admin: 'administration',
+  // Company / entity
+  corp: 'corporation', co: 'company', cos: 'companies',
+  org: 'organization', orgs: 'organizations',
+  grp: 'group', grps: 'groups',
+  intl: 'international', natl: 'national', regl: 'regional',
+  ops: 'operations', op: 'operator',
+  prop: 'property', props: 'properties',
+  pr: 'primary', pri: 'primary',
+  // Services / functions
+  svcs: 'services', svc: 'service',
+  tech: 'technology', techs: 'technologies',
+  acct: 'accounting', accts: 'accounts',
+  mktg: 'marketing', mkt: 'marketing',
+  hr: 'human resources',
+  it: 'information technology',
+  // Healthcare
+  hlth: 'health', hc: 'healthcare',
+  mgd: 'managed', msp: 'managed service provider',
+  res: 'residential', resid: 'residential',
+  snf: 'skilled nursing facility', sn: 'skilled nursing',
+  al: 'assisted living', il: 'independent living', mc: 'memory care',
+};
+
+function _normalizeStr(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function _expandAbbrevs(s: string): string {
+  return s.split(' ').map(w => WORD_ABBREVS[w] ?? w).join(' ');
+}
+
+function _levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n; if (n === 0) return m;
+  const prev = Array.from({ length: n + 1 }, (_, i) => i);
+  const curr = new Array<number>(n + 1);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1]);
+    }
+    prev.splice(0, prev.length, ...curr);
+  }
+  return prev[n];
+}
+
+/**
+ * Match a single raw CSV token against a list of admin-configured option values.
+ * Tries (in order): exact, punctuation-normalized, abbreviation-expanded, word-prefix,
+ * and finally Levenshtein similarity. Returns the canonical option string or null.
+ */
+export function matchConfigOption(csvValue: string, configOptions: string[]): string | null {
+  if (!csvValue.trim() || configOptions.length === 0) return null;
+
+  const normCsv = _normalizeStr(csvValue);
+
+  // 1. Exact match after normalization
+  for (const opt of configOptions) {
+    if (_normalizeStr(opt) === normCsv) return opt;
+  }
+
+  // 2. Abbreviation-expanded exact match
+  const expCsv = _expandAbbrevs(normCsv);
+  for (const opt of configOptions) {
+    const expOpt = _expandAbbrevs(_normalizeStr(opt));
+    if (expOpt === expCsv || expOpt === normCsv || expCsv === _normalizeStr(opt)) return opt;
+  }
+
+  // 3. Word-level prefix / abbreviation matching
+  const csvWords = normCsv.split(' ').filter(Boolean);
+  let bestOpt: string | null = null;
+  let bestScore = 0;
+
+  for (const opt of configOptions) {
+    const optWords = _normalizeStr(opt).split(' ').filter(Boolean);
+    const shorter = csvWords.length <= optWords.length ? csvWords : optWords;
+    const longer  = csvWords.length <= optWords.length ? optWords  : csvWords;
+    if (shorter.length === 0) continue;
+
+    let matched = 0;
+    const used = new Set<number>();
+    for (const sw of shorter) {
+      const expSw = WORD_ABBREVS[sw] ?? sw;
+      for (let i = 0; i < longer.length; i++) {
+        if (used.has(i)) continue;
+        const lw = longer[i];
+        const expLw = WORD_ABBREVS[lw] ?? lw;
+        if (sw === lw || lw.startsWith(sw) || sw.startsWith(lw) || expSw === lw || sw === expLw || expSw === expLw) {
+          matched++;
+          used.add(i);
+          break;
+        }
+      }
+    }
+
+    // All words in the shorter string must match; score penalises extra words in the longer
+    if (matched === shorter.length) {
+      const score = matched / Math.max(csvWords.length, optWords.length);
+      if (score > bestScore) { bestScore = score; bestOpt = opt; }
+    }
+  }
+
+  if (bestOpt && bestScore >= 0.5) return bestOpt;
+
+  // 4. Levenshtein similarity on expanded strings (catches typos / minor variants)
+  bestOpt = null; bestScore = 0;
+  for (const opt of configOptions) {
+    const expOpt = _expandAbbrevs(_normalizeStr(opt));
+    const maxLen = Math.max(expCsv.length, expOpt.length);
+    if (maxLen === 0) continue;
+    const sim = 1 - _levenshtein(expCsv, expOpt) / maxLen;
+    if (sim > bestScore && sim >= 0.72) { bestScore = sim; bestOpt = opt; }
+  }
+
+  return bestOpt;
+}
+
+/**
  * Parse a raw services string from a CSV/Excel cell into a comma-separated
  * string of values matched against admin-configured options.
  *
@@ -412,11 +543,9 @@ export function parseServicesValue(raw: string, validValues?: string[]): string 
 
   if (!validValues || validValues.length === 0) return '';
 
-  const validMap = new Map(validValues.map(v => [v.toLowerCase(), v]));
   const matched = new Set<string>();
-
   for (const token of tokens) {
-    const canonical = validMap.get(token.toLowerCase());
+    const canonical = matchConfigOption(token, validValues);
     if (canonical) matched.add(canonical);
   }
 

@@ -284,7 +284,18 @@ export function Header() {
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
-            onClick={() => setShowConferences(prev => !prev)}
+            onClick={() => {
+              const opening = !showConferences;
+              setShowConferences(opening);
+              if (opening) {
+                invalidateConfsCache();
+                setIsLoadingConfs(true);
+                loadConferences().then(data => {
+                  setConferences(data);
+                  setIsLoadingConfs(false);
+                });
+              }
+            }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
             title="Go to conference"
           >

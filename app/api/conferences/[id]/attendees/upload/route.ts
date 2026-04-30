@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, type ColumnMapping } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
   buildCompanyMatcher,
@@ -90,9 +90,6 @@ export async function POST(
     const seniorityPriority: Record<string, string> = (() => { try { return JSON.parse(settingsMap['icp_seniority_priority'] ?? '{}'); } catch { return {}; } })();
     const functionProductMapping: Record<string, string[]> = (() => { try { return JSON.parse(settingsMap['icp_function_product_mapping'] ?? '{}'); } catch { return {}; } })();
 
-    const validFunctionSet = new Set(functionOptions.map(v => v.toLowerCase()));
-    const validProductSet = new Set(productOptions.map(v => v.toLowerCase()));
-    const productCanonicalMap = new Map(productOptions.map(v => [v.toLowerCase(), v]));
     const userOptions: Array<{ id: number; value: string }> = userRows.rows.map(r => ({
       id: Number(r.id),
       value: String(r.value),
@@ -138,45 +135,44 @@ export async function POST(
       : await parseFile(buffer, file.name);
     const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
 
-    // Null out any company_type value from the file that doesn't match a configured option
+    // Resolve all config-driven fields using fuzzy matching against their canonical option values.
+    // matchConfigOption tries exact → abbreviation-expanded exact → word-prefix → Levenshtein.
+    // Returns the canonical display name or null (field is left empty when no match is found).
+
     if (companyTypeOptions.length > 0) {
-      const validTypeSet = new Set(companyTypeOptions.map((v) => v.toLowerCase()));
       for (const p of valid) {
-        if (p.company_type && !validTypeSet.has(p.company_type.toLowerCase())) {
-          p.company_type = undefined;
+        if (p.company_type) {
+          p.company_type = matchConfigOption(p.company_type, companyTypeOptions) ?? undefined;
         }
       }
     }
 
-    // Filter parsed services to only include values present in admin config
     if (servicesOptions.length > 0) {
-      const validServicesSet = new Set(servicesOptions.map((v) => v.toLowerCase()));
       for (const p of valid) {
         if (p.services) {
-          const filtered = p.services.split(',').map(s => s.trim()).filter(s => s && validServicesSet.has(s.toLowerCase()));
-          p.services = filtered.length > 0 ? filtered.join(',') : undefined;
+          const matched = p.services.split(',').map(s => s.trim()).filter(Boolean)
+            .map(s => matchConfigOption(s, servicesOptions)).filter((v): v is string => v !== null);
+          p.services = matched.length > 0 ? matched.join(',') : undefined;
         }
       }
     }
 
-    // Filter and canonicalize function values against config
-    if (validFunctionSet.size > 0) {
+    if (functionOptions.length > 0) {
       for (const p of valid) {
         if (p.function) {
-          const tokens = p.function.split(',').map(s => s.trim()).filter(s => s && validFunctionSet.has(s.toLowerCase()));
-          p.function = tokens.length > 0 ? tokens.join(',') : undefined;
+          const matched = p.function.split(',').map(s => s.trim()).filter(Boolean)
+            .map(s => matchConfigOption(s, functionOptions)).filter((v): v is string => v !== null);
+          p.function = matched.length > 0 ? matched.join(',') : undefined;
         }
       }
     }
 
-    // Filter and canonicalize product values against config
-    if (validProductSet.size > 0) {
+    if (productOptions.length > 0) {
       for (const p of valid) {
         if (p.product) {
-          const tokens = p.product.split(',').map(s => s.trim())
-            .map(s => productCanonicalMap.get(s.toLowerCase()))
-            .filter((s): s is string => !!s);
-          p.product = tokens.length > 0 ? tokens.join(',') : undefined;
+          const matched = p.product.split(',').map(s => s.trim()).filter(Boolean)
+            .map(s => matchConfigOption(s, productOptions)).filter((v): v is string => v !== null);
+          p.product = matched.length > 0 ? matched.join(',') : undefined;
         }
       }
     }
