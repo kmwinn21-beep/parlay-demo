@@ -649,6 +649,8 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('attendee', 'function', 'Function', 7)`,
     `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('attendee', 'products', 'Products', 8)`,
     `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('company', 'products', 'Products', 6)`,
+    // Effectiveness defaults key-value store
+    `CREATE TABLE IF NOT EXISTS effectiveness_defaults (key TEXT PRIMARY KEY, value TEXT)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
@@ -793,12 +795,22 @@ export async function initDb(): Promise<void> {
     { category: 'function', value: 'Accounting', sort_order: 8 },
     // Products
     { category: 'products', value: 'Product', sort_order: 1 },
+    // Cost Types
+    { category: 'cost_type', value: 'Registration', sort_order: 1 },
+    { category: 'cost_type', value: 'Sponsorship', sort_order: 2 },
+    { category: 'cost_type', value: 'Swag', sort_order: 3 },
+    { category: 'cost_type', value: 'Booth Setup', sort_order: 4 },
+    { category: 'cost_type', value: 'Travel', sort_order: 5 },
+    { category: 'cost_type', value: 'Lodging', sort_order: 6 },
+    { category: 'cost_type', value: 'Entertainment', sort_order: 7 },
+    { category: 'cost_type', value: 'Meals', sort_order: 8 },
+    { category: 'cost_type', value: 'Other', sort_order: 9 },
   ];
 
   // For categories that are entirely new to the app (not backfills of pre-existing categories),
   // only seed if the category currently has zero options. This prevents re-inserting the original
   // seeded value after an admin renames it (which would create a duplicate).
-  const newOnlyCats = new Set(['function', 'products']);
+  const newOnlyCats = new Set(['function', 'products', 'cost_type']);
   const newOnlySeeds = newCategorySeeds.filter(s => newOnlyCats.has(s.category));
   const backfillSeeds = newCategorySeeds.filter(s => !newOnlyCats.has(s.category));
 
@@ -898,6 +910,15 @@ export async function initDb(): Promise<void> {
     { category: 'function', value: 'IT' },
     { category: 'function', value: 'Accounting' },
     { category: 'products', value: 'Product' },
+    { category: 'cost_type', value: 'Registration' },
+    { category: 'cost_type', value: 'Sponsorship' },
+    { category: 'cost_type', value: 'Swag' },
+    { category: 'cost_type', value: 'Booth Setup' },
+    { category: 'cost_type', value: 'Travel' },
+    { category: 'cost_type', value: 'Lodging' },
+    { category: 'cost_type', value: 'Entertainment' },
+    { category: 'cost_type', value: 'Meals' },
+    { category: 'cost_type', value: 'Other' },
   ];
   await Promise.all(systemSeeds.map(seed =>
     db.execute({

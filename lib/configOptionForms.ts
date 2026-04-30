@@ -65,6 +65,7 @@ export const CATEGORY_FORM_USAGE: Record<string, FormChoice[]> = {
     { key: 'company_detail', label: 'Company Detail' },
     { key: 'relationships_page', label: 'Relationships Page' },
   ],
+  cost_type: [],
 };
 
 export function getCategoryFormKeys(category: string): string[] {

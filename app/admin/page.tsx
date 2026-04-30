@@ -46,6 +46,7 @@ const CATEGORIES = [
   { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'attendee_conference_status', label: 'Attendee Conference Status' },
   { key: 'user', label: 'Users' },
+  { key: 'cost_type', label: 'Cost Types' },
 ];
 
 const TABLE_LABELS: Record<string, string> = {
@@ -63,7 +64,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1588,14 +1589,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates', 'integrations'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : 'Integrations'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -2670,6 +2671,9 @@ export default function AdminPage() {
       {/* ── Integrations tab ── */}
       {tab === 'integrations' && <AdminIntegrationsTab />}
 
+      {/* ── Effectiveness Defaults tab ── */}
+      {tab === 'effectiveness' && <AdminEffectivenessTab />}
+
       {/* ── User Management tab ── */}
       {tab === 'users' && (
         <div className="space-y-6">
@@ -3678,5 +3682,519 @@ function AdminIntegrationsTab() {
         </div>
       </div>
     </form>
+  );
+}
+
+// ─── Admin Effectiveness Defaults Tab ─────────────────────────────────────────
+
+interface RepDefaultEntry {
+  avgDealSize: string;
+  dealConversionRate: string;
+}
+
+function AdminEffectivenessTab() {
+  const [section1Open, setSection1Open] = useState(false);
+  const [section2Open, setSection2Open] = useState(false);
+  const [section3Open, setSection3Open] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Section 1: Conference Costs
+  const [costTypeOptions, setCostTypeOptions] = useState<ConfigOption[]>([]);
+  const [conferenceCostTypes, setConferenceCostTypes] = useState<string[]>([]);
+  const [showCostPicker, setShowCostPicker] = useState(false);
+  const [pendingCostTypes, setPendingCostTypes] = useState<string[]>([]);
+  const [savingCostTypes, setSavingCostTypes] = useState(false);
+
+  // Section 2: Deal Defaults
+  const [avgAnnualDealSize, setAvgAnnualDealSize] = useState('');
+  const [avgCostPerUnit, setAvgCostPerUnit] = useState('');
+  const [conversionRate, setConversionRate] = useState('');
+  const [expectedReturn, setExpectedReturn] = useState('');
+  const [savingField, setSavingField] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Rep Defaults sub-section
+  const [userOptions, setUserOptions] = useState<ConfigOption[]>([]);
+  const [repDefaults, setRepDefaults] = useState<Record<number, RepDefaultEntry>>({});
+  const [savingRepId, setSavingRepId] = useState<number | null>(null);
+  const [repErrors, setRepErrors] = useState<Record<number, { avgDealSize?: string; dealConversionRate?: string }>>({});
+
+  // Section 3: Event Conversion Rates
+  const [meetingsHeldRate, setMeetingsHeldRate] = useState('');
+  const [followUpRate, setFollowUpRate] = useState('');
+  const [touchpointRate, setTouchpointRate] = useState('');
+  const [hostedEventRate, setHostedEventRate] = useState('');
+
+  useEffect(() => { loadAll(); }, []);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [costTypesData, effectivenessData, usersData] = await Promise.all([
+        fetch('/api/config?category=cost_type').then(r => r.json()),
+        fetch('/api/admin/effectiveness').then(r => r.json()),
+        fetch('/api/config?category=user').then(r => r.json()),
+      ]);
+      setCostTypeOptions(Array.isArray(costTypesData) ? costTypesData : []);
+      setUserOptions(Array.isArray(usersData) ? usersData : []);
+      const d = effectivenessData as Record<string, string>;
+      setConferenceCostTypes(d.conference_cost_types ? JSON.parse(d.conference_cost_types) : []);
+      setAvgAnnualDealSize(d.avg_annual_deal_size ?? '');
+      setAvgCostPerUnit(d.avg_cost_per_unit ?? '');
+      setConversionRate(d.conversion_rate ?? '');
+      setExpectedReturn(d.expected_return_on_event_cost ?? '');
+      setRepDefaults(d.rep_defaults ? JSON.parse(d.rep_defaults) : {});
+      setMeetingsHeldRate(d.meetings_held_conversion_rate ?? '');
+      setFollowUpRate(d.follow_up_meeting_conversion_rate ?? '');
+      setTouchpointRate(d.touchpoint_conversion_rate ?? '');
+      setHostedEventRate(d.hosted_event_attendee_conversion_rate ?? '');
+    } catch { toast.error('Failed to load effectiveness defaults.'); }
+    finally { setLoading(false); }
+  };
+
+  const saveKey = async (key: string, value: string) => {
+    setSavingField(key);
+    try {
+      const res = await fetch('/api/admin/effectiveness', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Saved!');
+    } catch { toast.error('Failed to save.'); }
+    finally { setSavingField(null); }
+  };
+
+  const validateDollarNumber = (val: string): string => {
+    if (!val.trim()) return '';
+    const n = parseFloat(val.replace(/,/g, ''));
+    if (isNaN(n) || n < 0) return 'Must be a positive number';
+    return '';
+  };
+
+  const validatePercentage = (val: string): string => {
+    if (!val.trim()) return '';
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0 || n > 100) return 'Must be a number between 0 and 100';
+    return '';
+  };
+
+  const validateDecimal3 = (val: string): string => {
+    if (!val.trim()) return '';
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0) return 'Must be a positive number';
+    if (!/^\d+(\.\d{0,3})?$/.test(val.trim())) return 'Up to 3 decimal places allowed (e.g. 3.867)';
+    return '';
+  };
+
+  const handleSaveField = async (key: string, value: string, validate: (v: string) => string) => {
+    const err = validate(value);
+    if (err) { setFieldErrors(prev => ({ ...prev, [key]: err })); return; }
+    setFieldErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
+    await saveKey(key, value);
+  };
+
+  const handleSaveCostTypes = async () => {
+    setSavingCostTypes(true);
+    try {
+      const merged = Array.from(new Set([...conferenceCostTypes, ...pendingCostTypes]));
+      const res = await fetch('/api/admin/effectiveness', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'conference_cost_types', value: JSON.stringify(merged) }),
+      });
+      if (!res.ok) throw new Error();
+      setConferenceCostTypes(merged);
+      setPendingCostTypes([]);
+      setShowCostPicker(false);
+      toast.success('Saved!');
+    } catch { toast.error('Failed to save.'); }
+    finally { setSavingCostTypes(false); }
+  };
+
+  const handleRemoveCostType = async (val: string) => {
+    const updated = conferenceCostTypes.filter(v => v !== val);
+    try {
+      const res = await fetch('/api/admin/effectiveness', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'conference_cost_types', value: JSON.stringify(updated) }),
+      });
+      if (!res.ok) throw new Error();
+      setConferenceCostTypes(updated);
+      toast.success('Removed.');
+    } catch { toast.error('Failed to update.'); }
+  };
+
+  const handleSaveRepDefault = async (optionId: number) => {
+    const rep = repDefaults[optionId] ?? { avgDealSize: '', dealConversionRate: '' };
+    const errors: { avgDealSize?: string; dealConversionRate?: string } = {};
+    const sizeErr = validateDollarNumber(rep.avgDealSize);
+    if (sizeErr) errors.avgDealSize = sizeErr;
+    const rateErr = validatePercentage(rep.dealConversionRate);
+    if (rateErr) errors.dealConversionRate = rateErr;
+    setRepErrors(prev => ({ ...prev, [optionId]: errors }));
+    if (Object.keys(errors).length > 0) return;
+    setSavingRepId(optionId);
+    try {
+      const updated = { ...repDefaults, [optionId]: rep };
+      const res = await fetch('/api/admin/effectiveness', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'rep_defaults', value: JSON.stringify(updated) }),
+      });
+      if (!res.ok) throw new Error();
+      setRepDefaults(updated);
+      toast.success('Rep defaults saved!');
+    } catch { toast.error('Failed to save.'); }
+    finally { setSavingRepId(null); }
+  };
+
+  const SectionChevron = ({ open }: { open: boolean }) => (
+    <svg className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500">Configure default values and benchmarks used for event effectiveness reporting.</p>
+
+      {/* ── Section 1: Conference Costs ── */}
+      <div className="card p-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setSection1Open(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+        >
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Conference Costs</h2>
+          <SectionChevron open={section1Open} />
+        </button>
+        {section1Open && (
+          <div className="border-t border-gray-100 px-6 py-5 space-y-4">
+            <p className="text-sm text-gray-500">Select the cost types that are included in every conference by default.</p>
+
+            {conferenceCostTypes.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {conferenceCostTypes.map(val => (
+                  <span key={val} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-blue-50 text-blue-700 border border-blue-200">
+                    {val}
+                    <button type="button" onClick={() => handleRemoveCostType(val)} className="text-blue-400 hover:text-blue-700 transition-colors" title={`Remove ${val}`}>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {conferenceCostTypes.length === 0 && !showCostPicker && (
+              <p className="text-sm text-gray-400">No default cost types selected.</p>
+            )}
+
+            {showCostPicker ? (
+              <div className="border border-gray-200 rounded-lg bg-gray-50 p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Cost Types to Add</p>
+                {costTypeOptions.filter(o => !conferenceCostTypes.includes(o.value)).length === 0 ? (
+                  <p className="text-sm text-gray-400">All cost types are already selected.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {costTypeOptions.filter(o => !conferenceCostTypes.includes(o.value)).map(opt => {
+                      const checked = pendingCostTypes.includes(opt.value);
+                      return (
+                        <label key={opt.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setPendingCostTypes(prev => checked ? prev.filter(v => v !== opt.value) : [...prev, opt.value])}
+                            className="accent-brand-secondary"
+                          />
+                          {opt.value}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSaveCostTypes}
+                    disabled={savingCostTypes || pendingCostTypes.length === 0}
+                    className="btn-primary text-sm"
+                  >
+                    {savingCostTypes ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCostPicker(false); setPendingCostTypes([]); }}
+                    className="btn-secondary text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCostPicker(true)}
+                className="flex items-center gap-1.5 text-sm text-brand-secondary font-medium hover:opacity-75 transition-opacity"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                Add Cost Types
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 2: Deal Defaults ── */}
+      <div className="card p-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setSection2Open(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+        >
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Deal Defaults</h2>
+          <SectionChevron open={section2Open} />
+        </button>
+        {section2Open && (
+          <div className="border-t border-gray-100 px-6 py-5 space-y-5">
+            {/* Average Annual Deal Size */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Average Annual Deal Size</label>
+              <div className="flex items-start gap-2">
+                <div className="flex items-center flex-1 max-w-xs">
+                  <span className="px-3 py-2 bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg text-sm text-gray-500 select-none">$</span>
+                  <input
+                    type="text"
+                    value={avgAnnualDealSize}
+                    onChange={e => { setAvgAnnualDealSize(e.target.value); setFieldErrors(p => { const n = { ...p }; delete n.avg_annual_deal_size; return n; }); }}
+                    className={`input-field rounded-l-none flex-1 text-sm ${fieldErrors.avg_annual_deal_size ? 'border-red-400' : ''}`}
+                    placeholder="e.g. 50000"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveField('avg_annual_deal_size', avgAnnualDealSize, validateDollarNumber)}
+                  disabled={savingField === 'avg_annual_deal_size'}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingField === 'avg_annual_deal_size' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              {fieldErrors.avg_annual_deal_size && <p className="text-xs text-red-500 mt-1">{fieldErrors.avg_annual_deal_size}</p>}
+            </div>
+
+            {/* Average Cost per Unit */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Average Cost per Unit</label>
+              <div className="flex items-start gap-2">
+                <div className="flex items-center flex-1 max-w-xs">
+                  <span className="px-3 py-2 bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg text-sm text-gray-500 select-none">$</span>
+                  <input
+                    type="text"
+                    value={avgCostPerUnit}
+                    onChange={e => { setAvgCostPerUnit(e.target.value); setFieldErrors(p => { const n = { ...p }; delete n.avg_cost_per_unit; return n; }); }}
+                    className={`input-field rounded-l-none flex-1 text-sm ${fieldErrors.avg_cost_per_unit ? 'border-red-400' : ''}`}
+                    placeholder="e.g. 1000"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveField('avg_cost_per_unit', avgCostPerUnit, validateDollarNumber)}
+                  disabled={savingField === 'avg_cost_per_unit'}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingField === 'avg_cost_per_unit' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              {fieldErrors.avg_cost_per_unit && <p className="text-xs text-red-500 mt-1">{fieldErrors.avg_cost_per_unit}</p>}
+            </div>
+
+            {/* Conversion Rate */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Conversion Rate</label>
+              <div className="flex items-start gap-2">
+                <div className="flex items-center flex-1 max-w-xs">
+                  <input
+                    type="text"
+                    value={conversionRate}
+                    onChange={e => { setConversionRate(e.target.value); setFieldErrors(p => { const n = { ...p }; delete n.conversion_rate; return n; }); }}
+                    className={`input-field rounded-r-none flex-1 text-sm ${fieldErrors.conversion_rate ? 'border-red-400' : ''}`}
+                    placeholder="e.g. 25"
+                  />
+                  <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-sm text-gray-500 select-none">%</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveField('conversion_rate', conversionRate, validatePercentage)}
+                  disabled={savingField === 'conversion_rate'}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingField === 'conversion_rate' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              {fieldErrors.conversion_rate && <p className="text-xs text-red-500 mt-1">{fieldErrors.conversion_rate}</p>}
+            </div>
+
+            {/* Expected Return on Event Cost */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Expected Return on Event Cost</label>
+              <div className="flex items-start gap-2">
+                <input
+                  type="text"
+                  value={expectedReturn}
+                  onChange={e => { setExpectedReturn(e.target.value); setFieldErrors(p => { const n = { ...p }; delete n.expected_return_on_event_cost; return n; }); }}
+                  className={`input-field flex-1 max-w-xs text-sm ${fieldErrors.expected_return_on_event_cost ? 'border-red-400' : ''}`}
+                  placeholder="e.g. 3.867"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSaveField('expected_return_on_event_cost', expectedReturn, validateDecimal3)}
+                  disabled={savingField === 'expected_return_on_event_cost'}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingField === 'expected_return_on_event_cost' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              {fieldErrors.expected_return_on_event_cost && <p className="text-xs text-red-500 mt-1">{fieldErrors.expected_return_on_event_cost}</p>}
+              <p className="text-xs text-gray-400 mt-1">Decimal number, up to 3 places (e.g. 3.867)</p>
+            </div>
+
+            {/* Rep Defaults sub-section */}
+            {userOptions.length > 0 && (
+              <div className="border-t border-gray-100 pt-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Rep Defaults</h3>
+                <div className="space-y-4">
+                  {userOptions.map(opt => {
+                    const rep = repDefaults[opt.id] ?? { avgDealSize: '', dealConversionRate: '' };
+                    const repErr = repErrors[opt.id] ?? {};
+                    return (
+                      <div key={opt.id} className="flex flex-wrap items-start gap-3">
+                        <span className="text-sm font-medium text-gray-700 min-w-[100px] pt-2 flex-shrink-0">{opt.value}:</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center">
+                            <span className="px-2.5 py-[7px] bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg text-xs text-gray-500 select-none">$</span>
+                            <input
+                              type="text"
+                              value={rep.avgDealSize}
+                              onChange={e => setRepDefaults(prev => ({ ...prev, [opt.id]: { ...prev[opt.id] ?? { avgDealSize: '', dealConversionRate: '' }, avgDealSize: e.target.value } }))}
+                              className={`input-field rounded-l-none w-32 text-sm ${repErr.avgDealSize ? 'border-red-400' : ''}`}
+                              placeholder="Avg Deal Size"
+                            />
+                          </div>
+                          {repErr.avgDealSize && <p className="text-xs text-red-500">{repErr.avgDealSize}</p>}
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              value={rep.dealConversionRate}
+                              onChange={e => setRepDefaults(prev => ({ ...prev, [opt.id]: { ...prev[opt.id] ?? { avgDealSize: '', dealConversionRate: '' }, dealConversionRate: e.target.value } }))}
+                              className={`input-field rounded-r-none w-28 text-sm ${repErr.dealConversionRate ? 'border-red-400' : ''}`}
+                              placeholder="Conv. Rate"
+                            />
+                            <span className="px-2.5 py-[7px] bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-xs text-gray-500 select-none">%</span>
+                          </div>
+                          {repErr.dealConversionRate && <p className="text-xs text-red-500">{repErr.dealConversionRate}</p>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveRepDefault(opt.id)}
+                          disabled={savingRepId === opt.id}
+                          className="btn-primary text-sm"
+                        >
+                          {savingRepId === opt.id ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 3: Event Conversion Rates ── */}
+      <div className="card p-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setSection3Open(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+        >
+          <div>
+            <h2 className="text-base font-semibold text-brand-primary font-serif text-left">Event Conversion Rates</h2>
+            <p className="text-xs text-gray-400 mt-0.5 text-left font-normal">The % at which an event interaction converts into a post-conference meeting</p>
+          </div>
+          <SectionChevron open={section3Open} />
+        </button>
+        {section3Open && (
+          <div className="border-t border-gray-100 px-6 py-5 space-y-5">
+            {[
+              {
+                key: 'meetings_held_conversion_rate',
+                label: 'Meetings Held Conversion Rate',
+                desc: 'The % of Conference Meetings Scheduled that are actually Held',
+                value: meetingsHeldRate,
+                setter: setMeetingsHeldRate,
+              },
+              {
+                key: 'follow_up_meeting_conversion_rate',
+                label: 'Follow Up Meeting Conversion Rate',
+                desc: 'The % of Meetings Held that lead to post-conference meetings',
+                value: followUpRate,
+                setter: setFollowUpRate,
+              },
+              {
+                key: 'touchpoint_conversion_rate',
+                label: 'Touchpoint Conversion Rate',
+                desc: 'The % of conference Touchpoints that lead to post-conference meetings',
+                value: touchpointRate,
+                setter: setTouchpointRate,
+              },
+              {
+                key: 'hosted_event_attendee_conversion_rate',
+                label: 'Hosted Event Attendee Conversion Rate',
+                desc: 'The % of attendees who attend a Company Hosted event that lead to post-conference meetings',
+                value: hostedEventRate,
+                setter: setHostedEventRate,
+              },
+            ].map(({ key, label, desc, value, setter }) => (
+              <div key={key}>
+                <label className="block text-sm font-medium text-gray-700 mb-0.5">{label}</label>
+                <p className="text-xs text-gray-400 mb-1.5">{desc}</p>
+                <div className="flex items-start gap-2">
+                  <div className="flex items-center flex-1 max-w-xs">
+                    <input
+                      type="text"
+                      value={value}
+                      onChange={e => { setter(e.target.value); setFieldErrors(p => { const n = { ...p }; delete n[key]; return n; }); }}
+                      className={`input-field rounded-r-none flex-1 text-sm ${fieldErrors[key] ? 'border-red-400' : ''}`}
+                      placeholder="e.g. 75"
+                    />
+                    <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-sm text-gray-500 select-none">%</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveField(key, value, validatePercentage)}
+                    disabled={savingField === key}
+                    className="btn-primary text-sm flex-shrink-0"
+                  >
+                    {savingField === key ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+                {fieldErrors[key] && <p className="text-xs text-red-500 mt-1">{fieldErrors[key]}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
