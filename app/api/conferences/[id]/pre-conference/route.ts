@@ -41,7 +41,7 @@ export async function GET(
   const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
-                   a.company_id,
+                   a.company_id, a.products, a."function",
                    c.name as company_name, c.company_type, c.icp, c.wse,
                    c.profit_type, c.entity_structure, c.services, c.website,
                    c.status as company_status, c.assigned_user as company_assigned_user
@@ -650,5 +650,44 @@ export async function GET(
     };
   });
 
-  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData });
+  // --- Product ICP: group attendees by product, then by company ---
+  const productCompanyMap = new Map<string, Map<number, {
+    companyId: number; companyName: string; assignedUserNames: string[];
+    attendees: Array<{ id: number; firstName: string; lastName: string; title: string | null; function: string | null; seniority: string | null; health: number; assignedUserNames: string[] }>;
+  }>>();
+  for (const a of attendees) {
+    const rawProducts = (a.products as string | null)?.trim();
+    if (!rawProducts) continue;
+    const products = rawProducts.split(',').map((s: string) => s.trim()).filter(Boolean);
+    const cid = a.company_id as number | null;
+    const companyName = String(a.company_name ?? '');
+    const assignedNames = resolveUserIds(a.company_assigned_user);
+    const attendeeEntry = {
+      id: a.id as number,
+      firstName: String(a.first_name ?? ''),
+      lastName: String(a.last_name ?? ''),
+      title: a.title ? String(a.title) : null,
+      function: (a as Record<string, unknown>).function ? String((a as Record<string, unknown>).function) : null,
+      seniority: resolveSeniority(a.seniority, a.title),
+      health: attendeeHealthMap.get(a.id as number) ?? 0,
+      assignedUserNames: assignedNames,
+    };
+    for (const product of products) {
+      if (!productCompanyMap.has(product)) productCompanyMap.set(product, new Map());
+      const compMap = productCompanyMap.get(product)!;
+      const compKey = cid ?? -1;
+      if (!compMap.has(compKey)) {
+        compMap.set(compKey, { companyId: compKey, companyName, assignedUserNames: assignedNames, attendees: [] });
+      }
+      compMap.get(compKey)!.attendees.push(attendeeEntry);
+    }
+  }
+  const productIcp = Array.from(productCompanyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([product, compMap]) => ({
+      product,
+      companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
+    }));
+
+  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp });
 }
