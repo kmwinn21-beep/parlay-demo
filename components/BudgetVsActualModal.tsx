@@ -36,7 +36,7 @@ function VariancePill({ variance }: { variance: number | null }) {
   const positive = variance >= 0;
   const label = `${positive ? '+' : ''}${variance.toFixed(1)}%`;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${positive ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${positive ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`}>
       {label}
     </span>
   );
