@@ -80,7 +80,7 @@ export default function AttendeeDetailPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string }>({});
+  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string }>({});
   const [showPhonePopup, setShowPhonePopup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -225,7 +225,7 @@ export default function AttendeeDetailPage() {
       setRelTypeOptions(relTypeData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setFunctionOptions(functionData.map((o: { value: string }) => o.value));
       setProductsOptions(productsData.map((o: { value: string; color: string | null }) => ({ value: String(o.value), color: o.color ?? null })));
-      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '' });
+      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '', function: atData.function || '' });
     } catch {
       toast.error('Failed to load attendee');
       routerRef.current.push('/attendees');
@@ -495,13 +495,6 @@ export default function AttendeeDetailPage() {
     catch { toast.error('Failed to update status.'); }
   };
 
-  const handleFunction = async (value: string) => {
-    const current = new Set((attendee?.function || '').split(',').map(s => s.trim()).filter(Boolean));
-    if (current.has(value)) { current.delete(value); } else { current.add(value); }
-    const next = Array.from(current).join(',');
-    try { await patchAttendee({ 'function': next }); toast.success('Function updated.'); }
-    catch { toast.error('Failed to update function.'); }
-  };
 
   const handleProduct = async (value: string) => {
     const current = new Set((attendee?.products || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -662,14 +655,10 @@ export default function AttendeeDetailPage() {
                 {functionOptions.length > 0 && (
                   <div>
                     <label className="label">Function</label>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {functionOptions.map(val => (
-                        <button key={val} type="button" onClick={() => handleFunction(val)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentFunctions.has(val) ? `${getPillClass(val, colorMaps.function || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
-                          {val}
-                        </button>
-                      ))}
-                    </div>
+                    <select value={editData.function || ''} onChange={e => setEditData(p => ({ ...p, function: e.target.value }))} className="input-field">
+                      <option value="">— No function —</option>
+                      {functionOptions.map(val => <option key={val} value={val}>{val}</option>)}
+                    </select>
                   </div>
                 )}
                 <div className="grid grid-cols-3 gap-3">

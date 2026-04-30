@@ -657,6 +657,29 @@ export async function initDb(): Promise<void> {
   await Promise.all(ddlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
   await Promise.all(dmlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
 
+  // Belt-and-suspenders: explicitly verify critical columns exist and add them if missing.
+  // This catches cases where ALTER TABLE silently failed or code was deployed without migrations.
+  try {
+    const attendeeCols = await db.execute({ sql: 'PRAGMA table_info(attendees)', args: [] });
+    const attendeeColNames = new Set(attendeeCols.rows.map(r => String(r.name)));
+    if (!attendeeColNames.has('function')) {
+      await db.execute({ sql: 'ALTER TABLE attendees ADD COLUMN "function" TEXT', args: [] }).catch(() => {});
+    }
+    if (!attendeeColNames.has('products')) {
+      await db.execute({ sql: 'ALTER TABLE attendees ADD COLUMN products TEXT', args: [] }).catch(() => {});
+    }
+    const companyCols = await db.execute({ sql: 'PRAGMA table_info(companies)', args: [] });
+    const companyColNames = new Set(companyCols.rows.map(r => String(r.name)));
+    if (!companyColNames.has('products')) {
+      await db.execute({ sql: 'ALTER TABLE companies ADD COLUMN products TEXT', args: [] }).catch(() => {});
+    }
+    const configCols = await db.execute({ sql: 'PRAGMA table_info(config_options)', args: [] });
+    const configColNames = new Set(configCols.rows.map(r => String(r.name)));
+    if (!configColNames.has('is_system')) {
+      await db.execute({ sql: 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0', args: [] }).catch(() => {});
+    }
+  } catch { /* PRAGMA not supported — skip */ }
+
   // Ensure exactly one unit_type row exists; seed with 'Units' for new installs
   const utCheck = await db.execute({ sql: "SELECT id FROM config_options WHERE category = 'unit_type' ORDER BY id", args: [] });
   if (utCheck.rows.length === 0) {
