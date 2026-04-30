@@ -1939,6 +1939,7 @@ export default function ConferenceDetailPage() {
       {showBudgetModal && conference && (
         <BudgetVsActualModal
           conferenceId={conference.id}
+          conferenceName={conference.name}
           onClose={() => setShowBudgetModal(false)}
         />
       )}
