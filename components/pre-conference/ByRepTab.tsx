@@ -217,6 +217,7 @@ function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onTog
                           seniority: a.seniority ? String(a.seniority) : null,
                           companyName: company.company_name,
                           companyId: company.company_id,
+                          companyWse: null,
                           assignedUserNames: company.assigned_user_names,
                         })}
                       />}

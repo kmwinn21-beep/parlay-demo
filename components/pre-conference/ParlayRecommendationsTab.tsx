@@ -123,6 +123,7 @@ function ParlayRecCard({
                       seniority: a.seniority,
                       companyName: rec.company_name,
                       companyId: rec.company_id,
+                      companyWse: null,
                       assignedUserNames: rec.rep_names,
                     })}
                   />

@@ -113,6 +113,7 @@ export function ProductIcpTab({
                               seniority: a.seniority,
                               companyName: company.companyName,
                               companyId: company.companyId > 0 ? company.companyId : null,
+                              companyWse: null,
                               assignedUserNames: company.assignedUserNames,
                             })}
                           />

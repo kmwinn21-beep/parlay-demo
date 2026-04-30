@@ -181,6 +181,7 @@ export function LandscapeTab({
                         seniority: a.seniority ?? null,
                         companyName: a.company_name ? String(a.company_name) : null,
                         companyId: a.company_id ?? null,
+                        companyWse: null,
                         assignedUserNames: a.assigned_user_names,
                       })}
                     />
