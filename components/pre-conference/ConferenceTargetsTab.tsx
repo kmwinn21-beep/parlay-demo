@@ -244,7 +244,7 @@ export function ConferenceTargetsTab({
     }
   }
   const tierValueSum: Record<string, number> = {};
-  for (const { tier, wse } of companyBestTier.values()) {
+  for (const { tier, wse } of Array.from(companyBestTier.values())) {
     tierValueSum[tier] = (tierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
   }
   const hasValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
