@@ -51,6 +51,8 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     wse:           findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees'),
     services:      findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting'),
     icp:           findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp'),
+    function:      findColumn(headers, 'function', 'department', 'dept', 'business_function', 'business function', 'job_function', 'job function', 'functional_area', 'functional area'),
+    product:       findColumn(headers, 'product', 'products', 'product_interest', 'product interest', 'product_line', 'product line'),
   };
 }
 
@@ -103,6 +105,8 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
       if (raw) attendee.services = parseServicesValue(raw);
     }
     if (mapping.icp && row[mapping.icp]) attendee.icp = String(row[mapping.icp]).trim();
+    if (mapping.function && row[mapping.function]) attendee.function = String(row[mapping.function]).trim();
+    if (mapping.product && row[mapping.product]) attendee.product = String(row[mapping.product]).trim();
 
     attendees.push(attendee);
   }
@@ -147,6 +151,8 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const wseCol = findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees');
   const servicesCol = findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting');
   const icpCol = findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp');
+  const functionCol = findColumn(headers, 'function', 'department', 'dept', 'business_function', 'business function', 'job_function', 'job function', 'functional_area', 'functional area');
+  const productCol = findColumn(headers, 'product', 'products', 'product_interest', 'product interest', 'product_line', 'product line');
 
   const attendees: ParsedAttendee[] = [];
 
@@ -219,6 +225,12 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
       if (rawIcp) {
         attendee.icp = rawIcp;
       }
+    }
+    if (functionCol && row[functionCol]) {
+      attendee.function = String(row[functionCol]).trim();
+    }
+    if (productCol && row[productCol]) {
+      attendee.product = String(row[productCol]).trim();
     }
 
     attendees.push(attendee);

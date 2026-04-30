@@ -730,6 +730,7 @@ export default function AdminPage() {
   // ── ICP extended fields ───────────────────────────────────────────────────────
   const [icpTargetTitles, setIcpTargetTitles] = useState<string[]>([]);
   const [icpSeniorityPriority, setIcpSeniorityPriority] = useState<Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>>({});
+  const [icpFunctionProductMapping, setIcpFunctionProductMapping] = useState<Record<string, string[]>>({});
   const [icpDecisionMakerTitles, setIcpDecisionMakerTitles] = useState<string[]>([]);
   const [icpInfluencerTitles, setIcpInfluencerTitles] = useState<string[]>([]);
   const [savingBuyerPersona, setSavingBuyerPersona] = useState(false);
@@ -818,6 +819,7 @@ export default function AdminPage() {
         const tryParse = <T,>(v: string | undefined, fallback: T): T => { try { return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
         setIcpTargetTitles(tryParse(s['icp_target_titles'], []));
         setIcpSeniorityPriority(tryParse(s['icp_seniority_priority'], {}));
+        setIcpFunctionProductMapping(tryParse(s['icp_function_product_mapping'], {}));
         setIcpDecisionMakerTitles(tryParse(s['icp_decision_maker_titles'], []));
         setIcpInfluencerTitles(tryParse(s['icp_influencer_titles'], []));
         setIcpPainPoints(tryParse(s['icp_pain_points'], []));
@@ -841,6 +843,7 @@ export default function AdminPage() {
       const res = await Promise.all([
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_target_titles', value: JSON.stringify(icpTargetTitles) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_seniority_priority', value: JSON.stringify(icpSeniorityPriority) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_function_product_mapping', value: JSON.stringify(icpFunctionProductMapping) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_decision_maker_titles', value: JSON.stringify(icpDecisionMakerTitles) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_influencer_titles', value: JSON.stringify(icpInfluencerTitles) }) }),
       ]);
@@ -2440,32 +2443,70 @@ export default function AdminPage() {
             <div className="border-t border-gray-100 my-4" />
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Priority</label>
-              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier. Parlay uses this to rank contacts within an ICP company.</p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-500 border-b border-gray-100">
-                    <th className="text-left pb-1 font-medium">Seniority Level</th>
-                    <th className="text-left pb-1 font-medium">Priority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(optionsByCategory['seniority'] ?? []).map(s => (
-                    <tr key={s.value} className="border-b border-gray-50">
-                      <td className="py-1.5 pr-4">{s.value}</td>
-                      <td className="py-1.5">
-                        <select
-                          value={icpSeniorityPriority[s.value] ?? 'Medium'}
-                          onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                          className="input-field text-sm py-0.5"
-                        >
-                          {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                      </td>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Priority and Product Mapping</label>
+              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and map products to contact functions. Contacts with High or Medium priority whose function has a mapped product will be auto-assigned that product on upload.</p>
+              <div className="grid grid-cols-2 gap-6">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <th className="text-left pb-1 font-medium">Seniority Level</th>
+                      <th className="text-left pb-1 font-medium">Priority</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(optionsByCategory['seniority'] ?? []).map(s => (
+                      <tr key={s.value} className="border-b border-gray-50">
+                        <td className="py-1.5 pr-4">{s.value}</td>
+                        <td className="py-1.5">
+                          <select
+                            value={icpSeniorityPriority[s.value] ?? 'Medium'}
+                            onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                            className="input-field text-sm py-0.5"
+                          >
+                            {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <th className="text-left pb-1 font-medium">Function</th>
+                      <th className="text-left pb-1 font-medium">Product</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(optionsByCategory['function'] ?? []).map(f => {
+                      const selected = icpFunctionProductMapping[f.value] ?? [];
+                      const productOpts = optionsByCategory['products'] ?? [];
+                      return (
+                        <tr key={f.value} className="border-b border-gray-50">
+                          <td className="py-1.5 pr-4">{f.value}</td>
+                          <td className="py-1.5">
+                            <select
+                              multiple
+                              size={Math.min(productOpts.length, 4)}
+                              value={selected}
+                              onChange={e => {
+                                const vals = Array.from(e.target.selectedOptions).map(o => o.value);
+                                setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }));
+                              }}
+                              className="input-field text-sm py-0.5 w-full"
+                            >
+                              {productOpts.map(p => <option key={p.value} value={p.value}>{p.value}</option>)}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(optionsByCategory['function'] ?? []).length === 0 && (
+                      <tr><td colSpan={2} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="border-t border-gray-100 my-4" />

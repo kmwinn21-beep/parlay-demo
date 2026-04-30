@@ -4,7 +4,7 @@
 export type SystemFieldKey =
   | 'first_name' | 'last_name' | 'full_name' | 'title' | 'company'
   | 'email' | 'website' | 'company_type' | 'assigned_user' | 'wse'
-  | 'services' | 'icp';
+  | 'services' | 'icp' | 'function' | 'product';
 
 export interface ColumnMapping {
   first_name: string | null;
@@ -19,6 +19,8 @@ export interface ColumnMapping {
   wse: string | null;
   services: string | null;
   icp: string | null;
+  function: string | null;
+  product: string | null;
 }
 
 export interface SystemFieldMeta {
@@ -40,9 +42,12 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
   wse:           { label: 'Employee Count (WSE)', description: 'Number of worksite employees' },
   services:      { label: 'Services',            description: 'Care types: AL, MC, IL, SNF, CCRC' },
   icp:           { label: 'ICP',                 description: 'Ideal Customer Profile — Yes / No' },
+  function:      { label: 'Function',            description: 'Attendee department/function (e.g. Finance, Operations)' },
+  product:       { label: 'Product',             description: 'Product(s) associated with this contact (comma-separated)' },
 };
 
 export const FIELD_ORDER: SystemFieldKey[] = [
   'first_name', 'last_name', 'full_name', 'title', 'company',
   'email', 'website', 'company_type', 'assigned_user', 'wse', 'services', 'icp',
+  'function', 'product',
 ];

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { classifySeniority } from '@/lib/parsers';
 
 export async function GET(
   request: NextRequest,
@@ -115,7 +116,7 @@ export async function PATCH(
     const { action, next_steps, next_steps_notes, status, notes, company_id, seniority, first_name, last_name, title, company_type, company_wse } = body;
 
     const existingResult = await db.execute({
-      sql: 'SELECT id, company_id FROM attendees WHERE id = ?',
+      sql: 'SELECT id, company_id, seniority, title, "function", products FROM attendees WHERE id = ?',
       args: [params.id],
     });
     if (existingResult.rows.length === 0) {
@@ -219,6 +220,53 @@ export async function PATCH(
           sql: `UPDATE companies SET ${companySetClauses.join(', ')}, updated_at = datetime('now') WHERE id = ?`,
           args: companyArgs,
         });
+      }
+    }
+
+    // Auto-assign products when seniority or function changes and products aren't explicitly set
+    if (('seniority' in body || 'function' in body || 'title' in body) && !('products' in body)) {
+      const row = updatedResult.rows[0];
+      const effectiveSen = String(row.seniority ?? existingResult.rows[0].seniority ?? '');
+      const effectiveTitle = String(row.title ?? existingResult.rows[0].title ?? '');
+      const effectiveFn = String(row.function ?? existingResult.rows[0].function ?? '');
+      const currentProducts = String(row.products ?? existingResult.rows[0].products ?? '');
+
+      const seniorityFromTitle = !effectiveSen ? classifySeniority(effectiveTitle) : effectiveSen;
+
+      const [priorityRow, mappingRow] = await Promise.all([
+        db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'icp_seniority_priority'", args: [] }),
+        db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'icp_function_product_mapping'", args: [] }),
+      ]);
+      const priorityMap: Record<string, string> = (() => { try { return JSON.parse(String(priorityRow.rows[0]?.value ?? '{}')); } catch { return {}; } })();
+      const fnProdMap: Record<string, string[]> = (() => { try { return JSON.parse(String(mappingRow.rows[0]?.value ?? '{}')); } catch { return {}; } })();
+
+      const priority = priorityMap[seniorityFromTitle];
+      if ((priority === 'High' || priority === 'Medium') && effectiveFn) {
+        const fns = effectiveFn.split(',').map(s => s.trim()).filter(Boolean);
+        const autoProds = new Set<string>();
+        for (const fn of fns) {
+          (fnProdMap[fn] ?? []).forEach(p => autoProds.add(p));
+        }
+        if (autoProds.size > 0) {
+          const existing = currentProducts.split(',').map(s => s.trim()).filter(Boolean);
+          const merged = new Set([...existing, ...Array.from(autoProds)]);
+          const mergedStr = Array.from(merged).join(',');
+          if (mergedStr !== currentProducts) {
+            await db.execute({
+              sql: 'UPDATE attendees SET products = ? WHERE id = ?',
+              args: [mergedStr, params.id],
+            });
+            updatedResult.rows[0] = { ...updatedResult.rows[0], products: mergedStr };
+
+            // Also propagate to company
+            if (effectiveCompanyId) {
+              const coRow = await db.execute({ sql: 'SELECT products FROM companies WHERE id = ?', args: [effectiveCompanyId] });
+              const coProd = String(coRow.rows[0]?.products ?? '').split(',').map(s => s.trim()).filter(Boolean);
+              const coMerged = new Set([...coProd, ...Array.from(autoProds)]);
+              await db.execute({ sql: 'UPDATE companies SET products = ? WHERE id = ?', args: [Array.from(coMerged).join(','), effectiveCompanyId] });
+            }
+          }
+        }
       }
     }
 
