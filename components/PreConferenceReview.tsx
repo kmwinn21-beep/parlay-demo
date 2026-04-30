@@ -10,6 +10,7 @@ import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
 import { ParlayRecommendationsTab } from './pre-conference/ParlayRecommendationsTab';
+import { ProductIcpTab } from './pre-conference/ProductIcpTab';
 export type { ParlayRec, ParlayWatchItem, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
 
 export interface PreConferenceSummary {
@@ -152,6 +153,29 @@ export interface TargetEntry {
   tier: string;
 }
 
+export interface ProductIcpAttendee {
+  id: number;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  function: string | null;
+  seniority: string | null;
+  health: number;
+  assignedUserNames: string[];
+}
+
+export interface ProductIcpCompany {
+  companyId: number;
+  companyName: string;
+  assignedUserNames: string[];
+  attendees: ProductIcpAttendee[];
+}
+
+export interface ProductIcpEntry {
+  product: string;
+  companies: ProductIcpCompany[];
+}
+
 export interface PreConferenceData {
   summary: PreConferenceSummary;
   landscape: LandscapeData;
@@ -160,9 +184,10 @@ export interface PreConferenceData {
   socialEvents: SocialEventRow[];
   byRep: ByRepEntry[];
   relationships: RelationshipRow[];
+  productIcp: ProductIcpEntry[];
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'conference_targets' | 'parlay_recommendations';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'parlay_recommendations';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -170,6 +195,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'social', label: 'Social Events' },
   { key: 'by-rep', label: 'By Rep' },
   { key: 'relationships', label: 'Relationships' },
+  { key: 'product_icp', label: 'Product ICP' },
   { key: 'conference_targets', label: 'Conference Targets' },
   { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
 ];
@@ -356,6 +382,9 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
               )}
               {activeTab === 'relationships' && (
                 <RelationshipsTab relationships={data.relationships} targetMap={targetMap} onToggleTarget={toggleTarget} />
+              )}
+              {activeTab === 'product_icp' && (
+                <ProductIcpTab productIcp={data.productIcp} targetMap={targetMap} onToggleTarget={toggleTarget} />
               )}
               {activeTab === 'conference_targets' && (
                 <ConferenceTargetsTab
