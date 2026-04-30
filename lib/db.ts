@@ -651,6 +651,13 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('company', 'products', 'Products', 6)`,
     // Effectiveness defaults key-value store
     `CREATE TABLE IF NOT EXISTS effectiveness_defaults (key TEXT PRIMARY KEY, value TEXT)`,
+    // Conference budget vs actual
+    `CREATE TABLE IF NOT EXISTS conference_budget (
+      conference_id INTEGER PRIMARY KEY,
+      line_items TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
