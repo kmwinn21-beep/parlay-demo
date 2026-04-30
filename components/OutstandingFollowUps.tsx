@@ -148,10 +148,12 @@ export function OutstandingFollowUps() {
             if (containerRef.current) {
               const rect = containerRef.current.getBoundingClientRect();
               const width = Math.min(384, window.innerWidth - 16);
+              // Anchor right edge to button, but clamp so left edge never goes off-screen
+              const leftEdge = Math.max(8, rect.right - width);
               setDropStyle({
                 position: 'fixed',
                 top: rect.bottom + 8,
-                right: Math.max(4, window.innerWidth - rect.right),
+                left: leftEdge,
                 width,
                 maxHeight: 'min(80vh, 600px)',
                 zIndex: 9999,
