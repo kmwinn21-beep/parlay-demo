@@ -987,6 +987,8 @@ export interface ParsedAttendee {
   wse?: string;
   services?: string;
   icp?: string;
+  function?: string;
+  product?: string;
 }
 
 /**

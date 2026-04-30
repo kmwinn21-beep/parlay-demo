@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, parseFileWithMapping, classifyCompanyType, type ColumnMapping } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
   buildCompanyMatcher,
@@ -73,14 +73,26 @@ export async function POST(
     }
 
     // Fetch live admin config options for classifiers
-    const [companyTypeOptions, servicesOptions, icpOptions, icpConfig, userRows, usersWithConfig] = await Promise.all([
+    const [companyTypeOptions, servicesOptions, icpOptions, icpConfig, userRows, usersWithConfig, functionOptions, productOptions, settingsRows] = await Promise.all([
       getConfigOptionValues('company_type'),
       getConfigOptionValues('services'),
       getConfigOptionValues('icp'),
       getIcpConfig(),
       db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
       db.execute({ sql: 'SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL', args: [] }),
+      getConfigOptionValues('function'),
+      getConfigOptionValues('products'),
+      db.execute({ sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_seniority_priority', 'icp_function_product_mapping')", args: [] }),
     ]);
+
+    const settingsMap: Record<string, string> = {};
+    for (const r of settingsRows.rows) settingsMap[String(r.key)] = String(r.value);
+    const seniorityPriority: Record<string, string> = (() => { try { return JSON.parse(settingsMap['icp_seniority_priority'] ?? '{}'); } catch { return {}; } })();
+    const functionProductMapping: Record<string, string[]> = (() => { try { return JSON.parse(settingsMap['icp_function_product_mapping'] ?? '{}'); } catch { return {}; } })();
+
+    const validFunctionSet = new Set(functionOptions.map(v => v.toLowerCase()));
+    const validProductSet = new Set(productOptions.map(v => v.toLowerCase()));
+    const productCanonicalMap = new Map(productOptions.map(v => [v.toLowerCase(), v]));
     const userOptions: Array<{ id: number; value: string }> = userRows.rows.map(r => ({
       id: Number(r.id),
       value: String(r.value),
@@ -143,6 +155,28 @@ export async function POST(
         if (p.services) {
           const filtered = p.services.split(',').map(s => s.trim()).filter(s => s && validServicesSet.has(s.toLowerCase()));
           p.services = filtered.length > 0 ? filtered.join(',') : undefined;
+        }
+      }
+    }
+
+    // Filter and canonicalize function values against config
+    if (validFunctionSet.size > 0) {
+      for (const p of valid) {
+        if (p.function) {
+          const tokens = p.function.split(',').map(s => s.trim()).filter(s => s && validFunctionSet.has(s.toLowerCase()));
+          p.function = tokens.length > 0 ? tokens.join(',') : undefined;
+        }
+      }
+    }
+
+    // Filter and canonicalize product values against config
+    if (validProductSet.size > 0) {
+      for (const p of valid) {
+        if (p.product) {
+          const tokens = p.product.split(',').map(s => s.trim())
+            .map(s => productCanonicalMap.get(s.toLowerCase()))
+            .filter((s): s is string => !!s);
+          p.product = tokens.length > 0 ? tokens.join(',') : undefined;
         }
       }
     }
@@ -432,10 +466,26 @@ export async function POST(
     }));
     const attendeeMatcher = buildAttendeeMatcher(existingAttendees);
 
+    // Compute which products should be auto-assigned based on seniority priority + function→product mapping
+    const computeAutoProducts = (seniority: string | undefined, title: string | undefined, functionVal: string | undefined): string | null => {
+      const effectiveSen = seniority || (title ? classifySeniority(title) : null);
+      if (!effectiveSen) return null;
+      const priority = seniorityPriority[effectiveSen];
+      if (priority !== 'High' && priority !== 'Medium') return null;
+      if (!functionVal) return null;
+      const functions = functionVal.split(',').map(s => s.trim()).filter(Boolean);
+      const products = new Set<string>();
+      for (const fn of functions) {
+        const mapped = functionProductMapping[fn] ?? [];
+        for (const p of mapped) products.add(p);
+      }
+      return products.size > 0 ? Array.from(products).join(',') : null;
+    };
+
     const attendeeIdCache = new Map<string, number>();
-    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string };
+    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string };
     const newAttendees: NewAttendee[] = [];
-    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null };
+    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string };
     const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
     const seen = new Set<string>();
 
@@ -455,23 +505,33 @@ export async function POST(
         const companyId = p.company?.trim()
           ? resolveCompanyId(p.company.trim())
           : null;
+        const functionVal = p.function?.trim() || undefined;
+        const rawProduct = p.product?.trim() || undefined;
+        const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
           email: p.email?.trim() || null,
+          function: functionVal,
+          product: rawProduct ?? autoProduct ?? undefined,
         });
       } else {
         attendeeIdCache.set(key, -1);
         const companyId = p.company?.trim()
           ? resolveCompanyId(p.company.trim())
           : null;
+        const functionVal = p.function?.trim() || undefined;
+        const rawProduct = p.product?.trim() || undefined;
+        const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         newAttendees.push({
           first_name: fname,
           last_name: lname,
           title: p.title?.trim() || undefined,
           company_id: companyId && companyId > 0 ? companyId : null,
           email: p.email?.trim() || undefined,
+          function: functionVal,
+          product: rawProduct ?? autoProduct ?? undefined,
         });
       }
     }
@@ -495,28 +555,44 @@ export async function POST(
         const companyId = p.company?.trim()
           ? resolveCompanyId(p.company.trim())
           : null;
+        const functionVal = p.function?.trim() || undefined;
+        const rawProduct = p.product?.trim() || undefined;
+        const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
           email: p.email?.trim() || null,
+          function: functionVal,
+          product: rawProduct ?? autoProduct ?? undefined,
         });
       }
     }
 
-    // Batch-update existing matched attendees with CSV company/title/email
+    // Batch-update existing matched attendees with CSV company/title/email/function/product
     if (existingAttendeeUpdates.length > 0) {
       await batchInsert(existingAttendeeUpdates, (u) => ({
-        sql: 'UPDATE attendees SET company_id = COALESCE(?, company_id), title = COALESCE(?, title), email = COALESCE(?, email) WHERE id = ?',
-        args: [u.company_id, u.title, u.email, u.id],
+        sql: `UPDATE attendees SET
+          company_id = COALESCE(?, company_id),
+          title = COALESCE(?, title),
+          email = COALESCE(?, email)
+          ${u.function !== undefined ? ', "function" = ?' : ''}
+          ${u.product !== undefined ? ', products = CASE WHEN (products IS NULL OR products = \'\') THEN ? ELSE products END' : ''}
+          WHERE id = ?`,
+        args: [
+          u.company_id, u.title, u.email,
+          ...(u.function !== undefined ? [u.function] : []),
+          ...(u.product !== undefined ? [u.product] : []),
+          u.id,
+        ],
       }));
     }
 
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
       const results = await batchInsert(newAttendees, (a) => ({
-        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id',
-        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null],
+        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
+        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null],
       }));
       for (let i = 0; i < newAttendees.length; i++) {
         const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();
@@ -538,6 +614,28 @@ export async function POST(
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [conferenceId, aid],
     }));
+
+    // Propagate attendee products to their associated companies (merge, don't overwrite)
+    const companyProductUpdates = new Map<number, Set<string>>();
+    const allProcessed = [...newAttendees, ...existingAttendeeUpdates];
+    for (const a of allProcessed) {
+      if (!a.product) continue;
+      const coId = a.company_id;
+      if (!coId || coId <= 0) continue;
+      const set = companyProductUpdates.get(coId) ?? new Set<string>();
+      a.product.split(',').filter(Boolean).forEach(p => set.add(p.trim()));
+      companyProductUpdates.set(coId, set);
+    }
+    if (companyProductUpdates.size > 0) {
+      for (const [coId, newProds] of Array.from(companyProductUpdates.entries())) {
+        const company = existingCompanies.find(c => c.id === coId);
+        const existing = (company as { products?: string | null })?.products
+          ? String((company as { products?: string | null }).products).split(',').map(s => s.trim()).filter(Boolean)
+          : [];
+        const merged = new Set([...existing, ...Array.from(newProds)]);
+        await db.execute({ sql: 'UPDATE companies SET products = ? WHERE id = ?', args: [Array.from(merged).join(','), coId] });
+      }
+    }
 
     const skippedCount = valid.length - newEntries.length;
     const updatedCount = existingAttendeeUpdates.length;
