@@ -659,6 +659,19 @@ export default function AttendeeDetailPage() {
                   <div><label className="label">LinkedIn URL</label><input type="url" value={editData.linkedin_url || ''} onChange={e => setEditData(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/…" className="input-field" /></div>
                   <div><label className="label">Phone Number</label><input type="tel" value={editData.phone || ''} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" className="input-field" /></div>
                 </div>
+                {functionOptions.length > 0 && (
+                  <div>
+                    <label className="label">Function</label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {functionOptions.map(val => (
+                        <button key={val} type="button" onClick={() => handleFunction(val)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentFunctions.has(val) ? `${getPillClass(val, colorMaps.function || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-3">
                   <button onClick={handleSave} disabled={isSaving} className="btn-primary">{isSaving ? 'Saving...' : 'Save'}</button>
                   <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
@@ -882,19 +895,6 @@ export default function AttendeeDetailPage() {
                     {statusOptions.map(val => (
                       <button key={val} onClick={() => handleStatus(val)}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentStatuses.has(val) ? `${getPillClass(val, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
-                        {val}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ),
-              function: (
-                <div key="function" className="card">
-                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('function')}</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {functionOptions.map(val => (
-                      <button key={val} onClick={() => handleFunction(val)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentFunctions.has(val) ? `${getPillClass(val, colorMaps.function || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
                         {val}
                       </button>
                     ))}

@@ -35,6 +35,8 @@ const CATEGORIES = [
   { key: 'action', label: 'Actions' },
   { key: 'next_steps', label: 'Next Steps' },
   { key: 'seniority', label: 'Seniority Levels' },
+  { key: 'function', label: 'Function' },
+  { key: 'products', label: 'Products' },
   { key: 'profit_type', label: 'Profit Types' },
   { key: 'services', label: 'Services' },
   { key: 'icp', label: 'ICP' },
