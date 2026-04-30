@@ -12,6 +12,7 @@ interface LineItem {
 
 interface BudgetVsActualModalProps {
   conferenceId: number;
+  conferenceName: string;
   onClose: () => void;
 }
 
@@ -31,6 +32,10 @@ function calcVariance(budget: string, actual: string): number | null {
   return ((a / b) * 100) - 100;
 }
 
+function fmtDollars(n: number): string {
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function VariancePill({ variance }: { variance: number | null }) {
   if (variance == null) return <span className="text-gray-300 text-xs">—</span>;
   const positive = variance >= 0;
@@ -42,10 +47,14 @@ function VariancePill({ variance }: { variance: number | null }) {
   );
 }
 
-export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualModalProps) {
+export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: BudgetVsActualModalProps) {
   const [items, setItems] = useState<LineItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Expected return on cost (per-conference override, falls back to global default)
+  const [returnOnCost, setReturnOnCost] = useState('');
+  const [globalDefaultReturn, setGlobalDefaultReturn] = useState('');
 
   // For "Other" custom label editing
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
@@ -65,18 +74,24 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
         fetch(`/api/conferences/${conferenceId}/budget`, { credentials: 'include' }),
       ]);
       const effData: Record<string, string> = effRes.ok ? await effRes.json() : {};
-      const budgetData: { line_items: LineItem[] } = budgetRes.ok ? await budgetRes.json() : { line_items: [] };
+      const budgetData: { line_items: LineItem[]; return_on_cost: string | null } = budgetRes.ok
+        ? await budgetRes.json()
+        : { line_items: [], return_on_cost: null };
 
       const defaultTypes: string[] = effData.conference_cost_types
         ? JSON.parse(effData.conference_cost_types)
         : [];
+      const globalReturn = effData.expected_return_on_event_cost ?? '';
 
       setAvailableCostTypes(defaultTypes);
+      setGlobalDefaultReturn(globalReturn);
+
+      // Per-conference return overrides global default if set
+      setReturnOnCost(budgetData.return_on_cost ?? globalReturn);
 
       if (budgetData.line_items && budgetData.line_items.length > 0) {
         setItems(budgetData.line_items);
       } else {
-        // Pre-populate from defaults
         setItems(defaultTypes.map(label => ({ id: genId(), label, budget: '', actual: '' })));
       }
     } catch {
@@ -88,7 +103,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
 
   useEffect(() => { load(); }, [load]);
 
-  // Focus label input when editing starts
   useEffect(() => {
     if (editingLabelId && labelInputRef.current) {
       labelInputRef.current.focus();
@@ -96,7 +110,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
     }
   }, [editingLabelId]);
 
-  // Close add dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
@@ -108,7 +121,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
   }, []);
 
   const updateItem = (id: string, field: 'budget' | 'actual', value: string) => {
-    // Allow only digits and a single decimal point
     const cleaned = value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
     setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: cleaned } : it));
   };
@@ -134,7 +146,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
     if (trimmed) {
       setItems(prev => prev.map(it => it.id === id ? { ...it, label: trimmed } : it));
     } else {
-      // Remove if empty
       setItems(prev => prev.filter(it => it.id !== id));
     }
     setEditingLabelId(null);
@@ -147,7 +158,10 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
       const res = await fetch(`/api/conferences/${conferenceId}/budget`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ line_items: items }),
+        body: JSON.stringify({
+          line_items: items,
+          return_on_cost: returnOnCost.trim() || null,
+        }),
       });
       if (!res.ok) throw new Error();
       toast.success('Budget saved successfully.');
@@ -160,26 +174,25 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
   };
 
   // Totals
-  const totalBudget = items.reduce((sum, it) => {
-    const v = parseDollar(it.budget);
-    return sum + (v ?? 0);
-  }, 0);
-  const totalActual = items.reduce((sum, it) => {
-    const v = parseDollar(it.actual);
-    return sum + (v ?? 0);
-  }, 0);
+  const totalBudget = items.reduce((sum, it) => sum + (parseDollar(it.budget) ?? 0), 0);
+  const totalActual = items.reduce((sum, it) => sum + (parseDollar(it.actual) ?? 0), 0);
   const hasBudgetTotals = items.some(it => parseDollar(it.budget) != null);
   const hasActualTotals = items.some(it => parseDollar(it.actual) != null);
   const totalVariance = hasBudgetTotals && hasActualTotals && totalBudget > 0
     ? ((totalActual / totalBudget) * 100) - 100
     : null;
 
-  // Dropdown options: all available types + "Other" + anything not already in the list
+  // Expected return calculation
+  const returnMultiplier = parseDollar(returnOnCost);
+  const expectedReturnValue = hasBudgetTotals && returnMultiplier != null && returnMultiplier > 0
+    ? totalBudget * returnMultiplier
+    : null;
+
+  // Dropdown options
   const existingLabels = new Set(items.map(it => it.label));
   const dropdownOptions = [
     ...availableCostTypes.filter(t => !existingLabels.has(t)),
     ...(!existingLabels.has('Other') ? ['Other'] : []),
-    // Always allow adding a new custom "Other" even if one exists
     ...(existingLabels.has('Other') ? ['Other (new)'] : []),
   ];
 
@@ -221,7 +234,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
               <div className="space-y-2">
                 {items.map(item => (
                   <div key={item.id} className="grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
-                    {/* Label */}
                     <div className="min-w-0">
                       {editingLabelId === item.id ? (
                         <input
@@ -240,8 +252,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
                         <span className="text-sm text-gray-700 truncate block" title={item.label}>{item.label}</span>
                       )}
                     </div>
-
-                    {/* Budget */}
                     <div className="relative">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
                       <input
@@ -253,8 +263,6 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
                         className="input-field text-sm pl-6 w-full"
                       />
                     </div>
-
-                    {/* Actual */}
                     <div className="relative">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
                       <input
@@ -266,13 +274,9 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
                         className="input-field text-sm pl-6 w-full"
                       />
                     </div>
-
-                    {/* Variance */}
                     <div className="flex items-center justify-center">
                       <VariancePill variance={calcVariance(item.budget, item.actual)} />
                     </div>
-
-                    {/* Remove */}
                     <button
                       type="button"
                       onClick={() => removeItem(item.id)}
@@ -321,17 +325,47 @@ export function BudgetVsActualModal({ conferenceId, onClose }: BudgetVsActualMod
 
               {/* Totals row */}
               {items.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
                   <div className="grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
                     <p className="text-sm font-semibold text-gray-700">Totals</p>
                     <p className="text-sm font-semibold text-gray-700 pl-2">
-                      {hasBudgetTotals ? `$${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}
+                      {hasBudgetTotals ? fmtDollars(totalBudget) : '—'}
                     </p>
                     <p className="text-sm font-semibold text-gray-700 pl-2">
-                      {hasActualTotals ? `$${totalActual.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}
+                      {hasActualTotals ? fmtDollars(totalActual) : '—'}
                     </p>
                     <div className="flex items-center justify-center">
                       <VariancePill variance={totalVariance} />
+                    </div>
+                    <span />
+                  </div>
+
+                  {/* Expected Return row */}
+                  <div className="grid grid-cols-[1fr_140px_290px_36px] gap-2 items-center pt-3 border-t border-gray-100">
+                    <p className="text-sm font-semibold text-gray-700 leading-snug">
+                      Expected Return on {conferenceName} Cost
+                    </p>
+                    {/* Multiplier input */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={returnOnCost}
+                        onChange={e => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                          setReturnOnCost(cleaned);
+                        }}
+                        placeholder={globalDefaultReturn || '0'}
+                        className="input-field text-sm w-full"
+                        title="Return multiplier (e.g. 2.5 = 250% of total budget)"
+                      />
+                    </div>
+                    {/* Calculated value spanning Actual + Variance columns */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 whitespace-nowrap">Total budget × return =</span>
+                      <span className={`text-sm font-semibold ${expectedReturnValue != null ? 'text-green-700' : 'text-gray-300'}`}>
+                        {expectedReturnValue != null ? fmtDollars(expectedReturnValue) : '—'}
+                      </span>
                     </div>
                     <span />
                   </div>
