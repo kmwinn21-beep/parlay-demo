@@ -98,6 +98,7 @@ export function RelationshipsTab({
                             seniority: a.seniority ?? null,
                             companyName: rel.company_name,
                             companyId: rel.company_id,
+                            companyWse: null,
                             assignedUserNames: rel.rep_names,
                           })}
                         />
