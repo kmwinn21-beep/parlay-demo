@@ -1431,6 +1431,41 @@ export default function CompanyDetailPage() {
                   )}
                 </div>
               ) : null,
+              products: (() => {
+                // Group company attendees by selected products
+                const productAttendeeMap: Record<string, Array<{ name: string; title: string | null }>> = {};
+                for (const a of (company.attendees ?? []) as Array<{ first_name: string; last_name: string; title?: string | null; products?: string | null }>) {
+                  if (!a.products) continue;
+                  for (const prod of String(a.products).split(',').map(s => s.trim()).filter(Boolean)) {
+                    (productAttendeeMap[prod] ??= []).push({ name: `${a.first_name} ${a.last_name}`, title: a.title ?? null });
+                  }
+                }
+                const entries = Object.entries(productAttendeeMap);
+                return entries.length === 0 ? null : (
+                  <div key="products" className="card">
+                    <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('products')}</h2>
+                    <div className="space-y-3">
+                      {entries.map(([product, attendees]) => {
+                        const preset = getPreset((colorMaps.products ?? {})[product]);
+                        return (
+                          <div key={product} className="rounded-lg border border-gray-200 overflow-hidden">
+                            <div className="px-3 py-2 border-b-2" style={{ backgroundColor: preset.hex + '18', borderColor: preset.hex }}>
+                              <span className="text-sm font-semibold" style={{ color: preset.hex }}>{product}</span>
+                            </div>
+                            <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                              {attendees.map((a, i) => (
+                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                  {a.name}{a.title ? ` · ${a.title}` : ''}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })(),
             };
             return sectionOrder.map(key => isSectionVisible(key) ? sectionMap[key] : null);
           })()}

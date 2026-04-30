@@ -44,7 +44,9 @@ interface Attendee {
   id: number; first_name: string; last_name: string; title?: string;
   company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
   email?: string; notes?: string; action?: string; next_steps?: string;
-  next_steps_notes?: string; status?: string; seniority?: string; linkedin_url?: string; phone?: string; created_at: string; conferences: Conference[];
+  next_steps_notes?: string; status?: string; seniority?: string; linkedin_url?: string; phone?: string;
+  function?: string; products?: string;
+  created_at: string; conferences: Conference[];
 }
 
 interface Company { id: number; name: string; }
@@ -91,6 +93,8 @@ export default function AttendeeDetailPage() {
   const [actionOptions, setActionOptions] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
   const [actionKeyMap, setActionKeyMap] = useState<Record<string, string | null>>({});
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
+  const [functionOptions, setFunctionOptions] = useState<string[]>([]);
+  const [productsOptions, setProductsOptions] = useState<{ value: string; color: string | null }[]>([]);
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
@@ -196,7 +200,7 @@ export default function AttendeeDetailPage() {
 
   const fetchAttendee = useCallback(async () => {
     try {
-      const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes, relTypeRes] = await Promise.all([
+      const [atRes, coRes, statusRes, actionRes, seniorityRes, userRes, relTypeRes, functionRes, productsRes] = await Promise.all([
         fetch(`/api/attendees/${id}`),
         fetch('/api/companies'),
         fetch('/api/config?category=status&form=attendee_detail'),
@@ -204,10 +208,12 @@ export default function AttendeeDetailPage() {
         fetch('/api/config?category=seniority&form=attendee_detail'),
         fetch('/api/config?category=user&form=attendee_detail'),
         fetch('/api/config?category=rep_relationship_type&form=attendee_detail'),
+        fetch('/api/config?category=function'),
+        fetch('/api/config?category=products'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
-      const [atData, coData, statusData, actionData, seniorityData, userData, relTypeData] = await Promise.all([
-        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), seniorityRes.json(), userRes.json(), relTypeRes.json(),
+      const [atData, coData, statusData, actionData, seniorityData, userData, relTypeData, functionData, productsData] = await Promise.all([
+        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), seniorityRes.json(), userRes.json(), relTypeRes.json(), functionRes.json(), productsRes.json(),
       ]);
       setAttendee(atData);
       setCompanies(coData);
@@ -217,6 +223,8 @@ export default function AttendeeDetailPage() {
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setRelTypeOptions(relTypeData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      setFunctionOptions(functionData.map((o: { value: string }) => o.value));
+      setProductsOptions(productsData.map((o: { value: string; color: string | null }) => ({ value: String(o.value), color: o.color ?? null })));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '' });
     } catch {
       toast.error('Failed to load attendee');
@@ -487,6 +495,22 @@ export default function AttendeeDetailPage() {
     catch { toast.error('Failed to update status.'); }
   };
 
+  const handleFunction = async (value: string) => {
+    const current = new Set((attendee?.function || '').split(',').map(s => s.trim()).filter(Boolean));
+    if (current.has(value)) { current.delete(value); } else { current.add(value); }
+    const next = Array.from(current).join(',');
+    try { await patchAttendee({ 'function': next }); toast.success('Function updated.'); }
+    catch { toast.error('Failed to update function.'); }
+  };
+
+  const handleProduct = async (value: string) => {
+    const current = new Set((attendee?.products || '').split(',').map(s => s.trim()).filter(Boolean));
+    if (current.has(value)) { current.delete(value); } else { current.add(value); }
+    const next = Array.from(current).join(',');
+    try { await patchAttendee({ products: next }); toast.success('Products updated.'); }
+    catch { toast.error('Failed to update products.'); }
+  };
+
   const handleAction = async (value: string) => {
     if (!selectedConferenceId) { toast.error('Please select a conference first.'); return; }
     try {
@@ -600,6 +624,8 @@ export default function AttendeeDetailPage() {
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
   const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
+  const currentFunctions = new Set((attendee.function || '').split(',').map(s => s.trim()).filter(Boolean));
+  const currentProducts = new Set((attendee.products || '').split(',').map(s => s.trim()).filter(Boolean));
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <BackButton />
@@ -633,6 +659,19 @@ export default function AttendeeDetailPage() {
                   <div><label className="label">LinkedIn URL</label><input type="url" value={editData.linkedin_url || ''} onChange={e => setEditData(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/…" className="input-field" /></div>
                   <div><label className="label">Phone Number</label><input type="tel" value={editData.phone || ''} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" className="input-field" /></div>
                 </div>
+                {functionOptions.length > 0 && (
+                  <div>
+                    <label className="label">Function</label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {functionOptions.map(val => (
+                        <button key={val} type="button" onClick={() => handleFunction(val)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${currentFunctions.has(val) ? `${getPillClass(val, colorMaps.function || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-3">
                   <button onClick={handleSave} disabled={isSaving} className="btn-primary">{isSaving ? 'Saving...' : 'Save'}</button>
                   <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
@@ -651,6 +690,9 @@ export default function AttendeeDetailPage() {
                       {attendee.title && <p className="text-gray-600 mt-1">{attendee.title}</p>}
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
+                        {currentFunctions.size > 0 && Array.from(currentFunctions).map(f => (
+                          <span key={f} className={`badge ${getPillClass(f, colorMaps.function || {})}`}>{f}</span>
+                        ))}
                         {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
                           <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{s}</span>
                         )) : <span className="text-sm text-gray-400">—</span>}
@@ -856,6 +898,27 @@ export default function AttendeeDetailPage() {
                         {val}
                       </button>
                     ))}
+                  </div>
+                </div>
+              ),
+              products: (
+                <div key="products" className="card">
+                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('products')}</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {productsOptions.map(opt => {
+                      const selected = currentProducts.has(opt.value);
+                      const preset = getPreset(opt.color);
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleProduct(opt.value)}
+                          style={selected ? { backgroundColor: preset.hex + '25', borderColor: preset.hex, color: preset.hex } : undefined}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${selected ? 'shadow-md scale-105' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
+                        >
+                          {opt.value}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ),

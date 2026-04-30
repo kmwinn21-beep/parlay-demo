@@ -52,22 +52,24 @@ export async function PUT(
     await dbReady;
     const body = await request.json();
     const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone } = body;
+    const functionVal = body['function'];
 
     if (!first_name || !last_name) {
       return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
     }
 
     const existingResult = await db.execute({
-      sql: 'SELECT id, status FROM attendees WHERE id = ?',
+      sql: 'SELECT id, status, "function" FROM attendees WHERE id = ?',
       args: [params.id],
     });
     if (existingResult.rows.length === 0) {
       return NextResponse.json({ error: 'Attendee not found' }, { status: 404 });
     }
     const existingStatus = String(existingResult.rows[0].status ?? '');
+    const existingFunction = existingResult.rows[0].function != null ? String(existingResult.rows[0].function) : null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, "function" = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [
         first_name,
         last_name,
@@ -82,6 +84,7 @@ export async function PUT(
         seniority || null,
         linkedin_url || null,
         phone || null,
+        'function' in body ? (functionVal || null) : existingFunction,
         params.id,
       ],
     });
@@ -165,6 +168,14 @@ export async function PATCH(
     if ('company_id' in body) {
       setClauses.push('company_id = ?');
       args.push(company_id || null);
+    }
+    if ('function' in body) {
+      setClauses.push('"function" = ?');
+      args.push((body['function'] as string | undefined) || null);
+    }
+    if ('products' in body) {
+      setClauses.push('products = ?');
+      args.push((body.products as string | undefined) || null);
     }
 
     if (setClauses.length === 0) {
