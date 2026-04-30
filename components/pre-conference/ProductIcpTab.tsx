@@ -36,15 +36,21 @@ export function ProductIcpTab({
       <div className="flex gap-4 overflow-x-auto pb-2">
         {productIcp.map((entry) => {
           const totalAttendees = entry.companies.reduce((sum, c) => sum + c.attendees.length, 0);
+          const hex = entry.color ?? null;
+          // Light fill (18% opacity) + full-color 2px border + full-color text
+          const headerStyle = hex
+            ? { backgroundColor: `${hex}2e`, borderColor: hex, color: hex }
+            : {};
+
           return (
-            <div
-              key={entry.product}
-              className="flex-shrink-0 w-72 flex flex-col gap-3"
-            >
+            <div key={entry.product} className="flex-shrink-0 w-72 flex flex-col gap-3">
               {/* Product column header */}
-              <div className="bg-brand-primary/10 border border-brand-primary/20 rounded-xl px-4 py-2.5">
-                <h3 className="font-semibold text-brand-primary text-sm">{entry.product}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
+              <div
+                className={`rounded-xl px-4 py-2.5 border-2 ${hex ? '' : 'bg-brand-primary/10 border-brand-primary/20 text-brand-primary'}`}
+                style={headerStyle}
+              >
+                <h3 className="font-semibold text-sm">{entry.product}</h3>
+                <p className="text-xs mt-0.5 opacity-70">
                   {entry.companies.length} {entry.companies.length === 1 ? 'company' : 'companies'} · {totalAttendees} {totalAttendees === 1 ? 'attendee' : 'attendees'}
                 </p>
               </div>

@@ -1364,12 +1364,6 @@ export default function ConferenceDetailPage() {
                           <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
                         </span>
-                        {attendee.company_wse != null && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                            <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                            {Number(attendee.company_wse).toLocaleString()}
-                          </span>
-                        )}
                         {Number(attendee.entity_notes_count ?? 0) > 0 && (
                           <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
                         )}
@@ -1459,15 +1453,6 @@ export default function ConferenceDetailPage() {
                                     <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
                                   ) : (
                                     <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
-                                  )}
-                                  {attendee.company_wse != null && (
-                                    editingCell?.attendeeId === attendee.id && editingCell.field === 'company_wse' ? (
-                                      <input className="input-field bg-white text-sm py-2 min-w-[180px] w-auto mt-1 relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_wse')} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(attendee, 'company_wse'); if (e.key === 'Escape') setEditingCell(null); }} autoFocus />
-                                    ) : (
-                                      <button type="button" className="text-[10px] text-gray-400 mt-0.5 hover:text-brand-secondary" onClick={() => startInlineEdit(attendee, 'company_wse')}>
-                                        WSE: {Number(attendee.company_wse).toLocaleString()}
-                                      </button>
-                                    )
                                   )}
                                 </div>
                               ) : (
