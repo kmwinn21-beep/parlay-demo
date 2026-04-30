@@ -17,6 +17,7 @@ import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
 import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRulesEval';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { type UserOption, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
@@ -125,6 +126,7 @@ export default function CompanyDetailPage() {
   const colorMaps = useConfigColors();
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
   const unitTypeLabel = useUnitTypeLabel();
+  const avgCostPerUnit = useAvgCostPerUnit();
 
   const [company, setCompany] = useState<Company | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -804,6 +806,14 @@ export default function CompanyDetailPage() {
                       {company.profit_type}
                     </span>
                   )}
+                  {(() => {
+                    const pill = formatValuePill(company.wse, avgCostPerUnit);
+                    return pill ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                        {pill}
+                      </span>
+                    ) : null;
+                  })()}
                   <span className="badge-gray">{company.attendees.length} attendees</span>
                   {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
                     <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>

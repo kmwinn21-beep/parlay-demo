@@ -31,7 +31,7 @@ import { useLogoConfig } from '@/lib/useLogoConfig';
 import { BatchCardScanModal } from '@/components/BatchCardScanModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
-import { ConferenceOfflineSync } from '@/components/ConferenceOfflineSync';
+import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { AgendaTab } from '@/components/AgendaTab';
 import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTargetsTab';
 
@@ -328,6 +328,7 @@ export default function ConferenceDetailPage() {
   const [isAddingAttendee, setIsAddingAttendee] = useState(false);
 
   const [showBatchScan, setShowBatchScan] = useState(false);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
 
   // Upload attendee list state
   const [isUploading, setIsUploading] = useState(false);
@@ -1000,7 +1001,16 @@ export default function ConferenceDetailPage() {
                     endDate={conference.end_date}
                     userRole={currentUser?.role ?? 'user'}
                   />
-                  <ConferenceOfflineSync conferenceId={conference.id} className="hidden sm:flex" />
+                  <button
+                    type="button"
+                    onClick={() => setShowBudgetModal(true)}
+                    className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Budget vs. Actual
+                  </button>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
@@ -1923,6 +1933,13 @@ export default function ConferenceDetailPage() {
           conferenceId={Number(id)}
           onClose={() => setShowBatchScan(false)}
           onDone={() => { setShowBatchScan(false); fetchConference(); }}
+        />
+      )}
+
+      {showBudgetModal && conference && (
+        <BudgetVsActualModal
+          conferenceId={conference.id}
+          onClose={() => setShowBudgetModal(false)}
         />
       )}
     </div>

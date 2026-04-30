@@ -14,6 +14,7 @@ import { getBadgeClass } from '@/lib/colors';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 
 interface Attendee {
   id: number;
@@ -116,6 +117,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const { isVisible, orderedColumns } = useTableColumnConfig('attendees');
   const customColumns = useCustomColumns('attendees');
   const unitTypeLabel = useUnitTypeLabel();
+  const avgCostPerUnit = useAvgCostPerUnit();
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('attendee_table');
   const statusOptions = configOptions.status ?? [];
@@ -566,6 +568,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                       {Number(attendee.company_wse).toLocaleString()}
                     </span>
                   )}
+                  {(() => {
+                    const pill = formatValuePill(attendee.company_wse, avgCostPerUnit);
+                    return pill ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                        {pill}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
                 {attendee.created_at && (
                   <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
@@ -593,6 +603,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     case 'status': return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
                     case 'seniority': return <th key="seniority" className={thCls} style={{ width: colWidths.seniority }}>Seniority<ResizeHandle col="seniority" /></th>;
                     case 'conferences': return <th key="conferences" className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>;
+                    case 'value': return <th key="value" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 100 }}>Value</th>;
                     case 'notes': return <th key="notes" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.notes }}>Notes<ResizeHandle col="notes" /></th>;
                     case 'updated_on': return <th key="updated_on" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>;
                     case 'date_added': return <th key="date_added" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.date_added }}>Date Added<ResizeHandle col="date_added" /></th>;
@@ -734,6 +745,18 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                           </td>
                         );
                         case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} /></td>;
+                        case 'value': return (
+                          <td key="value" className="px-3 py-3">
+                            {(() => {
+                              const pill = formatValuePill(attendee.company_wse, avgCostPerUnit);
+                              return pill ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                                  {pill}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>;
+                            })()}
+                          </td>
+                        );
                         case 'notes': return (
                           <td key="notes" className="px-3 py-3">
                             {Number(attendee.notes_count) > 0 ? (
