@@ -126,6 +126,35 @@ export async function PUT(
                   WHERE ',' || COALESCE(services, '') || ',' LIKE '%,' || ? || ',%'`,
             args: [oldValue, value, oldValue],
           });
+        } else if (category === 'function') {
+          await db.execute({
+            sql: `UPDATE attendees
+                  SET "function" = TRIM(
+                    REPLACE(',' || COALESCE("function", '') || ',', ',' || ? || ',', ',' || ? || ','),
+                    ','
+                  )
+                  WHERE ',' || COALESCE("function", '') || ',' LIKE '%,' || ? || ',%'`,
+            args: [oldValue, value, oldValue],
+          });
+        } else if (category === 'products') {
+          await db.execute({
+            sql: `UPDATE attendees
+                  SET products = TRIM(
+                    REPLACE(',' || COALESCE(products, '') || ',', ',' || ? || ',', ',' || ? || ','),
+                    ','
+                  )
+                  WHERE ',' || COALESCE(products, '') || ',' LIKE '%,' || ? || ',%'`,
+            args: [oldValue, value, oldValue],
+          });
+          await db.execute({
+            sql: `UPDATE companies
+                  SET products = TRIM(
+                    REPLACE(',' || COALESCE(products, '') || ',', ',' || ? || ',', ',' || ? || ','),
+                    ','
+                  )
+                  WHERE ',' || COALESCE(products, '') || ',' LIKE '%,' || ? || ',%'`,
+            args: [oldValue, value, oldValue],
+          });
         }
       } catch (cascadeErr) {
         console.error('Cascade rename error:', cascadeErr);

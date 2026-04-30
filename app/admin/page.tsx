@@ -153,6 +153,37 @@ function ColorPicker({ optionId, currentColor, onColorSaved }: { optionId: numbe
   );
 }
 
+function MultiSelectDropdown({ options, selected, onChange, placeholder = 'None' }: { options: string[]; selected: string[]; onChange: (vals: string[]) => void; placeholder?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  const toggle = (val: string) => onChange(selected.includes(val) ? selected.filter(s => s !== val) : [...selected, val]);
+  const label = selected.length === 0 ? placeholder : selected.join(', ');
+  return (
+    <div ref={ref} className="relative w-full">
+      <button type="button" onClick={() => setOpen(p => !p)} className="input-field text-sm py-0.5 w-full text-left flex items-center justify-between gap-1">
+        <span className={`truncate ${selected.length === 0 ? 'text-gray-400' : 'text-gray-800'}`}>{label}</span>
+        <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {open && options.length > 0 && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-full min-w-max bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+          {options.map(opt => (
+            <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm whitespace-nowrap">
+              <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)} className="rounded" />
+              <span>{opt}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CategorySection({ category, label, options, onRefresh }: { category: string; label: string; options: ConfigOption[]; onRefresh: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localOptions, setLocalOptions] = useState<ConfigOption[]>(options);
@@ -2485,18 +2516,12 @@ export default function AdminPage() {
                         <tr key={f.value} className="border-b border-gray-50">
                           <td className="py-1.5 pr-4">{f.value}</td>
                           <td className="py-1.5">
-                            <select
-                              multiple
-                              size={Math.min(productOpts.length, 4)}
-                              value={selected}
-                              onChange={e => {
-                                const vals = Array.from(e.target.selectedOptions).map(o => o.value);
-                                setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }));
-                              }}
-                              className="input-field text-sm py-0.5 w-full"
-                            >
-                              {productOpts.map(p => <option key={p.value} value={p.value}>{p.value}</option>)}
-                            </select>
+                            <MultiSelectDropdown
+                              options={productOpts.map(p => p.value)}
+                              selected={selected}
+                              onChange={vals => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }))}
+                              placeholder="None"
+                            />
                           </td>
                         </tr>
                       );
