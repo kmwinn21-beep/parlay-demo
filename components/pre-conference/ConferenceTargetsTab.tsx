@@ -220,6 +220,7 @@ export function ConferenceTargetsTab({
         seniority: a.seniority,
         companyName: a.companyName,
         companyId: a.companyId,
+        companyWse: null,
         assignedUserNames: [] as string[],
       }));
     await onAddTargets(entries);
