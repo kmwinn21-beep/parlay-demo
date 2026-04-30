@@ -73,8 +73,9 @@ export async function POST(
     }
 
     // Fetch live admin config options for classifiers
-    const [companyTypeOptions, icpOptions, icpConfig, userRows, usersWithConfig] = await Promise.all([
+    const [companyTypeOptions, servicesOptions, icpOptions, icpConfig, userRows, usersWithConfig] = await Promise.all([
       getConfigOptionValues('company_type'),
+      getConfigOptionValues('services'),
       getConfigOptionValues('icp'),
       getIcpConfig(),
       db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
@@ -131,6 +132,17 @@ export async function POST(
       for (const p of valid) {
         if (p.company_type && !validTypeSet.has(p.company_type.toLowerCase())) {
           p.company_type = undefined;
+        }
+      }
+    }
+
+    // Filter parsed services to only include values present in admin config
+    if (servicesOptions.length > 0) {
+      const validServicesSet = new Set(servicesOptions.map((v) => v.toLowerCase()));
+      for (const p of valid) {
+        if (p.services) {
+          const filtered = p.services.split(',').map(s => s.trim()).filter(s => s && validServicesSet.has(s.toLowerCase()));
+          p.services = filtered.length > 0 ? filtered.join(',') : undefined;
         }
       }
     }

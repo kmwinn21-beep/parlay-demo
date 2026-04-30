@@ -640,6 +640,8 @@ export async function initDb(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_group_members_user_id        ON group_conversation_members(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_group_members_group_id       ON group_conversation_members(group_id)`,
     `CREATE INDEX IF NOT EXISTS idx_group_messages_group_created ON group_messages(group_id, created_at)`,
+    // Protect system-seeded config options from deletion
+    `ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
@@ -755,6 +757,79 @@ export async function initDb(): Promise<void> {
     db.execute({
       sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
       args: [seed.category, seed.value, seed.sort_order],
+    }).catch(() => {})
+  ));
+
+  // Mark all system-seeded config_options as protected from deletion (runs every startup; safe)
+  const systemSeeds: Array<{ category: string; value: string }> = [
+    { category: 'company_type', value: '3rd Party Operator' },
+    { category: 'company_type', value: 'Owner/Operator' },
+    { category: 'company_type', value: 'Capital Partner' },
+    { category: 'company_type', value: 'Vendor' },
+    { category: 'company_type', value: 'Partner' },
+    { category: 'company_type', value: 'Other' },
+    { category: 'company_type', value: 'Capital' },
+    { category: 'company_type', value: 'Operator' },
+    { category: 'status', value: 'Client' },
+    { category: 'status', value: 'Priority' },
+    { category: 'status', value: 'Interested' },
+    { category: 'status', value: 'Not Interested' },
+    { category: 'status', value: 'Unknown' },
+    { category: 'action', value: 'Meeting Scheduled' },
+    { category: 'action', value: 'Meeting Held' },
+    { category: 'action', value: 'Rescheduled' },
+    { category: 'action', value: 'Cancelled' },
+    { category: 'action', value: 'Meeting No-Show' },
+    { category: 'action', value: 'Social Conversation' },
+    { category: 'action', value: 'Pending' },
+    { category: 'next_steps', value: 'Schedule Follow Up Meeting' },
+    { category: 'next_steps', value: 'General Follow Up' },
+    { category: 'next_steps', value: 'Other' },
+    { category: 'next_steps', value: 'Post-Mtg' },
+    { category: 'seniority', value: 'C-Suite' },
+    { category: 'seniority', value: 'BOD' },
+    { category: 'seniority', value: 'VP/SVP' },
+    { category: 'seniority', value: 'VP Level' },
+    { category: 'seniority', value: 'ED' },
+    { category: 'seniority', value: 'Director' },
+    { category: 'seniority', value: 'Manager' },
+    { category: 'seniority', value: 'Associate' },
+    { category: 'seniority', value: 'Admin' },
+    { category: 'seniority', value: 'Other' },
+    { category: 'profit_type', value: 'For-Profit' },
+    { category: 'profit_type', value: 'Non-Profit' },
+    { category: 'entity_structure', value: 'Parent' },
+    { category: 'entity_structure', value: 'Child' },
+    { category: 'services', value: 'IL' },
+    { category: 'services', value: 'AL' },
+    { category: 'services', value: 'MC' },
+    { category: 'services', value: 'SNF' },
+    { category: 'services', value: 'CCRC' },
+    { category: 'services', value: 'Other' },
+    { category: 'services', value: 'N/A' },
+    { category: 'event_type', value: 'Sponsored Event' },
+    { category: 'event_type', value: 'Lunch' },
+    { category: 'event_type', value: 'Dinner' },
+    { category: 'event_type', value: 'Company Hosted' },
+    { category: 'event_type', value: 'Partner' },
+    { category: 'event_type', value: 'Conference Event' },
+    { category: 'rep_relationship_type', value: 'Strong' },
+    { category: 'rep_relationship_type', value: 'Former Client' },
+    { category: 'rep_relationship_type', value: 'Other' },
+    { category: 'meeting_type', value: 'Pre-Scheduled' },
+    { category: 'meeting_type', value: 'Speed' },
+    { category: 'touchpoints', value: 'Booth Stop' },
+    { category: 'touchpoints', value: 'Coffee' },
+    { category: 'touchpoints', value: 'Dinner' },
+    { category: 'touchpoints', value: 'Event' },
+    { category: 'touchpoints', value: 'Breakfast/Lunch' },
+    { category: 'touchpoints', value: 'Other' },
+    { category: 'attendee_conference_status', value: 'Target' },
+  ];
+  await Promise.all(systemSeeds.map(seed =>
+    db.execute({
+      sql: 'UPDATE config_options SET is_system = 1 WHERE category = ? AND value = ?',
+      args: [seed.category, seed.value],
     }).catch(() => {})
   ));
 
