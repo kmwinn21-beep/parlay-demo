@@ -135,6 +135,12 @@ export async function POST(
       : await parseFile(buffer, file.name);
     const valid = parsed.filter((p) => p.first_name?.trim() || p.last_name?.trim());
 
+    // Debug: log function column parsing
+    console.log('[upload] mapping.function =', mapping?.function);
+    console.log('[upload] functionOptions =', functionOptions);
+    const sampleFunctions = valid.slice(0, 3).map(p => ({ name: `${p.first_name} ${p.last_name}`, fn: p.function }));
+    console.log('[upload] sample p.function before matching =', JSON.stringify(sampleFunctions));
+
     // Resolve all config-driven fields using fuzzy matching against their canonical option values.
     // matchConfigOption tries exact → abbreviation-expanded exact → word-prefix → Levenshtein.
     // Returns the canonical display name or null (field is left empty when no match is found).
@@ -176,6 +182,10 @@ export async function POST(
         }
       }
     }
+
+    // Debug: log function values after matching
+    const sampleFunctionsAfter = valid.slice(0, 3).map(p => ({ name: `${p.first_name} ${p.last_name}`, fn: p.function }));
+    console.log('[upload] sample p.function after matching =', JSON.stringify(sampleFunctionsAfter));
 
     if (valid.length === 0) {
       return NextResponse.json({ error: 'No valid attendees found in file' }, { status: 400 });
