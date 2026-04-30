@@ -166,6 +166,14 @@ export async function PATCH(
       setClauses.push('company_id = ?');
       args.push(company_id || null);
     }
+    if ('function' in body) {
+      setClauses.push('"function" = ?');
+      args.push((body['function'] as string | undefined) || null);
+    }
+    if ('products' in body) {
+      setClauses.push('products = ?');
+      args.push((body.products as string | undefined) || null);
+    }
 
     if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

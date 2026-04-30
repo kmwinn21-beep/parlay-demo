@@ -642,6 +642,13 @@ export async function initDb(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_group_messages_group_created ON group_messages(group_id, created_at)`,
     // Protect system-seeded config options from deletion
     `ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0`,
+    // Attendee function (department/role) and product selections
+    `ALTER TABLE attendees ADD COLUMN function TEXT`,
+    `ALTER TABLE attendees ADD COLUMN products TEXT`,
+    // Section config entries for new attendee and company sections
+    `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('attendee', 'function', 'Function', 7)`,
+    `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('attendee', 'products', 'Products', 8)`,
+    `INSERT OR IGNORE INTO section_config (page, section_key, label, sort_order) VALUES ('company', 'products', 'Products', 6)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
@@ -752,6 +759,17 @@ export async function initDb(): Promise<void> {
     { category: 'rep_relationship_type', value: 'Other', sort_order: 3 },
     { category: 'meeting_type', value: 'Pre-Scheduled', sort_order: 1 },
     { category: 'meeting_type', value: 'Speed', sort_order: 2 },
+    // Attendee function (department/role)
+    { category: 'function', value: 'Operations', sort_order: 1 },
+    { category: 'function', value: 'Finance', sort_order: 2 },
+    { category: 'function', value: 'Sales', sort_order: 3 },
+    { category: 'function', value: 'Marketing', sort_order: 4 },
+    { category: 'function', value: 'HR', sort_order: 5 },
+    { category: 'function', value: 'Legal', sort_order: 6 },
+    { category: 'function', value: 'IT', sort_order: 7 },
+    { category: 'function', value: 'Accounting', sort_order: 8 },
+    // Products
+    { category: 'products', value: 'Product', sort_order: 1 },
   ];
   await Promise.all(newCategorySeeds.map(seed =>
     db.execute({
@@ -825,6 +843,15 @@ export async function initDb(): Promise<void> {
     { category: 'touchpoints', value: 'Breakfast/Lunch' },
     { category: 'touchpoints', value: 'Other' },
     { category: 'attendee_conference_status', value: 'Target' },
+    { category: 'function', value: 'Operations' },
+    { category: 'function', value: 'Finance' },
+    { category: 'function', value: 'Sales' },
+    { category: 'function', value: 'Marketing' },
+    { category: 'function', value: 'HR' },
+    { category: 'function', value: 'Legal' },
+    { category: 'function', value: 'IT' },
+    { category: 'function', value: 'Accounting' },
+    { category: 'products', value: 'Product' },
   ];
   await Promise.all(systemSeeds.map(seed =>
     db.execute({
