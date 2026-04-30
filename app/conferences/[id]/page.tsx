@@ -1004,7 +1004,7 @@ export default function ConferenceDetailPage() {
                   <button
                     type="button"
                     onClick={() => setShowBudgetModal(true)}
-                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:border-brand-secondary hover:text-brand-secondary transition-colors"
+                    className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
