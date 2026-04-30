@@ -771,12 +771,35 @@ export async function initDb(): Promise<void> {
     // Products
     { category: 'products', value: 'Product', sort_order: 1 },
   ];
-  await Promise.all(newCategorySeeds.map(seed =>
+
+  // For categories that are entirely new to the app (not backfills of pre-existing categories),
+  // only seed if the category currently has zero options. This prevents re-inserting the original
+  // seeded value after an admin renames it (which would create a duplicate).
+  const newOnlyCats = new Set(['function', 'products']);
+  const newOnlySeeds = newCategorySeeds.filter(s => newOnlyCats.has(s.category));
+  const backfillSeeds = newCategorySeeds.filter(s => !newOnlyCats.has(s.category));
+
+  // Backfill seeds: run INSERT OR IGNORE unconditionally (ensures missing values for existing DBs)
+  await Promise.all(backfillSeeds.map(seed =>
     db.execute({
       sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
       args: [seed.category, seed.value, seed.sort_order],
     }).catch(() => {})
   ));
+
+  // New-category seeds: only seed when the category has no options yet (fresh install)
+  for (const cat of Array.from(newOnlyCats)) {
+    const countRow = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM config_options WHERE category = ?', args: [cat] }).catch(() => null);
+    if (countRow && Number(countRow.rows[0]?.cnt ?? 1) === 0) {
+      const seeds = newOnlySeeds.filter(s => s.category === cat);
+      await Promise.all(seeds.map(seed =>
+        db.execute({
+          sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
+          args: [seed.category, seed.value, seed.sort_order],
+        }).catch(() => {})
+      ));
+    }
+  }
 
   // Mark all system-seeded config_options as protected from deletion (runs every startup; safe)
   const systemSeeds: Array<{ category: string; value: string }> = [
