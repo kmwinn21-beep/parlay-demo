@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 interface Def {
   term: string;
   description: string;
@@ -12,11 +14,11 @@ const SECTIONS: { title: string; items: Def[] }[] = [
     items: [
       {
         term: 'CES — Conference Effectiveness Score',
-        description: 'A 0–100 composite score shared across Events, Sales, and Marketing as a common language for conference investment decisions.',
-        calculation: '(ICP & Target Quality × 25%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 20%) + (Engagement Breadth × 15%) + (Follow-up Execution × 10%) + (Net-New Engaged × 10%)',
+        description: 'A 0–100 composite score across 7 dimensions shared across Events, Sales, and Marketing as a common language for conference investment decisions.',
+        calculation: '(ICP & Target Quality × 20%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 30%) + (Engagement Breadth × 5%) + (Cost Efficiency × 10%) + (Follow-up Execution × 10%) + (Net-New Engaged × 5%)',
       },
       {
-        term: 'ICP & Target Quality (25%)',
+        term: 'ICP & Target Quality (20%)',
         description: 'Measures the quality of the audience reached — how many ICP companies were engaged relative to how many ICP companies were present, and how many targets were engaged.',
         calculation: '(ICP company engagement rate × 50%) + (target engagement rate × 50%)',
       },
@@ -26,14 +28,19 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         calculation: '(meetings held / meetings scheduled × 50%) + (companies with meeting + follow-up / companies with meeting × 50%)',
       },
       {
-        term: 'Pipeline Influence Index (20%)',
+        term: 'Pipeline Influence Index (30%)',
         description: 'Measures how much pipeline influence was generated relative to the expected return on event cost. Capped at 100.',
         calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
       },
       {
-        term: 'Engagement Breadth (15%)',
+        term: 'Engagement Breadth (5%)',
         description: 'The percentage of all companies at the conference that received at least one meaningful interaction.',
         calculation: 'engaged companies / total companies × 100',
+      },
+      {
+        term: 'Cost Efficiency (10%)',
+        description: 'Measures how efficiently conference spend was converted into pipeline influence, relative to the expected return target set in Effectiveness Defaults.',
+        calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
       },
       {
         term: 'Follow-up Execution (10%)',
@@ -41,7 +48,7 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         calculation: 'follow-ups completed / follow-ups created × 100',
       },
       {
-        term: 'Net-New Engaged (10%)',
+        term: 'Net-New Engaged (5%)',
         description: 'The percentage of engaged companies that have not appeared at any prior conference in the system.',
         calculation: 'net-new logos / total engaged companies × 100',
       },
@@ -203,6 +210,24 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         description: 'The ratio of pipeline influence generated to total conference spend. Compared against the expected return target set in Effectiveness Defaults.',
         calculation: 'total pipeline influence / total spend',
       },
+      {
+        term: 'Cost Efficiency Score',
+        description: 'A 0–100 score measuring how efficiently conference spend was converted into pipeline influence relative to the expected return on event cost target.',
+        calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
+      },
+      {
+        term: 'Cost Efficiency Score Interpretation',
+        description: 'Score ranges: 80–100 = Excellent (at or above expected ROI); 60–79 = Good (near target); 40–59 = Fair (below target, review cost allocation); 20–39 = Poor (significant underperformance); 0–19 = Critical (minimal return relative to investment).',
+      },
+      {
+        term: 'Cost per ICP Interaction',
+        description: 'Total effective conference spend divided by the number of ICP companies that received meaningful engagement.',
+        calculation: 'total spend / ICP companies engaged',
+      },
+      {
+        term: 'Efficiency Rank',
+        description: 'This conference\'s Cost Efficiency Score ranked against all other conferences in the system. Rank 1 is the most efficient.',
+      },
     ],
   },
   {
@@ -229,24 +254,40 @@ const SECTIONS: { title: string; items: Def[] }[] = [
 ];
 
 export function DefinitionsTab() {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const toggle = (title: string) => setExpanded((prev: Record<string, boolean>) => ({ ...prev, [title]: !prev[title] }));
+
   return (
-    <div className="p-6 space-y-8">
+    <div className="p-6 space-y-2">
       {SECTIONS.map(section => (
-        <div key={section.title}>
-          <h3 className="text-sm font-bold uppercase tracking-wide text-brand-primary mb-3 border-b border-gray-100 pb-2">{section.title}</h3>
-          <div className="space-y-4">
-            {section.items.map(item => (
-              <div key={item.term} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                <p className="text-sm font-semibold text-brand-secondary mb-1">{item.term}</p>
-                <p className="text-xs text-gray-600 leading-relaxed">{item.description}</p>
-                {item.calculation && (
-                  <p className="text-xs text-gray-400 mt-1.5 font-mono leading-relaxed">
-                    <span className="font-sans text-gray-500 not-italic">Formula: </span>{item.calculation}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
+        <div key={section.title} className="rounded-xl border border-gray-100 overflow-hidden">
+          <button
+            onClick={() => toggle(section.title)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            <h3 className="text-sm font-bold uppercase tracking-wide text-brand-primary">{section.title}</h3>
+            <svg
+              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expanded[section.title] ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expanded[section.title] && (
+            <div className="p-4 space-y-3 border-t border-gray-100">
+              {section.items.map(item => (
+                <div key={item.term} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-brand-secondary mb-1">{item.term}</p>
+                  <p className="text-xs text-gray-600 leading-relaxed">{item.description}</p>
+                  {item.calculation && (
+                    <p className="text-xs text-gray-400 mt-1.5 font-mono leading-relaxed">
+                      <span className="font-sans text-gray-500 not-italic">Formula: </span>{item.calculation}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
