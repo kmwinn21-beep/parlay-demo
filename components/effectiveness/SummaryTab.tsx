@@ -185,36 +185,57 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
 
   return (
     <div className="p-6 space-y-6">
-      {/* Top two-column section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+      {/* Flat 4-cell grid: row 1 = [score+rank | pipeline], row 2 = [breakdown | rep ces]
+          CSS grid makes all cells in the same row equal height automatically */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Left: CES score card + rank + dimension bars */}
-        <div className="flex flex-col gap-4">
-          {/* Score card (2/3) + Rank card (1/3) */}
-          <div className="grid grid-cols-3 gap-3">
-            <div
-              className="col-span-2 rounded-xl p-4"
-              style={{ backgroundColor: scoreColor + '15', borderLeft: `4px solid ${scoreColor}` }}
-            >
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Conference Effectiveness Score</div>
+        {/* [row 1, col 1]: CES Score card (2/3) + Rank card (1/3) */}
+        <div className="grid grid-cols-3 gap-3">
+          <div
+            className="col-span-2 rounded-xl p-4 flex flex-col justify-between"
+            style={{ backgroundColor: scoreColor + '15', borderLeft: `4px solid ${scoreColor}` }}
+          >
+            <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Conference Effectiveness Score</div>
+            <div>
               <div className="flex items-end gap-1">
                 <div className="text-4xl font-bold leading-tight" style={{ color: scoreColor }}>{ces.score}</div>
                 <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>
               </div>
               <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor }}>{cesScoreGrade(ces.score)}</div>
             </div>
-            {cesRank != null && (
-              <div className="col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
-                <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
-                <div className="text-3xl font-bold text-brand-secondary leading-tight">#{cesRank}</div>
-                {cesTotal != null && <div className="text-xs text-gray-400 mt-0.5">of {cesTotal} conferences</div>}
-              </div>
-            )}
           </div>
+          {cesRank != null && (
+            <div className="col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
+              <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
+              <div className="text-3xl font-bold text-brand-secondary leading-tight">#{cesRank}</div>
+              {cesTotal != null && <div className="text-xs text-gray-400 mt-0.5">of {cesTotal} conferences</div>}
+            </div>
+          )}
+        </div>
 
-          {/* Dimension bars — flex-1 to match Rep CES height */}
-          <div className="card p-5 flex-1 space-y-3">
-            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-1">Conference Effectiveness Score Breakdown</h3>
+        {/* [row 1, col 2]: Pipeline Influence Summary */}
+        <div className="card p-5 flex flex-col justify-between">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Pipeline Influence Summary</h3>
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Total',       value: fmt$(totalPI) },
+              { label: 'ICP',         value: fmt$(icpPI),  sub: totalPI > 0 ? `${Math.round(icpPI / totalPI * 100)}%` : null },
+              { label: 'Net-New',     value: fmt$(netPI),  sub: totalPI > 0 ? `${Math.round(netPI / totalPI * 100)}%` : null },
+              { label: 'Multi-Touch', value: fmt$(hiPI),   sub: totalPI > 0 ? `${Math.round(hiPI / totalPI * 100)}%` : null },
+            ].map(({ label, value, sub }) => (
+              <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div className="text-base font-bold text-brand-secondary leading-tight">{value}</div>
+                {sub && <div className="text-xs text-gray-400">{sub} of total</div>}
+                <div className="text-xs font-medium text-gray-500 mt-0.5">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* [row 2, col 1]: CES Breakdown bars */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Conference Effectiveness Score Breakdown</h3>
+          <div className="space-y-3">
             {dims.map((d, i) => (
               <div key={d.label}>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -227,81 +248,59 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
           </div>
         </div>
 
-        {/* Right: Pipeline Summary + Rep CES + Engagement Snapshot */}
-        <div className="flex flex-col gap-4">
-          {/* Pipeline Influence Summary — single row, 4 cards */}
-          <div className="card p-5">
-            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Pipeline Influence Summary</h3>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: 'Total',       value: fmt$(totalPI) },
-                { label: 'ICP',         value: fmt$(icpPI),  sub: totalPI > 0 ? `${Math.round(icpPI / totalPI * 100)}%` : null },
-                { label: 'Net-New',     value: fmt$(netPI),  sub: totalPI > 0 ? `${Math.round(netPI / totalPI * 100)}%` : null },
-                { label: 'Multi-Touch', value: fmt$(hiPI),   sub: totalPI > 0 ? `${Math.round(hiPI / totalPI * 100)}%` : null },
-              ].map(({ label, value, sub }) => (
-                <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-base font-bold text-brand-secondary leading-tight">{value}</div>
-                  {sub && <div className="text-xs text-gray-400">{sub} of total</div>}
-                  <div className="text-xs font-medium text-gray-500 mt-0.5">{label}</div>
-                </div>
-              ))}
+        {/* [row 2, col 2]: Effectiveness Score by Rep */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Effectiveness Score by Rep</h3>
+          {repCESRows.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left px-2 py-2 font-semibold text-gray-500">Rep</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="ICP & Target Quality">ICP</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Meeting Execution">Mtg</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Pipeline Influence Index">PI</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Engagement Breadth">Brd</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Cost Efficiency">Cost</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Follow-up Execution">FU</th>
+                    <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Net-New Engaged">NN</th>
+                    <th className="text-right px-2 py-2 font-semibold text-gray-500">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {repCESRows.map((r, i) => {
+                    const score = Number(r.rep_ces_score ?? 0);
+                    const dim = (key: string) => {
+                      const v = r[key];
+                      if (v == null) return <span className="text-gray-300">—</span>;
+                      return <span className="font-medium text-gray-600">{Math.round(Number(v))}</span>;
+                    };
+                    return (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap">{String(r.rep ?? '—')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim1_icp_target')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim2_meeting_exec')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim3_pipeline_index')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim4_breadth')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim5_cost_efficiency')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim6_followup')}</td>
+                        <td className="px-2 py-2 text-center">{dim('rep_dim7_net_new')}</td>
+                        <td className="px-2 py-2 text-right whitespace-nowrap">
+                          <span className="font-bold text-sm" style={{ color: repCESColor(score) }}>{score}</span>
+                          <span className="text-xs text-gray-400 ml-1">· {String(r.rep_ces_tier ?? '')}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="text-xs text-gray-400 mt-3 leading-tight">
+                ICP = ICP &amp; Target Quality · Mtg = Meeting Execution · PI = Pipeline Influence · Brd = Breadth · Cost = Cost Efficiency · FU = Follow-up · NN = Net-New
+              </p>
             </div>
-          </div>
-
-          {/* Effectiveness Score by Rep — flex-1 to match dimension bars */}
-          <div className="card p-5 flex-1">
-            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Effectiveness Score by Rep</h3>
-            {repCESRows.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-2 py-2 font-semibold text-gray-500">Rep</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="ICP & Target Quality">ICP</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Meeting Execution">Mtg</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Pipeline Influence Index">PI</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Engagement Breadth">Brd</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Cost Efficiency">Cost</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Follow-up Execution">FU</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Net-New Engaged">NN</th>
-                      <th className="text-right px-2 py-2 font-semibold text-gray-500">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {repCESRows.map((r, i) => {
-                      const score = Number(r.rep_ces_score ?? 0);
-                      const dim = (key: string) => {
-                        const v = r[key];
-                        if (v == null) return <span className="text-gray-300">—</span>;
-                        return <span className="font-medium text-gray-600">{Math.round(Number(v))}</span>;
-                      };
-                      return (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap">{String(r.rep ?? '—')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim1_icp_target')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim2_meeting_exec')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim3_pipeline_index')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim4_breadth')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim5_cost_efficiency')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim6_followup')}</td>
-                          <td className="px-2 py-2 text-center">{dim('rep_dim7_net_new')}</td>
-                          <td className="px-2 py-2 text-right whitespace-nowrap">
-                            <span className="font-bold text-sm" style={{ color: repCESColor(score) }}>{score}</span>
-                            <span className="text-xs text-gray-400 ml-1">· {String(r.rep_ces_tier ?? '')}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <p className="text-xs text-gray-400 mt-3 leading-tight">
-                  ICP = ICP &amp; Target Quality · Mtg = Meeting Execution · PI = Pipeline Influence · Brd = Breadth · Cost = Cost Efficiency · FU = Follow-up · NN = Net-New
-                </p>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
