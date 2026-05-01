@@ -230,7 +230,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
 
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto">
-            {activeTab === 'summary'     && <SummaryTab data={data} />}
+            {activeTab === 'summary'     && <SummaryTab data={data} conferenceId={conferenceId} />}
             {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
             {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
             {activeTab === 'roi'         && <OperationalROITab data={data} />}

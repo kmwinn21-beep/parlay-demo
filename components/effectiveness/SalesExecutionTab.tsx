@@ -17,6 +17,15 @@ function MiniBar({ value, max, color = '#1B76BC' }: { value: number; max: number
   );
 }
 
+function EngagementBar({ value, max = 100, color = '#1B76BC' }: { value: number; max?: number; color?: string }) {
+  const pct = max > 0 ? Math.min(Math.round(value / max * 100), 100) : 0;
+  return (
+    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+      <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+    </div>
+  );
+}
+
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const { pipeline, engagement, ces } = data;
   const reps = (pipeline.rep_attribution ?? []) as {
@@ -44,6 +53,16 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const hiEngage = Number(pipeline.high_engagement_companies ?? 0);
   const twoTouch = Number(pipeline.two_touch_companies ?? 0);
   const singleTouch = Number(pipeline.single_touch_companies ?? 0);
+
+  // Engagement snapshot data (moved from Summary tab)
+  const tgtEngd  = Number(engagement.target_companies_engaged ?? 0);
+  const tgtTotal = Number(engagement.targets_total ?? 0);
+  const icpEngd  = Number(data.audience.icp_coverage.icp_companies_engaged ?? 0);
+  const icpTotal = Number(data.audience.icp_coverage.icp_companies_total ?? 0);
+  const held      = Number(engagement.total_held ?? 0);
+  const scheduled = Number(engagement.total_scheduled ?? 0);
+  const contactsEngaged = Number(engagement.contacts_engaged ?? 0);
+  const operatorTotal   = Number(engagement.operator_contacts_total ?? 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -108,23 +127,45 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </div>
       </div>
 
-      {/* Engagement Quality */}
-      <div className="card p-5">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Engagement Quality</h3>
-        <div className="space-y-3">
+      {/* Engagement Snapshot + Engagement Quality side-by-side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Engagement Snapshot */}
+        <div className="card p-5 space-y-3">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-2">Engagement Snapshot</h3>
           {[
-            { label: 'Multi-Touch (3+ interactions)', val: hiEngage,    total: totalEngaged },
-            { label: 'Two-Touch',                     val: twoTouch,    total: totalEngaged },
-            { label: 'Single-Touch',                  val: singleTouch, total: totalEngaged },
-          ].map(({ label, val, total }) => (
+            { label: 'Contacts Engaged', val: contactsEngaged, of: operatorTotal, pct: operatorTotal > 0 ? Math.round(contactsEngaged / operatorTotal * 100) : 0 },
+            { label: 'Targets Engaged',  val: tgtEngd,         of: tgtTotal,      pct: tgtTotal > 0      ? Math.round(tgtEngd / tgtTotal * 100)           : 0 },
+            { label: 'ICP Coverage',     val: icpEngd,         of: icpTotal,      pct: icpTotal > 0      ? Math.round(icpEngd / icpTotal * 100)           : 0 },
+            { label: 'Meetings Held',    val: held,            of: scheduled,     pct: scheduled > 0     ? Math.round(held / scheduled * 100)             : 0 },
+          ].map(({ label, val, of: total2, pct }) => (
             <div key={label}>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-gray-600">{label}</span>
-                <span className="font-semibold text-gray-700">{val} <span className="text-gray-400">/ {total}</span></span>
+                <span className="text-gray-600 font-medium">{label}</span>
+                <span className="text-gray-500">{val}/{total2} <span className="font-semibold text-brand-secondary">{pct}%</span></span>
               </div>
-              <MiniBar value={val} max={Math.max(total, 1)} />
+              <EngagementBar value={pct} color="#1B76BC" />
             </div>
           ))}
+        </div>
+
+        {/* Engagement Quality */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Engagement Quality</h3>
+          <div className="space-y-3">
+            {[
+              { label: 'Multi-Touch (3+ interactions)', val: hiEngage,    total: totalEngaged },
+              { label: 'Two-Touch',                     val: twoTouch,    total: totalEngaged },
+              { label: 'Single-Touch',                  val: singleTouch, total: totalEngaged },
+            ].map(({ label, val, total }) => (
+              <div key={label}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-600">{label}</span>
+                  <span className="font-semibold text-gray-700">{val} <span className="text-gray-400">/ {total}</span></span>
+                </div>
+                <MiniBar value={val} max={Math.max(total, 1)} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
