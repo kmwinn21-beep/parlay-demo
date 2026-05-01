@@ -57,45 +57,51 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const [showInterpretation, setShowInterpretation] = useState(false);
 
   const filteredItems = lineItems.filter(li => Number(li.effective ?? li.actual ?? 0) > 0 || Number(li.budget ?? 0) > 0);
-  const maxEffective = filteredItems.reduce((m, li) => {
-    const eff = Number(li.effective ?? (Number(li.actual ?? 0) > 0 ? li.actual : li.budget) ?? 0);
-    return Math.max(m, eff);
-  }, 0);
 
   return (
     <div className="p-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Left column: Cost Efficiency */}
-        <div className="space-y-0">
+        <div>
           {/* Section header */}
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Cost Efficiency</h3>
-            <button
-              type="button"
-              onClick={() => setShowInterpretation((v: boolean) => !v)}
-              className="text-gray-400 hover:text-brand-secondary transition-colors text-base leading-none"
-              aria-label="Score interpretation"
-              title="Score interpretation"
-            >
-              ⓘ
-            </button>
           </div>
 
-          {/* Cost Efficiency Score card */}
-          <div
-            className="rounded-xl p-4 mb-3"
-            style={{ backgroundColor: scoreColor(cesScore) + '15', borderLeft: `4px solid ${scoreColor(cesScore)}` }}
-          >
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Cost Efficiency Score</div>
+          {/* Top row: Cost Efficiency Score (2/3) + Rank (1/3) */}
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            {/* Cost Efficiency Score card — 2/3 width */}
+            <div
+              className="col-span-2 rounded-xl p-4"
+              style={{ backgroundColor: scoreColor(cesScore) + '15', borderLeft: `4px solid ${scoreColor(cesScore)}` }}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Cost Efficiency Score</div>
+                <button
+                  type="button"
+                  onClick={() => setShowInterpretation((v: boolean) => !v)}
+                  className="text-gray-400 hover:text-brand-secondary transition-colors ml-2 flex-shrink-0"
+                  aria-label="Score interpretation"
+                  title="Score interpretation"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex items-end gap-1">
                 <div className="text-4xl font-bold leading-tight" style={{ color: scoreColor(cesScore) }}>{cesScore}</div>
-                <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor(cesScore) }}>{scoreGrade(cesScore)}</div>
+                <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-normal text-gray-400">/100</div>
-              </div>
+              <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor(cesScore) }}>{scoreGrade(cesScore)}</div>
+            </div>
+
+            {/* Efficiency Rank card — 1/3 width */}
+            <div className="col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
+              <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
+              <div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div>
+              <div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div>
             </div>
           </div>
 
@@ -106,22 +112,12 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               { label: 'Cost per Meeting Held',              value: fmt$(costs.cost_per_meeting_held) },
               { label: 'Cost per ICP Interaction',           value: fmt$(costs.cost_per_icp_interaction) },
               { label: 'Pipeline Influence per $1k Spent',   value: fmt$(costs.pipeline_influence_per_1k_spent) },
-              { label: 'Total Spend',                        value: fmt$(totalSpend) },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 p-3 flex justify-between items-center">
                 <div className="text-xs text-gray-500">{label}</div>
                 <div className="text-sm font-bold text-brand-secondary">{value}</div>
               </div>
             ))}
-          </div>
-
-          {/* Rank card */}
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 flex justify-between items-center mt-2">
-            <div className="text-xs text-gray-500 font-medium">Efficiency Rank</div>
-            <div className="text-right">
-              <div className="text-lg font-bold text-brand-secondary leading-tight">#{rank}</div>
-              <div className="text-xs text-gray-400">of {total} conferences</div>
-            </div>
           </div>
         </div>
 
@@ -140,7 +136,9 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                   const actual = Number(li.actual ?? 0);
                   const budget = Number(li.budget ?? 0);
                   const effective = Number(li.effective ?? (actual > 0 ? actual : budget));
-                  const pct = totalSpend > 0 ? Math.round(effective / totalSpend * 100) : 0;
+                  const barMax = budget > 0 ? budget : effective;
+                  const barPct = barMax > 0 ? Math.round(effective / barMax * 100) : 0;
+                  const shareOfTotal = totalSpend > 0 ? Math.round(effective / totalSpend * 100) : 0;
                   const overBudget = budget > 0 && actual > budget;
                   return (
                     <div key={i}>
@@ -155,12 +153,12 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                               )}
                             </>
                           ) : (
-                            <span className="text-gray-500">{fmt$(budget)} <span className="text-gray-300 text-xs">(budget)</span></span>
+                            <span className="text-gray-500">{fmt$(budget)}</span>
                           )}
-                          <span className="text-gray-300 ml-1">({pct}%)</span>
+                          <span className="text-gray-300 ml-1">({shareOfTotal}%)</span>
                         </span>
                       </div>
-                      <ProgressBar value={effective} max={Math.max(maxEffective, 1)} color={overBudget ? '#dc2626' : '#1B76BC'} />
+                      <ProgressBar value={barPct} max={100} color={overBudget ? '#dc2626' : '#1B76BC'} />
                     </div>
                   );
                 })}
