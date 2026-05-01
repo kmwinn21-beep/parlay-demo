@@ -168,15 +168,22 @@ export async function GET(
     );
     const confInfo = confRow[0] ?? {};
 
-    // Total actual spend from conference_budget line_items JSON
+    // Total effective spend from conference_budget line_items JSON
+    // (actual if set/nonzero, else budget per line item)
     const totalSpendRow = await runQuery(
-      `SELECT COALESCE(SUM(CAST(json_extract(li.value, '$.actual') AS REAL)), 0) AS total_spend,
-              json_group_array(json_object(
-                'id', json_extract(li.value, '$.id'),
-                'label', json_extract(li.value, '$.label'),
-                'budget', json_extract(li.value, '$.budget'),
-                'actual', json_extract(li.value, '$.actual')
-              )) AS line_items_json
+      `SELECT
+         COALESCE(SUM(
+           COALESCE(NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL), 0),
+                    COALESCE(CAST(json_extract(li.value, '$.budget') AS REAL), 0), 0)
+         ), 0) AS total_spend,
+         json_group_array(json_object(
+           'id', json_extract(li.value, '$.id'),
+           'label', json_extract(li.value, '$.label'),
+           'budget', json_extract(li.value, '$.budget'),
+           'actual', json_extract(li.value, '$.actual'),
+           'effective', COALESCE(NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL), 0),
+                                 COALESCE(CAST(json_extract(li.value, '$.budget') AS REAL), 0), 0)
+         )) AS line_items_json
        FROM conference_budget cb, json_each(cb.line_items) li
        WHERE cb.conference_id = ${cid}`
     );
@@ -237,6 +244,23 @@ export async function GET(
        FROM social_event_rsvps rsvp
        JOIN social_events se ON rsvp.social_event_id=se.id
        WHERE se.conference_id=${cid} AND se.event_type='Company Hosted'`
+    ))[0] ?? {};
+
+    // Contacts engaged at Operator companies
+    const contactsEngagementRow = (await runQuery(
+      `${w}
+       SELECT
+         COUNT(DISTINCT ca.attendee_id) AS operator_contacts_total,
+         COUNT(DISTINCT CASE WHEN ce.is_engaged=1 THEN ca.attendee_id END) AS contacts_engaged
+       FROM conference_attendees ca
+       JOIN attendees a ON ca.attendee_id = a.id
+       JOIN companies co ON a.company_id = co.id
+       LEFT JOIN company_engagement ce ON a.company_id = ce.company_id
+       WHERE ca.conference_id = ${cid}
+         AND (
+           co.company_type = (SELECT CAST(id AS TEXT) FROM config_options WHERE category='company_type' AND LOWER(value)='operator' LIMIT 1)
+           OR LOWER(co.company_type) = 'operator'
+         )`
     ))[0] ?? {};
 
     const repActivity = await runQuery(
@@ -586,6 +610,11 @@ export async function GET(
     ))[0] ?? {};
 
     // ── Cost Efficiency Metrics ─────────────────────────────────────────────
+    const icpCompaniesEngaged = Number(icpCoverage.icp_companies_engaged ?? 0);
+    const costPerIcpInteraction = (totalSpend > 0 && icpCompaniesEngaged > 0)
+      ? Math.round(totalSpend / icpCompaniesEngaged)
+      : null;
+
     const costEfficiency = {
       total_spend: totalSpend,
       cost_per_company_engaged: engagementSummary.companies_engaged
@@ -597,6 +626,7 @@ export async function GET(
       pipeline_influence_per_1k_spent: totalSpend > 0
         ? Math.round(Number(pipelineSummary.total_pipeline_influence ?? 0) / (totalSpend / 1000))
         : null,
+      cost_per_icp_interaction: costPerIcpInteraction,
     };
 
     // ── Conference Effectiveness Score (CES) ────────────────────────────────
@@ -625,14 +655,111 @@ export async function GET(
       ? Math.min(Number(netNewLogos.net_new_logos ?? 0) / totalEngaged * 100, 100)
       : 0;
 
+    // dim7: Cost Efficiency Score
+    const costEfficiencyScore = (totalSpend > 0 && expectedReturn > 0)
+      ? Math.min(Number(pipelineSummary.total_pipeline_influence ?? 0) / (totalSpend * expectedReturn) * 100, 100)
+      : 0;
+    const dim7CostEfficiency = Math.round(costEfficiencyScore * 10) / 10;
+
+    // Add cost_efficiency_score to costEfficiency object
+    (costEfficiency as Record<string, unknown>).cost_efficiency_score = Math.round(costEfficiencyScore);
+
     const ces = Math.round(
-      (dim1IcpTarget * 0.25) +
+      (dim1IcpTarget * 0.20) +
       (dim2MeetingExec * 0.20) +
-      (dim3PipelineIndex * 0.20) +
-      (dim4Breadth * 0.15) +
+      (dim3PipelineIndex * 0.30) +
+      (dim4Breadth * 0.05) +
+      (dim7CostEfficiency * 0.10) +
       (dim5Followup * 0.10) +
-      (dim6NetNew * 0.10)
+      (dim6NetNew * 0.05)
     );
+
+    // Conference rank by cost efficiency score
+    let confRank = 1;
+    let totalConferences = 1;
+    try {
+      const rankRows = await runQuery(
+        `WITH all_meetings AS (
+           SELECT m.conference_id, a.company_id,
+             COUNT(CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS mtg
+           FROM meetings m JOIN attendees a ON m.attendee_id = a.id
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome) = LOWER(cop.value)
+           GROUP BY m.conference_id, a.company_id
+         ),
+         all_tp AS (
+           SELECT atp.conference_id, a.company_id, COUNT(DISTINCT atp.id) AS tp
+           FROM attendee_touchpoints atp JOIN attendees a ON atp.attendee_id = a.id
+           GROUP BY atp.conference_id, a.company_id
+         ),
+         all_he AS (
+           SELECT se.conference_id, a.company_id, COUNT(DISTINCT rsvp.social_event_id) AS he
+           FROM social_event_rsvps rsvp
+           JOIN social_events se ON rsvp.social_event_id = se.id
+           JOIN attendees a ON rsvp.attendee_id = a.id
+           WHERE rsvp.rsvp_status='attended' AND se.event_type='Company Hosted'
+           GROUP BY se.conference_id, a.company_id
+         ),
+         all_cc AS (
+           SELECT DISTINCT ca.conference_id, a.company_id, co.wse
+           FROM conference_attendees ca
+           JOIN attendees a ON ca.attendee_id = a.id
+           JOIN companies co ON a.company_id = co.id
+           WHERE a.company_id IS NOT NULL
+         ),
+         all_eng AS (
+           SELECT acc.conference_id, acc.company_id, acc.wse,
+             COALESCE(am.mtg,0) AS mtg, COALESCE(at2.tp,0) AS tp, COALESCE(ah.he,0) AS he,
+             COALESCE(am.mtg,0)+COALESCE(at2.tp,0)+COALESCE(ah.he,0) AS ti
+           FROM all_cc acc
+           LEFT JOIN all_meetings am ON acc.conference_id=am.conference_id AND acc.company_id=am.company_id
+           LEFT JOIN all_tp at2 ON acc.conference_id=at2.conference_id AND acc.company_id=at2.company_id
+           LEFT JOIN all_he ah ON acc.conference_id=ah.conference_id AND acc.company_id=ah.company_id
+           WHERE COALESCE(am.mtg,0)+COALESCE(at2.tp,0)+COALESCE(ah.he,0) > 0
+         ),
+         eff_d AS (
+           SELECT
+             MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL)/100 END) AS fur,
+             MAX(CASE WHEN key='touchpoint_conversion_rate' THEN CAST(value AS REAL)/100 END) AS tpr,
+             MAX(CASE WHEN key='hosted_event_attendee_conversion_rate' THEN CAST(value AS REAL)/100 END) AS her,
+             MAX(CASE WHEN key='avg_cost_per_unit' THEN CAST(value AS REAL) END) AS cpu,
+             MAX(CASE WHEN key='avg_annual_deal_size' THEN CAST(value AS REAL) END) AS ds,
+             MAX(CASE WHEN key='expected_return_on_event_cost' THEN CAST(value AS REAL) END) AS er
+           FROM effectiveness_defaults
+         ),
+         all_pi AS (
+           SELECT ae.conference_id,
+             SUM(MIN(
+               CASE WHEN ae.mtg>0 THEN ed.fur WHEN ae.tp>0 THEN ed.tpr WHEN ae.he>0 THEN ed.her ELSE 0 END
+               * CASE WHEN ae.ti>=3 THEN 1.5 WHEN ae.ti=2 THEN 1.25 ELSE 1.0 END,
+               0.95
+             ) * CASE WHEN COALESCE(ae.wse,0)>0 THEN ae.wse*ed.cpu ELSE ed.ds END) AS total_pi
+           FROM all_eng ae CROSS JOIN eff_d ed
+           GROUP BY ae.conference_id
+         ),
+         all_spend AS (
+           SELECT cb.conference_id,
+             COALESCE(SUM(COALESCE(NULLIF(CAST(json_extract(li.value,'$.actual') AS REAL),0),
+               COALESCE(CAST(json_extract(li.value,'$.budget') AS REAL),0),0)),0) AS eff_spend
+           FROM conference_budget cb, json_each(cb.line_items) li
+           GROUP BY cb.conference_id
+         ),
+         conf_ces AS (
+           SELECT ap.conference_id,
+             CASE WHEN COALESCE(asp.eff_spend,0)>0 AND ed.er>0
+               THEN MIN(ap.total_pi/(asp.eff_spend*ed.er),1.0)*100
+               ELSE 0
+             END AS ces_score
+           FROM all_pi ap
+           LEFT JOIN all_spend asp ON ap.conference_id=asp.conference_id
+           CROSS JOIN eff_d ed
+         )
+         SELECT COUNT(*) AS total_confs,
+           SUM(CASE WHEN ces_score > ${costEfficiencyScore} THEN 1 ELSE 0 END)+1 AS rank
+         FROM conf_ces`
+      );
+      confRank = Number(rankRows[0]?.rank ?? 1);
+      totalConferences = Number(rankRows[0]?.total_confs ?? 1);
+    } catch { /* ranking is optional */ }
 
     return NextResponse.json({
       conference: confInfo,
@@ -644,12 +771,15 @@ export async function GET(
         dim4_breadth: Math.round(dim4Breadth * 10) / 10,
         dim5_followup: Math.round(dim5Followup * 10) / 10,
         dim6_net_new: Math.round(dim6NetNew * 10) / 10,
+        dim7_cost_efficiency: dim7CostEfficiency,
         target_pipeline_influence: targetInfluence,
       },
       engagement: {
         ...engagementSummary,
         ...targetEngagement,
         hosted_attendance: hostedAttendance,
+        contacts_engaged: Number(contactsEngagementRow.contacts_engaged ?? 0),
+        operator_contacts_total: Number(contactsEngagementRow.operator_contacts_total ?? 0),
       },
       pipeline: {
         ...pipelineSummary,
@@ -671,6 +801,8 @@ export async function GET(
         annual_budget: annualBudget,
         annual_budget_year: confYear ? Number(confYear) : null,
         rep_activity: repActivity.map(r => ({ ...r, rep: resolveRep(r.rep_raw).join(', ') })),
+        conf_efficiency_rank: confRank,
+        conf_efficiency_total: totalConferences,
       },
       effectiveness_defaults: effDefaults,
     });

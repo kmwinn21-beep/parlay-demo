@@ -17,13 +17,17 @@ export interface CESData {
   dim4_breadth: number;
   dim5_followup: number;
   dim6_net_new: number;
+  dim7_cost_efficiency: number;
   target_pipeline_influence: number | null;
 }
 
 export interface EffectivenessData {
   conference: Record<string, unknown>;
   ces: CESData;
-  engagement: Record<string, unknown>;
+  engagement: Record<string, unknown> & {
+    contacts_engaged?: number;
+    operator_contacts_total?: number;
+  };
   pipeline: Record<string, unknown>;
   audience: {
     icp_coverage: Record<string, unknown>;
@@ -39,6 +43,8 @@ export interface EffectivenessData {
     annual_budget: number | null;
     annual_budget_year: number | null;
     rep_activity: Record<string, unknown>[];
+    conf_efficiency_rank?: number;
+    conf_efficiency_total?: number;
   };
   effectiveness_defaults: Record<string, string>;
 }
@@ -174,7 +180,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <button
-                  onClick={() => setStatsOpen(v => !v)}
+                  onClick={() => setStatsOpen((v: boolean) => !v)}
                   className="sm:hidden transition-colors opacity-60 hover:opacity-100"
                   style={{ color: HEADER_TEXT }}
                   aria-label={statsOpen ? 'Collapse stats' : 'Expand stats'}

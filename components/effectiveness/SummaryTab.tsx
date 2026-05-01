@@ -17,6 +17,8 @@ function CESColor(score: number) {
   return '#dc2626';
 }
 
+const DIM_COLORS = ['#1B76BC', '#10b981', '#8b5cf6', '#0891b2', '#f97316', '#d97706', '#14b8a6'];
+
 interface DimRow {
   label: string;
   value: number;
@@ -27,12 +29,13 @@ export function SummaryTab({ data }: { data: EffectivenessData }) {
   const { ces, engagement, pipeline } = data;
 
   const dims: DimRow[] = [
-    { label: 'ICP & Target Quality',     value: ces.dim1_icp_target,      weight: '25%' },
-    { label: 'Meeting Execution',         value: ces.dim2_meeting_exec,     weight: '20%' },
-    { label: 'Pipeline Influence Index',  value: ces.dim3_pipeline_index,   weight: '20%' },
-    { label: 'Engagement Breadth',        value: ces.dim4_breadth,          weight: '15%' },
-    { label: 'Follow-up Execution',       value: ces.dim5_followup,         weight: '10%' },
-    { label: 'Net-New Engaged',            value: ces.dim6_net_new,          weight: '10%' },
+    { label: 'ICP & Target Quality',     value: ces.dim1_icp_target,              weight: '20%' },
+    { label: 'Meeting Execution',         value: ces.dim2_meeting_exec,             weight: '20%' },
+    { label: 'Pipeline Influence Index',  value: ces.dim3_pipeline_index,           weight: '30%' },
+    { label: 'Engagement Breadth',        value: ces.dim4_breadth,                  weight: '5%'  },
+    { label: 'Cost Efficiency',           value: ces.dim7_cost_efficiency ?? 0,     weight: '10%' },
+    { label: 'Follow-up Execution',       value: ces.dim5_followup,                 weight: '10%' },
+    { label: 'Net-New Engaged',           value: ces.dim6_net_new,                  weight: '5%'  },
   ];
 
   function fmt$(n: number | null | undefined) {
@@ -45,14 +48,14 @@ export function SummaryTab({ data }: { data: EffectivenessData }) {
   const netPI = Number(pipeline.net_new_pipeline_influence ?? 0);
   const hiPI = Number(pipeline.high_engagement_influence ?? 0);
 
-  const engd = Number(engagement.companies_engaged ?? 0);
-  const total = Number(engagement.total_companies ?? 0);
   const tgtEngd = Number(engagement.target_companies_engaged ?? 0);
   const tgtTotal = Number(engagement.targets_total ?? 0);
   const icpEngd = Number(data.audience.icp_coverage.icp_companies_engaged ?? 0);
   const icpTotal = Number(data.audience.icp_coverage.icp_companies_total ?? 0);
   const held = Number(engagement.total_held ?? 0);
   const scheduled = Number(engagement.total_scheduled ?? 0);
+  const contactsEngaged = Number(engagement.contacts_engaged ?? 0);
+  const operatorTotal = Number(engagement.operator_contacts_total ?? 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -64,13 +67,13 @@ export function SummaryTab({ data }: { data: EffectivenessData }) {
         </div>
         <ProgressBar value={ces.score} color={CESColor(ces.score)} />
         <div className="space-y-3 pt-1">
-          {dims.map(d => (
+          {dims.map((d, i) => (
             <div key={d.label}>
               <div className="flex justify-between text-xs text-gray-500 mb-1">
                 <span>{d.label} <span className="text-gray-300">({d.weight})</span></span>
                 <span className="font-semibold text-gray-700">{Math.round(d.value)}</span>
               </div>
-              <ProgressBar value={d.value} color="#1B76BC" />
+              <ProgressBar value={d.value} color={DIM_COLORS[i]} />
             </div>
           ))}
         </div>
@@ -99,7 +102,7 @@ export function SummaryTab({ data }: { data: EffectivenessData }) {
       <div className="card p-5 space-y-3">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-2">Engagement Snapshot</h3>
         {[
-          { label: 'Companies Engaged', val: engd, of: total,   pct: total > 0 ? Math.round(engd/total*100) : 0 },
+          { label: 'Contacts Engaged', val: contactsEngaged, of: operatorTotal, pct: operatorTotal > 0 ? Math.round(contactsEngaged/operatorTotal*100) : 0 },
           { label: 'Targets Engaged',   val: tgtEngd, of: tgtTotal, pct: tgtTotal > 0 ? Math.round(tgtEngd/tgtTotal*100) : 0 },
           { label: 'ICP Coverage',      val: icpEngd, of: icpTotal, pct: icpTotal > 0 ? Math.round(icpEngd/icpTotal*100) : 0 },
           { label: 'Meetings Held',     val: held, of: scheduled, pct: scheduled > 0 ? Math.round(held/scheduled*100) : 0 },
