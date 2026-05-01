@@ -134,6 +134,64 @@ function buildCTEs(cid: number): string {
   )`;
 }
 
+function scoreLowerIsBetter(value: number, eliteMax: number, strongMax: number, healthyMax: number, weakMax: number): { score: number; tier: string } {
+  if (value < eliteMax) {
+    const pct = eliteMax > 0 ? value / eliteMax : 0;
+    return { score: Math.round(100 - pct * 5), tier: 'Elite' };
+  }
+  if (value <= strongMax) {
+    const pct = (value - eliteMax) / Math.max(strongMax - eliteMax, 1);
+    return { score: Math.round(94 - pct * 14), tier: 'Strong' };
+  }
+  if (value <= healthyMax) {
+    const pct = (value - strongMax) / Math.max(healthyMax - strongMax, 1);
+    return { score: Math.round(79 - pct * 14), tier: 'Healthy' };
+  }
+  if (value <= weakMax) {
+    const pct = (value - healthyMax) / Math.max(weakMax - healthyMax, 1);
+    return { score: Math.round(64 - pct * 14), tier: 'Weak' };
+  }
+  const pct = Math.min((value - weakMax) / Math.max(weakMax, 1), 1);
+  return { score: Math.max(35, Math.round(49 - pct * 14)), tier: 'Poor' };
+}
+
+function scoreHigherIsBetter(value: number, eliteMin: number, strongMin: number, healthyMin: number, weakMin: number): { score: number; tier: string } {
+  if (value >= eliteMin) {
+    const pct = Math.min((value - eliteMin) / Math.max(eliteMin, 1), 1);
+    return { score: Math.min(100, Math.round(95 + pct * 5)), tier: 'Elite' };
+  }
+  if (value >= strongMin) {
+    const pct = (value - strongMin) / Math.max(eliteMin - strongMin, 1);
+    return { score: Math.round(80 + pct * 14), tier: 'Strong' };
+  }
+  if (value >= healthyMin) {
+    const pct = (value - healthyMin) / Math.max(strongMin - healthyMin, 1);
+    return { score: Math.round(65 + pct * 14), tier: 'Healthy' };
+  }
+  if (value >= weakMin) {
+    const pct = (value - weakMin) / Math.max(healthyMin - weakMin, 1);
+    return { score: Math.round(50 + pct * 14), tier: 'Weak' };
+  }
+  const pct = Math.min(value / Math.max(weakMin, 1), 1);
+  return { score: Math.max(35, Math.round(35 + pct * 14)), tier: 'Poor' };
+}
+
+function cesInterpretation(score: number): string {
+  if (score >= 90) return 'Exceptional efficiency';
+  if (score >= 75) return 'Strong efficiency';
+  if (score >= 60) return 'Acceptable efficiency';
+  if (score >= 50) return 'Weak efficiency';
+  return 'Inefficient';
+}
+
+function cesTier(score: number): string {
+  if (score >= 90) return 'Exceptional';
+  if (score >= 75) return 'Strong';
+  if (score >= 60) return 'Acceptable';
+  if (score >= 50) return 'Weak';
+  return 'Inefficient';
+}
+
 async function runQuery(sql: string): Promise<Record<string, unknown>[]> {
   const result = await db.execute({ sql, args: [] });
   return result.rows.map((r: Record<string, unknown>) => {
@@ -167,6 +225,17 @@ export async function GET(
       `SELECT name, start_date, end_date, location FROM conferences WHERE id = ${cid}`
     );
     const confInfo = confRow[0] ?? {};
+
+    // Fetch conf event type and cost efficiency modifier
+    const confModifierRow = await runQuery(
+      `SELECT conf_event_type, cost_efficiency_modifier, cost_efficiency_modifier_reason FROM conferences WHERE id = ${cid}`
+    );
+    const confModifierInfo = confModifierRow[0] ?? {};
+    const confEventType = String(confModifierInfo.conf_event_type ?? 'other');
+    const confModifierOverride = confModifierInfo.cost_efficiency_modifier != null
+      ? Number(confModifierInfo.cost_efficiency_modifier)
+      : null;
+    const confModifierReason = String(confModifierInfo.cost_efficiency_modifier_reason ?? '');
 
     // Total effective spend from conference_budget line_items JSON
     // (actual if set/nonzero, else budget per line item)
@@ -202,6 +271,25 @@ export async function GET(
     const effRow = await runQuery(`SELECT key, value FROM effectiveness_defaults`);
     const effDefaults: Record<string, string> = {};
     for (const r of effRow) effDefaults[String(r.key)] = String(r.value ?? '');
+
+    // CES benchmarks
+    const DEFAULT_BENCHMARKS = {
+      cost_per_company: { elite_max: 350, strong_max: 650, healthy_max: 1000, weak_max: 1600 },
+      cost_per_meeting:  { elite_max: 400, strong_max: 700, healthy_max: 1100, weak_max: 1800 },
+      pipeline_per_1k:  { elite_min: 10000, strong_min: 6000, healthy_min: 3500, weak_min: 1500 },
+    };
+    const benchmarkRow = await runQuery(`SELECT value FROM effectiveness_defaults WHERE key = 'ces_benchmarks'`);
+    const cesBenchmarks = (() => {
+      try { return { ...DEFAULT_BENCHMARKS, ...JSON.parse(String(benchmarkRow[0]?.value ?? '{}')) }; }
+      catch { return DEFAULT_BENCHMARKS; }
+    })();
+
+    const DEFAULT_MODIFIERS: Record<string, number> = { flagship_industry_event: 5, regional_operator_conference: 0, vendor_heavy_trade_show: -5, other: 0 };
+    const modifierRow = await runQuery(`SELECT value FROM effectiveness_defaults WHERE key = 'ces_event_type_modifiers'`);
+    const eventModifiers: Record<string, number> = (() => {
+      try { return { ...DEFAULT_MODIFIERS, ...JSON.parse(String(modifierRow[0]?.value ?? '{}')) }; }
+      catch { return DEFAULT_MODIFIERS; }
+    })();
 
     // ── Events Coordinator Metrics ──────────────────────────────────────────
     const [engagementSummary] = await runQuery(
@@ -609,25 +697,93 @@ export async function GET(
        WHERE ca.conference_id=${cid}`
     ))[0] ?? {};
 
-    // ── Cost Efficiency Metrics ─────────────────────────────────────────────
-    const icpCompaniesEngaged = Number(icpCoverage.icp_companies_engaged ?? 0);
-    const costPerIcpInteraction = (totalSpend > 0 && icpCompaniesEngaged > 0)
-      ? Math.round(totalSpend / icpCompaniesEngaged)
+    // ── Tier-Based Cost Efficiency Score ──────────────────────────────────────
+    const unavailableMetrics: string[] = [];
+
+    // Raw metrics
+    const companiesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+    const meetingsHeld = Number(engagementSummary.total_held ?? 0);
+    const totalPI = Number(pipelineSummary.total_pipeline_influence ?? 0);
+
+    const costPerCompanyEngaged = (totalSpend > 0 && companiesEngaged > 0)
+      ? totalSpend / companiesEngaged : null;
+    const costPerMeetingHeld = (totalSpend > 0 && meetingsHeld > 0)
+      ? totalSpend / meetingsHeld : null;
+    const pipelinePer1k = (totalSpend > 0)
+      ? totalPI / (totalSpend / 1000) : null;
+
+    if (costPerCompanyEngaged == null) unavailableMetrics.push('cost_per_company_engaged');
+    if (costPerMeetingHeld == null) unavailableMetrics.push('cost_per_meeting_held');
+    if (pipelinePer1k == null) unavailableMetrics.push('pipeline_per_1k');
+
+    // Component scores
+    const bCPC = cesBenchmarks.cost_per_company;
+    const companyScore = costPerCompanyEngaged != null
+      ? scoreLowerIsBetter(costPerCompanyEngaged, bCPC.elite_max, bCPC.strong_max, bCPC.healthy_max, bCPC.weak_max)
       : null;
+
+    const bCPM = cesBenchmarks.cost_per_meeting;
+    const meetingScore = costPerMeetingHeld != null
+      ? scoreLowerIsBetter(costPerMeetingHeld, bCPM.elite_max, bCPM.strong_max, bCPM.healthy_max, bCPM.weak_max)
+      : null;
+
+    const bPI = cesBenchmarks.pipeline_per_1k;
+    const pipelineScore = pipelinePer1k != null
+      ? scoreHigherIsBetter(pipelinePer1k, bPI.elite_min, bPI.strong_min, bPI.healthy_min, bPI.weak_min)
+      : null;
+
+    // Weighted raw score (handle unavailable metrics by redistributing weights)
+    let rawWeight = 0;
+    let rawScore = 0;
+    if (pipelineScore != null) { rawScore += pipelineScore.score * 0.50; rawWeight += 0.50; }
+    if (companyScore != null)  { rawScore += companyScore.score * 0.30;  rawWeight += 0.30; }
+    if (meetingScore != null)  { rawScore += meetingScore.score * 0.20;  rawWeight += 0.20; }
+
+    const costEfficiencyScoreRaw = rawWeight > 0 ? Math.round(rawScore / rawWeight) : 0;
+    const calculationConfidence = rawWeight >= 1.0 ? 'full' : rawWeight >= 0.5 ? 'partial' : 'low';
+
+    // Event type modifier
+    const defaultModifier = eventModifiers[confEventType] ?? 0;
+    const modifier = confModifierOverride != null ? confModifierOverride : defaultModifier;
+    const modifierReason = confModifierReason || (confModifierOverride != null
+      ? 'Manual override'
+      : `Default for ${confEventType.replace(/_/g, ' ')}`);
+
+    const adjustedScore = Math.max(0, Math.min(100, costEfficiencyScoreRaw + modifier));
 
     const costEfficiency = {
       total_spend: totalSpend,
-      cost_per_company_engaged: engagementSummary.companies_engaged
-        ? Math.round(totalSpend / Number(engagementSummary.companies_engaged))
+      cost_per_company_engaged: costPerCompanyEngaged != null ? Math.round(costPerCompanyEngaged) : null,
+      cost_per_meeting_held: costPerMeetingHeld != null ? Math.round(costPerMeetingHeld) : null,
+      pipeline_influence_per_1k_spent: pipelinePer1k != null ? Math.round(pipelinePer1k) : null,
+      cost_per_icp_interaction: (totalSpend > 0 && Number(icpCoverage.icp_companies_engaged ?? 0) > 0)
+        ? Math.round(totalSpend / Number(icpCoverage.icp_companies_engaged))
         : null,
-      cost_per_meeting_held: engagementSummary.total_held
-        ? Math.round(totalSpend / Number(engagementSummary.total_held))
-        : null,
-      pipeline_influence_per_1k_spent: totalSpend > 0
-        ? Math.round(Number(pipelineSummary.total_pipeline_influence ?? 0) / (totalSpend / 1000))
-        : null,
-      cost_per_icp_interaction: costPerIcpInteraction,
+      // Component scores
+      company_engaged_score: companyScore?.score ?? null,
+      company_engaged_tier: companyScore?.tier ?? null,
+      meeting_held_score: meetingScore?.score ?? null,
+      meeting_held_tier: meetingScore?.tier ?? null,
+      pipeline_influence_score: pipelineScore?.score ?? null,
+      pipeline_influence_tier: pipelineScore?.tier ?? null,
+      // Final scores
+      cost_efficiency_score_raw: costEfficiencyScoreRaw,
+      adjusted_cost_efficiency_score: adjustedScore,
+      cost_efficiency_score: adjustedScore,  // alias for backward compat
+      // Event type info
+      event_type: confEventType,
+      cost_efficiency_modifier: modifier,
+      cost_efficiency_modifier_reason: modifierReason,
+      // Interpretation
+      cost_efficiency_tier: cesTier(adjustedScore),
+      cost_efficiency_interpretation: cesInterpretation(adjustedScore),
+      // Diagnostics
+      unavailable_metrics: unavailableMetrics,
+      calculation_confidence: calculationConfidence,
     };
+
+    // dim7: use adjusted score
+    const dim7CostEfficiency = adjustedScore;
 
     // ── Conference Effectiveness Score (CES) ────────────────────────────────
     const dim1IcpTarget =
@@ -654,15 +810,6 @@ export async function GET(
     const dim6NetNew = totalEngaged > 0
       ? Math.min(Number(netNewLogos.net_new_logos ?? 0) / totalEngaged * 100, 100)
       : 0;
-
-    // dim7: Cost Efficiency Score
-    const costEfficiencyScore = (totalSpend > 0 && expectedReturn > 0)
-      ? Math.min(Number(pipelineSummary.total_pipeline_influence ?? 0) / (totalSpend * expectedReturn) * 100, 100)
-      : 0;
-    const dim7CostEfficiency = Math.round(costEfficiencyScore * 10) / 10;
-
-    // Add cost_efficiency_score to costEfficiency object
-    (costEfficiency as Record<string, unknown>).cost_efficiency_score = Math.round(costEfficiencyScore);
 
     const ces = Math.round(
       (dim1IcpTarget * 0.20) +
@@ -754,7 +901,7 @@ export async function GET(
            CROSS JOIN eff_d ed
          )
          SELECT COUNT(*) AS total_confs,
-           SUM(CASE WHEN ces_score > ${costEfficiencyScore} THEN 1 ELSE 0 END)+1 AS rank
+           SUM(CASE WHEN ces_score > ${adjustedScore} THEN 1 ELSE 0 END)+1 AS rank
          FROM conf_ces`
       );
       confRank = Number(rankRows[0]?.rank ?? 1);
@@ -762,7 +909,7 @@ export async function GET(
     } catch { /* ranking is optional */ }
 
     return NextResponse.json({
-      conference: confInfo,
+      conference: { ...confInfo, conf_event_type: confEventType },
       ces: {
         score: ces,
         dim1_icp_target: Math.round(dim1IcpTarget * 10) / 10,
