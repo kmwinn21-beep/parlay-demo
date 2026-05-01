@@ -659,6 +659,13 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE conference_budget ADD COLUMN return_on_cost TEXT`,
+    // Annual conference budget targets (per year, for global reporting)
+    `CREATE TABLE IF NOT EXISTS annual_budgets (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      year       INTEGER NOT NULL UNIQUE,
+      amount     REAL    NOT NULL,
+      created_at TEXT    DEFAULT (datetime('now'))
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

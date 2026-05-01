@@ -3696,6 +3696,7 @@ function AdminEffectivenessTab() {
   const [section1Open, setSection1Open] = useState(false);
   const [section2Open, setSection2Open] = useState(false);
   const [section3Open, setSection3Open] = useState(false);
+  const [section4Open, setSection4Open] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Section 1: Conference Costs
@@ -3725,15 +3726,27 @@ function AdminEffectivenessTab() {
   const [touchpointRate, setTouchpointRate] = useState('');
   const [hostedEventRate, setHostedEventRate] = useState('');
 
+  // Section 4: Annual Conference Budgets
+  interface AnnualBudgetRow { id: number; year: number; amount: number; }
+  const [annualBudgets, setAnnualBudgets] = useState<AnnualBudgetRow[]>([]);
+  const [showAddBudget, setShowAddBudget] = useState(false);
+  const [newBudgetYear, setNewBudgetYear] = useState(String(new Date().getFullYear() + 1));
+  const [newBudgetAmount, setNewBudgetAmount] = useState('');
+  const [addBudgetError, setAddBudgetError] = useState('');
+  const [savingBudget, setSavingBudget] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Record<number, string>>({});
+  const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
+
   useEffect(() => { loadAll(); }, []);
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [costTypesData, effectivenessData, usersData] = await Promise.all([
+      const [costTypesData, effectivenessData, usersData, annualBudgetsData] = await Promise.all([
         fetch('/api/config?category=cost_type').then(r => r.json()),
         fetch('/api/admin/effectiveness').then(r => r.json()),
         fetch('/api/config?category=user').then(r => r.json()),
+        fetch('/api/admin/annual-budgets').then(r => r.json()),
       ]);
       setCostTypeOptions(Array.isArray(costTypesData) ? costTypesData : []);
       setUserOptions(Array.isArray(usersData) ? usersData : []);
@@ -3748,6 +3761,12 @@ function AdminEffectivenessTab() {
       setFollowUpRate(d.follow_up_meeting_conversion_rate ?? '');
       setTouchpointRate(d.touchpoint_conversion_rate ?? '');
       setHostedEventRate(d.hosted_event_attendee_conversion_rate ?? '');
+      setAnnualBudgets(Array.isArray(annualBudgetsData) ? annualBudgetsData : []);
+      setEditingBudget(
+        Object.fromEntries((Array.isArray(annualBudgetsData) ? annualBudgetsData : []).map(
+          (b: { id: number; year: number; amount: number }) => [b.id, String(b.amount)]
+        ))
+      );
     } catch { toast.error('Failed to load effectiveness defaults.'); }
     finally { setLoading(false); }
   };
@@ -3849,6 +3868,65 @@ function AdminEffectivenessTab() {
       toast.success('Rep defaults saved!');
     } catch { toast.error('Failed to save.'); }
     finally { setSavingRepId(null); }
+  };
+
+  const handleAddBudget = async () => {
+    setAddBudgetError('');
+    const year = parseInt(newBudgetYear, 10);
+    const amount = parseFloat(newBudgetAmount.replace(/,/g, ''));
+    if (!newBudgetYear || isNaN(year) || year < 1000 || year > 9999) {
+      setAddBudgetError('Enter a valid 4-digit year.');
+      return;
+    }
+    if (!newBudgetAmount || isNaN(amount) || amount <= 0) {
+      setAddBudgetError('Enter a valid positive amount.');
+      return;
+    }
+    setSavingBudget(true);
+    try {
+      const res = await fetch('/api/admin/annual-budgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAddBudgetError(data.error ?? 'Failed to add.'); return; }
+      setAnnualBudgets(prev => [data, ...prev].sort((a, b) => b.year - a.year));
+      setEditingBudget(prev => ({ ...prev, [data.id]: String(data.amount) }));
+      setNewBudgetYear(String(new Date().getFullYear() + 1));
+      setNewBudgetAmount('');
+      setShowAddBudget(false);
+      toast.success('Annual budget added!');
+    } catch { setAddBudgetError('Failed to add.'); }
+    finally { setSavingBudget(false); }
+  };
+
+  const handleSaveBudget = async (id: number) => {
+    const amount = parseFloat((editingBudget[id] ?? '').replace(/,/g, ''));
+    if (isNaN(amount) || amount <= 0) { toast.error('Enter a valid positive amount.'); return; }
+    setSavingBudgetId(id);
+    try {
+      const res = await fetch(`/api/admin/annual-budgets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
+      if (!res.ok) throw new Error();
+      setAnnualBudgets(prev => prev.map(b => b.id === id ? { ...b, amount } : b));
+      toast.success('Budget updated!');
+    } catch { toast.error('Failed to save.'); }
+    finally { setSavingBudgetId(null); }
+  };
+
+  const handleDeleteBudget = async (id: number) => {
+    if (!confirm('Remove this annual budget entry?')) return;
+    try {
+      const res = await fetch(`/api/admin/annual-budgets/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      setAnnualBudgets(prev => prev.filter(b => b.id !== id));
+      setEditingBudget(prev => { const n = { ...prev }; delete n[id]; return n; });
+      toast.success('Budget removed.');
+    } catch { toast.error('Failed to remove.'); }
   };
 
   const SectionChevron = ({ open }: { open: boolean }) => (
@@ -4192,6 +4270,121 @@ function AdminEffectivenessTab() {
                 {fieldErrors[key] && <p className="text-xs text-red-500 mt-1">{fieldErrors[key]}</p>}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 4: Annual Conference Budgets ── */}
+      <div className="card p-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setSection4Open(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+        >
+          <div>
+            <h2 className="text-base font-semibold text-brand-primary font-serif text-left">Annual Conference Budgets</h2>
+            <p className="text-xs text-gray-400 mt-0.5 text-left font-normal">Set a total conference budget per calendar year for global spend reporting</p>
+          </div>
+          <SectionChevron open={section4Open} />
+        </button>
+        {section4Open && (
+          <div className="border-t border-gray-100 px-6 py-5 space-y-3">
+            {annualBudgets.length === 0 && !showAddBudget && (
+              <p className="text-sm text-gray-400 italic">No annual budgets set yet.</p>
+            )}
+            {annualBudgets.map(budget => (
+              <div key={budget.id} className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 w-14 flex-shrink-0">{budget.year}</span>
+                <div className="flex items-center flex-1 max-w-xs">
+                  <span className="px-3 py-2 bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg text-sm text-gray-500 select-none">$</span>
+                  <input
+                    type="text"
+                    value={editingBudget[budget.id] ?? ''}
+                    onChange={e => setEditingBudget(prev => ({ ...prev, [budget.id]: e.target.value }))}
+                    className="input-field rounded-none flex-1 text-sm"
+                    placeholder="e.g. 2000000"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveBudget(budget.id)}
+                  disabled={savingBudgetId === budget.id}
+                  className="btn-primary text-sm flex-shrink-0"
+                >
+                  {savingBudgetId === budget.id ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBudget(budget.id)}
+                  className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                  title="Remove"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+
+            {showAddBudget && (
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 flex-shrink-0">
+                    <input
+                      type="number"
+                      value={newBudgetYear}
+                      onChange={e => { setNewBudgetYear(e.target.value); setAddBudgetError(''); }}
+                      className="input-field text-sm w-full"
+                      placeholder="Year"
+                      min={2000}
+                      max={2100}
+                    />
+                  </div>
+                  <div className="flex items-center flex-1 max-w-xs">
+                    <span className="px-3 py-2 bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg text-sm text-gray-500 select-none">$</span>
+                    <input
+                      type="text"
+                      value={newBudgetAmount}
+                      onChange={e => { setNewBudgetAmount(e.target.value); setAddBudgetError(''); }}
+                      className="input-field rounded-none flex-1 text-sm"
+                      placeholder="e.g. 2000000"
+                      onKeyDown={e => e.key === 'Enter' && handleAddBudget()}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddBudget}
+                    disabled={savingBudget}
+                    className="btn-primary text-sm flex-shrink-0"
+                  >
+                    {savingBudget ? 'Adding…' : 'Add'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddBudget(false); setAddBudgetError(''); }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                {addBudgetError && <p className="text-xs text-red-500">{addBudgetError}</p>}
+              </div>
+            )}
+
+            {!showAddBudget && (
+              <button
+                type="button"
+                onClick={() => setShowAddBudget(true)}
+                className="flex items-center gap-1.5 text-sm text-brand-secondary hover:text-brand-secondary/80 font-medium mt-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Year
+              </button>
+            )}
           </div>
         )}
       </div>

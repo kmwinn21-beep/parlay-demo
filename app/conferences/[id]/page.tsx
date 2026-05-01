@@ -33,6 +33,7 @@ import { BatchCardScanModal } from '@/components/BatchCardScanModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
+import { ConferenceEffectivenessModal } from '@/components/ConferenceEffectivenessModal';
 import { AgendaTab } from '@/components/AgendaTab';
 import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTargetsTab';
 
@@ -1053,6 +1054,10 @@ export default function ConferenceDetailPage() {
                     conferenceName={conference.name}
                     endDate={conference.end_date}
                     userRole={currentUser?.role ?? 'user'}
+                  />
+                  <ConferenceEffectivenessModal
+                    conferenceId={conference.id}
+                    conferenceName={conference.name}
                   />
                   <button
                     type="button"
