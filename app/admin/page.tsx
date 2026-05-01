@@ -3697,6 +3697,7 @@ function AdminEffectivenessTab() {
   const [section2Open, setSection2Open] = useState(false);
   const [section3Open, setSection3Open] = useState(false);
   const [section4Open, setSection4Open] = useState(false);
+  const [section5Open, setSection5Open] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Section 1: Conference Costs
@@ -3725,6 +3726,18 @@ function AdminEffectivenessTab() {
   const [followUpRate, setFollowUpRate] = useState('');
   const [touchpointRate, setTouchpointRate] = useState('');
   const [hostedEventRate, setHostedEventRate] = useState('');
+
+  // Section 5: Cost Efficiency Score Default Benchmarks
+  const DEFAULT_BENCHMARKS = {
+    cost_per_company: { elite_max: 350, strong_max: 650, healthy_max: 1000, weak_max: 1600 },
+    cost_per_meeting:  { elite_max: 400, strong_max: 700, healthy_max: 1100, weak_max: 1800 },
+    pipeline_per_1k:  { elite_min: 10000, strong_min: 6000, healthy_min: 3500, weak_min: 1500 },
+  };
+  const DEFAULT_MODIFIERS = { flagship_industry_event: 5, regional_operator_conference: 0, vendor_heavy_trade_show: -5, other: 0 };
+  const [benchmarks, setBenchmarks] = useState(DEFAULT_BENCHMARKS);
+  const [savingBenchmarks, setSavingBenchmarks] = useState(false);
+  const [eventModifiers, setEventModifiers] = useState(DEFAULT_MODIFIERS);
+  const [savingModifiers, setSavingModifiers] = useState(false);
 
   // Section 4: Annual Conference Budgets
   interface AnnualBudgetRow { id: number; year: number; amount: number; }
@@ -3767,6 +3780,10 @@ function AdminEffectivenessTab() {
           (b: { id: number; year: number; amount: number }) => [b.id, String(b.amount)]
         ))
       );
+      const cesBenchmarks = d.ces_benchmarks ? JSON.parse(d.ces_benchmarks) : DEFAULT_BENCHMARKS;
+      setBenchmarks({ ...DEFAULT_BENCHMARKS, ...cesBenchmarks });
+      const cesModifiers = d.ces_event_type_modifiers ? JSON.parse(d.ces_event_type_modifiers) : DEFAULT_MODIFIERS;
+      setEventModifiers({ ...DEFAULT_MODIFIERS, ...cesModifiers });
     } catch { toast.error('Failed to load effectiveness defaults.'); }
     finally { setLoading(false); }
   };
@@ -3812,6 +3829,20 @@ function AdminEffectivenessTab() {
     if (err) { setFieldErrors(prev => ({ ...prev, [key]: err })); return; }
     setFieldErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
     await saveKey(key, value);
+  };
+
+  const handleSaveBenchmarks = async () => {
+    setSavingBenchmarks(true);
+    try {
+      await saveKey('ces_benchmarks', JSON.stringify(benchmarks));
+    } finally { setSavingBenchmarks(false); }
+  };
+
+  const handleSaveModifiers = async () => {
+    setSavingModifiers(true);
+    try {
+      await saveKey('ces_event_type_modifiers', JSON.stringify(eventModifiers));
+    } finally { setSavingModifiers(false); }
   };
 
   const handleSaveCostTypes = async () => {
@@ -4385,6 +4416,128 @@ function AdminEffectivenessTab() {
                 Add Year
               </button>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 5: Cost Efficiency Score Default Benchmarks ── */}
+      <div className="card p-0 overflow-hidden">
+        <button type="button" onClick={() => setSection5Open(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors">
+          <div>
+            <h2 className="text-base font-semibold text-brand-primary font-serif text-left">Cost Efficiency Score Default Benchmarks</h2>
+            <p className="text-xs text-gray-400 mt-0.5 text-left font-normal">Set benchmark thresholds used to score cost efficiency components</p>
+          </div>
+          <SectionChevron open={section5Open} />
+        </button>
+        {section5Open && (
+          <div className="border-t border-gray-100 px-6 py-5 space-y-6">
+            {/* A: Cost per Company Engaged */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">A. Cost per Company Engaged <span className="text-xs font-normal text-gray-400">(lower is better)</span></h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+                {[
+                  { label: 'Elite Max (< this)', field: 'elite_max' as const, scoreBand: '95–100' },
+                  { label: 'Strong Max',         field: 'strong_max' as const, scoreBand: '80–94' },
+                  { label: 'Healthy Max',        field: 'healthy_max' as const, scoreBand: '65–79' },
+                  { label: 'Weak Max',           field: 'weak_max' as const, scoreBand: '50–64' },
+                ].map(({ label, field, scoreBand }) => (
+                  <div key={field}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{label} <span className="text-gray-300">({scoreBand})</span></label>
+                    <div className="flex items-center">
+                      <span className="px-2 py-1.5 bg-gray-100 border border-r-0 border-gray-300 rounded-l text-xs text-gray-500">$</span>
+                      <input type="number" min="0"
+                        value={benchmarks.cost_per_company[field]}
+                        onChange={e => setBenchmarks(p => ({ ...p, cost_per_company: { ...p.cost_per_company, [field]: Number(e.target.value) } }))}
+                        className="input-field rounded-l-none text-sm flex-1 min-w-0"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400">Poor (&gt; Weak Max): 35–49</p>
+            </div>
+
+            {/* B: Cost per Meeting Held */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">B. Cost per Meeting Held <span className="text-xs font-normal text-gray-400">(lower is better)</span></h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+                {[
+                  { label: 'Elite Max (< this)', field: 'elite_max' as const, scoreBand: '95–100' },
+                  { label: 'Strong Max',         field: 'strong_max' as const, scoreBand: '80–94' },
+                  { label: 'Healthy Max',        field: 'healthy_max' as const, scoreBand: '65–79' },
+                  { label: 'Weak Max',           field: 'weak_max' as const, scoreBand: '50–64' },
+                ].map(({ label, field, scoreBand }) => (
+                  <div key={field}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{label} <span className="text-gray-300">({scoreBand})</span></label>
+                    <div className="flex items-center">
+                      <span className="px-2 py-1.5 bg-gray-100 border border-r-0 border-gray-300 rounded-l text-xs text-gray-500">$</span>
+                      <input type="number" min="0"
+                        value={benchmarks.cost_per_meeting[field]}
+                        onChange={e => setBenchmarks(p => ({ ...p, cost_per_meeting: { ...p.cost_per_meeting, [field]: Number(e.target.value) } }))}
+                        className="input-field rounded-l-none text-sm flex-1 min-w-0"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400">Poor (&gt; Weak Max): 35–49</p>
+            </div>
+
+            {/* C: Pipeline Influence per $1k */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">C. Pipeline Influence per $1,000 Spent <span className="text-xs font-normal text-gray-400">(higher is better)</span></h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+                {[
+                  { label: 'Elite Min (≥ this)', field: 'elite_min' as const, scoreBand: '95–100' },
+                  { label: 'Strong Min',         field: 'strong_min' as const, scoreBand: '80–94' },
+                  { label: 'Healthy Min',        field: 'healthy_min' as const, scoreBand: '65–79' },
+                  { label: 'Weak Min',           field: 'weak_min' as const, scoreBand: '50–64' },
+                ].map(({ label, field, scoreBand }) => (
+                  <div key={field}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{label} <span className="text-gray-300">({scoreBand})</span></label>
+                    <div className="flex items-center">
+                      <span className="px-2 py-1.5 bg-gray-100 border border-r-0 border-gray-300 rounded-l text-xs text-gray-500">$</span>
+                      <input type="number" min="0"
+                        value={benchmarks.pipeline_per_1k[field]}
+                        onChange={e => setBenchmarks(p => ({ ...p, pipeline_per_1k: { ...p.pipeline_per_1k, [field]: Number(e.target.value) } }))}
+                        className="input-field rounded-l-none text-sm flex-1 min-w-0"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400">Poor (&lt; Weak Min): 35–49</p>
+            </div>
+
+            <button type="button" onClick={handleSaveBenchmarks} disabled={savingBenchmarks} className="btn-primary text-sm">
+              {savingBenchmarks ? 'Saving…' : 'Save Benchmarks'}
+            </button>
+
+            <div className="border-t border-gray-100 pt-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Event Type Modifiers</h3>
+              <div className="space-y-3">
+                {([
+                  { key: 'flagship_industry_event',     label: 'Flagship Industry Event' },
+                  { key: 'regional_operator_conference', label: 'Regional Operator Conference' },
+                  { key: 'vendor_heavy_trade_show',     label: 'Vendor-Heavy Trade Show' },
+                  { key: 'other',                       label: 'Other' },
+                ] as { key: keyof typeof DEFAULT_MODIFIERS; label: string }[]).map(({ key, label }) => (
+                  <div key={key} className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600 w-48 flex-shrink-0">{label}</span>
+                    <input type="number" min="-20" max="20"
+                      value={eventModifiers[key]}
+                      onChange={e => setEventModifiers(p => ({ ...p, [key]: Number(e.target.value) }))}
+                      className="input-field w-20 text-sm text-center"
+                    />
+                    <span className="text-xs text-gray-400">points</span>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={handleSaveModifiers} disabled={savingModifiers} className="btn-primary text-sm mt-4">
+                {savingModifiers ? 'Saving…' : 'Save Modifiers'}
+              </button>
+            </div>
           </div>
         )}
       </div>

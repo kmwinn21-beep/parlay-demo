@@ -39,8 +39,8 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Cost Efficiency (10%)',
-        description: 'Measures how efficiently conference spend was converted into pipeline influence, relative to the expected return target set in Effectiveness Defaults.',
-        calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
+        description: 'A tier-based 0–100 score measuring how efficiently conference spend was converted into meaningful account engagement, meetings, and pipeline influence. Computed from three benchmark-scored components: Cost per Company Engaged (30%), Cost per Meeting Held (20%), and Pipeline Influence per $1,000 Spent (50%). May be adjusted by an event-type modifier.',
+        calculation: 'weighted score = (Pipeline per $1k Score × 50%) + (Company Engaged Score × 30%) + (Meeting Held Score × 20%); adjusted = raw + event_type_modifier (capped 0–100)',
       },
       {
         term: 'Follow-up Execution (10%)',
@@ -212,12 +212,12 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Cost Efficiency Score',
-        description: 'A 0–100 score measuring how efficiently conference spend was converted into pipeline influence relative to the expected return on event cost target.',
-        calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
+        description: 'A 0–100 score that measures how efficiently a conference converts event spend into meaningful account engagement, meetings, and pipeline influence. The score is calculated using three benchmark-scored components: Cost per Company Engaged (30%), Cost per Meeting Held (20%), and Pipeline Influence per $1,000 Spent (50%). Each component is scored against fixed benchmark ranges with linear interpolation. The raw score may be adjusted by an event-type modifier.',
+        calculation: 'weighted score = (Pipeline per $1k Score × 50%) + (Company Engaged Score × 30%) + (Meeting Held Score × 20%); adjusted = raw + event_type_modifier (capped 0–100)',
       },
       {
         term: 'Cost Efficiency Score Interpretation',
-        description: 'Score ranges: 80–100 = Excellent (at or above expected ROI); 60–79 = Good (near target); 40–59 = Fair (below target, review cost allocation); 20–39 = Poor (significant underperformance); 0–19 = Critical (minimal return relative to investment).',
+        description: 'Score ranges: 90–100 = Exceptional (exceptional cost efficiency — strong pipeline return and low cost per engagement); 75–89 = Strong (near-optimal cost-to-outcome ratio); 60–74 = Acceptable (some room for improvement); 50–59 = Weak (review cost allocation and engagement strategy); < 50 = Inefficient (significant underperformance relative to benchmarks).',
       },
       {
         term: 'Cost per ICP Interaction',

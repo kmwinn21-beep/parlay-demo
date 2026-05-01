@@ -19,27 +19,27 @@ function ProgressBar({ value, max = 100, color = '#1B76BC' }: { value: number; m
 }
 
 function scoreColor(score: number) {
-  if (score >= 80) return '#059669'; // green
-  if (score >= 60) return '#1B76BC'; // blue
-  if (score >= 40) return '#d97706'; // amber
-  if (score >= 20) return '#f97316'; // orange
-  return '#dc2626'; // red
+  if (score >= 90) return '#059669';  // green — Exceptional
+  if (score >= 75) return '#1B76BC';  // blue — Strong
+  if (score >= 60) return '#d97706';  // amber — Acceptable
+  if (score >= 50) return '#f97316';  // orange — Weak
+  return '#dc2626'; // red — Inefficient
 }
 
 function scoreGrade(score: number) {
-  if (score >= 80) return 'Excellent';
-  if (score >= 60) return 'Good';
-  if (score >= 40) return 'Fair';
-  if (score >= 20) return 'Poor';
-  return 'Critical';
+  if (score >= 90) return 'Exceptional efficiency';
+  if (score >= 75) return 'Strong efficiency';
+  if (score >= 60) return 'Acceptable efficiency';
+  if (score >= 50) return 'Weak efficiency';
+  return 'Inefficient';
 }
 
 const INTERPRETATION_ROWS = [
-  { range: '80–100', rating: 'Excellent', meaning: 'Delivered at or above expected return on investment' },
-  { range: '60–79',  rating: 'Good',      meaning: 'Strong cost efficiency; near or at target ROI' },
-  { range: '40–59',  rating: 'Fair',      meaning: 'Below target efficiency; review cost allocation' },
-  { range: '20–39',  rating: 'Poor',      meaning: 'Significant underperformance relative to spend' },
-  { range: '0–19',   rating: 'Critical',  meaning: 'Minimal measurable return relative to investment' },
+  { range: '90–100', rating: 'Exceptional', meaning: 'Exceptional cost efficiency — strong pipeline return and low cost per engagement' },
+  { range: '75–89',  rating: 'Strong',      meaning: 'Strong efficiency; near-optimal cost-to-outcome ratio' },
+  { range: '60–74',  rating: 'Acceptable',  meaning: 'Acceptable efficiency; some room for improvement' },
+  { range: '50–59',  rating: 'Weak',        meaning: 'Weak efficiency; review cost allocation and engagement strategy' },
+  { range: '< 50',   rating: 'Inefficient', meaning: 'Significant underperformance relative to benchmarks' },
 ];
 
 export function OperationalROITab({ data }: { data: EffectivenessData }) {
@@ -53,6 +53,18 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const cesScore = Number(costs.cost_efficiency_score ?? 0);
   const rank = operational.conf_efficiency_rank ?? 1;
   const total = operational.conf_efficiency_total ?? 1;
+
+  const rawScore = Number(costs.cost_efficiency_score_raw ?? cesScore);
+  const modifier = Number(costs.cost_efficiency_modifier ?? 0);
+  const eventType = String(costs.event_type ?? 'other');
+  const modifierReason = String(costs.cost_efficiency_modifier_reason ?? '');
+  const companyScore = costs.company_engaged_score != null ? Number(costs.company_engaged_score) : null;
+  const companyTier = String(costs.company_engaged_tier ?? '');
+  const meetingScore = costs.meeting_held_score != null ? Number(costs.meeting_held_score) : null;
+  const meetingTier = String(costs.meeting_held_tier ?? '');
+  const pipelineScore = costs.pipeline_influence_score != null ? Number(costs.pipeline_influence_score) : null;
+  const pipelineTier = String(costs.pipeline_influence_tier ?? '');
+  const confidence = String(costs.calculation_confidence ?? 'full');
 
   const [showInterpretation, setShowInterpretation] = useState(false);
 
@@ -95,6 +107,39 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>
               </div>
               <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor(cesScore) }}>{scoreGrade(cesScore)}</div>
+
+              {/* Component breakdown inside the score card */}
+              {(companyScore != null || meetingScore != null || pipelineScore != null) && (
+                <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
+                  {pipelineScore != null && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Pipeline Influence per $1k <span className="text-gray-300">(50%)</span></span>
+                      <span className="font-semibold" style={{ color: scoreColor(pipelineScore) }}>{pipelineScore} <span className="text-gray-400">· {pipelineTier}</span></span>
+                    </div>
+                  )}
+                  {companyScore != null && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Cost per Company <span className="text-gray-300">(30%)</span></span>
+                      <span className="font-semibold" style={{ color: scoreColor(companyScore) }}>{companyScore} <span className="text-gray-400">· {companyTier}</span></span>
+                    </div>
+                  )}
+                  {meetingScore != null && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Cost per Meeting <span className="text-gray-300">(20%)</span></span>
+                      <span className="font-semibold" style={{ color: scoreColor(meetingScore) }}>{meetingScore} <span className="text-gray-400">· {meetingTier}</span></span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {modifier !== 0 && (
+                <div className="mt-2 pt-2 border-t border-current border-opacity-10 text-xs text-gray-500">
+                  Raw: {rawScore} · Modifier: {modifier > 0 ? '+' : ''}{modifier} · {eventType.replace(/_/g, ' ')}
+                  {modifierReason && <span className="block text-gray-400 text-xs">{modifierReason}</span>}
+                </div>
+              )}
+              {confidence !== 'full' && (
+                <div className="mt-1 text-xs text-amber-600">⚠ Partial data ({confidence} confidence)</div>
+              )}
             </div>
 
             {/* Efficiency Rank card — 1/3 width */}
@@ -205,7 +250,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 {INTERPRETATION_ROWS.map(row => (
                   <tr key={row.range} className="border-b border-gray-50">
                     <td className="py-1.5 pr-2 font-mono text-gray-600">{row.range}</td>
-                    <td className="py-1.5 pr-2 font-semibold" style={{ color: scoreColor(row.range === '80–100' ? 80 : row.range === '60–79' ? 60 : row.range === '40–59' ? 40 : row.range === '20–39' ? 20 : 0) }}>{row.rating}</td>
+                    <td className="py-1.5 pr-2 font-semibold" style={{ color: scoreColor(row.range === '90–100' ? 90 : row.range === '75–89' ? 75 : row.range === '60–74' ? 60 : row.range === '50–59' ? 50 : 0) }}>{row.rating}</td>
                     <td className="py-1.5 text-gray-500 leading-tight">{row.meaning}</td>
                   </tr>
                 ))}
