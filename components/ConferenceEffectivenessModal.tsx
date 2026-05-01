@@ -5,6 +5,7 @@ import { SummaryTab } from './effectiveness/SummaryTab';
 import { SalesExecutionTab } from './effectiveness/SalesExecutionTab';
 import { AudienceMessagingTab } from './effectiveness/AudienceMessagingTab';
 import { OperationalROITab } from './effectiveness/OperationalROITab';
+import { DefinitionsTab } from './effectiveness/DefinitionsTab';
 
 // ── Shared data types ─────────────────────────────────────────────────────────
 
@@ -44,8 +45,10 @@ export interface EffectivenessData {
 
 // ── Color constants ───────────────────────────────────────────────────────────
 
+// Header uses brand-accent (set in Admin → Brand Colors → Accent #1)
+const HEADER_BG = 'rgb(var(--brand-accent-rgb))';
+const HEADER_TEXT = 'rgb(var(--brand-primary-rgb))';
 const SECONDARY = '#1B76BC';
-const SECONDARY_DARK = '#0d3d6b';
 
 function fmtDate(d: string) {
   try {
@@ -61,9 +64,9 @@ function fmt$(n: number | null | undefined) {
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border-2 border-white/40 p-3 bg-white/15 flex flex-col items-center gap-0.5 min-w-0 backdrop-blur-sm">
-      <div className="text-xl font-bold text-white leading-tight">{value}</div>
-      <div className="text-xs font-semibold text-white/80 text-center truncate w-full">{label}</div>
+    <div className="rounded-xl border-2 p-3 bg-white/60 flex flex-col items-center gap-0.5 min-w-0" style={{ borderColor: 'rgb(var(--brand-primary-rgb) / 0.2)' }}>
+      <div className="text-xl font-bold leading-tight" style={{ color: HEADER_TEXT }}>{value}</div>
+      <div className="text-xs font-semibold text-center truncate w-full" style={{ color: 'rgb(var(--brand-primary-rgb) / 0.6)' }}>{label}</div>
     </div>
   );
 }
@@ -76,10 +79,11 @@ interface Props {
 }
 
 const TABS = [
-  { key: 'summary',   label: 'Summary' },
-  { key: 'sales',     label: 'Sales Execution' },
-  { key: 'audience',  label: 'Audience & Messaging' },
-  { key: 'roi',       label: 'Operational ROI' },
+  { key: 'summary',     label: 'Summary' },
+  { key: 'sales',       label: 'Sales Execution' },
+  { key: 'audience',    label: 'Audience & Messaging' },
+  { key: 'roi',         label: 'Operational ROI' },
+  { key: 'definitions', label: 'Definitions' },
 ] as const;
 type TabKey = typeof TABS[number]['key'];
 
@@ -159,26 +163,27 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
         <div className="absolute inset-0 sm:inset-4 md:inset-6 flex flex-col bg-white overflow-hidden shadow-2xl sm:rounded-2xl">
 
           {/* Header */}
-          <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: SECONDARY }}>
+          <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: HEADER_BG }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold mb-0.5 uppercase tracking-widest" style={{ color: `${SECONDARY_DARK}99` }}>Conference Effectiveness</p>
-                <h2 className="text-lg font-bold leading-tight text-white">{conferenceName}</h2>
+                <p className="text-xs font-semibold mb-0.5 uppercase tracking-widest" style={{ color: `${HEADER_TEXT}99` }}>Conference Effectiveness</p>
+                <h2 className="text-lg font-bold leading-tight" style={{ color: HEADER_TEXT }}>{conferenceName}</h2>
                 {(dateRange || location) && (
-                  <p className="text-xs text-white/70 mt-0.5">{[dateRange, location].filter(Boolean).join(' · ')}</p>
+                  <p className="text-xs mt-0.5 opacity-60" style={{ color: HEADER_TEXT }}>{[dateRange, location].filter(Boolean).join(' · ')}</p>
                 )}
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <button
                   onClick={() => setStatsOpen(v => !v)}
-                  className="sm:hidden text-white/70 hover:text-white transition-colors"
+                  className="sm:hidden transition-colors opacity-60 hover:opacity-100"
+                  style={{ color: HEADER_TEXT }}
                   aria-label={statsOpen ? 'Collapse stats' : 'Expand stats'}
                 >
                   <svg className={`w-5 h-5 transition-transform duration-200 ${statsOpen ? '' : '-rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors">
+                <button onClick={() => setOpen(false)} className="transition-colors opacity-60 hover:opacity-100" style={{ color: HEADER_TEXT }}>
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -187,9 +192,9 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
             </div>
 
             <div className={`grid grid-cols-3 sm:grid-cols-6 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
-              <div className="rounded-xl border-2 p-3 flex flex-col items-center gap-0.5 min-w-0 backdrop-blur-sm" style={{ borderColor: cesColor, backgroundColor: `${cesColor}22` }}>
+              <div className="rounded-xl border-2 p-3 flex flex-col items-center gap-0.5 min-w-0 bg-white/60" style={{ borderColor: cesColor }}>
                 <div className="text-xl font-bold leading-tight" style={{ color: cesColor }}>{ces.score}</div>
-                <div className="text-xs font-semibold text-white/80 text-center">CES /100</div>
+                <div className="text-xs font-semibold text-center" style={{ color: HEADER_TEXT }}>CES /100</div>
               </div>
               <StatPill label="Pipeline Influence" value={fmt$(pi)} />
               <StatPill label="ICP Coverage" value={icpCov.icp_company_engagement_pct != null ? `${String(icpCov.icp_company_engagement_pct)}%` : '—'} />
@@ -216,10 +221,11 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
 
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto">
-            {activeTab === 'summary'  && <SummaryTab data={data} />}
-            {activeTab === 'sales'    && <SalesExecutionTab data={data} />}
-            {activeTab === 'audience' && <AudienceMessagingTab data={data} />}
-            {activeTab === 'roi'      && <OperationalROITab data={data} />}
+            {activeTab === 'summary'     && <SummaryTab data={data} />}
+            {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
+            {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
+            {activeTab === 'roi'         && <OperationalROITab data={data} />}
+            {activeTab === 'definitions' && <DefinitionsTab />}
           </div>
         </div>
       </div>

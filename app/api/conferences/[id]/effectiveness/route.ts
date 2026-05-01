@@ -241,7 +241,7 @@ export async function GET(
 
     const repActivity = await runQuery(
       `SELECT
-         m.scheduled_by AS rep,
+         m.scheduled_by AS rep_raw,
          COUNT(DISTINCT CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS meetings_held,
          COUNT(DISTINCT m.id) AS meetings_scheduled,
          COUNT(DISTINCT a.company_id) AS unique_companies_met
@@ -252,6 +252,82 @@ export async function GET(
        GROUP BY m.scheduled_by
        ORDER BY meetings_held DESC`
     );
+
+    // ── Rep name resolution ─────────────────────────────────────────────────
+    const userConfigRows = await runQuery(
+      `SELECT co.id, COALESCE(u.display_name, co.value) AS display_name
+       FROM config_options co
+       LEFT JOIN users u ON u.config_id = co.id
+       WHERE co.category = 'user'`
+    );
+    const repNameMap = new Map<string, string>();
+    for (const r of userConfigRows) repNameMap.set(String(r.id), String(r.display_name ?? r.id));
+    const resolveRep = (raw: unknown): string[] =>
+      String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
+        .map(id => repNameMap.get(id) ?? id);
+
+    // ── Seniority priority from site_settings ──────────────────────────────
+    const senioritySettingRow = await runQuery(
+      `SELECT value FROM site_settings WHERE key = 'icp_seniority_priority'`
+    );
+    const seniorityPriority: Record<string, string> = (() => {
+      try { return JSON.parse(String(senioritySettingRow[0]?.value ?? '{}')); } catch { return {}; }
+    })();
+    const PRIORITY_WEIGHT: Record<string, number> = { High: 50, Medium: 35, Low: 15, Ignore: 0 };
+    const PRIORITY_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1, Ignore: 0 };
+
+    // ── Internal attendees at this conference ───────────────────────────────
+    const confDetailRow = await runQuery(`SELECT internal_attendees FROM conferences WHERE id = ${cid}`);
+    const internalAttendeeIds = new Set<string>(
+      String(confDetailRow[0]?.internal_attendees ?? '').split(',').map(s => s.trim()).filter(Boolean)
+    );
+
+    // ── Company assigned users ──────────────────────────────────────────────
+    const companyAssignedRows = await runQuery(
+      `${w}
+       SELECT cc.company_id, co.assigned_user
+       FROM conf_companies cc
+       JOIN companies co ON cc.company_id = co.id`
+    );
+    const companyAssignedMap = new Map<number, string[]>();
+    for (const r of companyAssignedRows) {
+      companyAssignedMap.set(Number(r.company_id),
+        String(r.assigned_user ?? '').split(',').map(s => s.trim()).filter(Boolean));
+    }
+
+    // ── Per-company-rep meeting engagements with seniority ──────────────────
+    const meetingEngagements = await runQuery(
+      `SELECT
+         a.company_id, m.scheduled_by,
+         a.seniority,
+         COUNT(CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS held_count,
+         COUNT(m.id) AS scheduled_count
+       FROM meetings m
+       JOIN attendees a ON m.attendee_id = a.id
+       LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+       WHERE m.conference_id = ${cid} AND a.company_id IS NOT NULL AND m.scheduled_by IS NOT NULL
+       GROUP BY a.company_id, m.scheduled_by, a.seniority`
+    );
+
+    // ── Company-level touchpoints and social event counts ───────────────────
+    const companyTouchpointMap = new Map<number, number>();
+    for (const r of await runQuery(
+      `SELECT a.company_id, COUNT(DISTINCT atp.id) AS tp_count
+       FROM attendee_touchpoints atp
+       JOIN attendees a ON atp.attendee_id = a.id
+       WHERE atp.conference_id = ${cid} AND a.company_id IS NOT NULL
+       GROUP BY a.company_id`
+    )) companyTouchpointMap.set(Number(r.company_id), Number(r.tp_count ?? 0));
+
+    const companySocialMap = new Map<number, number>();
+    for (const r of await runQuery(
+      `SELECT a.company_id, COUNT(DISTINCT rsvp.attendee_id) AS ev_count
+       FROM social_event_rsvps rsvp
+       JOIN social_events se ON rsvp.social_event_id = se.id
+       JOIN attendees a ON rsvp.attendee_id = a.id
+       WHERE se.conference_id = ${cid} AND rsvp.rsvp_status = 'attended' AND a.company_id IS NOT NULL
+       GROUP BY a.company_id`
+    )) companySocialMap.set(Number(r.company_id), Number(r.ev_count ?? 0));
 
     // ── Sales / Pipeline Metrics ────────────────────────────────────────────
     const pipelineSummary = (await runQuery(
@@ -283,20 +359,135 @@ export async function GET(
        FROM pipeline_influence pi`
     ))[0] ?? {};
 
-    const repPipeline = await runQuery(
-      `${w}
-       SELECT
-         m.scheduled_by AS rep,
-         COUNT(DISTINCT a.company_id) AS companies_met,
-         ROUND(SUM(pi.pipeline_influence_value),2) AS pipeline_influence_attributed
-       FROM meetings m
-       JOIN attendees a ON m.attendee_id=a.id
-       JOIN pipeline_influence pi ON a.company_id=pi.company_id
-       LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
-       WHERE m.conference_id=${cid} AND cop.action_key='meeting_held'
-       GROUP BY m.scheduled_by
-       ORDER BY pipeline_influence_attributed DESC`
-    );
+    // ── Rep attribution (TypeScript logic, company-level) ──────────────────
+    interface RepAcc {
+      companies: Set<number>;
+      pipelineInfluence: number;
+      meetingsHeld: number;
+      meetingsScheduled: number;
+      touchpoints: number;
+      eventAttendees: number;
+    }
+    const repAccMap = new Map<string, RepAcc>();
+    const getAcc = (name: string): RepAcc => {
+      if (!repAccMap.has(name)) repAccMap.set(name, { companies: new Set(), pipelineInfluence: 0, meetingsHeld: 0, meetingsScheduled: 0, touchpoints: 0, eventAttendees: 0 });
+      return repAccMap.get(name)!;
+    };
+
+    // Group meeting engagements by company (use resolved names)
+    type EngRow = { repNames: string[]; seniority: string; heldCount: number; scheduledCount: number };
+    const compEngByCompany = new Map<number, EngRow[]>();
+    for (const me of meetingEngagements) {
+      const compId = Number(me.company_id);
+      const repNames = resolveRep(me.scheduled_by);
+      const row: EngRow = { repNames, seniority: String(me.seniority ?? ''), heldCount: Number(me.held_count ?? 0), scheduledCount: Number(me.scheduled_count ?? 0) };
+      if (!compEngByCompany.has(compId)) compEngByCompany.set(compId, []);
+      compEngByCompany.get(compId)!.push(row);
+    }
+
+    // Resolved internal attendee names
+    const internalAttendeeNames = new Set<string>();
+    for (const id of internalAttendeeIds) {
+      const name = repNameMap.get(id);
+      if (name) internalAttendeeNames.add(name);
+      else internalAttendeeNames.add(id);
+    }
+
+    for (const pi of companyPipeline) {
+      const compId = Number(pi.company_id);
+      const piValue = Number(pi.pipeline_influence_value ?? 0);
+      const engagements = compEngByCompany.get(compId) ?? [];
+      const assignedRawIds = companyAssignedMap.get(compId) ?? [];
+      const assignedNames = assignedRawIds.map(id => repNameMap.get(id) ?? id);
+
+      // Which assigned reps are internal attendees at this conference?
+      const assignedAtConf = assignedNames.filter(n => internalAttendeeNames.has(n));
+
+      // All reps who engaged
+      const allEngagingReps = new Set<string>();
+      for (const eng of engagements) for (const n of eng.repNames) allEngagingReps.add(n);
+
+      // Meeting/sched counts (split equally among co-schedulers)
+      for (const eng of engagements) {
+        const share = eng.repNames.length > 0 ? 1 / eng.repNames.length : 0;
+        for (const n of eng.repNames) {
+          const acc = getAcc(n);
+          acc.companies.add(compId);
+          acc.meetingsHeld += eng.heldCount * share;
+          acc.meetingsScheduled += eng.scheduledCount * share;
+        }
+      }
+
+      // Touchpoints / social events attributed by meeting-engagement presence
+      const tp = companyTouchpointMap.get(compId) ?? 0;
+      const ev = companySocialMap.get(compId) ?? 0;
+      if (allEngagingReps.size > 0) {
+        const perRep = 1 / allEngagingReps.size;
+        for (const n of allEngagingReps) {
+          getAcc(n).touchpoints += tp * perRep;
+          getAcc(n).eventAttendees += ev * perRep;
+        }
+      }
+
+      if (piValue === 0) continue;
+
+      let attribution: Map<string, number>;
+
+      if (assignedAtConf.length === 0) {
+        // No assigned reps at this conf → credit whoever engaged
+        const reps = allEngagingReps.size > 0 ? [...allEngagingReps] : assignedNames;
+        const share = piValue / (reps.length || 1);
+        attribution = new Map(reps.map(n => [n, share]));
+      } else {
+        // Seniority-based attribution among assigned reps who are at the conference
+        const repBestPriority = new Map<string, string>();
+        for (const eng of engagements) {
+          for (const repName of eng.repNames) {
+            if (!assignedAtConf.includes(repName)) continue;
+            const priority = seniorityPriority[eng.seniority] ?? 'Low';
+            const cur = repBestPriority.get(repName);
+            if (!cur || (PRIORITY_RANK[priority] ?? 0) > (PRIORITY_RANK[cur] ?? 0)) {
+              repBestPriority.set(repName, priority);
+            }
+          }
+        }
+
+        if (repBestPriority.size === 0) {
+          const share = piValue / (allEngagingReps.size || 1);
+          attribution = new Map([...allEngagingReps].map(n => [n, share]));
+        } else {
+          const tierReps: Record<string, string[]> = { High: [], Medium: [], Low: [] };
+          for (const [n, p] of repBestPriority) {
+            if (p === 'Ignore' || p === 'ignore') continue;
+            (tierReps[p] = tierReps[p] ?? []).push(n);
+          }
+          const activeTiers = (['High', 'Medium', 'Low'] as const).filter(t => tierReps[t]?.length > 0);
+          const totalW = activeTiers.reduce((s, t) => s + (PRIORITY_WEIGHT[t] ?? 0), 0);
+          attribution = new Map();
+          for (const tier of activeTiers) {
+            const tierPI = (PRIORITY_WEIGHT[tier] / (totalW || 1)) * piValue;
+            const perRep = tierPI / tierReps[tier].length;
+            for (const n of tierReps[tier]) attribution.set(n, (attribution.get(n) ?? 0) + perRep);
+          }
+        }
+      }
+
+      for (const [n, share] of attribution) getAcc(n).pipelineInfluence += share;
+    }
+
+    const totalRepPI = [...repAccMap.values()].reduce((s, r) => s + r.pipelineInfluence, 0);
+    const repAttribution = [...repAccMap.entries()]
+      .sort(([, a], [, b]) => b.pipelineInfluence - a.pipelineInfluence)
+      .map(([name, acc]) => ({
+        rep: name,
+        meetings_held: Math.round(acc.meetingsHeld),
+        meetings_scheduled: Math.round(acc.meetingsScheduled),
+        unique_companies_met: acc.companies.size,
+        touchpoints: Math.round(acc.touchpoints),
+        event_attendees: Math.round(acc.eventAttendees),
+        pipeline_influence_attributed: Math.round(acc.pipelineInfluence),
+        contribution_pct: totalRepPI > 0 ? Math.round(acc.pipelineInfluence / totalRepPI * 1000) / 10 : 0,
+      }));
 
     // Per-company pipeline detail
     const companyPipeline = await runQuery(
@@ -466,7 +657,7 @@ export async function GET(
       pipeline: {
         ...pipelineSummary,
         ...netNewLogos,
-        rep_pipeline: repPipeline,
+        rep_attribution: repAttribution,
         company_pipeline: companyPipeline,
       },
       audience: {
@@ -482,7 +673,7 @@ export async function GET(
         cost_efficiency: costEfficiency,
         annual_budget: annualBudget,
         annual_budget_year: confYear ? Number(confYear) : null,
-        rep_activity: repActivity,
+        rep_activity: repActivity.map(r => ({ ...r, rep: resolveRep(r.rep_raw).join(', ') })),
       },
       effectiveness_defaults: effDefaults,
     });

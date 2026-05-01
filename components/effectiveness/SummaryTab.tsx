@@ -32,7 +32,7 @@ export function SummaryTab({ data }: { data: EffectivenessData }) {
     { label: 'Pipeline Influence Index',  value: ces.dim3_pipeline_index,   weight: '20%' },
     { label: 'Engagement Breadth',        value: ces.dim4_breadth,          weight: '15%' },
     { label: 'Follow-up Execution',       value: ces.dim5_followup,         weight: '10%' },
-    { label: 'Net-New Acquisition',       value: ces.dim6_net_new,          weight: '10%' },
+    { label: 'Net-New Engaged',            value: ces.dim6_net_new,          weight: '10%' },
   ];
 
   function fmt$(n: number | null | undefined) {
