@@ -136,7 +136,7 @@ function buildCTEs(cid: number): string {
 
 async function runQuery(sql: string): Promise<Record<string, unknown>[]> {
   const result = await db.execute({ sql, args: [] });
-  return result.rows.map(r => {
+  return result.rows.map((r: Record<string, unknown>) => {
     const obj: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(r)) obj[k] = v;
     return obj;
@@ -359,6 +359,20 @@ export async function GET(
        FROM pipeline_influence pi`
     ))[0] ?? {};
 
+    // Per-company pipeline detail (also used for rep attribution loop below)
+    const companyPipeline = await runQuery(
+      `${w}
+       SELECT
+         pi.company_id, pi.name, pi.icp, pi.wse, pi.status,
+         pi.meetings_held, pi.touchpoints, pi.hosted_events, pi.total_interactions,
+         ROUND(pi.adj_conv_rate*100,1) AS adj_conv_rate_pct,
+         ROUND(pi.company_deal_value,2) AS company_deal_value,
+         ROUND(pi.pipeline_influence_value,2) AS pipeline_influence_value,
+         pi.multi_touch_mult
+       FROM pipeline_influence pi
+       ORDER BY pipeline_influence_value DESC`
+    );
+
     // ── Rep attribution (TypeScript logic, company-level) ──────────────────
     interface RepAcc {
       companies: Set<number>;
@@ -386,12 +400,9 @@ export async function GET(
     }
 
     // Resolved internal attendee names
-    const internalAttendeeNames = new Set<string>();
-    for (const id of internalAttendeeIds) {
-      const name = repNameMap.get(id);
-      if (name) internalAttendeeNames.add(name);
-      else internalAttendeeNames.add(id);
-    }
+    const internalAttendeeNames = new Set<string>(
+      Array.from(internalAttendeeIds).map(id => repNameMap.get(id) ?? id)
+    );
 
     for (const pi of companyPipeline) {
       const compId = Number(pi.company_id);
@@ -423,10 +434,10 @@ export async function GET(
       const ev = companySocialMap.get(compId) ?? 0;
       if (allEngagingReps.size > 0) {
         const perRep = 1 / allEngagingReps.size;
-        for (const n of allEngagingReps) {
+        Array.from(allEngagingReps).forEach(n => {
           getAcc(n).touchpoints += tp * perRep;
           getAcc(n).eventAttendees += ev * perRep;
-        }
+        });
       }
 
       if (piValue === 0) continue;
@@ -435,7 +446,7 @@ export async function GET(
 
       if (assignedAtConf.length === 0) {
         // No assigned reps at this conf → credit whoever engaged
-        const reps = allEngagingReps.size > 0 ? [...allEngagingReps] : assignedNames;
+        const reps = allEngagingReps.size > 0 ? Array.from(allEngagingReps) : assignedNames;
         const share = piValue / (reps.length || 1);
         attribution = new Map(reps.map(n => [n, share]));
       } else {
@@ -454,13 +465,13 @@ export async function GET(
 
         if (repBestPriority.size === 0) {
           const share = piValue / (allEngagingReps.size || 1);
-          attribution = new Map([...allEngagingReps].map(n => [n, share]));
+          attribution = new Map(Array.from(allEngagingReps).map(n => [n, share]));
         } else {
           const tierReps: Record<string, string[]> = { High: [], Medium: [], Low: [] };
-          for (const [n, p] of repBestPriority) {
-            if (p === 'Ignore' || p === 'ignore') continue;
+          Array.from(repBestPriority.entries()).forEach(([n, p]) => {
+            if (p === 'Ignore' || p === 'ignore') return;
             (tierReps[p] = tierReps[p] ?? []).push(n);
-          }
+          });
           const activeTiers = (['High', 'Medium', 'Low'] as const).filter(t => tierReps[t]?.length > 0);
           const totalW = activeTiers.reduce((s, t) => s + (PRIORITY_WEIGHT[t] ?? 0), 0);
           attribution = new Map();
@@ -472,11 +483,11 @@ export async function GET(
         }
       }
 
-      for (const [n, share] of attribution) getAcc(n).pipelineInfluence += share;
+      Array.from(attribution.entries()).forEach(([n, share]) => { getAcc(n).pipelineInfluence += share; });
     }
 
-    const totalRepPI = [...repAccMap.values()].reduce((s, r) => s + r.pipelineInfluence, 0);
-    const repAttribution = [...repAccMap.entries()]
+    const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
+    const repAttribution = Array.from(repAccMap.entries())
       .sort(([, a], [, b]) => b.pipelineInfluence - a.pipelineInfluence)
       .map(([name, acc]) => ({
         rep: name,
@@ -488,20 +499,6 @@ export async function GET(
         pipeline_influence_attributed: Math.round(acc.pipelineInfluence),
         contribution_pct: totalRepPI > 0 ? Math.round(acc.pipelineInfluence / totalRepPI * 1000) / 10 : 0,
       }));
-
-    // Per-company pipeline detail
-    const companyPipeline = await runQuery(
-      `${w}
-       SELECT
-         pi.company_id, pi.name, pi.icp, pi.wse, pi.status,
-         pi.meetings_held, pi.touchpoints, pi.hosted_events, pi.total_interactions,
-         ROUND(pi.adj_conv_rate*100,1) AS adj_conv_rate_pct,
-         ROUND(pi.company_deal_value,2) AS company_deal_value,
-         ROUND(pi.pipeline_influence_value,2) AS pipeline_influence_value,
-         pi.multi_touch_mult
-       FROM pipeline_influence pi
-       ORDER BY pipeline_influence_value DESC`
-    );
 
     // ── Audience / CMO Metrics ──────────────────────────────────────────────
     const icpCoverage = (await runQuery(
