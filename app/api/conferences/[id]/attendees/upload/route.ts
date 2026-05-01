@@ -129,6 +129,14 @@ export async function POST(
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
 
+    // Optional conflict resolutions from the ConflictResolutionModal
+    const resolutionsJson = formData.get('conflict_resolutions') as string | null;
+    const resolutions: Record<string, 'accept' | 'ignore'> = resolutionsJson ? JSON.parse(resolutionsJson) : {};
+    const hasResolutions = resolutionsJson != null;
+
+    const coRes = (coId: number, field: string) => resolutions[`company_${coId}_${field}`] ?? null;
+    const atRes = (atId: number, field: string) => resolutions[`attendee_${atId}_${field}`] ?? null;
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const parsed = mapping
       ? await parseFileWithMapping(buffer, file.name, mapping)
@@ -333,26 +341,55 @@ export async function POST(
       return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services);
     });
     if (existingToUpdate.length > 0) {
-      await batchInsert(existingToUpdate, ([n, entry]) => {
+      const updateStmts: { sql: string; args: (string | number | null)[] }[] = [];
+      for (const [n, entry] of existingToUpdate) {
         const coId = companyIdCache.get(n)!;
         const existingCompany = existingCompanies.find((c) => c.id === coId);
-        // Count only valid numeric user IDs — raw name strings (legacy data) should not block the upload from fixing them
+        const setClauses: string[] = [];
+        const setArgs: (string | number | null)[] = [];
+
+        // Helper: add a field to the update, honoring conflict resolutions
+        const addCoField = (sqlField: string, logField: string, value: string | number | null) => {
+          if (value == null || value === '') return;
+          const r = coRes(coId, logField);
+          if (r === 'ignore') return;
+          if (r === 'accept') {
+            setClauses.push(`${sqlField} = ?`);
+          } else {
+            setClauses.push(`${sqlField} = COALESCE(?, ${sqlField})`);
+          }
+          setArgs.push(value);
+        };
+
+        addCoField('company_type', 'company_type', entry.company_type || null);
+        addCoField('website', 'website', entry.website || null);
+        addCoField('wse', 'wse', entry.wse ?? null);
+
+        // assigned_user: preserve if already has valid user (no conflict resolution for this field)
         const existingValidUserIds = existingCompany?.assigned_user
           ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
           : [];
-        // Preserve assigned_user if the company already has at least one valid assigned user; only set from upload if none exist
         const assignedUserArg = existingValidUserIds.length >= 1 ? null : (entry.assigned_user || null);
-        return {
-          sql: `UPDATE companies SET
-            company_type = COALESCE(?, company_type),
-            assigned_user = COALESCE(?, assigned_user),
-            website = COALESCE(?, website),
-            wse = COALESCE(?, wse),
-            services = COALESCE(?, services)
-            WHERE id = ?`,
-          args: [entry.company_type || null, assignedUserArg, entry.website || null, entry.wse ?? null, entry.services || null, coId],
-        };
-      });
+        if (assignedUserArg) {
+          setClauses.push('assigned_user = COALESCE(?, assigned_user)');
+          setArgs.push(assignedUserArg);
+        }
+
+        // services: always merge (additive, no conflict)
+        if (entry.services) {
+          setClauses.push('services = COALESCE(?, services)');
+          setArgs.push(entry.services);
+        }
+
+        if (setClauses.length === 0) continue;
+        updateStmts.push({
+          sql: `UPDATE companies SET ${setClauses.join(', ')} WHERE id = ?`,
+          args: [...setArgs, coId],
+        });
+      }
+      for (let i = 0; i < updateStmts.length; i += 100) {
+        await db.batch(updateStmts.slice(i, i + 100), 'write');
+      }
     }
 
     // Batch-insert new companies (with auto-detected company type, website, assigned_user, wse, and services)
@@ -567,21 +604,59 @@ export async function POST(
 
     // Batch-update existing matched attendees with CSV company/title/email/function/product
     if (existingAttendeeUpdates.length > 0) {
-      await batchInsert(existingAttendeeUpdates, (u) => ({
-        sql: `UPDATE attendees SET
-          company_id = COALESCE(?, company_id),
-          title = COALESCE(?, title),
-          email = COALESCE(?, email)
-          ${u.function !== undefined ? ', "function" = ?' : ''}
-          ${u.product !== undefined ? ', products = CASE WHEN (products IS NULL OR products = \'\') THEN ? ELSE products END' : ''}
-          WHERE id = ?`,
-        args: [
-          u.company_id, u.title, u.email,
-          ...(u.function !== undefined ? [u.function] : []),
-          ...(u.product !== undefined ? [u.product] : []),
-          u.id,
-        ],
-      }));
+      const atUpdateStmts: { sql: string; args: (string | number | null)[] }[] = [];
+      for (const u of existingAttendeeUpdates) {
+        const setClauses: string[] = [];
+        const setArgs: (string | number | null)[] = [];
+
+        // company_id: always COALESCE (no conflict resolution)
+        if (u.company_id != null) {
+          setClauses.push('company_id = COALESCE(?, company_id)');
+          setArgs.push(u.company_id);
+        }
+
+        // title
+        const titleR = atRes(u.id, 'title');
+        if (titleR === 'ignore') { /* skip */ }
+        else if (titleR === 'accept' && u.title) { setClauses.push('title = ?'); setArgs.push(u.title); }
+        else if (u.title) { setClauses.push('title = COALESCE(?, title)'); setArgs.push(u.title); }
+
+        // email
+        const emailR = atRes(u.id, 'email');
+        if (emailR === 'ignore') { /* skip */ }
+        else if (emailR === 'accept' && u.email) { setClauses.push('email = ?'); setArgs.push(u.email); }
+        else if (u.email) { setClauses.push('email = COALESCE(?, email)'); setArgs.push(u.email); }
+
+        // function
+        if (u.function !== undefined) {
+          const fnR = atRes(u.id, 'function');
+          if (fnR === 'ignore') { /* skip */ }
+          else if (fnR === 'accept') { setClauses.push('"function" = ?'); setArgs.push(u.function); }
+          else if (hasResolutions) {
+            // Conservative when conflict detection ran: COALESCE preserves existing non-null values
+            setClauses.push('"function" = COALESCE(?, "function")'); setArgs.push(u.function);
+          } else {
+            // Legacy behavior (no conflict step): direct assign
+            setClauses.push('"function" = ?'); setArgs.push(u.function);
+          }
+        }
+
+        // product: always CASE WHEN (no conflict resolution)
+        if (u.product !== undefined) {
+          setClauses.push('products = CASE WHEN (products IS NULL OR products = \'\') THEN ? ELSE products END');
+          setArgs.push(u.product);
+        }
+
+        if (setClauses.length === 0) continue;
+        setArgs.push(u.id);
+        atUpdateStmts.push({
+          sql: `UPDATE attendees SET ${setClauses.join(', ')} WHERE id = ?`,
+          args: setArgs,
+        });
+      }
+      for (let i = 0; i < atUpdateStmts.length; i += 100) {
+        await db.batch(atUpdateStmts.slice(i, i + 100), 'write');
+      }
     }
 
     // Batch-insert new attendees

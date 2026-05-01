@@ -24,6 +24,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
 import { ColumnMappingModal } from '@/components/ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
+import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
 import { useUser } from '@/components/UserContext';
@@ -334,12 +335,14 @@ export default function ConferenceDetailPage() {
   const [isUploading, setIsUploading] = useState(false);
   const uploadFileRef = useRef<HTMLInputElement>(null);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [pendingMapping, setPendingMapping] = useState<ColumnMapping | null>(null);
   const [columnMappingData, setColumnMappingData] = useState<{
     headers: string[];
     suggestions: ColumnMapping;
     sampleRows: Record<string, string>[];
     totalRows: number;
   } | null>(null);
+  const [pendingConflicts, setPendingConflicts] = useState<ConflictItem[] | null>(null);
 
   const visibleConferenceTabs = CONFERENCE_TAB_ORDER.filter(
     (tabKey) => conferenceTabConfig.orderedKeys.includes(tabKey) && conferenceTabConfig.isVisible(tabKey),
@@ -777,14 +780,16 @@ export default function ConferenceDetailPage() {
     }
   };
 
-  const handleConfirmMapping = async (mapping: ColumnMapping) => {
+  const doUpload = async (mapping: ColumnMapping, resolutions: Record<string, 'accept' | 'ignore'>) => {
     if (!pendingUploadFile) return;
-    setColumnMappingData(null);
     setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', pendingUploadFile);
       formData.append('mapping', JSON.stringify(mapping));
+      if (Object.keys(resolutions).length > 0 || pendingConflicts !== null) {
+        formData.append('conflict_resolutions', JSON.stringify(resolutions));
+      }
       const res = await fetch(`/api/conferences/${id}/attendees/upload`, { method: 'POST', body: formData });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
@@ -803,7 +808,42 @@ export default function ConferenceDetailPage() {
     } finally {
       setIsUploading(false);
       setPendingUploadFile(null);
+      setPendingMapping(null);
+      setPendingConflicts(null);
     }
+  };
+
+  const handleConfirmMapping = async (mapping: ColumnMapping) => {
+    if (!pendingUploadFile) return;
+    setColumnMappingData(null);
+    setPendingMapping(mapping);
+    setIsUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', pendingUploadFile);
+      fd.append('mapping', JSON.stringify(mapping));
+      const res = await fetch(`/api/conferences/${id}/attendees/upload/conflicts`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Failed to check for conflicts');
+      const { conflicts }: { conflicts: ConflictItem[] } = await res.json();
+      if (conflicts.length > 0) {
+        setPendingConflicts(conflicts);
+        setIsUploading(false);
+        return; // wait for user to resolve conflicts in modal
+      }
+      // No conflicts — proceed directly
+      await doUpload(mapping, {});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload attendees');
+      setIsUploading(false);
+      setPendingUploadFile(null);
+      setPendingMapping(null);
+    }
+  };
+
+  const handleConflictResolved = async (resolutions: Record<string, 'accept' | 'ignore'>) => {
+    if (!pendingMapping) return;
+    setPendingConflicts(null);
+    await doUpload(pendingMapping, resolutions);
   };
 
   useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType]);
@@ -860,6 +900,19 @@ export default function ConferenceDetailPage() {
           sampleRows={columnMappingData.sampleRows}
           onConfirm={handleConfirmMapping}
           onCancel={() => { setColumnMappingData(null); setPendingUploadFile(null); }}
+        />
+      )}
+
+      {/* Conflict resolution modal */}
+      {pendingConflicts && pendingConflicts.length > 0 && (
+        <ConflictResolutionModal
+          conflicts={pendingConflicts}
+          onResolve={handleConflictResolved}
+          onCancel={() => {
+            setPendingConflicts(null);
+            setPendingUploadFile(null);
+            setPendingMapping(null);
+          }}
         />
       )}
 
