@@ -2,9 +2,10 @@
 
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 
-function fmt$(n: number | null | undefined) {
-  if (n == null) return '—';
-  return '$' + Math.round(n).toLocaleString();
+function fmt$(n: unknown) {
+  const v = n == null ? null : Number(n);
+  if (v == null || isNaN(v)) return '—';
+  return '$' + Math.round(v).toLocaleString();
 }
 
 function ProgressBar({ value, max = 100, color = '#1B76BC' }: { value: number; max?: number; color?: string }) {
@@ -80,10 +81,10 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Cost Efficiency</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Cost / Company Engaged',    value: fmt$(costs.cost_per_company_engaged) },
-            { label: 'Cost / Meeting Held',        value: fmt$(costs.cost_per_meeting_held) },
-            { label: 'PI / $1k Spent',             value: fmt$(costs.pipeline_influence_per_1k_spent) },
-            { label: 'Total Spend',                value: fmt$(totalSpend) },
+            { label: 'Cost / Company Engaged', value: fmt$(costs.cost_per_company_engaged) },
+            { label: 'Cost / Meeting Held',     value: fmt$(costs.cost_per_meeting_held) },
+            { label: 'PI / $1k Spent',          value: fmt$(costs.pipeline_influence_per_1k_spent) },
+            { label: 'Total Spend',             value: fmt$(totalSpend) },
           ].map(({ label, value }) => (
             <div key={label} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
               <div className="text-lg font-bold text-brand-secondary leading-tight">{value}</div>

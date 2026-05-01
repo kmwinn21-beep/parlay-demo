@@ -131,7 +131,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
                   <td className="py-1.5 text-center">{c.icp === 'Yes' ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="py-1.5 text-center text-gray-600">{String(c.total_interactions ?? 0)}</td>
                   <td className="py-1.5 text-center">{Number(c.meetings_held ?? 0) > 0 ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}</td>
-                  <td className="py-1.5 text-right text-gray-600">{c.adj_conv_rate_pct != null ? `${c.adj_conv_rate_pct}%` : '—'}</td>
+                  <td className="py-1.5 text-right text-gray-600">{c.adj_conv_rate_pct != null ? `${String(c.adj_conv_rate_pct)}%` : '—'}</td>
                   <td className="py-1.5 text-right font-semibold text-brand-secondary">{fmt$(Number(c.pipeline_influence_value ?? 0))}</td>
                 </tr>
               ))}

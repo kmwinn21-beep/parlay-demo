@@ -192,9 +192,9 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
                 <div className="text-xs font-semibold text-white/80 text-center">CES /100</div>
               </div>
               <StatPill label="Pipeline Influence" value={fmt$(pi)} />
-              <StatPill label="ICP Coverage" value={icpCov.icp_company_engagement_pct != null ? `${icpCov.icp_company_engagement_pct}%` : '—'} />
+              <StatPill label="ICP Coverage" value={icpCov.icp_company_engagement_pct != null ? `${String(icpCov.icp_company_engagement_pct)}%` : '—'} />
               <StatPill label="Meetings Held" value={String(eng.total_held ?? '—')} />
-              <StatPill label="FU Rate" value={eng.followup_completion_rate_pct != null ? `${eng.followup_completion_rate_pct}%` : '—'} />
+              <StatPill label="FU Rate" value={eng.followup_completion_rate_pct != null ? `${String(eng.followup_completion_rate_pct)}%` : '—'} />
               <StatPill label="Net-New Logos" value={String(data.audience.net_new_logos.net_new_logos ?? '—')} />
             </div>
           </div>

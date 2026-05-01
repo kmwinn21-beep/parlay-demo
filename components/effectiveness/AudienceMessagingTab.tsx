@@ -2,6 +2,10 @@
 
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 
+function s(v: unknown, fallback = '—'): string {
+  return v != null && v !== '' ? String(v) : fallback;
+}
+
 function ProgressBar({ value, max = 100, color = '#1B76BC' }: { value: number; max?: number; color?: string }) {
   const pct = Math.min(Math.round((value / Math.max(max, 1)) * 100), 100);
   return (
@@ -19,8 +23,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const persona = (audience.persona_distribution ?? []) as Record<string, unknown>[];
   const netNew = audience.net_new_logos;
 
-  const totalEngaged = Number(penetration.engaged_attendees ?? 0);
-  const seniorityTotal = seniority.reduce((s, r) => s + Number(r.engaged_count ?? 0), 0);
+  const seniorityTotal = seniority.reduce((sum, r) => sum + Number(r.engaged_count ?? 0), 0);
 
   const SENIORITY_COLORS: Record<string, string> = {
     'C-Suite': '#1e3a5f',
@@ -39,8 +42,8 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">ICP Coverage</h3>
         <div className="grid grid-cols-3 gap-4 mb-4">
           {[
-            { label: 'ICP Companies', value: String(icp.icp_companies_total ?? '—') },
-            { label: 'ICP Engaged',   value: String(icp.icp_companies_engaged ?? '—') },
+            { label: 'ICP Companies',   value: s(icp.icp_companies_total) },
+            { label: 'ICP Engaged',     value: s(icp.icp_companies_engaged) },
             { label: 'Engagement Rate', value: icp.icp_company_engagement_pct != null ? `${icp.icp_company_engagement_pct}%` : '—' },
           ].map(({ label, value }) => (
             <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-3">
@@ -52,7 +55,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div>
           <div className="flex justify-between text-xs mb-1">
             <span className="text-gray-500">ICP Attendee Coverage</span>
-            <span className="font-semibold text-brand-secondary">{icp.icp_attendee_coverage_pct ?? 0}%</span>
+            <span className="font-semibold text-brand-secondary">{Number(icp.icp_attendee_coverage_pct ?? 0)}%</span>
           </div>
           <ProgressBar value={Number(icp.icp_attendee_coverage_pct ?? 0)} />
         </div>
@@ -87,18 +90,18 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           <div>
             <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-2">Net-New Logos</h3>
             <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold text-brand-secondary">{netNew.net_new_logos ?? 0}</span>
-              <span className="text-sm text-gray-400 pb-1">({netNew.net_new_rate_pct ?? 0}% of engaged)</span>
+              <span className="text-3xl font-bold text-brand-secondary">{Number(netNew.net_new_logos ?? 0)}</span>
+              <span className="text-sm text-gray-400 pb-1">({Number(netNew.net_new_rate_pct ?? 0)}% of engaged)</span>
             </div>
           </div>
 
           <div>
             <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-2">Account Penetration</h3>
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-              <div><span className="block text-lg font-bold text-brand-secondary">{penetration.avg_contacts_per_company ?? '—'}</span>Avg contacts/company</div>
-              <div><span className="block text-lg font-bold text-brand-secondary">{penetration.avg_engaged_contacts_per_company ?? '—'}</span>Avg per engaged co.</div>
-              <div><span className="block text-lg font-bold text-gray-700">{penetration.unique_companies ?? '—'}</span>Unique companies</div>
-              <div><span className="block text-lg font-bold text-gray-700">{penetration.engaged_companies ?? '—'}</span>Engaged companies</div>
+              <div><span className="block text-lg font-bold text-brand-secondary">{s(penetration.avg_contacts_per_company)}</span>Avg contacts/company</div>
+              <div><span className="block text-lg font-bold text-brand-secondary">{s(penetration.avg_engaged_contacts_per_company)}</span>Avg per engaged co.</div>
+              <div><span className="block text-lg font-bold text-gray-700">{s(penetration.unique_companies)}</span>Unique companies</div>
+              <div><span className="block text-lg font-bold text-gray-700">{s(penetration.engaged_companies)}</span>Engaged companies</div>
             </div>
           </div>
         </div>
