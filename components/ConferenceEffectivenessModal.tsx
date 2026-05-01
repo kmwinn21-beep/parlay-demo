@@ -147,6 +147,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
   const startDate = conf.start_date ? fmtDate(String(conf.start_date)) : '';
   const endDate   = conf.end_date   ? fmtDate(String(conf.end_date)) : '';
   const dateRange = startDate && endDate ? `${startDate} – ${endDate}` : startDate || '';
+  const location = conf.location ? String(conf.location) : '';
 
   return (
     <>
@@ -163,8 +164,8 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
               <div>
                 <p className="text-xs font-semibold mb-0.5 uppercase tracking-widest" style={{ color: `${SECONDARY_DARK}99` }}>Conference Effectiveness</p>
                 <h2 className="text-lg font-bold leading-tight text-white">{conferenceName}</h2>
-                {(dateRange || conf.location) && (
-                  <p className="text-xs text-white/70 mt-0.5">{[dateRange, conf.location as string | undefined].filter(Boolean).join(' · ')}</p>
+                {(dateRange || location) && (
+                  <p className="text-xs text-white/70 mt-0.5">{[dateRange, location].filter(Boolean).join(' · ')}</p>
                 )}
               </div>
               <div className="flex items-center gap-2 mt-1">
