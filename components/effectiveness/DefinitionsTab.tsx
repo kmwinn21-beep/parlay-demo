@@ -10,6 +10,56 @@ interface Def {
 
 const SECTIONS: { title: string; items: Def[] }[] = [
   {
+    title: 'Conference Effectiveness Score by Rep',
+    items: [
+      {
+        term: 'Rep CES — Conference Effectiveness Score by Rep',
+        description: 'A 0–100 composite score measuring how effectively an individual sales rep contributed to a conference\'s performance across the same seven dimensions as the conference-level CES. Uses equal-share conference cost allocation per rep.',
+        calculation: '(ICP & Target Quality × 20%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 30%) + (Engagement Breadth × 5%) + (Cost Efficiency × 10%) + (Follow-up Execution × 10%) + (Net-New Engaged × 5%)',
+      },
+      {
+        term: 'ICP & Target Quality — Rep (20%)',
+        description: 'How many ICP companies and target accounts the rep engaged relative to the total ICP companies and targets present at the conference.',
+        calculation: '(rep ICP companies engaged / total ICP companies at conf × 50%) + (rep target accounts engaged / total targets at conf × 50%)',
+      },
+      {
+        term: 'Meeting Execution — Rep (20%)',
+        description: 'How effectively the rep converted scheduled meetings into held meetings and created follow-ups for those companies.',
+        calculation: '(rep meetings held / rep meetings scheduled × 50%) + (rep companies with meeting & follow-up / rep companies with meeting × 50%)',
+      },
+      {
+        term: 'Pipeline Influence Index — Rep (30%)',
+        description: 'Pipeline influenced by the rep relative to their equal-share of the conference cost and the expected return target. Capped at 100.',
+        calculation: 'MIN(rep pipeline influenced / (rep allocated cost × expected return target), 1) × 100',
+      },
+      {
+        term: 'Engagement Breadth — Rep (5%)',
+        description: 'The percentage of all companies at the conference that the rep engaged via meetings.',
+        calculation: 'rep companies engaged / total companies at conference × 100',
+      },
+      {
+        term: 'Cost Efficiency — Rep (10%)',
+        description: 'Reuses the Rep Cost Efficiency Score computed from the rep\'s equal-share allocated cost against benchmark tiers for Cost per Company, Cost per Meeting, and Pipeline per $1k.',
+        calculation: 'Same as conference-level Cost Efficiency Score, applied to rep allocated cost',
+      },
+      {
+        term: 'Follow-up Execution — Rep (10%)',
+        description: 'The percentage of follow-ups attributed to the rep\'s engaged companies that were marked completed.',
+        calculation: 'rep follow-ups completed / rep follow-ups created × 100',
+      },
+      {
+        term: 'Net-New Engaged — Rep (5%)',
+        description: 'The percentage of companies this rep engaged that have not appeared at any prior conference in the system.',
+        calculation: 'rep net-new logos engaged / rep companies engaged × 100',
+      },
+      {
+        term: 'Rep Allocated Cost',
+        description: 'The rep\'s equal share of total conference spend. Used as the cost denominator for all rep-level cost efficiency calculations.',
+        calculation: 'total conference effective spend / number of reps in attribution',
+      },
+    ],
+  },
+  {
     title: 'Conference Effectiveness Score (CES)',
     items: [
       {
