@@ -316,17 +316,25 @@ export async function GET(
     const icpCoverage = (await runQuery(
       `${w}
        SELECT
-         COUNT(DISTINCT CASE WHEN cc.icp='Yes' THEN cc.company_id END) AS icp_companies_total,
-         COUNT(DISTINCT CASE WHEN cc.icp='Yes' AND ce.is_engaged=1 THEN cc.company_id END) AS icp_companies_engaged,
-         COUNT(DISTINCT ca.attendee_id) AS total_attendees,
-         COUNT(DISTINCT CASE WHEN co.icp='Yes' THEN ca.attendee_id END) AS icp_attendees,
-         ROUND(COUNT(DISTINCT CASE WHEN co.icp='Yes' THEN ca.attendee_id END)*100.0/NULLIF(COUNT(DISTINCT ca.attendee_id),0),1) AS icp_attendee_coverage_pct,
-         ROUND(COUNT(DISTINCT CASE WHEN cc.icp='Yes' AND ce.is_engaged=1 THEN cc.company_id END)*100.0/NULLIF(COUNT(DISTINCT CASE WHEN cc.icp='Yes' THEN cc.company_id END),0),1) AS icp_company_engagement_pct
-       FROM conf_companies cc
-       JOIN company_engagement ce ON cc.company_id = ce.company_id
-       JOIN conference_attendees ca ON ca.conference_id = ${cid}
-       JOIN attendees a ON ca.attendee_id = a.id
-       JOIN companies co ON a.company_id = co.id`
+         COUNT(DISTINCT CASE WHEN ce.icp='Yes' THEN ce.company_id END) AS icp_companies_total,
+         COUNT(DISTINCT CASE WHEN ce.icp='Yes' AND ce.is_engaged=1 THEN ce.company_id END) AS icp_companies_engaged,
+         (SELECT COUNT(DISTINCT ca2.attendee_id) FROM conference_attendees ca2 WHERE ca2.conference_id = ${cid}) AS total_attendees,
+         (SELECT COUNT(DISTINCT ca2.attendee_id) FROM conference_attendees ca2
+           JOIN attendees a2 ON ca2.attendee_id = a2.id
+           JOIN companies co2 ON a2.company_id = co2.id
+           WHERE ca2.conference_id = ${cid} AND co2.icp = 'Yes') AS icp_attendees,
+         ROUND(
+           (SELECT COUNT(DISTINCT ca2.attendee_id) FROM conference_attendees ca2
+             JOIN attendees a2 ON ca2.attendee_id = a2.id
+             JOIN companies co2 ON a2.company_id = co2.id
+             WHERE ca2.conference_id = ${cid} AND co2.icp = 'Yes') * 100.0
+           / NULLIF((SELECT COUNT(DISTINCT ca2.attendee_id) FROM conference_attendees ca2 WHERE ca2.conference_id = ${cid}), 0),
+         1) AS icp_attendee_coverage_pct,
+         ROUND(
+           COUNT(DISTINCT CASE WHEN ce.icp='Yes' AND ce.is_engaged=1 THEN ce.company_id END)*100.0
+           / NULLIF(COUNT(DISTINCT CASE WHEN ce.icp='Yes' THEN ce.company_id END), 0),
+         1) AS icp_company_engagement_pct
+       FROM company_engagement ce`
     ))[0] ?? {};
 
     const seniorityMix = await runQuery(
@@ -359,16 +367,14 @@ export async function GET(
     ))[0] ?? {};
 
     const personaDistribution = await runQuery(
-      `SELECT
+      `${w}
+       SELECT
          a.function,
          COUNT(DISTINCT ca.attendee_id) AS total,
          COUNT(DISTINCT CASE WHEN ce.is_engaged=1 THEN ca.attendee_id END) AS engaged
        FROM conference_attendees ca
        JOIN attendees a ON ca.attendee_id=a.id
-       LEFT JOIN (
-         ${w.replace('WITH ', '')}
-         SELECT company_id, is_engaged FROM company_engagement
-       ) ce ON a.company_id = ce.company_id
+       LEFT JOIN company_engagement ce ON a.company_id=ce.company_id
        WHERE ca.conference_id=${cid} AND a.function IS NOT NULL
        GROUP BY a.function ORDER BY engaged DESC`
     );

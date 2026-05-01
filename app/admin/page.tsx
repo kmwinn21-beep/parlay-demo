@@ -4329,7 +4329,7 @@ function AdminEffectivenessTab() {
             {showAddBudget && (
               <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
                 <div className="flex items-center gap-3">
-                  <div className="w-14 flex-shrink-0">
+                  <div className="w-24 flex-shrink-0">
                     <input
                       type="number"
                       value={newBudgetYear}
