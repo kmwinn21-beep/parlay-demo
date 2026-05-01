@@ -485,18 +485,74 @@ export async function GET(
        ORDER BY pipeline_influence_value DESC`
     );
 
+    // ── Supporting sets for Rep CES dimensions ─────────────────────────────
+    const icpCompanyRows = await runQuery(
+      `SELECT DISTINCT a.company_id FROM conference_attendees ca
+       JOIN attendees a  ON ca.attendee_id = a.id
+       JOIN companies co ON a.company_id = co.id
+       WHERE ca.conference_id = ${cid} AND co.icp = 'Yes' AND a.company_id IS NOT NULL`
+    );
+    const icpCompanyIdSet = new Set<number>(icpCompanyRows.map(r => Number(r.company_id)));
+
+    const netNewCompanyRows = await runQuery(
+      `SELECT DISTINCT a.company_id FROM conference_attendees ca
+       JOIN attendees a ON ca.attendee_id = a.id
+       WHERE ca.conference_id = ${cid} AND a.company_id IS NOT NULL
+         AND a.company_id NOT IN (
+           SELECT DISTINCT a2.company_id FROM conference_attendees ca2
+           JOIN attendees a2 ON ca2.attendee_id = a2.id
+           WHERE ca2.conference_id != ${cid} AND a2.company_id IS NOT NULL
+         )`
+    );
+    const netNewCompanyIdSet = new Set<number>(netNewCompanyRows.map(r => Number(r.company_id)));
+
+    const targetCompanyRows = await runQuery(
+      `SELECT DISTINCT a.company_id FROM conference_targets ct
+       JOIN attendees a ON ct.attendee_id = a.id
+       WHERE ct.conference_id = ${cid} AND a.company_id IS NOT NULL`
+    );
+    const targetCompanyIdSet = new Set<number>(targetCompanyRows.map(r => Number(r.company_id)));
+
+    const companyFollowupRows = await runQuery(
+      `SELECT a.company_id,
+         COUNT(DISTINCT f.id) AS followups_created,
+         COUNT(DISTINCT CASE WHEN f.completed = 1 THEN f.id END) AS followups_completed
+       FROM follow_ups f
+       JOIN attendees a ON f.attendee_id = a.id
+       WHERE f.conference_id = ${cid} AND a.company_id IS NOT NULL
+       GROUP BY a.company_id`
+    );
+    const companyFollowupMap = new Map<number, { created: number; completed: number }>();
+    for (const r of companyFollowupRows) {
+      companyFollowupMap.set(Number(r.company_id), {
+        created: Number(r.followups_created ?? 0),
+        completed: Number(r.followups_completed ?? 0),
+      });
+    }
+
     // ── Rep attribution (TypeScript logic, company-level) ──────────────────
     interface RepAcc {
       companies: Set<number>;
+      icpCompanies: Set<number>;
+      netNewCompanies: Set<number>;
+      targetCompanies: Set<number>;
+      meetingCompanies: Set<number>;
       pipelineInfluence: number;
       meetingsHeld: number;
       meetingsScheduled: number;
       touchpoints: number;
       eventAttendees: number;
+      followupsCreated: number;
+      followupsCompleted: number;
     }
     const repAccMap = new Map<string, RepAcc>();
     const getAcc = (name: string): RepAcc => {
-      if (!repAccMap.has(name)) repAccMap.set(name, { companies: new Set(), pipelineInfluence: 0, meetingsHeld: 0, meetingsScheduled: 0, touchpoints: 0, eventAttendees: 0 });
+      if (!repAccMap.has(name)) repAccMap.set(name, {
+        companies: new Set(), icpCompanies: new Set(), netNewCompanies: new Set(),
+        targetCompanies: new Set(), meetingCompanies: new Set(),
+        pipelineInfluence: 0, meetingsHeld: 0, meetingsScheduled: 0,
+        touchpoints: 0, eventAttendees: 0, followupsCreated: 0, followupsCompleted: 0,
+      });
       return repAccMap.get(name)!;
     };
 
@@ -536,6 +592,10 @@ export async function GET(
         for (const n of eng.repNames) {
           const acc = getAcc(n);
           acc.companies.add(compId);
+          if (icpCompanyIdSet.has(compId)) acc.icpCompanies.add(compId);
+          if (netNewCompanyIdSet.has(compId)) acc.netNewCompanies.add(compId);
+          if (targetCompanyIdSet.has(compId)) acc.targetCompanies.add(compId);
+          if (eng.heldCount > 0) acc.meetingCompanies.add(compId);
           acc.meetingsHeld += eng.heldCount * share;
           acc.meetingsScheduled += eng.scheduledCount * share;
         }
@@ -597,6 +657,26 @@ export async function GET(
 
       Array.from(attribution.entries()).forEach(([n, share]) => { getAcc(n).pipelineInfluence += share; });
     }
+
+    // Second pass: attribute follow-ups to reps via company portfolio (equal share)
+    const companyToRepsMap = new Map<number, Set<string>>();
+    Array.from(repAccMap.entries()).forEach(([name, acc]) => {
+      Array.from(acc.companies).forEach(compId => {
+        if (!companyToRepsMap.has(compId)) companyToRepsMap.set(compId, new Set());
+        companyToRepsMap.get(compId)!.add(name);
+      });
+    });
+    Array.from(companyFollowupMap.entries()).forEach(([compId, fu]) => {
+      const repsForComp = companyToRepsMap.get(compId);
+      if (!repsForComp || repsForComp.size === 0) return;
+      const share = 1 / repsForComp.size;
+      Array.from(repsForComp).forEach(repName => {
+        const acc = repAccMap.get(repName);
+        if (!acc) return;
+        acc.followupsCreated += fu.created * share;
+        acc.followupsCompleted += fu.completed * share;
+      });
+    });
 
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
@@ -785,6 +865,174 @@ export async function GET(
     // dim7: use adjusted score
     const dim7CostEfficiency = adjustedScore;
 
+    // ── Rep Cost Efficiency Scoring (equal-share allocation) ───────────────
+    const numReps = repAttribution.length;
+    const repAllocatedCost = numReps > 0 ? totalSpend / numReps : 0;
+    const repCostEfficiency = repAttribution.map(rep => {
+      const repUnavailable: string[] = [];
+
+      const repCPCE = (repAllocatedCost > 0 && rep.unique_companies_met > 0)
+        ? repAllocatedCost / rep.unique_companies_met : null;
+      const repCPMH = (repAllocatedCost > 0 && rep.meetings_held > 0)
+        ? repAllocatedCost / rep.meetings_held : null;
+      const repPIper1k = (repAllocatedCost > 0)
+        ? rep.pipeline_influence_attributed / (repAllocatedCost / 1000) : null;
+
+      if (repCPCE == null) repUnavailable.push('cost_per_company_engaged');
+      if (repCPMH == null) repUnavailable.push('cost_per_meeting_held');
+      if (repPIper1k == null) repUnavailable.push('pipeline_per_1k');
+
+      const repCompanyScore = repCPCE != null
+        ? scoreLowerIsBetter(repCPCE, bCPC.elite_max, bCPC.strong_max, bCPC.healthy_max, bCPC.weak_max)
+        : null;
+      const repMeetingScore = repCPMH != null
+        ? scoreLowerIsBetter(repCPMH, bCPM.elite_max, bCPM.strong_max, bCPM.healthy_max, bCPM.weak_max)
+        : null;
+      const repPipelineScore = repPIper1k != null
+        ? scoreHigherIsBetter(repPIper1k, bPI.elite_min, bPI.strong_min, bPI.healthy_min, bPI.weak_min)
+        : null;
+
+      let rW = 0, rS = 0;
+      if (repPipelineScore != null) { rS += repPipelineScore.score * 0.50; rW += 0.50; }
+      if (repCompanyScore != null)  { rS += repCompanyScore.score  * 0.30; rW += 0.30; }
+      if (repMeetingScore != null)  { rS += repMeetingScore.score  * 0.20; rW += 0.20; }
+      const repRawScore = rW > 0 ? Math.max(0, Math.min(100, Math.round(rS / rW))) : 0;
+
+      return {
+        rep: rep.rep,
+        rep_allocated_cost: Math.round(repAllocatedCost),
+        unique_companies_engaged_by_rep: rep.unique_companies_met,
+        meetings_held_by_rep: rep.meetings_held,
+        rep_pipeline_influenced_amount: rep.pipeline_influence_attributed,
+        rep_cost_per_company_engaged: repCPCE != null ? Math.round(repCPCE) : null,
+        rep_cost_per_meeting_held: repCPMH != null ? Math.round(repCPMH) : null,
+        rep_pipeline_influence_per_1000: repPIper1k != null ? Math.round(repPIper1k) : null,
+        rep_company_score: repCompanyScore?.score ?? null,
+        rep_company_score_tier: repCompanyScore?.tier ?? null,
+        rep_meeting_score: repMeetingScore?.score ?? null,
+        rep_meeting_score_tier: repMeetingScore?.tier ?? null,
+        rep_pipeline_score: repPipelineScore?.score ?? null,
+        rep_pipeline_score_tier: repPipelineScore?.tier ?? null,
+        rep_cost_efficiency_score_raw: repRawScore,
+        rep_cost_efficiency_tier: cesTier(repRawScore),
+        rep_cost_efficiency_interpretation: cesInterpretation(repRawScore),
+        unavailable_metrics: repUnavailable,
+        calculation_confidence: rW >= 1.0 ? 'full' : rW >= 0.5 ? 'partial' : 'low',
+      };
+    });
+
+    // ── Rep Conference Effectiveness Score (CES by Rep) ─────────────────────
+    const totalCompaniesAtConf = Number(engagementSummary.total_companies ?? 0);
+    const totalIcpAtConf = Number(icpCoverage.icp_companies_total ?? 0);
+    const totalTargetAtConf = targetCompanyIdSet.size || Number(targetEngagement.targets_total ?? 0);
+    const expectedReturnForRepCES = Number(effDefaults.expected_return_on_event_cost ?? 0);
+
+    const repCES = repAttribution.map((rep) => {
+      const acc = repAccMap.get(rep.rep);
+      if (!acc) return null;
+
+      const repCostEffRow = repCostEfficiency.find(r => r.rep === rep.rep);
+      const dim5CostEff = repCostEffRow ? Number(repCostEffRow.rep_cost_efficiency_score_raw ?? 0) : null;
+
+      const repCompaniesEngaged = acc.companies.size;
+      const repIcpEngaged = acc.icpCompanies.size;
+      const repNetNew = acc.netNewCompanies.size;
+      const repTargetEngaged = acc.targetCompanies.size;
+      const repMeetingComps = acc.meetingCompanies.size;
+      const repFollowupsCreated = acc.followupsCreated;
+      const repFollowupsCompleted = acc.followupsCompleted;
+
+      // Companies with meeting held AND follow-up
+      const meetingAndFuCount = Array.from(acc.meetingCompanies)
+        .filter(compId => { const fu = companyFollowupMap.get(compId); return fu != null && fu.created > 0; })
+        .length;
+
+      // Dim 1: ICP & Target Quality
+      const icpRate = totalIcpAtConf > 0 ? repIcpEngaged / totalIcpAtConf * 100 : null;
+      const targetRate = totalTargetAtConf > 0 ? repTargetEngaged / totalTargetAtConf * 100 : null;
+      let dim1: number | null;
+      if (icpRate != null && targetRate != null) dim1 = icpRate * 0.5 + targetRate * 0.5;
+      else dim1 = icpRate ?? targetRate ?? null;
+
+      // Dim 2: Meeting Execution
+      const holdRate = rep.meetings_scheduled > 0 ? rep.meetings_held / rep.meetings_scheduled * 100 : null;
+      const fuSchedRate = repMeetingComps > 0 ? meetingAndFuCount / repMeetingComps * 100 : null;
+      let dim2: number | null;
+      if (holdRate != null && fuSchedRate != null) dim2 = holdRate * 0.5 + fuSchedRate * 0.5;
+      else dim2 = holdRate ?? fuSchedRate ?? null;
+
+      // Dim 3: Pipeline Influence Index
+      const dim3 = (repAllocatedCost > 0 && expectedReturnForRepCES > 0)
+        ? Math.min(rep.pipeline_influence_attributed / (repAllocatedCost * expectedReturnForRepCES) * 100, 100)
+        : null;
+
+      // Dim 4: Engagement Breadth
+      const dim4 = totalCompaniesAtConf > 0 ? repCompaniesEngaged / totalCompaniesAtConf * 100 : null;
+
+      // Dim 5: Cost Efficiency (from repCostEfficiency)
+      const dim5 = dim5CostEff;
+
+      // Dim 6: Follow-up Execution
+      const dim6 = repFollowupsCreated > 0 ? repFollowupsCompleted / repFollowupsCreated * 100 : null;
+
+      // Dim 7: Net-New Engaged
+      const dim7 = repCompaniesEngaged > 0 ? repNetNew / repCompaniesEngaged * 100 : null;
+
+      const dims = [
+        { key: 'icp_target_quality', val: dim1, w: 0.20 },
+        { key: 'meeting_execution',  val: dim2, w: 0.20 },
+        { key: 'pipeline_influence', val: dim3, w: 0.30 },
+        { key: 'engagement_breadth', val: dim4, w: 0.05 },
+        { key: 'cost_efficiency',    val: dim5, w: 0.10 },
+        { key: 'followup_execution', val: dim6, w: 0.10 },
+        { key: 'net_new_engaged',    val: dim7, w: 0.05 },
+      ];
+
+      const available = dims.filter(d => d.val != null);
+      const unavailableComponents = dims.filter(d => d.val == null).map(d => d.key);
+      const totalAvailableWeight = available.reduce((s, d) => s + d.w, 0);
+
+      let score = 0;
+      const effectiveWeights: Record<string, number> = {};
+      for (const d of available) {
+        const eff = d.w / (totalAvailableWeight || 1);
+        effectiveWeights[d.key] = Math.round(eff * 100);
+        score += (d.val ?? 0) * eff;
+      }
+      const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+
+      return {
+        rep: rep.rep,
+        rep_ces_score: finalScore,
+        rep_ces_tier: cesTier(finalScore),
+        rep_ces_interpretation: cesInterpretation(finalScore),
+        rep_dim1_icp_target: dim1 != null ? Math.round(dim1 * 10) / 10 : null,
+        rep_dim2_meeting_exec: dim2 != null ? Math.round(dim2 * 10) / 10 : null,
+        rep_dim3_pipeline_index: dim3 != null ? Math.round(dim3 * 10) / 10 : null,
+        rep_dim4_breadth: dim4 != null ? Math.round(dim4 * 10) / 10 : null,
+        rep_dim5_cost_efficiency: dim5,
+        rep_dim6_followup: dim6 != null ? Math.round(dim6 * 10) / 10 : null,
+        rep_dim7_net_new: dim7 != null ? Math.round(dim7 * 10) / 10 : null,
+        rep_pipeline_influenced: rep.pipeline_influence_attributed,
+        rep_companies_engaged: repCompaniesEngaged,
+        unavailable_components: unavailableComponents,
+        effective_weights: effectiveWeights,
+        calculation_confidence: totalAvailableWeight >= 1.0 ? 'full' : totalAvailableWeight >= 0.5 ? 'partial' : 'low',
+        supporting_metrics: {
+          rep_icp_companies_engaged: repIcpEngaged,
+          rep_target_accounts_engaged: repTargetEngaged,
+          rep_companies_engaged: repCompaniesEngaged,
+          rep_meetings_scheduled: rep.meetings_scheduled,
+          rep_meetings_held: rep.meetings_held,
+          rep_meeting_companies: repMeetingComps,
+          rep_meeting_and_fu_companies: meetingAndFuCount,
+          rep_followups_created: Math.round(repFollowupsCreated),
+          rep_followups_completed: Math.round(repFollowupsCompleted),
+          rep_net_new_logos_engaged: repNetNew,
+        },
+      };
+    }).filter(Boolean);
+
     // ── Conference Effectiveness Score (CES) ────────────────────────────────
     const dim1IcpTarget =
       (Number(icpCoverage.icp_company_engagement_pct ?? 0) * 0.5) +
@@ -950,6 +1198,9 @@ export async function GET(
         rep_activity: repActivity.map(r => ({ ...r, rep: resolveRep(r.rep_raw).join(', ') })),
         conf_efficiency_rank: confRank,
         conf_efficiency_total: totalConferences,
+        rep_cost_efficiency: repCostEfficiency,
+        rep_allocated_cost: Math.round(repAllocatedCost),
+        rep_ces: repCES,
       },
       effectiveness_defaults: effDefaults,
     });

@@ -9,14 +9,6 @@ function fmt$(n: unknown) {
   return '$' + Math.round(v).toLocaleString();
 }
 
-function ProgressBar({ value, max = 100, color = '#1B76BC' }: { value: number; max?: number; color?: string }) {
-  const pct = Math.min(Math.round((value / Math.max(max, 1)) * 100), 100);
-  return (
-    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-      <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-    </div>
-  );
-}
 
 function scoreColor(score: number) {
   if (score >= 90) return '#059669';  // green — Exceptional
@@ -42,13 +34,29 @@ const INTERPRETATION_ROWS = [
   { range: '< 50',   rating: 'Inefficient', meaning: 'Significant underperformance relative to benchmarks' },
 ];
 
+function RepMetricCell({ value, score, tier }: { value: unknown; score: unknown; tier: unknown }) {
+  const v = value == null ? null : Number(value);
+  const s = score == null ? null : Number(score);
+  const t = tier == null ? '' : String(tier);
+  if (v == null || isNaN(v)) return <span className="text-gray-300">—</span>;
+  return (
+    <span className="font-medium text-gray-700">
+      {fmt$(v)}
+      {s != null && (
+        <span className="ml-1 text-xs font-normal">
+          <span className="font-semibold" style={{ color: scoreColor(s) }}>{s}</span>
+          {t && <span className="text-gray-400"> · {t}</span>}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const { operational, ces } = data;
   const costs = operational.cost_efficiency;
-  const lineItems = (operational.line_items ?? []) as Record<string, unknown>[];
-  const totalSpend = Number(costs.total_spend ?? 0);
-  const annualBudget = operational.annual_budget;
-  const annualBudgetYear = operational.annual_budget_year;
+  const repRows = (operational.rep_cost_efficiency ?? []) as Record<string, unknown>[];
+  const repAllocatedCost = Number(operational.rep_allocated_cost ?? 0);
 
   const cesScore = Number(costs.cost_efficiency_score ?? 0);
   const rank = operational.conf_efficiency_rank ?? 1;
@@ -67,8 +75,6 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const confidence = String(costs.calculation_confidence ?? 'full');
 
   const [showInterpretation, setShowInterpretation] = useState(false);
-
-  const filteredItems = lineItems.filter(li => Number(li.effective ?? li.actual ?? 0) > 0 || Number(li.budget ?? 0) > 0);
 
   return (
     <div className="p-6">
@@ -166,58 +172,57 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           </div>
         </div>
 
-        {/* Right column: Conference Costs */}
+        {/* Right column: Cost Efficiency by Rep */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Conference Costs</h3>
-            <span className="text-sm font-bold text-gray-700">Total: {fmt$(totalSpend)}</span>
-          </div>
-          <div className="card p-4">
-            {filteredItems.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No cost data entered yet. Add costs via the Budget &amp; Actuals section on the conference page.</p>
-            ) : (
-              <div className="space-y-3">
-                {filteredItems.map((li, i) => {
-                  const actual = Number(li.actual ?? 0);
-                  const budget = Number(li.budget ?? 0);
-                  const effective = Number(li.effective ?? (actual > 0 ? actual : budget));
-                  const barMax = budget > 0 ? budget : effective;
-                  const barPct = barMax > 0 ? Math.round(effective / barMax * 100) : 0;
-                  const shareOfTotal = totalSpend > 0 ? Math.round(effective / totalSpend * 100) : 0;
-                  const overBudget = budget > 0 && actual > budget;
-                  return (
-                    <div key={i}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">{String(li.label ?? '—')}</span>
-                        <span className={overBudget ? 'text-red-500 font-semibold' : 'text-gray-600'}>
-                          {actual > 0 ? (
-                            <>
-                              <span className="font-bold">{fmt$(actual)}</span>
-                              {budget > 0 && actual !== budget && (
-                                <span className="text-gray-400 ml-1">/ {fmt$(budget)} budget</span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-gray-500">{fmt$(budget)}</span>
-                          )}
-                          <span className="text-gray-300 ml-1">({shareOfTotal}%)</span>
-                        </span>
-                      </div>
-                      <ProgressBar value={barPct} max={100} color={overBudget ? '#dc2626' : '#1B76BC'} />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {annualBudget != null && (
-              <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                Annual conference budget ({annualBudgetYear}): <span className="font-semibold text-gray-700">{fmt$(annualBudget)}</span>
-                {totalSpend > 0 && annualBudget > 0 && (
-                  <span className="ml-2 text-gray-400">({Math.round(totalSpend / annualBudget * 100)}% of annual budget)</span>
-                )}
-              </div>
+            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Cost Efficiency by Rep</h3>
+            {repAllocatedCost > 0 && (
+              <span className="text-xs text-gray-400">Allocated cost/rep: <span className="font-semibold text-gray-600">{fmt$(repAllocatedCost)}</span></span>
             )}
           </div>
+          {repRows.length === 0 ? (
+            <div className="card p-4">
+              <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-100">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
+                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
+                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
+                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
+                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {repRows.map((r, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{String(r.rep ?? '—')}</td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        {r.rep_cost_efficiency_score_raw != null ? (
+                          <span className="font-bold text-sm" style={{ color: scoreColor(Number(r.rep_cost_efficiency_score_raw)) }}>
+                            {Number(r.rep_cost_efficiency_score_raw)}
+                            <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
+                          </span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

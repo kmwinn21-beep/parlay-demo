@@ -45,6 +45,9 @@ export interface EffectivenessData {
     rep_activity: Record<string, unknown>[];
     conf_efficiency_rank?: number;
     conf_efficiency_total?: number;
+    rep_cost_efficiency?: Record<string, unknown>[];
+    rep_allocated_cost?: number;
+    rep_ces?: Record<string, unknown>[];
   };
   effectiveness_defaults: Record<string, string>;
 }
