@@ -785,6 +785,62 @@ export async function GET(
     // dim7: use adjusted score
     const dim7CostEfficiency = adjustedScore;
 
+    // ── Rep Cost Efficiency Scoring (equal-share allocation) ───────────────
+    const numReps = repAttribution.length;
+    const repAllocatedCost = numReps > 0 ? totalSpend / numReps : 0;
+    const repCostEfficiency = repAttribution.map(rep => {
+      const repUnavailable: string[] = [];
+
+      const repCPCE = (repAllocatedCost > 0 && rep.unique_companies_met > 0)
+        ? repAllocatedCost / rep.unique_companies_met : null;
+      const repCPMH = (repAllocatedCost > 0 && rep.meetings_held > 0)
+        ? repAllocatedCost / rep.meetings_held : null;
+      const repPIper1k = (repAllocatedCost > 0)
+        ? rep.pipeline_influence_attributed / (repAllocatedCost / 1000) : null;
+
+      if (repCPCE == null) repUnavailable.push('cost_per_company_engaged');
+      if (repCPMH == null) repUnavailable.push('cost_per_meeting_held');
+      if (repPIper1k == null) repUnavailable.push('pipeline_per_1k');
+
+      const repCompanyScore = repCPCE != null
+        ? scoreLowerIsBetter(repCPCE, bCPC.elite_max, bCPC.strong_max, bCPC.healthy_max, bCPC.weak_max)
+        : null;
+      const repMeetingScore = repCPMH != null
+        ? scoreLowerIsBetter(repCPMH, bCPM.elite_max, bCPM.strong_max, bCPM.healthy_max, bCPM.weak_max)
+        : null;
+      const repPipelineScore = repPIper1k != null
+        ? scoreHigherIsBetter(repPIper1k, bPI.elite_min, bPI.strong_min, bPI.healthy_min, bPI.weak_min)
+        : null;
+
+      let rW = 0, rS = 0;
+      if (repPipelineScore != null) { rS += repPipelineScore.score * 0.50; rW += 0.50; }
+      if (repCompanyScore != null)  { rS += repCompanyScore.score  * 0.30; rW += 0.30; }
+      if (repMeetingScore != null)  { rS += repMeetingScore.score  * 0.20; rW += 0.20; }
+      const repRawScore = rW > 0 ? Math.max(0, Math.min(100, Math.round(rS / rW))) : 0;
+
+      return {
+        rep: rep.rep,
+        rep_allocated_cost: Math.round(repAllocatedCost),
+        unique_companies_engaged_by_rep: rep.unique_companies_met,
+        meetings_held_by_rep: rep.meetings_held,
+        rep_pipeline_influenced_amount: rep.pipeline_influence_attributed,
+        rep_cost_per_company_engaged: repCPCE != null ? Math.round(repCPCE) : null,
+        rep_cost_per_meeting_held: repCPMH != null ? Math.round(repCPMH) : null,
+        rep_pipeline_influence_per_1000: repPIper1k != null ? Math.round(repPIper1k) : null,
+        rep_company_score: repCompanyScore?.score ?? null,
+        rep_company_score_tier: repCompanyScore?.tier ?? null,
+        rep_meeting_score: repMeetingScore?.score ?? null,
+        rep_meeting_score_tier: repMeetingScore?.tier ?? null,
+        rep_pipeline_score: repPipelineScore?.score ?? null,
+        rep_pipeline_score_tier: repPipelineScore?.tier ?? null,
+        rep_cost_efficiency_score_raw: repRawScore,
+        rep_cost_efficiency_tier: cesTier(repRawScore),
+        rep_cost_efficiency_interpretation: cesInterpretation(repRawScore),
+        unavailable_metrics: repUnavailable,
+        calculation_confidence: rW >= 1.0 ? 'full' : rW >= 0.5 ? 'partial' : 'low',
+      };
+    });
+
     // ── Conference Effectiveness Score (CES) ────────────────────────────────
     const dim1IcpTarget =
       (Number(icpCoverage.icp_company_engagement_pct ?? 0) * 0.5) +
@@ -950,6 +1006,8 @@ export async function GET(
         rep_activity: repActivity.map(r => ({ ...r, rep: resolveRep(r.rep_raw).join(', ') })),
         conf_efficiency_rank: confRank,
         conf_efficiency_total: totalConferences,
+        rep_cost_efficiency: repCostEfficiency,
+        rep_allocated_cost: Math.round(repAllocatedCost),
       },
       effectiveness_defaults: effDefaults,
     });
