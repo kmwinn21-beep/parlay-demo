@@ -52,16 +52,13 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Expected return on cost (per-conference override, falls back to global default)
   const [returnOnCost, setReturnOnCost] = useState('');
   const [globalDefaultReturn, setGlobalDefaultReturn] = useState('');
 
-  // For "Other" custom label editing
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
   const labelInputRef = useRef<HTMLInputElement>(null);
 
-  // Available cost types for "Add line item" dropdown
   const [availableCostTypes, setAvailableCostTypes] = useState<string[]>([]);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const addDropdownRef = useRef<HTMLDivElement>(null);
@@ -85,8 +82,6 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
 
       setAvailableCostTypes(defaultTypes);
       setGlobalDefaultReturn(globalReturn);
-
-      // Per-conference return overrides global default if set
       setReturnOnCost(budgetData.return_on_cost ?? globalReturn);
 
       if (budgetData.line_items && budgetData.line_items.length > 0) {
@@ -173,7 +168,6 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
     }
   };
 
-  // Totals
   const totalBudget = items.reduce((sum, it) => sum + (parseDollar(it.budget) ?? 0), 0);
   const totalActual = items.reduce((sum, it) => sum + (parseDollar(it.actual) ?? 0), 0);
   const hasBudgetTotals = items.some(it => parseDollar(it.budget) != null);
@@ -182,13 +176,11 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
     ? ((totalActual / totalBudget) * 100) - 100
     : null;
 
-  // Expected return calculation
   const returnMultiplier = parseDollar(returnOnCost);
   const expectedReturnValue = hasBudgetTotals && returnMultiplier != null && returnMultiplier > 0
     ? totalBudget * returnMultiplier
     : null;
 
-  // Dropdown options
   const existingLabels = new Set(items.map(it => it.label));
   const dropdownOptions = [
     ...availableCostTypes.filter(t => !existingLabels.has(t)),
@@ -197,11 +189,22 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '90vh' }}>
+    /* Backdrop — bottom-sheet on mobile, centered dialog on sm+ */
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white w-full sm:max-w-3xl flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl" style={{ maxHeight: '92vh' }}>
+
+        {/* Drag handle (mobile only) */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-lg font-bold text-brand-primary font-serif">Budget vs. Actual</h2>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex-shrink-0">
+          <h2 className="text-base sm:text-lg font-bold text-brand-primary font-serif">Budget vs. Actual</h2>
           <button
             type="button"
             onClick={onClose}
@@ -214,15 +217,15 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : (
             <>
-              {/* Column headers */}
-              <div className="grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 mb-2 px-1">
+              {/* ── Desktop column headers (hidden on mobile) ── */}
+              <div className="hidden sm:grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 mb-2 px-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Item</p>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Budget</p>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Actual</p>
@@ -231,62 +234,123 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
               </div>
 
               {/* Line items */}
-              <div className="space-y-2">
+              <div className="space-y-3 sm:space-y-2">
                 {items.map(item => (
-                  <div key={item.id} className="grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
-                    <div className="min-w-0">
-                      {editingLabelId === item.id ? (
+                  <div key={item.id}>
+                    {/* ── Mobile card layout ── */}
+                    <div className="sm:hidden border border-gray-100 rounded-xl p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          {editingLabelId === item.id ? (
+                            <input
+                              ref={labelInputRef}
+                              value={labelDraft}
+                              onChange={e => setLabelDraft(e.target.value)}
+                              onBlur={() => commitLabelEdit(item.id)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') commitLabelEdit(item.id);
+                                if (e.key === 'Escape') { setEditingLabelId(null); removeItem(item.id); }
+                              }}
+                              placeholder="Enter description…"
+                              className="input-field text-sm w-full"
+                            />
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700 block">{item.label}</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="flex items-center justify-center w-7 h-7 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.budget}
+                            onChange={e => updateItem(item.id, 'budget', e.target.value)}
+                            placeholder="Budget"
+                            className="input-field text-sm pl-6 w-full"
+                          />
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.actual}
+                            onChange={e => updateItem(item.id, 'actual', e.target.value)}
+                            placeholder="Actual"
+                            className="input-field text-sm pl-6 w-full"
+                          />
+                        </div>
+                        <VariancePill variance={calcVariance(item.budget, item.actual)} />
+                      </div>
+                    </div>
+
+                    {/* ── Desktop row layout ── */}
+                    <div className="hidden sm:grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
+                      <div className="min-w-0">
+                        {editingLabelId === item.id ? (
+                          <input
+                            ref={labelInputRef}
+                            value={labelDraft}
+                            onChange={e => setLabelDraft(e.target.value)}
+                            onBlur={() => commitLabelEdit(item.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commitLabelEdit(item.id);
+                              if (e.key === 'Escape') { setEditingLabelId(null); removeItem(item.id); }
+                            }}
+                            placeholder="Enter description…"
+                            className="input-field text-sm w-full"
+                          />
+                        ) : (
+                          <span className="text-sm text-gray-700 truncate block" title={item.label}>{item.label}</span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
                         <input
-                          ref={labelInputRef}
-                          value={labelDraft}
-                          onChange={e => setLabelDraft(e.target.value)}
-                          onBlur={() => commitLabelEdit(item.id)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') commitLabelEdit(item.id);
-                            if (e.key === 'Escape') { setEditingLabelId(null); removeItem(item.id); }
-                          }}
-                          placeholder="Enter description…"
-                          className="input-field text-sm w-full"
+                          type="text"
+                          inputMode="decimal"
+                          value={item.budget}
+                          onChange={e => updateItem(item.id, 'budget', e.target.value)}
+                          placeholder="0"
+                          className="input-field text-sm pl-6 w-full"
                         />
-                      ) : (
-                        <span className="text-sm text-gray-700 truncate block" title={item.label}>{item.label}</span>
-                      )}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={item.actual}
+                          onChange={e => updateItem(item.id, 'actual', e.target.value)}
+                          placeholder="0"
+                          className="input-field text-sm pl-6 w-full"
+                        />
+                      </div>
+                      <div className="flex items-center justify-center">
+                        <VariancePill variance={calcVariance(item.budget, item.actual)} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                        title="Remove line item"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={item.budget}
-                        onChange={e => updateItem(item.id, 'budget', e.target.value)}
-                        placeholder="0"
-                        className="input-field text-sm pl-6 w-full"
-                      />
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={item.actual}
-                        onChange={e => updateItem(item.id, 'actual', e.target.value)}
-                        placeholder="0"
-                        className="input-field text-sm pl-6 w-full"
-                      />
-                    </div>
-                    <div className="flex items-center justify-center">
-                      <VariancePill variance={calcVariance(item.budget, item.actual)} />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(item.id)}
-                      className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
-                      title="Remove line item"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
                   </div>
                 ))}
               </div>
@@ -323,10 +387,28 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
                 </div>
               </div>
 
-              {/* Totals row */}
+              {/* Totals + Expected Return */}
               {items.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
-                  <div className="grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
+
+                  {/* ── Totals: mobile ── */}
+                  <div className="sm:hidden flex items-center justify-between gap-2 px-1">
+                    <p className="text-sm font-semibold text-gray-700">Totals</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400">Budget</p>
+                        <p className="text-sm font-semibold text-gray-700">{hasBudgetTotals ? fmtDollars(totalBudget) : '—'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400">Actual</p>
+                        <p className="text-sm font-semibold text-gray-700">{hasActualTotals ? fmtDollars(totalActual) : '—'}</p>
+                      </div>
+                      <VariancePill variance={totalVariance} />
+                    </div>
+                  </div>
+
+                  {/* ── Totals: desktop ── */}
+                  <div className="hidden sm:grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
                     <p className="text-sm font-semibold text-gray-700">Totals</p>
                     <p className="text-sm font-semibold text-gray-700 pl-2">
                       {hasBudgetTotals ? fmtDollars(totalBudget) : '—'}
@@ -340,12 +422,40 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
                     <span />
                   </div>
 
-                  {/* Expected Return row */}
-                  <div className="grid grid-cols-[1fr_140px_290px_36px] gap-2 items-center pt-3 border-t border-gray-100">
+                  {/* ── Expected Return: mobile ── */}
+                  <div className="sm:hidden pt-3 border-t border-gray-100 space-y-2">
                     <p className="text-sm font-semibold text-gray-700 leading-snug">
                       Expected Return on {conferenceName} Cost
                     </p>
-                    {/* Multiplier input */}
+                    <div className="flex items-center gap-3">
+                      <div className="w-28 flex-shrink-0">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={returnOnCost}
+                          onChange={e => {
+                            const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                            setReturnOnCost(cleaned);
+                          }}
+                          placeholder={globalDefaultReturn || '0'}
+                          className="input-field text-sm w-full"
+                          title="Return multiplier"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-gray-400 whitespace-nowrap">× budget =</span>
+                        <span className={`text-sm font-semibold ${expectedReturnValue != null ? 'text-green-700' : 'text-gray-300'}`}>
+                          {expectedReturnValue != null ? fmtDollars(expectedReturnValue) : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Expected Return: desktop ── */}
+                  <div className="hidden sm:grid grid-cols-[1fr_140px_290px_36px] gap-2 items-center pt-3 border-t border-gray-100">
+                    <p className="text-sm font-semibold text-gray-700 leading-snug">
+                      Expected Return on {conferenceName} Cost
+                    </p>
                     <div className="relative">
                       <input
                         type="text"
@@ -360,7 +470,6 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
                         title="Return multiplier (e.g. 2.5 = 250% of total budget)"
                       />
                     </div>
-                    {/* Calculated value spanning Actual + Variance columns */}
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400 whitespace-nowrap">Total budget × return =</span>
                       <span className={`text-sm font-semibold ${expectedReturnValue != null ? 'text-green-700' : 'text-gray-300'}`}>
@@ -369,6 +478,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
                     </div>
                     <span />
                   </div>
+
                 </div>
               )}
             </>
@@ -376,7 +486,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-200 flex-shrink-0">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">
             Cancel
           </button>
