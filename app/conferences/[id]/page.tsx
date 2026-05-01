@@ -993,7 +993,7 @@ export default function ConferenceDetailPage() {
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
-                <div className="flex items-center gap-1 border-l border-gray-200 pl-3">
+                <div className="flex items-center gap-1 border-l border-gray-200 pl-3 overflow-x-auto flex-nowrap hide-scrollbar">
                   <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
                   <PostConferenceReview
                     conferenceId={conference.id}
@@ -1004,9 +1004,9 @@ export default function ConferenceDetailPage() {
                   <button
                     type="button"
                     onClick={() => setShowBudgetModal(true)}
-                    className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors"
+                    className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                     Budget vs. Actual

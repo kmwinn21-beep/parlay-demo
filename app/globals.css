@@ -94,4 +94,12 @@ h1, h2, h3 {
   .badge-gray {
     @apply badge bg-gray-100 text-gray-700;
   }
+
+  .hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
