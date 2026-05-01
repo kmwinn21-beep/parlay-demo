@@ -660,23 +660,23 @@ export async function GET(
 
     // Second pass: attribute follow-ups to reps via company portfolio (equal share)
     const companyToRepsMap = new Map<number, Set<string>>();
-    for (const [name, acc] of repAccMap.entries()) {
-      for (const compId of acc.companies) {
+    Array.from(repAccMap.entries()).forEach(([name, acc]) => {
+      Array.from(acc.companies).forEach(compId => {
         if (!companyToRepsMap.has(compId)) companyToRepsMap.set(compId, new Set());
         companyToRepsMap.get(compId)!.add(name);
-      }
-    }
-    for (const [compId, fu] of companyFollowupMap.entries()) {
+      });
+    });
+    Array.from(companyFollowupMap.entries()).forEach(([compId, fu]) => {
       const repsForComp = companyToRepsMap.get(compId);
-      if (!repsForComp || repsForComp.size === 0) continue;
+      if (!repsForComp || repsForComp.size === 0) return;
       const share = 1 / repsForComp.size;
-      for (const repName of repsForComp) {
+      Array.from(repsForComp).forEach(repName => {
         const acc = repAccMap.get(repName);
-        if (!acc) continue;
+        if (!acc) return;
         acc.followupsCreated += fu.created * share;
         acc.followupsCompleted += fu.completed * share;
-      }
-    }
+      });
+    });
 
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
@@ -943,11 +943,9 @@ export async function GET(
       const repFollowupsCompleted = acc.followupsCompleted;
 
       // Companies with meeting held AND follow-up
-      let meetingAndFuCount = 0;
-      for (const compId of acc.meetingCompanies) {
-        const fu = companyFollowupMap.get(compId);
-        if (fu && fu.created > 0) meetingAndFuCount++;
-      }
+      const meetingAndFuCount = Array.from(acc.meetingCompanies)
+        .filter(compId => { const fu = companyFollowupMap.get(compId); return fu != null && fu.created > 0; })
+        .length;
 
       // Dim 1: ICP & Target Quality
       const icpRate = totalIcpAtConf > 0 ? repIcpEngaged / totalIcpAtConf * 100 : null;
