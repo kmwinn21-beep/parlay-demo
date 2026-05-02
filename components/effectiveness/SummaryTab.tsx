@@ -184,15 +184,14 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
   const regenerationsLeft = Math.max(0, MAX_GENERATIONS - genCount);
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Flat 4-cell grid: row 1 = [score+rank | pipeline], row 2 = [breakdown | rep ces]
-          CSS grid makes all cells in the same row equal height automatically */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      {/* Top row: header cards — always 2 columns (one card per column) */}
+      <div className="grid grid-cols-2 gap-3">
 
-        {/* [row 1, col 1]: CES Score card (2/3) + Rank card (1/3) */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* [row 1, col 1]: CES Score card + Rank card — stacked on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div
-            className="col-span-2 rounded-xl p-4 flex flex-col justify-between"
+            className="sm:col-span-2 rounded-xl p-4 flex flex-col justify-between"
             style={{ backgroundColor: scoreColor + '15', borderLeft: `4px solid ${scoreColor}` }}
           >
             <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Conference Effectiveness Score</div>
@@ -205,7 +204,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
             </div>
           </div>
           {cesRank != null && (
-            <div className="col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
+            <div className="sm:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
               <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
               <div className="text-3xl font-bold text-brand-secondary leading-tight">#{cesRank}</div>
               {cesTotal != null && <div className="text-xs text-gray-400 mt-0.5">of {cesTotal} conferences</div>}
@@ -214,23 +213,27 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
         </div>
 
         {/* [row 1, col 2]: Pipeline Influence Summary */}
-        <div className="card p-5 flex flex-col justify-between">
-          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Pipeline Influence Summary</h3>
-          <div className="grid grid-cols-4 gap-2">
+        <div className="card p-3 sm:p-5 flex flex-col justify-between">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3 sm:mb-4">Pipeline Influence Summary</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             {[
               { label: 'Total',       value: fmt$(totalPI) },
               { label: 'ICP',         value: fmt$(icpPI),  sub: totalPI > 0 ? `${Math.round(icpPI / totalPI * 100)}%` : null },
               { label: 'Net-New',     value: fmt$(netPI),  sub: totalPI > 0 ? `${Math.round(netPI / totalPI * 100)}%` : null },
               { label: 'Multi-Touch', value: fmt$(hiPI),   sub: totalPI > 0 ? `${Math.round(hiPI / totalPI * 100)}%` : null },
             ].map(({ label, value, sub }) => (
-              <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <div className="text-base font-bold text-brand-secondary leading-tight">{value}</div>
+              <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-2 sm:p-3">
+                <div className="text-sm sm:text-base font-bold text-brand-secondary leading-tight">{value}</div>
                 {sub && <div className="text-xs text-gray-400">{sub} of total</div>}
                 <div className="text-xs font-medium text-gray-500 mt-0.5">{label}</div>
               </div>
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Bottom row: detail cards — stack on mobile, 2 cols on lg */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* [row 2, col 1]: CES Breakdown bars */}
         <div className="card p-5">

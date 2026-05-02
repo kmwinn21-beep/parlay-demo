@@ -100,6 +100,7 @@ const SECTION_PAGE_LABELS: Record<string, string> = {
   relationships_page: 'Relationships Page',
   pre_conference_review: 'Pre-Conference Review',
   post_conference_review: 'Post-Conference Review',
+  effectiveness_modal: 'Conference Effectiveness Modal Tabs',
 };
 
 // ─── Sub-components ────────────────────────────────────────────────────────────

@@ -60,6 +60,13 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'events_touchpoints', label: 'Events & Touchpoints' },
     { key: 'action_items', label: 'Action Items' },
   ],
+  effectiveness_modal: [
+    { key: 'summary',     label: 'Summary' },
+    { key: 'sales',       label: 'Sales Execution' },
+    { key: 'audience',    label: 'Audience & Messaging' },
+    { key: 'roi',         label: 'Operational ROI' },
+    { key: 'definitions', label: 'Definitions' },
+  ],
 };
 
 interface SectionConfig {

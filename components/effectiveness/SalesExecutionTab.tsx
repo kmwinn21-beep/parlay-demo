@@ -85,7 +85,48 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile card view */}
+        <div className="sm:hidden space-y-3">
+          {reps.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No rep data yet</p>}
+          {reps.map((r, i) => (
+            <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-gray-800 text-sm">{r.rep}</span>
+                <span className="font-bold text-brand-secondary text-sm">{fmt$(r.pipeline_influence_attributed)}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs mb-2">
+                <div className="text-center">
+                  <div className="font-semibold text-gray-700">{r.meetings_held}</div>
+                  <div className="text-gray-400">Held</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-gray-700">{r.meetings_scheduled}</div>
+                  <div className="text-gray-400">Sched.</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-gray-700">{r.touchpoints}</div>
+                  <div className="text-gray-400">Touchpoints</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-gray-700">{r.event_attendees}</div>
+                  <div className="text-gray-400">Events</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-gray-700">{r.unique_companies_met}</div>
+                  <div className="text-gray-400">Companies</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-brand-secondary">{r.contribution_pct}%</div>
+                  <div className="text-gray-400">Contribution</div>
+                </div>
+              </div>
+              <MiniBar value={r.contribution_pct} max={100} color="#1B76BC" />
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-gray-400 uppercase border-b border-gray-100">

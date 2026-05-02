@@ -6,6 +6,7 @@ import { SalesExecutionTab } from './effectiveness/SalesExecutionTab';
 import { AudienceMessagingTab } from './effectiveness/AudienceMessagingTab';
 import { OperationalROITab } from './effectiveness/OperationalROITab';
 import { DefinitionsTab } from './effectiveness/DefinitionsTab';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 
 // ── Shared data types ─────────────────────────────────────────────────────────
 
@@ -87,14 +88,7 @@ interface Props {
   conferenceName: string;
 }
 
-const TABS = [
-  { key: 'summary',     label: 'Summary' },
-  { key: 'sales',       label: 'Sales Execution' },
-  { key: 'audience',    label: 'Audience & Messaging' },
-  { key: 'roi',         label: 'Operational ROI' },
-  { key: 'definitions', label: 'Definitions' },
-] as const;
-type TabKey = typeof TABS[number]['key'];
+type TabKey = 'summary' | 'sales' | 'audience' | 'roi' | 'definitions';
 
 export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: Props) {
   const [open, setOpen] = useState(false);
@@ -103,6 +97,11 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const [statsOpen, setStatsOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { orderedKeys, isVisible, getLabel } = useSectionConfig('effectiveness_modal');
+
+  const visibleTabs = (orderedKeys.length > 0 ? orderedKeys : ['summary', 'sales', 'audience', 'roi', 'definitions'])
+    .filter(key => isVisible(key))
+    .map(key => ({ key: key as TabKey, label: getLabel(key) }));
 
   const handleOpen = async () => {
     setLoading(true);
@@ -113,7 +112,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
       const d = await res.json() as EffectivenessData;
       setData(d);
       setOpen(true);
-      setActiveTab('summary');
+      setActiveTab((visibleTabs[0]?.key ?? 'summary') as TabKey);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -216,7 +215,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
           {/* Tab nav */}
           <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
             <nav className="flex gap-0 px-4">
-              {TABS.map(t => (
+              {visibleTabs.map(t => (
                 <button key={t.key} onClick={() => setActiveTab(t.key)}
                   className="py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
                   style={activeTab === t.key

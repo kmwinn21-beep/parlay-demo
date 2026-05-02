@@ -87,11 +87,11 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Cost Efficiency</h3>
           </div>
 
-          {/* Top row: Cost Efficiency Score (2/3) + Rank (1/3) */}
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            {/* Cost Efficiency Score card — 2/3 width */}
+          {/* Top row: Cost Efficiency Score + Rank — stacked on mobile, side-by-side on sm+ */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+            {/* Cost Efficiency Score card — full width on mobile, 2/3 on sm+ */}
             <div
-              className="col-span-2 rounded-xl p-4"
+              className="sm:col-span-2 rounded-xl p-4"
               style={{ backgroundColor: scoreColor(cesScore) + '15', borderLeft: `4px solid ${scoreColor(cesScore)}` }}
             >
               <div className="flex items-start justify-between mb-2">
@@ -148,8 +148,8 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               )}
             </div>
 
-            {/* Efficiency Rank card — 1/3 width */}
-            <div className="col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
+            {/* Efficiency Rank card — full width on mobile, 1/3 on sm+ */}
+            <div className="sm:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
               <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
               <div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div>
               <div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div>
@@ -185,43 +185,80 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {repRows.map((r, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{String(r.rep ?? '—')}</td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
-                      </td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
-                      </td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
-                      </td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        {r.rep_cost_efficiency_score_raw != null ? (
-                          <span className="font-bold text-sm" style={{ color: scoreColor(Number(r.rep_cost_efficiency_score_raw)) }}>
-                            {Number(r.rep_cost_efficiency_score_raw)}
+            <>
+              {/* Mobile card view */}
+              <div className="sm:hidden space-y-3">
+                {repRows.map((r, i) => {
+                  const rawScore = r.rep_cost_efficiency_score_raw != null ? Number(r.rep_cost_efficiency_score_raw) : null;
+                  return (
+                    <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-gray-800 text-sm">{String(r.rep ?? '—')}</span>
+                        {rawScore != null ? (
+                          <span className="font-bold text-sm" style={{ color: scoreColor(rawScore) }}>
+                            {rawScore}
                             <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
                           </span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
+                        ) : <span className="text-gray-300 text-sm">—</span>}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <div className="text-gray-400 mb-0.5">Pipeline / $1k</div>
+                          <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-0.5">Cost / Company</div>
+                          <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-0.5">Cost / Meeting</div>
+                          <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop table view */}
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {repRows.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{String(r.rep ?? '—')}</td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
+                        </td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
+                        </td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
+                        </td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          {r.rep_cost_efficiency_score_raw != null ? (
+                            <span className="font-bold text-sm" style={{ color: scoreColor(Number(r.rep_cost_efficiency_score_raw)) }}>
+                              {Number(r.rep_cost_efficiency_score_raw)}
+                              <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>
