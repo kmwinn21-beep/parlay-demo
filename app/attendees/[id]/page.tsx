@@ -577,6 +577,7 @@ export default function AttendeeDetailPage() {
       });
       if (!res.ok) throw new Error();
       toast.success('Outcome updated.');
+      fetchFollowUps();
       // Refresh conference details to reflect action update
       if (selectedConferenceId) {
         const detailRes = await fetch(`/api/conference-details?attendee_id=${id}&conference_id=${selectedConferenceId}`);
@@ -1177,6 +1178,7 @@ export default function AttendeeDetailPage() {
                   attendeeId={Number(id)}
                   conferences={attendee.conferences}
                   sectionLabel={getSectionLabel('touchpoints')}
+                  onTouchpointLogged={fetchFollowUps}
                 />
               ) : null,
             };
