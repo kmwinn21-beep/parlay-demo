@@ -1149,7 +1149,17 @@ export async function GET(
            CROSS JOIN eff_d ed
          )
          SELECT COUNT(*) AS total_confs,
-           SUM(CASE WHEN ces_score > ${costEfficiencyScoreRaw} THEN 1 ELSE 0 END)+1 AS rank
+           SUM(CASE WHEN ces_score > COALESCE(
+             (SELECT CASE WHEN COALESCE(asp2.eff_spend,0)>0 AND ed2.er>0
+                THEN MIN(ap2.total_pi/(asp2.eff_spend*ed2.er),1.0)*100
+                ELSE 0
+              END
+              FROM all_pi ap2
+              LEFT JOIN all_spend asp2 ON ap2.conference_id=asp2.conference_id
+              CROSS JOIN eff_d ed2
+              WHERE ap2.conference_id=${cid}),
+             0
+           ) THEN 1 ELSE 0 END)+1 AS rank
          FROM conf_ces`
       );
       confRank = Number(rankRows[0]?.rank ?? 1);
