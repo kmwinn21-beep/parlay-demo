@@ -23,9 +23,10 @@ interface Props {
   attendeeId: number;
   conferences: Conference[];
   sectionLabel?: string;
+  onTouchpointLogged?: () => void;
 }
 
-export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'Touchpoints' }: Props) {
+export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'Touchpoints', onTouchpointLogged }: Props) {
   const [options, setOptions] = useState<TouchpointOption[]>([]);
   const [counts, setCounts] = useState<Record<number, number>>({});
   const [totalCount, setTotalCount] = useState(0);
@@ -110,6 +111,7 @@ export function TouchpointsSection({ attendeeId, conferences, sectionLabel = 'To
       if (res.ok) {
         setCounts(prev => ({ ...prev, [opt.id]: (prev[opt.id] ?? 0) + 1 }));
         setTotalCount(prev => prev + 1);
+        onTouchpointLogged?.();
       }
     } catch { /* silent */ }
     finally { setPendingId(null); }
