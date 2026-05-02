@@ -173,9 +173,6 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
     if (stored && storedCount > 0) {
       setSummaryText(stored);
       setGenCount(storedCount);
-    } else {
-      // Auto-generate on first open
-      generateSummary();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -317,13 +314,13 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
             <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Conference Effectiveness Summary</h3>
             <p className="text-xs text-gray-400 mt-0.5">AI-generated executive narrative · powered by Claude</p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {genCount > 0 && !summaryLoading && (
-              <span className="text-xs text-gray-400">
-                {regenerationsLeft > 0 ? `${regenerationsLeft} regeneration${regenerationsLeft !== 1 ? 's' : ''} left` : 'Regeneration limit reached'}
-              </span>
-            )}
-            {genCount > 0 && (
+          {genCount > 0 && (
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {!summaryLoading && (
+                <span className="text-xs text-gray-400">
+                  {regenerationsLeft > 0 ? `${regenerationsLeft} regeneration${regenerationsLeft !== 1 ? 's' : ''} left` : 'Regeneration limit reached'}
+                </span>
+              )}
               <button
                 type="button"
                 disabled={!canRegenerate}
@@ -335,9 +332,29 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
                 </svg>
                 Regenerate
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+
+        {/* Not yet generated — prompt the user to generate */}
+        {genCount === 0 && !summaryLoading && (
+          <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+            <div>
+              <p className="text-gray-800 font-semibold mb-1">No summary generated yet</p>
+              <p className="text-sm text-gray-500 max-w-sm">
+                Generate an AI executive narrative that synthesizes conference effectiveness data, pipeline performance, and engagement insights.
+              </p>
+            </div>
+            {summaryError && <p className="text-sm text-red-600">{summaryError}</p>}
+            <button
+              type="button"
+              onClick={generateSummary}
+              className="btn-primary text-sm flex items-center gap-2"
+            >
+              Generate Summary
+            </button>
+          </div>
+        )}
 
         {summaryLoading && summaryText === '' && (
           <div className="flex items-center gap-2 text-sm text-gray-500 py-8 justify-center">
@@ -348,7 +365,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
           </div>
         )}
 
-        {summaryError && (
+        {summaryError && genCount > 0 && (
           <div className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
             Failed to generate summary: {summaryError}
           </div>
