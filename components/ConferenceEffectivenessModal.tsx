@@ -199,7 +199,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
               </div>
             </div>
 
-            <div className={`grid grid-cols-3 sm:grid-cols-6 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
+            <div className={`grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
               <div className="rounded-xl border-2 p-3 flex flex-col items-center gap-0.5 min-w-0 bg-white/60" style={{ borderColor: cesColor }}>
                 <div className="text-xl font-bold leading-tight" style={{ color: cesColor }}>{ces.score}</div>
                 <div className="text-xs font-semibold text-center" style={{ color: HEADER_TEXT }}>CES /100</div>

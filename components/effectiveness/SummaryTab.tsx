@@ -185,11 +185,11 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      {/* Top row: header cards — always 2 columns (one card per column) */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Top section: stacked on mobile, 2-col on sm+ */}
+      <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-3">
 
-        {/* [row 1, col 1]: CES Score card + Rank card — stacked on mobile */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Left col on desktop: CES Score + Rank — each full-width on mobile, side-by-side (2/3 + 1/3) on sm+ */}
+        <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-3">
           <div
             className="sm:col-span-2 rounded-xl p-4 flex flex-col justify-between"
             style={{ backgroundColor: scoreColor + '15', borderLeft: `4px solid ${scoreColor}` }}
@@ -212,20 +212,23 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
           )}
         </div>
 
-        {/* [row 1, col 2]: Pipeline Influence Summary */}
-        <div className="card p-3 sm:p-5 flex flex-col justify-between">
-          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3 sm:mb-4">Pipeline Influence Summary</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        {/* Right col on desktop: Pipeline Influence Summary — each sub-card full-width on mobile, 4-col on sm+ */}
+        <div className="card p-4 sm:p-5">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Pipeline Influence Summary</h3>
+          <div className="space-y-2 sm:space-y-0 sm:grid sm:grid-cols-4 sm:gap-2">
             {[
               { label: 'Total',       value: fmt$(totalPI) },
               { label: 'ICP',         value: fmt$(icpPI),  sub: totalPI > 0 ? `${Math.round(icpPI / totalPI * 100)}%` : null },
               { label: 'Net-New',     value: fmt$(netPI),  sub: totalPI > 0 ? `${Math.round(netPI / totalPI * 100)}%` : null },
               { label: 'Multi-Touch', value: fmt$(hiPI),   sub: totalPI > 0 ? `${Math.round(hiPI / totalPI * 100)}%` : null },
             ].map(({ label, value, sub }) => (
-              <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-2 sm:p-3">
-                <div className="text-sm sm:text-base font-bold text-brand-secondary leading-tight">{value}</div>
-                {sub && <div className="text-xs text-gray-400">{sub} of total</div>}
-                <div className="text-xs font-medium text-gray-500 mt-0.5">{label}</div>
+              <div key={label} className="flex sm:flex-col items-center sm:items-center justify-between sm:justify-start rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 sm:p-3 sm:text-center">
+                <div className="text-sm font-medium text-gray-600 sm:hidden">{label}</div>
+                <div className="text-right sm:text-center">
+                  <div className="text-base font-bold text-brand-secondary leading-tight">{value}</div>
+                  {sub && <div className="text-xs text-gray-400">{sub} of total</div>}
+                  <div className="hidden sm:block text-xs font-medium text-gray-500 mt-0.5">{label}</div>
+                </div>
               </div>
             ))}
           </div>
