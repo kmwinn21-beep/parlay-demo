@@ -1149,7 +1149,7 @@ export async function GET(
            CROSS JOIN eff_d ed
          )
          SELECT COUNT(*) AS total_confs,
-           SUM(CASE WHEN ces_score > ${adjustedScore} THEN 1 ELSE 0 END)+1 AS rank
+           SUM(CASE WHEN ces_score > ${costEfficiencyScoreRaw} THEN 1 ELSE 0 END)+1 AS rank
          FROM conf_ces`
       );
       confRank = Number(rankRows[0]?.rank ?? 1);
