@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
+import { ConferenceRankingsModal } from './ConferenceRankingsModal';
 
 function fmt$(n: unknown) {
   const v = n == null ? null : Number(n);
@@ -57,6 +58,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const costs = operational.cost_efficiency;
   const repRows = (operational.rep_cost_efficiency ?? []) as Record<string, unknown>[];
   const repAllocatedCost = Number(operational.rep_allocated_cost ?? 0);
+  const currentConferenceId = Number(data.conference.id ?? 0);
 
   const cesScore = Number(costs.cost_efficiency_score ?? 0);
   const rank = operational.conf_efficiency_rank ?? 1;
@@ -75,6 +77,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const confidence = String(costs.calculation_confidence ?? 'full');
 
   const [showInterpretation, setShowInterpretation] = useState(false);
+  const [showRankings, setShowRankings] = useState(false);
 
   return (
     <div className="p-6">
@@ -149,11 +152,17 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             </div>
 
             {/* Efficiency Rank card — full width on mobile, 1/3 on sm+ */}
-            <div className="sm:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
-              <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
+            <button
+              type="button"
+              onClick={() => setShowRankings(true)}
+              className="sm:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group w-full"
+              title="View full rankings"
+            >
+              <div className="text-xs text-gray-500 font-medium mb-1 group-hover:text-brand-secondary transition-colors">Efficiency Rank</div>
               <div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div>
               <div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div>
-            </div>
+              <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div>
+            </button>
           </div>
 
           {/* Metric cards */}
@@ -269,6 +278,14 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
       </div>
 
       {/* Interpretation popup overlay */}
+      {showRankings && (
+        <ConferenceRankingsModal
+          title="Cost Efficiency Rankings"
+          currentConferenceId={currentConferenceId}
+          onClose={() => setShowRankings(false)}
+        />
+      )}
+
       {showInterpretation && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center" onClick={() => setShowInterpretation(false)}>
           <div className="absolute inset-0 bg-black/30" />

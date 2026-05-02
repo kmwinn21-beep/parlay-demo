@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
+import { ConferenceRankingsModal } from './ConferenceRankingsModal';
 
 const MAX_GENERATIONS = 4; // 1 auto + 3 manual
 
@@ -104,6 +105,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [genCount, setGenCount] = useState(0);
+  const [showRankings, setShowRankings] = useState(false);
 
   const dims: DimRow[] = [
     { label: 'ICP & Target Quality',    value: ces.dim1_icp_target,          weight: '20%' },
@@ -201,11 +203,17 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
             </div>
           </div>
           {cesRank != null && (
-            <div className="sm:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
-              <div className="text-xs text-gray-500 font-medium mb-1">Efficiency Rank</div>
+            <button
+              type="button"
+              onClick={() => setShowRankings(true)}
+              className="sm:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group w-full"
+              title="View full rankings"
+            >
+              <div className="text-xs text-gray-500 font-medium mb-1 group-hover:text-brand-secondary transition-colors">Efficiency Rank</div>
               <div className="text-3xl font-bold text-brand-secondary leading-tight">#{cesRank}</div>
               {cesTotal != null && <div className="text-xs text-gray-400 mt-0.5">of {cesTotal} conferences</div>}
-            </div>
+              <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div>
+            </button>
           )}
         </div>
 
@@ -377,6 +385,14 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
           </div>
         )}
       </div>
+
+      {showRankings && (
+        <ConferenceRankingsModal
+          title="Conference Efficiency Rankings"
+          currentConferenceId={conferenceId}
+          onClose={() => setShowRankings(false)}
+        />
+      )}
     </div>
   );
 }
