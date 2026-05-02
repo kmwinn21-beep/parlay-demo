@@ -9,7 +9,6 @@ import { GlobalSearchModal } from './GlobalSearch';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 import { useUnreadChatCount } from '@/lib/useUnreadChatCount';
-import { useConferenceOfflineSync } from './ConferenceOfflineSync';
 import { useChatPanel } from './ChatPanelContext';
 
 const STORAGE_KEY = 'floatingNavPos';
@@ -98,58 +97,6 @@ function safeClamp(p: { x: number; y: number }): { x: number; y: number } {
   };
 }
 
-function OfflineNavItem({ confId, onClose }: { confId: number; onClose: () => void }) {
-  const { state, progress, syncedAt, handleDownload } = useConferenceOfflineSync(confId);
-
-  const label =
-    state === 'ready' ? 'Offline Ready' :
-    state === 'downloading' ? `Downloading… ${progress}%` :
-    state === 'error' ? 'Retry Offline Sync' :
-    'Make Offline';
-
-  const icon = state === 'ready' ? (
-    <svg className="w-5 h-5 flex-shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  ) : state === 'downloading' ? (
-    <svg className="w-5 h-5 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  ) : state === 'error' ? (
-    <svg className="w-5 h-5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ) : (
-    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  );
-
-  const title = state === 'ready' && syncedAt
-    ? `Last synced: ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(syncedAt))}`
-    : undefined;
-
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={() => { onClose(); if (state !== 'downloading') handleDownload(); }}
-      disabled={state === 'downloading'}
-      className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border w-full min-w-[152px] transition-colors
-        ${state === 'ready'
-          ? 'bg-emerald-800/90 text-emerald-100 border-emerald-700/40 hover:bg-emerald-700/90'
-          : state === 'error'
-            ? 'bg-red-900/90 text-red-100 border-red-700/40 hover:bg-red-800/90'
-            : 'bg-brand-primary/90 text-blue-100 border-blue-700/40 hover:bg-brand-secondary/90'
-        }`}
-    >
-      {icon}
-      <span className="text-sm font-medium leading-none">{label}</span>
-    </button>
-  );
-}
-
 export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
@@ -163,9 +110,6 @@ export function FloatingNav() {
   const [showSearch, setShowSearch] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
 
-  // Detect conference detail page to show offline sync item
-  const confMatch = pathname?.match(/^\/conferences\/(\d+)$/);
-  const confId = confMatch ? parseInt(confMatch[1], 10) : null;
   const fabRef = useRef<HTMLDivElement>(null);
   const ds = useRef({
     on: false,
@@ -260,14 +204,6 @@ export function FloatingNav() {
       href: n.href as string | null,
       active: n.href === '/' ? pathname === '/' : pathname.startsWith(n.href),
     })),
-    ...(confId !== null ? [{
-      key: 'offline-sync',
-      label: '__offline__',
-      icon: null as React.ReactNode,
-      href: null,
-      active: false,
-      action: 'offline-sync' as const,
-    }] : []),
     {
       key: 'search',
       label: 'Search',
@@ -376,9 +312,7 @@ export function FloatingNav() {
                   : `translateY(${above ? '10px' : '-10px'}) scale(0.88)`,
               }}
             >
-              {item.key === 'offline-sync' && confId !== null ? (
-                <OfflineNavItem confId={confId} onClose={() => setOpen(false)} />
-              ) : item.href !== null ? (
+              {item.href !== null ? (
                 <Link
                   href={item.href}
                   onClick={() => setOpen(false)}
