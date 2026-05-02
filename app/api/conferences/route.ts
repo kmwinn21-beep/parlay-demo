@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     // ?nav=1 — lightweight query for the header navigation dropdown (no JOIN/COUNT)
     if (request.nextUrl.searchParams.get('nav') === '1') {
       const result = await db.execute({
-        sql: `SELECT id, name, start_date, end_date FROM conferences ORDER BY start_date DESC`,
+        sql: `SELECT id, name, start_date, end_date, internal_attendees FROM conferences ORDER BY start_date DESC`,
         args: [],
       });
       return NextResponse.json(result.rows.map((r) => ({ ...r })), {

@@ -42,6 +42,7 @@ interface ConferenceOption {
   name: string;
   start_date: string;
   end_date: string;
+  internal_attendees?: string | null;
 }
 
 function formatDateShort(d: string) {
@@ -322,30 +323,57 @@ export function Header() {
                 ) : (
                   (() => {
                     const today = new Date().toISOString().slice(0, 10);
-                    const sorted = [...conferences].sort((a, b) => {
-                      const aActive = a.start_date <= today && a.end_date >= today;
-                      const bActive = b.start_date <= today && b.end_date >= today;
-                      if (aActive && !bActive) return -1;
-                      if (!aActive && bActive) return 1;
-                      return 0;
-                    });
-                    return sorted.map(conf => {
-                      const isActive = conf.start_date <= today && conf.end_date >= today;
-                      return (
-                        <Link
-                          key={conf.id}
-                          href={`/conferences/${conf.id}`}
-                          onClick={() => setShowConferences(false)}
-                          className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0"
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            {isActive && <span className="w-2 h-2 rounded-full bg-brand-secondary flex-shrink-0" />}
-                            <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
-                          </span>
-                          <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
-                        </Link>
-                      );
-                    });
+                    const userDisplayName = user?.displayName?.trim().toLowerCase() ?? null;
+
+                    const isUserAttendee = (conf: ConferenceOption) => {
+                      if (!userDisplayName || !conf.internal_attendees) return false;
+                      return conf.internal_attendees.split(',').some(a => a.trim().toLowerCase() === userDisplayName);
+                    };
+
+                    const inProgress = conferences
+                      .filter(c => c.start_date <= today && c.end_date >= today)
+                      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+                    const upcoming = conferences
+                      .filter(c => c.start_date > today)
+                      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+                    const past = conferences
+                      .filter(c => c.end_date < today)
+                      .sort((a, b) => b.start_date.localeCompare(a.start_date));
+
+                    const groups = [
+                      { label: 'In Progress', items: inProgress },
+                      { label: 'Upcoming',    items: upcoming },
+                      { label: 'Past',        items: past },
+                    ].filter(g => g.items.length > 0);
+
+                    const renderConf = (conf: ConferenceOption) => (
+                      <Link
+                        key={conf.id}
+                        href={`/conferences/${conf.id}`}
+                        onClick={() => setShowConferences(false)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          {isUserAttendee(conf) && (
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: 'rgb(var(--brand-accent-rgb))' }}
+                            />
+                          )}
+                          <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
+                        </span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
+                      </Link>
+                    );
+
+                    return groups.map(({ label, items }) => (
+                      <div key={label}>
+                        <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+                        </div>
+                        {items.map(renderConf)}
+                      </div>
+                    ));
                   })()
                 )}
               </div>
