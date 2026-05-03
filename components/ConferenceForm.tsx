@@ -14,6 +14,7 @@ interface ConferenceFormData {
   end_date: string;
   location: string;
   notes: string;
+  conference_strategy_type_id: string;
 }
 
 export function ConferenceForm() {
@@ -35,6 +36,13 @@ export function ConferenceForm() {
   const internalDropdownRef = useRef<HTMLDivElement>(null);
   const configOptions = useConfigOptions('conference_form');
   const userOptions = configOptions.user ?? [];
+  const [conferenceStrategyOptions, setConferenceStrategyOptions] = useState<{ id: number; value: string }[]>([]);
+  useEffect(() => {
+    fetch('/api/config?category=conference_strategy_type&form=conference_form')
+      .then((r) => r.json())
+      .then((rows) => setConferenceStrategyOptions((rows ?? []).map((r: { id: number; value: string }) => ({ id: Number(r.id), value: String(r.value) }))))
+      .catch(() => setConferenceStrategyOptions([]));
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -94,6 +102,7 @@ export function ConferenceForm() {
       formData.append('location', data.location);
       formData.append('notes', data.notes || '');
       formData.append('internal_attendees', selectedInternalAttendees.join(','));
+      formData.append('conference_strategy_type_id', data.conference_strategy_type_id);
 
       if (file) {
         formData.append('file', file);
@@ -178,6 +187,17 @@ export function ConferenceForm() {
               placeholder="e.g., Las Vegas Convention Center, NV"
             />
             {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location.message}</p>}
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="label">Conference Strategy *</label>
+            <select {...register('conference_strategy_type_id', { required: 'Conference strategy is required' })} className="input-field">
+              <option value="">Select conference strategy...</option>
+              {conferenceStrategyOptions.map((opt) => <option key={opt.id} value={String(opt.id)}>{opt.value}</option>)}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Select the primary reason your team is attending this conference. This helps Parlay evaluate the event using the right success lens.</p>
+            {conferenceStrategyOptions.length === 0 && <p className="text-xs text-amber-600 mt-1">No Conference Strategy options configured. Configure in Admin Settings → Types.</p>}
+            {errors.conference_strategy_type_id && <p className="text-red-500 text-xs mt-1">{errors.conference_strategy_type_id.message}</p>}
           </div>
 
           <div className="md:col-span-2">

@@ -58,6 +58,7 @@ function fmtRepCurrency(v: number) {
 
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
+  const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
   const [showHeatmapInfo, setShowHeatmapInfo] = useState(false);
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
@@ -196,6 +197,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Sales Effectiveness Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_interpretation ?? 'Not scored'}</div>
+        <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div>
         <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
           {Object.entries(sx.components ?? {}).map(([key, comp]: any) => (
             <div key={key} className="flex justify-between text-xs">

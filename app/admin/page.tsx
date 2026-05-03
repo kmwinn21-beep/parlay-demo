@@ -42,6 +42,7 @@ const CATEGORIES = [
   { key: 'icp', label: 'ICP' },
   { key: 'meeting_type', label: 'Meeting Type' },
   { key: 'event_type', label: 'Event Type' },
+  { key: 'conference_strategy_type', label: 'Conference Strategy Type' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'attendee_conference_status', label: 'Attendee Conference Status' },
