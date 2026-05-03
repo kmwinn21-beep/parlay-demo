@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
+import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
 
 function fmt$(n: unknown) {
@@ -117,7 +118,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>
               </div>
               <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor(cesScore) }}>{scoreGrade(cesScore)}</div>
-              <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div>
+              <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div><StrategyWeightNotice applied={(data as any).sales_execution?.strategy_modifier_applied || (data as any).marketing_audience?.strategy_modifier_applied || (data as any).operational?.cost_efficiency?.strategy_modifier_applied || (data as any).ces?.strategy_modifier_applied} strategyLabel={strategyLabel} />
 
               {/* Component breakdown inside the score card */}
               {(companyScore != null || meetingScore != null || pipelineScore != null) && (

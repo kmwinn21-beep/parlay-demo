@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
+import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
 
 const MAX_GENERATIONS = 4; // 1 auto + 3 manual
@@ -201,7 +202,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
                 <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>
               </div>
               <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor }}>{cesScoreGrade(ces.score)}</div>
-              <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div>
+              <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div><StrategyWeightNotice applied={(data as any).sales_execution?.strategy_modifier_applied || (data as any).marketing_audience?.strategy_modifier_applied || (data as any).operational?.cost_efficiency?.strategy_modifier_applied || (data as any).ces?.strategy_modifier_applied} strategyLabel={strategyLabel} />
             </div>
           </div>
           {cesRank != null && (

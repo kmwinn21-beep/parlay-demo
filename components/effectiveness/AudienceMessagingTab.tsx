@@ -1,5 +1,6 @@
 'use client';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
+import { StrategyWeightNotice } from './StrategyWeightNotice';
 
 const scoreColor = (score: number | null | undefined) => { const s=Number(score??0); if(s>=90)return '#059669'; if(s>=75)return '#1B76BC'; if(s>=60)return '#d97706'; if(s>=50)return '#f97316'; return '#dc2626'; };
 const fmtPct=(n:number|null|undefined)=>n==null?'—':`${Math.round(n)}%`;
@@ -15,7 +16,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Marketing Audience Signal Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
-        <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div>
+        <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div><StrategyWeightNotice applied={(data as any).sales_execution?.strategy_modifier_applied || (data as any).marketing_audience?.strategy_modifier_applied || (data as any).operational?.cost_efficiency?.strategy_modifier_applied || (data as any).ces?.strategy_modifier_applied} strategyLabel={strategyLabel} />
         <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">{[
           ['icp_target_quality','ICP & Target Quality'],
           ['buyer_role_access','Buyer Role Access'],
