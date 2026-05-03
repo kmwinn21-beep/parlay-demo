@@ -104,6 +104,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
         {sx.sales_execution_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{sx.sales_execution_rank}</div><div className="text-xs text-gray-400">of {sx.sales_execution_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       </div>
+
+      <div className="hidden lg:block lg:col-span-1" aria-hidden="true" />
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
@@ -111,11 +113,11 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
-      <div className="card p-5 w-full lg:col-span-2 flex flex-col lg:aspect-square">
+      <div className="card p-5 w-full lg:col-span-1 flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
-          <div className="relative w-full h-[320px] lg:h-full rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
+          <div className="relative w-full aspect-square rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
             <svg viewBox="0 0 100 100" className="w-full h-full">
               <rect x="0" y="0" width="50" height="50" fill="#f8fafc" />
               <rect x="50" y="0" width="50" height="50" fill="#f0f9ff" />
@@ -146,7 +148,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 w-full lg:col-span-3 overflow-x-auto flex flex-col lg:h-full">
+      <div className="card p-5 w-full lg:col-span-3 overflow-x-auto flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
@@ -165,6 +167,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           <div className="mt-2 text-[11px] text-gray-500">{riskRows.filter((r) => r.statuses[1] === 'risk' || r.statuses[4] === 'risk').length} reps show follow-up or activity risk.</div>
         </>}
       </div>
+
+      <div className="hidden lg:block lg:col-span-1" aria-hidden="true" />
     </div>
   </div>;
 }
