@@ -178,8 +178,8 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Target Engagement Rate',
-        description: 'The percentage of pre-designated target attendees whose companies received engagement.',
-        calculation: 'engaged targets / total targets × 100',
+        description: 'The percentage of conference-specific targets (for this conference only) that received meaningful engagement via held meetings, touchpoints, follow-ups, or social attendance signals.',
+        calculation: 'engaged conference targets / total conference targets × 100',
       },
       {
         term: 'Hold Rate',
