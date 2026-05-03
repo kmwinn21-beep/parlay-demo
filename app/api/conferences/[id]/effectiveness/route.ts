@@ -48,7 +48,7 @@ function buildCTEs(cid: number): string {
   company_followups AS (
     SELECT a.company_id,
       COUNT(DISTINCT f.id)                                          AS followups_created,
-      COUNT(DISTINCT CASE WHEN f.completed = 1 THEN f.id END)       AS followups_completed
+      COUNT(DISTINCT CASE WHEN COALESCE(f.completed,0) = 1 THEN f.id END) AS followups_completed
     FROM follow_ups f
     JOIN attendees a ON f.attendee_id = a.id
     WHERE f.conference_id = ${cid}
@@ -192,6 +192,18 @@ function cesTier(score: number): string {
   if (score >= 60) return 'Acceptable';
   if (score >= 50) return 'Weak';
   return 'Inefficient';
+}
+
+
+function isFollowUpCompleted(followUp: { completed?: unknown }): boolean {
+  return Number(followUp.completed ?? 0) === 1;
+}
+
+function followupHealthStatus(rate: number | null, total: number): 'healthy' | 'watch' | 'risk' | 'unavailable' {
+  if (total <= 0 || rate == null || !isFinite(rate)) return 'unavailable';
+  if (rate >= 75) return 'healthy';
+  if (rate >= 50) return 'watch';
+  return 'risk';
 }
 
 async function runQuery(sql: string): Promise<Record<string, unknown>[]> {
@@ -526,7 +538,7 @@ export async function GET(
     const companyFollowupRows = await runQuery(
       `SELECT a.company_id,
          COUNT(DISTINCT f.id) AS followups_created,
-         COUNT(DISTINCT CASE WHEN f.completed = 1 THEN f.id END) AS followups_completed
+         COUNT(DISTINCT CASE WHEN COALESCE(f.completed,0) = 1 THEN f.id END) AS followups_completed
        FROM follow_ups f
        JOIN attendees a ON f.attendee_id = a.id
        WHERE f.conference_id = ${cid} AND a.company_id IS NOT NULL
@@ -668,7 +680,13 @@ export async function GET(
       Array.from(attribution.entries()).forEach(([n, share]) => { getAcc(n).pipelineInfluence += share; });
     }
 
-    // Second pass: attribute follow-ups to reps via company portfolio (equal share)
+    // Second pass: attribute follow-ups directly to reps using assigned_rep; fallback to company portfolio split.
+    const followupsByRepRows = await runQuery(
+      `SELECT fu.id, fu.assigned_rep, fu.completed, a.company_id
+       FROM follow_ups fu
+       JOIN attendees a ON fu.attendee_id = a.id
+       WHERE fu.conference_id = ${cid} AND fu.next_steps IS NOT NULL AND fu.next_steps != ''`
+    );
     const companyToRepsMap = new Map<number, Set<string>>();
     Array.from(repAccMap.entries()).forEach(([name, acc]) => {
       Array.from(acc.companies).forEach(compId => {
@@ -676,17 +694,46 @@ export async function GET(
         companyToRepsMap.get(compId)!.add(name);
       });
     });
-    Array.from(companyFollowupMap.entries()).forEach(([compId, fu]) => {
+
+    let followupsWithRepAssignment = 0;
+    let followupsWithoutRepAssignment = 0;
+    const attributionMethodCounts = { assigned_rep_id: 0, created_by: 0, attendee_owner: 0, meeting_owner: 0, touchpoint_owner: 0, unavailable: 0 };
+
+    for (const fu of followupsByRepRows) {
+      const completed = isFollowUpCompleted({ completed: fu.completed });
+      const assignedRepRaw = String(fu.assigned_rep ?? '').trim();
+      const assignedReps = assignedRepRaw
+        ? assignedRepRaw.split(',').map((v) => v.trim()).filter(Boolean).map((id) => repNameMap.get(id) ?? id)
+        : [];
+
+      if (assignedReps.length > 0) {
+        followupsWithRepAssignment += 1;
+        attributionMethodCounts.assigned_rep_id += 1;
+        const share = 1 / assignedReps.length;
+        for (const repName of assignedReps) {
+          const acc = getAcc(repName);
+          acc.followupsCreated += share;
+          if (completed) acc.followupsCompleted += share;
+        }
+        continue;
+      }
+
+      followupsWithoutRepAssignment += 1;
+      const compId = Number(fu.company_id ?? 0);
       const repsForComp = companyToRepsMap.get(compId);
-      if (!repsForComp || repsForComp.size === 0) return;
+      if (!repsForComp || repsForComp.size === 0) {
+        attributionMethodCounts.unavailable += 1;
+        continue;
+      }
+      attributionMethodCounts.attendee_owner += 1;
       const share = 1 / repsForComp.size;
-      Array.from(repsForComp).forEach(repName => {
+      for (const repName of repsForComp) {
         const acc = repAccMap.get(repName);
-        if (!acc) return;
-        acc.followupsCreated += fu.created * share;
-        acc.followupsCompleted += fu.completed * share;
-      });
-    });
+        if (!acc) continue;
+        acc.followupsCreated += share;
+        if (completed) acc.followupsCompleted += share;
+      }
+    }
 
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
@@ -700,6 +747,13 @@ export async function GET(
         event_attendees: Math.round(acc.eventAttendees),
         pipeline_influence_attributed: Math.round(acc.pipelineInfluence),
         contribution_pct: totalRepPI > 0 ? Math.round(acc.pipelineInfluence / totalRepPI * 1000) / 10 : 0,
+        followups_created: Math.round(acc.followupsCreated * 10) / 10,
+        followups_completed: Math.round(acc.followupsCompleted * 10) / 10,
+        followup_completion_rate: acc.followupsCreated > 0 ? Math.round((acc.followupsCompleted / acc.followupsCreated) * 1000) / 10 : null,
+        followup_health_status: followupHealthStatus(acc.followupsCreated > 0 ? (acc.followupsCompleted / acc.followupsCreated) * 100 : null, acc.followupsCreated),
+        followup_health_reason: acc.followupsCreated > 0
+          ? `${Math.round(acc.followupsCompleted * 10) / 10} of ${Math.round(acc.followupsCreated * 10) / 10} follow-ups completed`
+          : 'No follow-ups assigned to this rep',
       }));
 
     // ── Audience / CMO Metrics ──────────────────────────────────────────────
@@ -1380,7 +1434,7 @@ export async function GET(
           audience_quality_rank: null,
           audience_quality_rank_total: null,
           components: { icp_target_quality: { score: icpTargetQuality, weight: 0.3, tier: tierFromScore(icpTargetQuality), confidence: 'Medium', metrics: { icp_companies_engaged: icpEngaged, icp_companies_denominator: icpDen, icp_engagement_rate: icpRate, target_accounts_engaged: targetEng, target_accounts_denominator: targetDen, target_engagement_rate: targetRate } }, buyer_role_access: { score: buyerRoleAccess, weight: 0.25, tier: tierFromScore(buyerRoleAccess), confidence: 'Medium', metrics: { companies_with_decision_maker_engaged: companiesWithDecision, decision_maker_access_rate: decisionRate, companies_with_influencer_engaged: companiesWithInfluencer, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit }, admin_settings_used: { decision_maker_titles_count: decisionMakerTitles.length, influencer_titles_count: influencerTitles.length, seniority_priority_map: seniorityPriorityMap, function_priority_map: functionPriorityMap, source_of_truth: 'effectiveness_defaults (ICP JSON keys)' } }, net_new_market_reach: { score: netNewRate, weight: 0.2, tier: tierFromScore(netNewRate), confidence: 'Medium', metrics: { net_new_companies_engaged: netNew, total_companies_engaged: companiesEngaged, net_new_market_reach_rate: netNewRate } }, engagement_depth: { score: depth, weight: 0.15, tier: tierFromScore(depth), confidence: 'Medium', metrics: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_engaged: companiesEngaged, engagement_depth_score: depth } }, message_resonance_proxy: { score: resonance, weight: 0.1, tier: tierFromScore(resonance), confidence: 'Medium', provenance: 'Proxy', metrics: { companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, meeting_rate: meetingRate, followup_attachment_rate: followAttach, multi_touch_rate: multiRate } } },
-          kpis: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, net_new_market_reach_rate: netNewRate, message_resonance_proxy: resonance },
+        kpis: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, net_new_market_reach_rate: netNewRate, message_resonance_proxy: resonance },
         audience_fit: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit },
         reach_and_mix: { total_companies_engaged: companiesEngaged, net_new_companies_engaged: netNew, known_companies_engaged: companiesEngaged-netNew, icp_companies_engaged: icpEngaged, target_accounts_engaged: targetEng, companies_with_decision_maker_engaged: companiesWithDecision, companies_with_influencer_engaged: companiesWithInfluencer },
         engagement_resonance: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, engagement_depth_score: depth, message_resonance_proxy: resonance },
@@ -1408,6 +1462,19 @@ export async function GET(
           target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: DEFAULT_SALES_WEIGHTS.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: salesTargetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
           rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: DEFAULT_SALES_WEIGHTS.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: salesMeetingsHeld, touchpoints_logged: salesTouchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: salesCompaniesEngaged, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
         },
+        followup_summary: {
+          total_followups: salesFollowupsCreated,
+          completed_followups: salesFollowupsCompleted,
+          pending_followups: Math.max(0, salesFollowupsCreated - salesFollowupsCompleted),
+          completion_rate: followupExecution,
+        },
+        followup_debug: process.env.NODE_ENV !== 'production' ? {
+          total_followups_found_for_conference: followupsByRepRows.length,
+          completed_followups_found_for_conference: followupsByRepRows.filter((fu) => isFollowUpCompleted({ completed: fu.completed })).length,
+          followups_with_rep_assignment: followupsWithRepAssignment,
+          followups_without_rep_assignment: followupsWithoutRepAssignment,
+          attribution_method_counts: attributionMethodCounts,
+        } : undefined,
         kpis: {
           meeting_hold_rate: meetingHoldRate,
           followup_completion_rate: followupExecution,

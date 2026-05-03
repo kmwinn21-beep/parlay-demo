@@ -55,6 +55,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     const meetingsScheduled = Number(r.meetings_scheduled ?? 0);
     const holdRate = meetingsScheduled > 0 ? (meetingsHeld / meetingsScheduled) * 100 : null;
     const followupRate = Number(r.followup_completion_rate ?? NaN);
+    const followupHealthReason = r.followup_health_reason != null ? String(r.followup_health_reason) : null;
     const targetAccountsEngaged = Number(r.target_accounts_engaged ?? NaN);
     const targetAccountsAssigned = Number(r.target_accounts_assigned ?? NaN);
     const targetEngagementRate = Number.isFinite(targetAccountsEngaged) && Number.isFinite(targetAccountsAssigned) && targetAccountsAssigned > 0
@@ -72,6 +73,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       meetingsScheduled,
       holdRate,
       followupRate: Number.isFinite(followupRate) ? followupRate : null,
+      followupHealthReason,
       targetAccountsEngaged: Number.isFinite(targetAccountsEngaged) ? targetAccountsEngaged : null,
       targetEngagementRate: Number.isFinite(targetEngagementRate) ? targetEngagementRate : null,
       pipelinePerActivity,
@@ -98,7 +100,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     const lowHoldRate: RiskStatus = rep.meetingsScheduled <= 0
       ? 'unavailable'
       : rep.meetingsScheduled >= 3 && (rep.holdRate ?? 0) < 50 ? 'risk' : (rep.holdRate ?? 0) < 65 ? 'watch' : 'healthy';
-    const lowFollowup: RiskStatus = rep.followupRate == null ? 'unavailable' : rep.followupRate < 50 ? 'risk' : rep.followupRate < 70 ? 'watch' : 'healthy';
+    const lowFollowup: RiskStatus = rep.followupRate == null ? 'unavailable' : rep.followupRate < 50 ? 'risk' : rep.followupRate < 75 ? 'watch' : 'healthy';
     const lowTarget: RiskStatus = rep.targetEngagementRate == null ? 'unavailable' : (rep.targetAccountsEngaged ?? 0) === 0 && rep.salesActivities > 0 ? 'risk' : rep.targetEngagementRate < avgTargetEngagement ? 'watch' : 'healthy';
     const lowPipelinePerActivity: RiskStatus = rep.pipelinePerActivity == null || avgPipelinePerActivity <= 0
       ? 'unavailable'
@@ -107,7 +109,14 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       ? 'unavailable'
       : rep.salesActivities < avgActivity * 0.5 ? 'risk' : rep.salesActivities < avgActivity * 0.85 ? 'watch' : 'healthy';
     const statuses = [lowHoldRate, lowFollowup, lowTarget, lowPipelinePerActivity, lowActivity] as RiskStatus[];
-    return { rep, statuses, score: riskStatus(statuses) };
+    const statusReasons = [
+      lowHoldRate === 'unavailable' ? 'No scheduled meetings for hold-rate analysis' : `${fmtNum(rep.meetingsHeld)} held of ${fmtNum(rep.meetingsScheduled)} scheduled`,
+      rep.followupHealthReason ?? (lowFollowup === 'unavailable' ? 'No follow-ups assigned to this rep' : `${fmtPct(rep.followupRate)} follow-up completion`),
+      lowTarget === 'unavailable' ? 'No target-account assignment available' : `${fmtPct(rep.targetEngagementRate)} target-account engagement`,
+      lowPipelinePerActivity === 'unavailable' ? 'No pipeline/activity benchmark available' : `${fmt$(rep.pipelinePerActivity)} pipeline per activity`,
+      lowActivity === 'unavailable' ? 'No rep activity benchmark available' : `${fmtNum(rep.salesActivities)} activities vs team average ${fmtNum(avgActivity)}`
+    ];
+    return { rep, statuses, statusReasons, score: riskStatus(statuses) };
   }).sort((a, b) => b.score - a.score || a.rep.repName.localeCompare(b.rep.repName));
 
   const riskEmpty = riskRows.length < 2;
@@ -260,7 +269,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
             {riskRows.map((row) => (
               <div key={row.rep.repName} className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] gap-1 mb-1 items-center">
                 <div className="text-xs font-medium text-gray-700 truncate pr-1" title={row.rep.repName}>{row.rep.repName}</div>
-                {row.statuses.map((status, i) => <div key={i} className={`h-7 rounded ${RISK_META[status].bg} ${RISK_META[status].text} flex items-center justify-center text-[11px] font-semibold`} title={RISK_META[status].label}>{RISK_META[status].short}</div>)}
+                {row.statuses.map((status, i) => <div key={i} className={`h-7 rounded ${RISK_META[status].bg} ${RISK_META[status].text} flex items-center justify-center text-[11px] font-semibold`} title={row.statusReasons?.[i] ?? RISK_META[status].label}>{RISK_META[status].short}</div>)}
               </div>
             ))}
           </div>
