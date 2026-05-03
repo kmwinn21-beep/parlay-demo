@@ -1191,8 +1191,9 @@ export async function GET(
       const seniorityExpr = colNames.has('seniority') ? `LOWER(TRIM(COALESCE(a.seniority,'')))` : `''`;
       const functionExpr = colNames.has('function') ? `LOWER(TRIM(COALESCE(a."function",'')))` : `''`;
       engagedContacts = await runQuery(`${w}
-        SELECT cc.company_id, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
+        SELECT cc.company_id, COALESCE(c.name, c.company_name, 'Unknown Company') AS company_name, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
         FROM conference_companies cc
+        LEFT JOIN companies c ON c.id = cc.company_id
         JOIN attendees a ON a.company_id = cc.company_id
         LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
         LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
@@ -1203,13 +1204,13 @@ export async function GET(
       engagedContacts = [];
     }
 
-    const byCompany = new Map<number, {decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
+    const byCompany = new Map<number, {name: string; decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
     for (const row of engagedContacts) {
       const cid2 = Number(row.company_id ?? 0); if (!cid2) continue;
       const title = String(row.title ?? '');
       const sen = String(row.seniority ?? '');
       const fn = String(row.function ?? '');
-      const curr = byCompany.get(cid2) ?? { decision: false, influencer: false, seniorityScore: null, functionScore: null };
+      const curr = byCompany.get(cid2) ?? { name: String(row.company_name ?? 'Unknown Company'), decision: false, influencer: false, seniorityScore: null, functionScore: null };
       if (decisionMakerTitles.length && title && titleMatch(title, decisionMakerTitles)) curr.decision = true;
       if (influencerTitles.length && title && titleMatch(title, influencerTitles)) curr.influencer = true;
       const senPriority = String(seniorityPriorityMap[sen] ?? seniorityPriorityMap[sen.trim()] ?? 'Ignore').toLowerCase();
@@ -1328,6 +1329,14 @@ export async function GET(
         const icpTargetQuality = icpRate != null && targetRate != null ? icpRate * 0.5 + targetRate * 0.5 : (icpRate ?? targetRate ?? null);
 
         const companyRows = Array.from(byCompany.values());
+        const companyTable = Array.from(byCompany.entries()).map(([company_id, info]) => ({
+          company_id,
+          company: info.name,
+          decision_maker_engaged: info.decision,
+          influencer_engaged: info.influencer,
+          highest_seniority_match: info.seniorityScore,
+          highest_function_match: info.functionScore,
+        }));
         const companiesWithDecision = companyRows.filter(c => c.decision).length;
         const companiesWithInfluencer = companyRows.filter(c => c.influencer).length;
         const decisionRate = pct(companiesWithDecision, companiesEngaged);
@@ -1370,7 +1379,7 @@ export async function GET(
           marketing_audience_signal_interpretation: rw.score != null ? `${tierFromScore(rw.score)} Audience Fit` : null,
           audience_quality_rank: null,
           audience_quality_rank_total: null,
-          components: { icp_target_quality: { score: icpTargetQuality, weight: 0.3, tier: tierFromScore(icpTargetQuality), confidence: 'Medium', metrics: { icp_companies_engaged: icpEngaged, icp_companies_denominator: icpDen, icp_engagement_rate: icpRate, target_accounts_engaged: targetEng, target_accounts_denominator: targetDen, target_engagement_rate: targetRate } }, buyer_role_access: { score: buyerRoleAccess, weight: 0.25, tier: tierFromScore(buyerRoleAccess), confidence: 'Medium', metrics: { companies_with_decision_maker_engaged: companiesWithDecision, decision_maker_access_rate: decisionRate, companies_with_influencer_engaged: companiesWithInfluencer, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit }, admin_settings_used: { decision_maker_titles_count: decisionMakerTitles.length, influencer_titles_count: influencerTitles.length, seniority_priority_map: seniorityPriorityMap, function_priority_map: functionPriorityMap } }, net_new_market_reach: { score: netNewRate, weight: 0.2, tier: tierFromScore(netNewRate), confidence: 'Medium', metrics: { net_new_companies_engaged: netNew, total_companies_engaged: companiesEngaged, net_new_market_reach_rate: netNewRate } }, engagement_depth: { score: depth, weight: 0.15, tier: tierFromScore(depth), confidence: 'Medium', metrics: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_engaged: companiesEngaged, engagement_depth_score: depth } }, message_resonance_proxy: { score: resonance, weight: 0.1, tier: tierFromScore(resonance), confidence: 'Medium', provenance: 'Proxy', metrics: { companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, meeting_rate: meetingRate, followup_attachment_rate: followAttach, multi_touch_rate: multiRate } } },
+          components: { icp_target_quality: { score: icpTargetQuality, weight: 0.3, tier: tierFromScore(icpTargetQuality), confidence: 'Medium', metrics: { icp_companies_engaged: icpEngaged, icp_companies_denominator: icpDen, icp_engagement_rate: icpRate, target_accounts_engaged: targetEng, target_accounts_denominator: targetDen, target_engagement_rate: targetRate } }, buyer_role_access: { score: buyerRoleAccess, weight: 0.25, tier: tierFromScore(buyerRoleAccess), confidence: 'Medium', metrics: { companies_with_decision_maker_engaged: companiesWithDecision, decision_maker_access_rate: decisionRate, companies_with_influencer_engaged: companiesWithInfluencer, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit }, admin_settings_used: { decision_maker_titles_count: decisionMakerTitles.length, influencer_titles_count: influencerTitles.length, seniority_priority_map: seniorityPriorityMap, function_priority_map: functionPriorityMap, source_of_truth: 'effectiveness_defaults (ICP JSON keys)' } }, net_new_market_reach: { score: netNewRate, weight: 0.2, tier: tierFromScore(netNewRate), confidence: 'Medium', metrics: { net_new_companies_engaged: netNew, total_companies_engaged: companiesEngaged, net_new_market_reach_rate: netNewRate } }, engagement_depth: { score: depth, weight: 0.15, tier: tierFromScore(depth), confidence: 'Medium', metrics: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_engaged: companiesEngaged, engagement_depth_score: depth } }, message_resonance_proxy: { score: resonance, weight: 0.1, tier: tierFromScore(resonance), confidence: 'Medium', provenance: 'Proxy', metrics: { companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, meeting_rate: meetingRate, followup_attachment_rate: followAttach, multi_touch_rate: multiRate } } },
           kpis: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, net_new_market_reach_rate: netNewRate, message_resonance_proxy: resonance },
         audience_fit: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit },
         reach_and_mix: { total_companies_engaged: companiesEngaged, net_new_companies_engaged: netNew, known_companies_engaged: companiesEngaged-netNew, icp_companies_engaged: icpEngaged, target_accounts_engaged: targetEng, companies_with_decision_maker_engaged: companiesWithDecision, companies_with_influencer_engaged: companiesWithInfluencer },
@@ -1384,6 +1393,7 @@ export async function GET(
         original_weights: rw.originalWeights,
         effective_weights: rw.effectiveWeights,
         calculation_confidence: rw.confidence,
+        account_level_table: companyTable,
       }; })(),
       sales_execution: {
         sales_effectiveness_score: salesWeighted.score,
