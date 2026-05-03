@@ -336,12 +336,56 @@ export async function GET(
       `${w}
        SELECT
          COUNT(DISTINCT ct.attendee_id) AS targets_total,
-         COUNT(DISTINCT CASE WHEN ce.is_engaged=1 THEN a.company_id END) AS target_companies_engaged,
-         ROUND(COUNT(DISTINCT CASE WHEN ce.is_engaged=1 THEN ct.attendee_id END)*100.0
+         COUNT(DISTINCT CASE
+           WHEN COALESCE(mh.meetings_held,0) > 0
+             OR COALESCE(tp.touchpoints,0) > 0
+             OR COALESCE(fu.followups_created,0) > 0
+             OR COALESCE(se.social_attended,0) > 0
+           THEN ct.attendee_id
+         END) AS conference_specific_targets_engaged,
+         COUNT(DISTINCT CASE
+           WHEN COALESCE(mh.meetings_held,0) > 0
+             OR COALESCE(tp.touchpoints,0) > 0
+             OR COALESCE(fu.followups_created,0) > 0
+             OR COALESCE(se.social_attended,0) > 0
+           THEN ct.attendee_id
+         END) AS target_companies_engaged,
+         ROUND(COUNT(DISTINCT CASE
+           WHEN COALESCE(mh.meetings_held,0) > 0
+             OR COALESCE(tp.touchpoints,0) > 0
+             OR COALESCE(fu.followups_created,0) > 0
+             OR COALESCE(se.social_attended,0) > 0
+           THEN ct.attendee_id
+         END)*100.0
                / NULLIF(COUNT(DISTINCT ct.attendee_id),0), 1) AS target_engagement_pct
        FROM conference_targets ct
        JOIN attendees a ON ct.attendee_id = a.id
-       LEFT JOIN company_engagement ce ON a.company_id = ce.company_id
+       LEFT JOIN (
+         SELECT attendee_id, COUNT(*) AS meetings_held
+         FROM meetings m
+         LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+         WHERE m.conference_id = ${cid} AND cop.action_key='meeting_held'
+         GROUP BY attendee_id
+       ) mh ON mh.attendee_id = ct.attendee_id
+       LEFT JOIN (
+         SELECT attendee_id, COUNT(*) AS touchpoints
+         FROM attendee_touchpoints
+         WHERE conference_id = ${cid}
+         GROUP BY attendee_id
+       ) tp ON tp.attendee_id = ct.attendee_id
+       LEFT JOIN (
+         SELECT attendee_id, COUNT(*) AS followups_created
+         FROM follow_ups
+         WHERE conference_id = ${cid} AND next_steps IS NOT NULL AND next_steps != ''
+         GROUP BY attendee_id
+       ) fu ON fu.attendee_id = ct.attendee_id
+       LEFT JOIN (
+         SELECT rsvp.attendee_id, COUNT(*) AS social_attended
+         FROM social_event_rsvps rsvp
+         JOIN social_events se ON se.id = rsvp.social_event_id
+         WHERE se.conference_id = ${cid} AND rsvp.rsvp_status='attended'
+         GROUP BY rsvp.attendee_id
+       ) se ON se.attendee_id = ct.attendee_id
        WHERE ct.conference_id = ${cid}`
     ))[0] ?? {};
 
@@ -735,10 +779,85 @@ export async function GET(
       }
     }
 
+    // ── Conference-specific target engagement by rep (attendee-level) ─────
+    const targetRows = await runQuery(
+      `SELECT DISTINCT ct.attendee_id, a.company_id
+       FROM conference_targets ct
+       JOIN attendees a ON a.id = ct.attendee_id
+       WHERE ct.conference_id = ${cid}`
+    );
+    const targetMeetingReps = await runQuery(
+      `SELECT m.attendee_id, m.scheduled_by AS rep_raw
+       FROM meetings m
+       LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+       WHERE m.conference_id = ${cid}
+         AND cop.action_key='meeting_held'
+         AND m.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
+    );
+    const targetFollowupReps = await runQuery(
+      `SELECT fu.attendee_id, fu.assigned_rep AS rep_raw
+       FROM follow_ups fu
+       WHERE fu.conference_id = ${cid}
+         AND fu.next_steps IS NOT NULL AND fu.next_steps != ''
+         AND fu.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
+    );
+    const targetTouchpointRows = await runQuery(
+      `SELECT attendee_id
+       FROM attendee_touchpoints
+       WHERE conference_id = ${cid}
+         AND attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
+    );
+    const targetSocialRows = await runQuery(
+      `SELECT rsvp.attendee_id
+       FROM social_event_rsvps rsvp
+       JOIN social_events se ON se.id = rsvp.social_event_id
+       WHERE se.conference_id = ${cid}
+         AND rsvp.rsvp_status='attended'
+         AND rsvp.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
+    );
+
+    const targetToRepSet = new Map<number, Set<string>>();
+    const addTargetRep = (attendeeId: number, repName: string) => {
+      if (!repName) return;
+      if (!targetToRepSet.has(attendeeId)) targetToRepSet.set(attendeeId, new Set());
+      targetToRepSet.get(attendeeId)!.add(repName);
+    };
+    for (const row of targetMeetingReps) {
+      for (const repName of resolveRep(row.rep_raw)) addTargetRep(Number(row.attendee_id), repName);
+    }
+    for (const row of targetFollowupReps) {
+      for (const repName of resolveRep(row.rep_raw)) addTargetRep(Number(row.attendee_id), repName);
+    }
+    const repToTargetsEngaged = new Map<string, Set<number>>();
+    const attendeeCompanyMap = new Map<number, number>();
+    for (const r of targetRows) attendeeCompanyMap.set(Number(r.attendee_id), Number(r.company_id ?? 0));
+    for (const row of targetTouchpointRows) {
+      const attendeeId = Number(row.attendee_id);
+      const companyId = attendeeCompanyMap.get(attendeeId) ?? 0;
+      const ownerIds = companyAssignedMap.get(companyId) ?? [];
+      ownerIds.map((id) => repNameMap.get(id) ?? id).forEach((repName) => addTargetRep(attendeeId, repName));
+    }
+    for (const row of targetSocialRows) {
+      const attendeeId = Number(row.attendee_id);
+      const companyId = attendeeCompanyMap.get(attendeeId) ?? 0;
+      const ownerIds = companyAssignedMap.get(companyId) ?? [];
+      ownerIds.map((id) => repNameMap.get(id) ?? id).forEach((repName) => addTargetRep(attendeeId, repName));
+    }
+    for (const [attendeeId, repsSet] of targetToRepSet.entries()) {
+      for (const repName of repsSet) {
+        if (!repToTargetsEngaged.has(repName)) repToTargetsEngaged.set(repName, new Set());
+        repToTargetsEngaged.get(repName)!.add(attendeeId);
+      }
+    }
+    const totalConferenceTargets = new Set(targetRows.map((r) => Number(r.attendee_id))).size;
+
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
       .sort(([, a], [, b]) => b.pipelineInfluence - a.pipelineInfluence)
       .map(([name, acc]) => ({
+        target_accounts_assigned: totalConferenceTargets,
+        target_accounts_engaged: repToTargetsEngaged.get(name)?.size ?? 0,
+        target_engagement_rate: totalConferenceTargets > 0 ? Math.round((((repToTargetsEngaged.get(name)?.size ?? 0) / totalConferenceTargets) * 100) * 10) / 10 : null,
         rep: name,
         meetings_held: Math.round(acc.meetingsHeld),
         meetings_scheduled: Math.round(acc.meetingsScheduled),
@@ -1284,7 +1403,7 @@ export async function GET(
     const salesFollowupsCompleted = Number(engagementSummary.total_followups_completed ?? 0);
     const salesCompaniesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
     const salesCompaniesWithMeetingAndFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
-    const salesTargetEngaged = Number(targetEngagement.target_companies_engaged ?? 0);
+    const salesTargetEngaged = Number(targetEngagement.conference_specific_targets_engaged ?? 0);
     const salesTargetsPresent = Number(targetEngagement.targets_total ?? 0);
     const salesTouchpointsLogged = Number(pipelineSummary.total_touchpoints ?? 0);
     const salesCompaniesEngaged = Number(engagementSummary.companies_engaged ?? 0);
