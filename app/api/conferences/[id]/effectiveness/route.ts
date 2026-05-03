@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
+import { DEFAULT_MARKETING_AUDIENCE_WEIGHTS, PRIORITY_SCORE, titleMatch, norm as normText } from '@/lib/effectiveness/marketingAudience';
 
 export const dynamic = 'force-dynamic';
 
@@ -271,6 +273,14 @@ export async function GET(
     const effRow = await runQuery(`SELECT key, value FROM effectiveness_defaults`);
     const effDefaults: Record<string, string> = {};
     for (const r of effRow) effDefaults[String(r.key)] = String(r.value ?? '');
+
+    const adminSettings: Record<string, string> = {};
+    try {
+      const adminSettingsRows = await runQuery(`SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
+      for (const r of adminSettingsRows) adminSettings[String(r.key)] = String(r.value ?? '');
+    } catch {
+      // Backward-compatible fallback if site_settings table is unavailable
+    }
 
     // CES benchmarks
     const DEFAULT_BENCHMARKS = {
@@ -1166,6 +1176,100 @@ export async function GET(
       totalConferences = Number(rankRows[0]?.total_confs ?? 1);
     } catch { /* ranking is optional */ }
 
+
+
+    const parseJson = <T,>(v: string | undefined, fallback: T): T => { try { return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
+    const decisionMakerTitles = parseJson<string[]>(adminSettings.icp_decision_maker_titles, []).map(normText).filter(Boolean);
+    const influencerTitles = parseJson<string[]>(adminSettings.icp_influencer_titles, []).map(normText).filter(Boolean);
+    const seniorityPriorityMap = parseJson<Record<string, string>>(adminSettings.icp_seniority_priority, {});
+    const functionPriorityMap = parseJson<Record<string, string>>(adminSettings.icp_function_priority, {});
+
+    let engagedContacts: Record<string, unknown>[] = [];
+    try {
+      const attendeeCols = await runQuery(`PRAGMA table_info(attendees)`);
+      const colNames = new Set(attendeeCols.map(c => String(c.name ?? '').toLowerCase()));
+      const seniorityExpr = colNames.has('seniority') ? `LOWER(TRIM(COALESCE(a.seniority,'')))` : `''`;
+      const functionExpr = colNames.has('function') ? `LOWER(TRIM(COALESCE(a."function",'')))` : `''`;
+      engagedContacts = await runQuery(`${w}
+        SELECT cc.company_id, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
+        FROM conference_companies cc
+        JOIN attendees a ON a.company_id = cc.company_id
+        LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
+        LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
+        LEFT JOIN company_hosted_attendance cha ON cha.company_id = cc.company_id
+        WHERE (COALESCE(cm.meetings_scheduled,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0)) > 0
+      `);
+    } catch {
+      engagedContacts = [];
+    }
+
+    const byCompany = new Map<number, {decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
+    for (const row of engagedContacts) {
+      const cid2 = Number(row.company_id ?? 0); if (!cid2) continue;
+      const title = String(row.title ?? '');
+      const sen = String(row.seniority ?? '');
+      const fn = String(row.function ?? '');
+      const curr = byCompany.get(cid2) ?? { decision: false, influencer: false, seniorityScore: null, functionScore: null };
+      if (decisionMakerTitles.length && title && titleMatch(title, decisionMakerTitles)) curr.decision = true;
+      if (influencerTitles.length && title && titleMatch(title, influencerTitles)) curr.influencer = true;
+      const senPriority = String(seniorityPriorityMap[sen] ?? seniorityPriorityMap[sen.trim()] ?? 'Ignore').toLowerCase();
+      if (senPriority !== 'ignore' && PRIORITY_SCORE[senPriority] != null) curr.seniorityScore = Math.max(curr.seniorityScore ?? 0, PRIORITY_SCORE[senPriority]);
+      const fnPriority = String(functionPriorityMap[fn] ?? functionPriorityMap[fn.trim()] ?? 'Ignore').toLowerCase();
+      if (fnPriority !== 'ignore' && PRIORITY_SCORE[fnPriority] != null) curr.functionScore = Math.max(curr.functionScore ?? 0, PRIORITY_SCORE[fnPriority]);
+      byCompany.set(cid2, curr);
+    }
+
+    const expectedSalesActivities = Number(effDefaults.expected_sales_activities ?? 60);
+    const expectedCompaniesEngaged = Number(effDefaults.expected_companies_engaged ?? 30);
+    const expectedPipelinePerSalesActivity = Number(effDefaults.expected_pipeline_per_sales_activity ?? 15000);
+
+    const salesMeetingsHeld = Number(engagementSummary.total_held ?? 0);
+    const salesMeetingsScheduled = Number(engagementSummary.total_scheduled ?? 0);
+    const salesFollowupsCreated = Number(engagementSummary.total_followups_created ?? 0);
+    const salesFollowupsCompleted = Number(engagementSummary.total_followups_completed ?? 0);
+    const salesCompaniesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
+    const salesCompaniesWithMeetingAndFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
+    const salesTargetEngaged = Number(targetEngagement.target_companies_engaged ?? 0);
+    const salesTargetsPresent = Number(targetEngagement.targets_total ?? 0);
+    const salesTouchpointsLogged = Number(pipelineSummary.total_touchpoints ?? 0);
+    const salesCompaniesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+    const salesActivities = salesMeetingsHeld + salesTouchpointsLogged;
+    const totalPipelineInfluence = Number(pipelineSummary.total_pipeline_influence ?? 0);
+
+    const meetingHoldRate = pct(salesMeetingsHeld, salesMeetingsScheduled);
+    const meetingFollowupAttachmentRate = pct(salesCompaniesWithMeetingAndFollowup, salesCompaniesWithMeeting);
+    const meetingExecution = (meetingHoldRate != null && meetingFollowupAttachmentRate != null)
+      ? (meetingHoldRate * 0.5) + (meetingFollowupAttachmentRate * 0.5)
+      : (meetingHoldRate ?? meetingFollowupAttachmentRate ?? null);
+
+    const followupExecution = pct(salesFollowupsCompleted, salesFollowupsCreated);
+    const pipelineInfluenceExecution = (totalSpend > 0 && expectedReturn > 0)
+      ? Math.min(totalPipelineInfluence / (totalSpend * expectedReturn), 1) * 100
+      : null;
+
+    const targetDenominator = salesTargetsPresent > 0 ? salesTargetsPresent : null;
+    const targetExecution = targetDenominator ? pct(salesTargetEngaged, targetDenominator) : null;
+    const targetDenominatorType = targetDenominator ? 'present_at_conference' : 'unavailable';
+
+    const activityProductivity = expectedSalesActivities > 0 ? Math.min(salesActivities / expectedSalesActivities, 1) * 100 : null;
+    const companyCoverage = expectedCompaniesEngaged > 0 ? Math.min(salesCompaniesEngaged / expectedCompaniesEngaged, 1) * 100 : null;
+    const pipelinePerSalesActivity = salesActivities > 0 ? totalPipelineInfluence / salesActivities : null;
+    const pipelineProductivity = (pipelinePerSalesActivity != null && expectedPipelinePerSalesActivity > 0)
+      ? Math.min(pipelinePerSalesActivity / expectedPipelinePerSalesActivity, 1) * 100
+      : null;
+    const repProductivity = (activityProductivity != null && companyCoverage != null && pipelineProductivity != null)
+      ? (activityProductivity * 0.4) + (companyCoverage * 0.3) + (pipelineProductivity * 0.3)
+      : ([activityProductivity, companyCoverage, pipelineProductivity].filter(v => v != null).reduce((a,b)=>a+Number(b),0) / Math.max([activityProductivity, companyCoverage, pipelineProductivity].filter(v => v != null).length, 1));
+
+    const salesComponents = [
+      { key: 'meeting_execution', score: meetingExecution, weight: DEFAULT_SALES_WEIGHTS.meeting_execution },
+      { key: 'followup_execution', score: followupExecution, weight: DEFAULT_SALES_WEIGHTS.followup_execution },
+      { key: 'pipeline_influence_execution', score: pipelineInfluenceExecution, weight: DEFAULT_SALES_WEIGHTS.pipeline_influence_execution },
+      { key: 'target_account_execution', score: targetExecution, weight: DEFAULT_SALES_WEIGHTS.target_account_execution },
+      { key: 'rep_productivity', score: repProductivity, weight: DEFAULT_SALES_WEIGHTS.rep_productivity },
+    ];
+    const salesWeighted = reweight(salesComponents);
+
     return NextResponse.json({
       conference: { ...confInfo, conf_event_type: confEventType },
       ces: {
@@ -1211,6 +1315,118 @@ export async function GET(
         rep_cost_efficiency: repCostEfficiency,
         rep_allocated_cost: Math.round(repAllocatedCost),
         rep_ces: repCES,
+      },
+
+      marketing_audience: (() => {
+        const companiesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+        const icpEngaged = Number(icpCoverage.icp_companies_engaged ?? 0);
+        const icpDen = Number(icpCoverage.icp_companies_total ?? 0) || null;
+        const targetEng = Number(targetEngagement.target_companies_engaged ?? 0);
+        const targetDen = Number(targetEngagement.targets_total ?? 0) || null;
+        const icpRate = icpDen ? pct(icpEngaged, icpDen) : (companiesEngaged > 0 ? pct(icpEngaged, companiesEngaged) : null);
+        const targetRate = targetDen ? pct(targetEng, targetDen) : null;
+        const icpTargetQuality = icpRate != null && targetRate != null ? icpRate * 0.5 + targetRate * 0.5 : (icpRate ?? targetRate ?? null);
+
+        const companyRows = Array.from(byCompany.values());
+        const companiesWithDecision = companyRows.filter(c => c.decision).length;
+        const companiesWithInfluencer = companyRows.filter(c => c.influencer).length;
+        const decisionRate = pct(companiesWithDecision, companiesEngaged);
+        const influencerRate = pct(companiesWithInfluencer, companiesEngaged);
+        const seniorityFit = companyRows.filter(c => c.seniorityScore != null).length ? companyRows.filter(c => c.seniorityScore != null).reduce((a,c)=>a+Number(c.seniorityScore),0)/companyRows.filter(c => c.seniorityScore != null).length : null;
+        const functionFit = companyRows.filter(c => c.functionScore != null).length ? companyRows.filter(c => c.functionScore != null).reduce((a,c)=>a+Number(c.functionScore),0)/companyRows.filter(c => c.functionScore != null).length : null;
+        const buyerRoleParts = [
+          decisionRate != null ? { value: decisionRate, weight: 0.4 } : null,
+          influencerRate != null ? { value: influencerRate, weight: 0.2 } : null,
+          seniorityFit != null ? { value: seniorityFit, weight: 0.2 } : null,
+          functionFit != null ? { value: functionFit, weight: 0.2 } : null,
+        ].filter((p): p is { value: number; weight: number } => p != null);
+        const buyerRoleAccess = buyerRoleParts.length
+          ? buyerRoleParts.reduce((sum, p) => sum + (p.value * p.weight), 0) / buyerRoleParts.reduce((sum, p) => sum + p.weight, 0)
+          : null;
+
+        const netNew = Number(netNewLogos.net_new_logos ?? 0);
+        const netNewRate = pct(netNew, companiesEngaged);
+        const multi = Number(pipelineSummary.high_engagement_companies ?? 0);
+        const two = Number(pipelineSummary.two_touch_companies ?? 0);
+        const single = Number(pipelineSummary.single_touch_companies ?? 0);
+        const depth = companiesEngaged > 0 ? ((multi/companiesEngaged*100)*0.5)+((two/companiesEngaged*100)*0.3)+((single/companiesEngaged*100)*0.2) : null;
+        const companiesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
+        const companiesWithMeetingFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
+        const meetingRate = pct(companiesWithMeeting, companiesEngaged);
+        const followAttach = pct(companiesWithMeetingFollowup, companiesWithMeeting);
+        const multiRate = pct(multi, companiesEngaged);
+        const resonance = (meetingRate != null && followAttach != null && multiRate != null) ? (meetingRate*0.4)+(followAttach*0.3)+(multiRate*0.3) : null;
+
+        const rw = reweight([
+          { key: 'icp_target_quality', score: icpTargetQuality, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.icp_target_quality },
+          { key: 'buyer_role_access', score: buyerRoleAccess, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.buyer_role_access },
+          { key: 'net_new_market_reach', score: netNewRate, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.net_new_market_reach },
+          { key: 'engagement_depth', score: depth, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.engagement_depth },
+          { key: 'message_resonance_proxy', score: resonance, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.message_resonance_proxy },
+        ]);
+        return {
+          marketing_audience_signal_score: rw.score,
+          marketing_audience_signal_tier: tierFromScore(rw.score),
+          marketing_audience_signal_interpretation: rw.score != null ? `${tierFromScore(rw.score)} Audience Fit` : null,
+          audience_quality_rank: null,
+          audience_quality_rank_total: null,
+          components: { icp_target_quality: { score: icpTargetQuality, weight: 0.3, tier: tierFromScore(icpTargetQuality), confidence: 'Medium', metrics: { icp_companies_engaged: icpEngaged, icp_companies_denominator: icpDen, icp_engagement_rate: icpRate, target_accounts_engaged: targetEng, target_accounts_denominator: targetDen, target_engagement_rate: targetRate } }, buyer_role_access: { score: buyerRoleAccess, weight: 0.25, tier: tierFromScore(buyerRoleAccess), confidence: 'Medium', metrics: { companies_with_decision_maker_engaged: companiesWithDecision, decision_maker_access_rate: decisionRate, companies_with_influencer_engaged: companiesWithInfluencer, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit }, admin_settings_used: { decision_maker_titles_count: decisionMakerTitles.length, influencer_titles_count: influencerTitles.length, seniority_priority_map: seniorityPriorityMap, function_priority_map: functionPriorityMap } }, net_new_market_reach: { score: netNewRate, weight: 0.2, tier: tierFromScore(netNewRate), confidence: 'Medium', metrics: { net_new_companies_engaged: netNew, total_companies_engaged: companiesEngaged, net_new_market_reach_rate: netNewRate } }, engagement_depth: { score: depth, weight: 0.15, tier: tierFromScore(depth), confidence: 'Medium', metrics: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_engaged: companiesEngaged, engagement_depth_score: depth } }, message_resonance_proxy: { score: resonance, weight: 0.1, tier: tierFromScore(resonance), confidence: 'Medium', provenance: 'Proxy', metrics: { companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, meeting_rate: meetingRate, followup_attachment_rate: followAttach, multi_touch_rate: multiRate } } },
+          kpis: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, net_new_market_reach_rate: netNewRate, message_resonance_proxy: resonance },
+        audience_fit: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit },
+        reach_and_mix: { total_companies_engaged: companiesEngaged, net_new_companies_engaged: netNew, known_companies_engaged: companiesEngaged-netNew, icp_companies_engaged: icpEngaged, target_accounts_engaged: targetEng, companies_with_decision_maker_engaged: companiesWithDecision, companies_with_influencer_engaged: companiesWithInfluencer },
+        engagement_resonance: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, engagement_depth_score: depth, message_resonance_proxy: resonance },
+        opportunities_gaps: [
+          { label: 'High-fit companies without decision maker access', count: Math.max(companiesEngaged - companiesWithDecision, 0), severity: 'medium', description: 'Improve executive meeting access planning.' },
+          { label: 'Target accounts with shallow interactions', count: single, severity: 'medium', description: 'Increase multi-touch engagement for targets.' }
+        ],
+        unavailable_components: rw.unavailable,
+        unavailable_metrics: [],
+        original_weights: rw.originalWeights,
+        effective_weights: rw.effectiveWeights,
+        calculation_confidence: rw.confidence,
+      }; })(),
+      sales_execution: {
+        sales_effectiveness_score: salesWeighted.score,
+        sales_effectiveness_tier: tierFromScore(salesWeighted.score),
+        sales_effectiveness_interpretation: salesWeighted.score != null ? `${tierFromScore(salesWeighted.score)} Execution` : null,
+        sales_execution_rank: null,
+        sales_execution_rank_total: null,
+        components: {
+          meeting_execution: { score: meetingExecution != null ? Math.round(meetingExecution) : null, weight: DEFAULT_SALES_WEIGHTS.meeting_execution, tier: tierFromScore(meetingExecution), confidence: 'High', metrics: { meetings_held: salesMeetingsHeld, meetings_scheduled: salesMeetingsScheduled, meeting_hold_rate: meetingHoldRate, companies_with_meeting: salesCompaniesWithMeeting, companies_with_meeting_and_followup: salesCompaniesWithMeetingAndFollowup, meeting_followup_attachment_rate: meetingFollowupAttachmentRate } },
+          followup_execution: { score: followupExecution != null ? Math.round(followupExecution) : null, weight: DEFAULT_SALES_WEIGHTS.followup_execution, tier: tierFromScore(followupExecution), confidence: 'High', metrics: { followups_created: salesFollowupsCreated, followups_completed: salesFollowupsCompleted, followup_completion_rate: followupExecution } },
+          pipeline_influence_execution: { score: pipelineInfluenceExecution != null ? Math.round(pipelineInfluenceExecution) : null, weight: DEFAULT_SALES_WEIGHTS.pipeline_influence_execution, tier: tierFromScore(pipelineInfluenceExecution), confidence: 'Medium', provenance: 'Proxy', metrics: { total_pipeline_influence: totalPipelineInfluence, total_spend: totalSpend, expected_return_target: expectedReturn, pipeline_influence_index: pipelineInfluenceExecution } },
+          target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: DEFAULT_SALES_WEIGHTS.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: salesTargetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
+          rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: DEFAULT_SALES_WEIGHTS.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: salesMeetingsHeld, touchpoints_logged: salesTouchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: salesCompaniesEngaged, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
+        },
+        kpis: {
+          meeting_hold_rate: meetingHoldRate,
+          followup_completion_rate: followupExecution,
+          followup_attachment_rate: meetingFollowupAttachmentRate,
+          pipeline_per_meeting: salesMeetingsHeld > 0 ? totalPipelineInfluence / salesMeetingsHeld : null,
+          pipeline_per_company: salesCompaniesEngaged > 0 ? totalPipelineInfluence / salesCompaniesEngaged : null,
+          average_influenced_deal_size: null,
+        },
+        pipeline_quality: {
+          total_pipeline_influence: totalPipelineInfluence,
+          influenced_opportunity_count: null,
+          average_influenced_deal_size: null,
+          largest_deal_concentration: null,
+          pipeline_per_company_engaged: salesCompaniesEngaged > 0 ? totalPipelineInfluence / salesCompaniesEngaged : null,
+          pipeline_per_meeting_held: salesMeetingsHeld > 0 ? totalPipelineInfluence / salesMeetingsHeld : null,
+          pipeline_per_sales_activity: salesActivities > 0 ? totalPipelineInfluence / salesActivities : null,
+        },
+        followup_risks: [
+          { label: 'Open follow-ups still incomplete', count: Math.max(salesFollowupsCreated - salesFollowupsCompleted, 0), severity: (salesFollowupsCreated > 0 && (salesFollowupsCompleted / salesFollowupsCreated) < 0.6) ? 'high' : 'medium', description: 'Prioritize high-pipeline accounts first.' },
+          { label: 'Meetings held without completed follow-up', count: Math.max(salesCompaniesWithMeeting - salesCompaniesWithMeetingAndFollowup, 0), severity: 'medium', description: 'Commercial engagement without clear next steps.' }
+        ],
+        unavailable_components: salesWeighted.unavailable,
+        unavailable_metrics: [
+          ...(meetingHoldRate == null ? ['meeting_hold_rate'] : []),
+          ...(meetingFollowupAttachmentRate == null ? ['meeting_followup_attachment_rate'] : []),
+        ],
+        original_weights: salesWeighted.originalWeights,
+        effective_weights: salesWeighted.effectiveWeights,
+        calculation_confidence: salesWeighted.confidence,
       },
       effectiveness_defaults: effDefaults,
     });
