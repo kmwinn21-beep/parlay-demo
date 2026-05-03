@@ -1191,8 +1191,9 @@ export async function GET(
       const seniorityExpr = colNames.has('seniority') ? `LOWER(TRIM(COALESCE(a.seniority,'')))` : `''`;
       const functionExpr = colNames.has('function') ? `LOWER(TRIM(COALESCE(a."function",'')))` : `''`;
       engagedContacts = await runQuery(`${w}
-        SELECT cc.company_id, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
+        SELECT cc.company_id, COALESCE(c.name, c.company_name, 'Unknown Company') AS company_name, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
         FROM conference_companies cc
+        LEFT JOIN companies c ON c.id = cc.company_id
         JOIN attendees a ON a.company_id = cc.company_id
         LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
         LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
@@ -1203,13 +1204,13 @@ export async function GET(
       engagedContacts = [];
     }
 
-    const byCompany = new Map<number, {decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
+    const byCompany = new Map<number, {name: string; decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
     for (const row of engagedContacts) {
       const cid2 = Number(row.company_id ?? 0); if (!cid2) continue;
       const title = String(row.title ?? '');
       const sen = String(row.seniority ?? '');
       const fn = String(row.function ?? '');
-      const curr = byCompany.get(cid2) ?? { decision: false, influencer: false, seniorityScore: null, functionScore: null };
+      const curr = byCompany.get(cid2) ?? { name: String(row.company_name ?? 'Unknown Company'), decision: false, influencer: false, seniorityScore: null, functionScore: null };
       if (decisionMakerTitles.length && title && titleMatch(title, decisionMakerTitles)) curr.decision = true;
       if (influencerTitles.length && title && titleMatch(title, influencerTitles)) curr.influencer = true;
       const senPriority = String(seniorityPriorityMap[sen] ?? seniorityPriorityMap[sen.trim()] ?? 'Ignore').toLowerCase();
@@ -1328,6 +1329,14 @@ export async function GET(
         const icpTargetQuality = icpRate != null && targetRate != null ? icpRate * 0.5 + targetRate * 0.5 : (icpRate ?? targetRate ?? null);
 
         const companyRows = Array.from(byCompany.values());
+        const companyTable = Array.from(byCompany.entries()).map(([company_id, info]) => ({
+          company_id,
+          company: info.name,
+          decision_maker_engaged: info.decision,
+          influencer_engaged: info.influencer,
+          highest_seniority_match: info.seniorityScore,
+          highest_function_match: info.functionScore,
+        }));
         const companiesWithDecision = companyRows.filter(c => c.decision).length;
         const companiesWithInfluencer = companyRows.filter(c => c.influencer).length;
         const decisionRate = pct(companiesWithDecision, companiesEngaged);
@@ -1384,6 +1393,7 @@ export async function GET(
         original_weights: rw.originalWeights,
         effective_weights: rw.effectiveWeights,
         calculation_confidence: rw.confidence,
+        account_level_table: companyTable,
       }; })(),
       sales_execution: {
         sales_effectiveness_score: salesWeighted.score,

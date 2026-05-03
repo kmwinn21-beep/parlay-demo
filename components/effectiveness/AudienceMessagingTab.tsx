@@ -14,15 +14,6 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Marketing Audience Signal Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
-        <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
-          {Object.entries(m.components ?? {}).map(([key, comp]: any) => (
-            <div key={key} className="flex justify-between text-xs">
-              <span className="text-gray-500">{key.replace(/_/g,' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} <span className="text-gray-300">({Math.round((Number(comp.weight ?? 0))*100)}%)</span></span>
-              <span className="font-semibold" style={{ color: scoreColor(comp.score) }}>{comp.score != null ? Math.round(comp.score) : '—'} <span className="text-gray-400">· {comp.tier ?? '—'}</span></span>
-            </div>
-          ))}
-        </div>
-
       </div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center"><div className="text-xs text-gray-500">Audience Quality Rank</div>{m.audience_quality_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{m.audience_quality_rank}</div><div className="text-xs text-gray-400">of {m.audience_quality_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}</div>
     </div>
@@ -49,8 +40,15 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs text-gray-500">Total Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.total_companies_engaged)}</span></div>
         <div className="text-xs text-gray-500">Net-New Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.net_new_companies_engaged)}</span></div>
         <div className="text-xs text-gray-500">Known Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.known_companies_engaged)}</span></div>
-        <div className="text-xs text-gray-500">ICP Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.icp_companies_engaged)}</span></div>
+        <div className="text-xs text-gray-500">Companies with Decision Makers <span className="float-right">{fmtNum(m.reach_and_mix.companies_with_decision_maker_engaged)}</span></div>
+        <div className="text-xs text-gray-500">Companies with Influencers <span className="float-right">{fmtNum(m.reach_and_mix.companies_with_influencer_engaged)}</span></div>
       </div>
+    </div>
+
+    <div className="card p-5"><h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Account-level Audience Quality</h3>
+      <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-gray-500 border-b"><th className="py-2 pr-3">Company</th><th className="py-2 pr-3">Decision Maker</th><th className="py-2 pr-3">Influencer</th><th className="py-2 pr-3">Top Seniority</th><th className="py-2 pr-3">Top Function</th></tr></thead><tbody>
+        {(m.account_level_table ?? []).slice(0, 25).map((r: any, idx: number) => <tr key={idx} className="border-b border-gray-100"><td className="py-2 pr-3">{r.company ?? '—'}</td><td className="py-2 pr-3">{r.decision_maker_engaged ? 'Yes' : 'No'}</td><td className="py-2 pr-3">{r.influencer_engaged ? 'Yes' : 'No'}</td><td className="py-2 pr-3">{fmtNum(r.highest_seniority_match)}</td><td className="py-2 pr-3">{fmtNum(r.highest_function_match)}</td></tr>)}
+      </tbody></table></div>
     </div>
   </div>;
 }
