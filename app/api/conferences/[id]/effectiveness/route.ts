@@ -1321,12 +1321,15 @@ export async function GET(
         const influencerRate = pct(companiesWithInfluencer, companiesEngaged);
         const seniorityFit = companyRows.filter(c => c.seniorityScore != null).length ? companyRows.filter(c => c.seniorityScore != null).reduce((a,c)=>a+Number(c.seniorityScore),0)/companyRows.filter(c => c.seniorityScore != null).length : null;
         const functionFit = companyRows.filter(c => c.functionScore != null).length ? companyRows.filter(c => c.functionScore != null).reduce((a,c)=>a+Number(c.functionScore),0)/companyRows.filter(c => c.functionScore != null).length : null;
-        const buyerRoleAccess = [
-          decisionRate != null ? decisionRate * 0.4 : null,
-          influencerRate != null ? influencerRate * 0.2 : null,
-          seniorityFit != null ? seniorityFit * 0.2 : null,
-          functionFit != null ? functionFit * 0.2 : null,
-        ].reduce((a,v)=>a+(v??0),0);
+        const buyerRoleParts = [
+          decisionRate != null ? { value: decisionRate, weight: 0.4 } : null,
+          influencerRate != null ? { value: influencerRate, weight: 0.2 } : null,
+          seniorityFit != null ? { value: seniorityFit, weight: 0.2 } : null,
+          functionFit != null ? { value: functionFit, weight: 0.2 } : null,
+        ].filter((p): p is { value: number; weight: number } => p != null);
+        const buyerRoleAccess = buyerRoleParts.length
+          ? buyerRoleParts.reduce((sum, p) => sum + (p.value * p.weight), 0) / buyerRoleParts.reduce((sum, p) => sum + p.weight, 0)
+          : null;
 
         const netNew = Number(netNewLogos.net_new_logos ?? 0);
         const netNewRate = pct(netNew, companiesEngaged);
