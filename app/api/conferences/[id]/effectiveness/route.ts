@@ -843,12 +843,12 @@ export async function GET(
       const ownerIds = companyAssignedMap.get(companyId) ?? [];
       ownerIds.map((id) => repNameMap.get(id) ?? id).forEach((repName) => addTargetRep(attendeeId, repName));
     }
-    for (const [attendeeId, repsSet] of targetToRepSet.entries()) {
-      for (const repName of repsSet) {
+    targetToRepSet.forEach((repsSet, attendeeId) => {
+      repsSet.forEach((repName) => {
         if (!repToTargetsEngaged.has(repName)) repToTargetsEngaged.set(repName, new Set());
         repToTargetsEngaged.get(repName)!.add(attendeeId);
-      }
-    }
+      });
+    });
     const totalConferenceTargets = new Set(targetRows.map((r) => Number(r.attendee_id))).size;
     const targetHealthStatus = (rate: number | null, engaged: number, denominator: number): 'healthy' | 'watch' | 'risk' | 'unavailable' => {
       if (denominator <= 0) return engaged > 0 ? 'watch' : 'unavailable';
