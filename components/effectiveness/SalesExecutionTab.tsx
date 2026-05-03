@@ -1,7 +1,58 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 
+
+
+function InfoIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function InfoPopover({ title, children, align = 'right' }: { title: string; children: ReactNode; align?: 'left' | 'right' }) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <button type="button" onClick={() => setOpen((v) => !v)} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label={`About ${title}`}>
+        <InfoIcon />
+      </button>
+      {open && (
+        <div className={`absolute top-7 z-30 w-[min(30rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl ${align === 'left' ? 'left-0' : 'right-0'}`}>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h4 className="text-sm font-semibold text-brand-primary">{title}</h4>
+            <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600" aria-label={`Close ${title} details`}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="text-xs text-gray-600 space-y-2 max-h-80 overflow-y-auto">{children}</div>
+        </div>
+      )}
+    </div>
+  );
+}
 type RepRow = Record<string, unknown>;
 type RiskStatus = 'healthy' | 'watch' | 'risk' | 'unavailable';
 
@@ -213,9 +264,9 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
-      <div className="card p-5 w-full lg:col-span-1 flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
+      <div className="card p-5 w-full xl:col-span-3 flex flex-col">
+        <div className="flex items-start justify-between gap-2"><h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3><InfoPopover title="Rep Execution Quadrant" align="left"><p>The Rep Execution Quadrant compares each rep&rsquo;s sales activity against their directional pipeline influence. It helps sales leadership quickly identify which reps created strong commercial value, which reps were active but lower-yield, and which reps may have been under-leveraged at the conference.</p><div><p className="font-semibold text-gray-700">1. Top Performers</p><p>Reps with stronger activity and stronger pipeline influence relative to the team.</p><p className="text-gray-500">Why it matters: These reps converted conference participation into meaningful commercial signal and may represent the behaviors to replicate at future events.</p></div><div><p className="font-semibold text-gray-700">2. Strategic, Under-Leveraged</p><p>Reps with stronger pipeline influence but lower activity volume.</p><p className="text-gray-500">Why it matters: These reps may have touched high-value accounts or strategic opportunities, but there may have been missed capacity to engage more accounts or create more meetings/touchpoints.</p></div><div><p className="font-semibold text-gray-700">3. Busy, Low Yield</p><p>Reps with higher activity volume but lower pipeline influence.</p><p className="text-gray-500">Why it matters: This can indicate that the rep was active but may have spent time with lower-fit accounts, lower-value conversations, or interactions that did not convert into meaningful pipeline signal.</p></div><div><p className="font-semibold text-gray-700">4. Low Impact</p><p>Reps with lower activity volume and lower pipeline influence.</p><p className="text-gray-500">Why it matters: These reps may need better pre-conference planning, clearer target ownership, stronger onsite execution, or better follow-up discipline.</p></div><p className="text-gray-500">Pipeline influence is directional unless connected to true CRM opportunity attribution.</p></InfoPopover></div>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
           <div className="relative w-full aspect-square rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
@@ -249,8 +300,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
+      <div className="card p-5 w-full xl:col-span-5 overflow-x-auto flex flex-col">
+        <div className="flex items-start justify-between gap-2"><h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3><InfoPopover title="Sales Execution Risk Heatmap"><p>The Sales Execution Risk Heatmap shows rep-level execution health across key sales behaviors. It is designed to help sales leadership identify where coaching or follow-up action may be needed after a conference.</p><div><p className="font-semibold text-gray-700">Status meanings</p><ul className="list-disc pl-4"><li>Healthy: performance is within an acceptable range</li><li>Watch: performance may need attention</li><li>Risk: performance is meaningfully below expectations</li><li>Unavailable: not enough data exists to evaluate this metric</li></ul></div><div><p className="font-semibold text-gray-700">Hold Rate</p><p>Measures how effectively a rep converted scheduled meetings into held meetings.</p></div><div><p className="font-semibold text-gray-700">Follow-up</p><p>Measures whether a rep completed the follow-ups created from conference interactions.</p></div><div><p className="font-semibold text-gray-700">Target</p><p>Measures whether the rep engaged assigned target accounts or strategically important accounts.</p></div><div><p className="font-semibold text-gray-700">Pipe/Act</p><p>Pipeline per Activity. Measures directional pipeline influence relative to the rep&rsquo;s total sales activities (meetings held + touchpoints logged).</p></div><div><p className="font-semibold text-gray-700">Activity</p><p>Measures whether the rep logged enough sales activity at the conference (meetings held + touchpoints logged).</p></div><p className="text-gray-500">Pipeline-related measures are directional unless CRM opportunity attribution is connected.</p></InfoPopover></div>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
           <div className="min-w-[340px]">
@@ -286,6 +337,42 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
+
+      <div className="card p-5 w-full xl:col-span-4 flex flex-col overflow-hidden">
+        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Performance</h3>
+        <p className="text-xs text-gray-500 mb-3">Rep-level execution activity</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500 border-b border-gray-100">
+                <th className="text-left font-semibold py-2 pr-2">Rep</th>
+                <th className="text-center font-semibold py-2 px-1">Held</th>
+                <th className="text-center font-semibold py-2 px-1">Sched.</th>
+                <th className="text-center font-semibold py-2 px-1">Hold %</th>
+                <th className="text-center font-semibold py-2 px-1">T-Points</th>
+                <th className="text-center font-semibold py-2 px-1">Companies</th>
+                <th className="text-center font-semibold py-2 px-1 whitespace-normal leading-tight" title="Influenced Pipeline per Meeting">Inf. Pipe/Mtg</th>
+              </tr>
+            </thead>
+            <tbody>
+              {repPlot.map((rep) => {
+                const pipelinePerMeeting = rep.meetingsHeld > 0 ? rep.pipelineInfluence / rep.meetingsHeld : null;
+                return (
+                  <tr key={rep.repName} className="border-b border-gray-100 last:border-b-0">
+                    <td className="py-2 pr-2 text-gray-700 font-medium truncate" title={rep.repName}>{rep.repName}</td>
+                    <td className="py-2 px-1 text-center text-gray-600">{fmtNum(rep.meetingsHeld)}</td>
+                    <td className="py-2 px-1 text-center text-gray-600">{fmtNum(rep.meetingsScheduled)}</td>
+                    <td className="py-2 px-1 text-center text-gray-600">{fmtPct(rep.holdRate)}</td>
+                    <td className="py-2 px-1 text-center text-gray-600">{fmtNum(rep.touchpoints)}</td>
+                    <td className="py-2 px-1 text-center text-gray-600">{fmtNum(rep.companiesEngaged)}</td>
+                    <td className="py-2 px-1 text-center text-gray-600">{pipelinePerMeeting == null ? '—' : fmt$(pipelinePerMeeting)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>;
 }
