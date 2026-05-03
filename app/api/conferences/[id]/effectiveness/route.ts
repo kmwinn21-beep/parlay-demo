@@ -1172,36 +1172,36 @@ export async function GET(
     const expectedCompaniesEngaged = Number(effDefaults.expected_companies_engaged ?? 30);
     const expectedPipelinePerSalesActivity = Number(effDefaults.expected_pipeline_per_sales_activity ?? 15000);
 
-    const meetingsHeld = Number(engagementSummary.total_held ?? 0);
-    const meetingsScheduled = Number(engagementSummary.total_scheduled ?? 0);
-    const followupsCreated = Number(engagementSummary.total_followups_created ?? 0);
-    const followupsCompleted = Number(engagementSummary.total_followups_completed ?? 0);
-    const companiesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
-    const companiesWithMeetingAndFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
-    const targetEngaged = Number(targetEngagement.target_companies_engaged ?? 0);
-    const targetsPresent = Number(targetEngagement.targets_total ?? 0);
-    const touchpointsLogged = Number(pipelineSummary.total_touchpoints ?? 0);
-    const companiesEngagedBySales = Number(engagementSummary.companies_engaged ?? 0);
-    const salesActivities = meetingsHeld + touchpointsLogged;
+    const salesMeetingsHeld = Number(engagementSummary.total_held ?? 0);
+    const salesMeetingsScheduled = Number(engagementSummary.total_scheduled ?? 0);
+    const salesFollowupsCreated = Number(engagementSummary.total_followups_created ?? 0);
+    const salesFollowupsCompleted = Number(engagementSummary.total_followups_completed ?? 0);
+    const salesCompaniesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
+    const salesCompaniesWithMeetingAndFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
+    const salesTargetEngaged = Number(targetEngagement.target_companies_engaged ?? 0);
+    const salesTargetsPresent = Number(targetEngagement.targets_total ?? 0);
+    const salesTouchpointsLogged = Number(pipelineSummary.total_touchpoints ?? 0);
+    const salesCompaniesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+    const salesActivities = salesMeetingsHeld + salesTouchpointsLogged;
     const totalPipelineInfluence = Number(pipelineSummary.total_pipeline_influence ?? 0);
 
-    const meetingHoldRate = pct(meetingsHeld, meetingsScheduled);
-    const meetingFollowupAttachmentRate = pct(companiesWithMeetingAndFollowup, companiesWithMeeting);
+    const meetingHoldRate = pct(salesMeetingsHeld, salesMeetingsScheduled);
+    const meetingFollowupAttachmentRate = pct(salesCompaniesWithMeetingAndFollowup, salesCompaniesWithMeeting);
     const meetingExecution = (meetingHoldRate != null && meetingFollowupAttachmentRate != null)
       ? (meetingHoldRate * 0.5) + (meetingFollowupAttachmentRate * 0.5)
       : (meetingHoldRate ?? meetingFollowupAttachmentRate ?? null);
 
-    const followupExecution = pct(followupsCompleted, followupsCreated);
+    const followupExecution = pct(salesFollowupsCompleted, salesFollowupsCreated);
     const pipelineInfluenceExecution = (totalSpend > 0 && expectedReturn > 0)
       ? Math.min(totalPipelineInfluence / (totalSpend * expectedReturn), 1) * 100
       : null;
 
-    const targetDenominator = targetsPresent > 0 ? targetsPresent : null;
-    const targetExecution = targetDenominator ? pct(targetEngaged, targetDenominator) : null;
+    const targetDenominator = salesTargetsPresent > 0 ? salesTargetsPresent : null;
+    const targetExecution = targetDenominator ? pct(salesTargetEngaged, targetDenominator) : null;
     const targetDenominatorType = targetDenominator ? 'present_at_conference' : 'unavailable';
 
     const activityProductivity = expectedSalesActivities > 0 ? Math.min(salesActivities / expectedSalesActivities, 1) * 100 : null;
-    const companyCoverage = expectedCompaniesEngaged > 0 ? Math.min(companiesEngagedBySales / expectedCompaniesEngaged, 1) * 100 : null;
+    const companyCoverage = expectedCompaniesEngaged > 0 ? Math.min(salesCompaniesEngaged / expectedCompaniesEngaged, 1) * 100 : null;
     const pipelinePerSalesActivity = salesActivities > 0 ? totalPipelineInfluence / salesActivities : null;
     const pipelineProductivity = (pipelinePerSalesActivity != null && expectedPipelinePerSalesActivity > 0)
       ? Math.min(pipelinePerSalesActivity / expectedPipelinePerSalesActivity, 1) * 100
@@ -1272,18 +1272,18 @@ export async function GET(
         sales_execution_rank: null,
         sales_execution_rank_total: null,
         components: {
-          meeting_execution: { score: meetingExecution != null ? Math.round(meetingExecution) : null, weight: DEFAULT_SALES_WEIGHTS.meeting_execution, tier: tierFromScore(meetingExecution), confidence: 'High', metrics: { meetings_held: meetingsHeld, meetings_scheduled: meetingsScheduled, meeting_hold_rate: meetingHoldRate, companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingAndFollowup, meeting_followup_attachment_rate: meetingFollowupAttachmentRate } },
-          followup_execution: { score: followupExecution != null ? Math.round(followupExecution) : null, weight: DEFAULT_SALES_WEIGHTS.followup_execution, tier: tierFromScore(followupExecution), confidence: 'High', metrics: { followups_created: followupsCreated, followups_completed: followupsCompleted, followup_completion_rate: followupExecution } },
+          meeting_execution: { score: meetingExecution != null ? Math.round(meetingExecution) : null, weight: DEFAULT_SALES_WEIGHTS.meeting_execution, tier: tierFromScore(meetingExecution), confidence: 'High', metrics: { meetings_held: salesMeetingsHeld, meetings_scheduled: salesMeetingsScheduled, meeting_hold_rate: meetingHoldRate, companies_with_meeting: salesCompaniesWithMeeting, companies_with_meeting_and_followup: salesCompaniesWithMeetingAndFollowup, meeting_followup_attachment_rate: meetingFollowupAttachmentRate } },
+          followup_execution: { score: followupExecution != null ? Math.round(followupExecution) : null, weight: DEFAULT_SALES_WEIGHTS.followup_execution, tier: tierFromScore(followupExecution), confidence: 'High', metrics: { followups_created: salesFollowupsCreated, followups_completed: salesFollowupsCompleted, followup_completion_rate: followupExecution } },
           pipeline_influence_execution: { score: pipelineInfluenceExecution != null ? Math.round(pipelineInfluenceExecution) : null, weight: DEFAULT_SALES_WEIGHTS.pipeline_influence_execution, tier: tierFromScore(pipelineInfluenceExecution), confidence: 'Medium', provenance: 'Proxy', metrics: { total_pipeline_influence: totalPipelineInfluence, total_spend: totalSpend, expected_return_target: expectedReturn, pipeline_influence_index: pipelineInfluenceExecution } },
-          target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: DEFAULT_SALES_WEIGHTS.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: targetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
-          rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: DEFAULT_SALES_WEIGHTS.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: meetingsHeld, touchpoints_logged: touchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: companiesEngagedBySales, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
+          target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: DEFAULT_SALES_WEIGHTS.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: salesTargetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
+          rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: DEFAULT_SALES_WEIGHTS.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: salesMeetingsHeld, touchpoints_logged: salesTouchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: salesCompaniesEngaged, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
         },
         kpis: {
           meeting_hold_rate: meetingHoldRate,
           followup_completion_rate: followupExecution,
           followup_attachment_rate: meetingFollowupAttachmentRate,
-          pipeline_per_meeting: meetingsHeld > 0 ? totalPipelineInfluence / meetingsHeld : null,
-          pipeline_per_company: companiesEngagedBySales > 0 ? totalPipelineInfluence / companiesEngagedBySales : null,
+          pipeline_per_meeting: salesMeetingsHeld > 0 ? totalPipelineInfluence / salesMeetingsHeld : null,
+          pipeline_per_company: salesCompaniesEngaged > 0 ? totalPipelineInfluence / salesCompaniesEngaged : null,
           average_influenced_deal_size: null,
         },
         pipeline_quality: {
@@ -1291,13 +1291,13 @@ export async function GET(
           influenced_opportunity_count: null,
           average_influenced_deal_size: null,
           largest_deal_concentration: null,
-          pipeline_per_company_engaged: companiesEngagedBySales > 0 ? totalPipelineInfluence / companiesEngagedBySales : null,
-          pipeline_per_meeting_held: meetingsHeld > 0 ? totalPipelineInfluence / meetingsHeld : null,
+          pipeline_per_company_engaged: salesCompaniesEngaged > 0 ? totalPipelineInfluence / salesCompaniesEngaged : null,
+          pipeline_per_meeting_held: salesMeetingsHeld > 0 ? totalPipelineInfluence / salesMeetingsHeld : null,
           pipeline_per_sales_activity: salesActivities > 0 ? totalPipelineInfluence / salesActivities : null,
         },
         followup_risks: [
-          { label: 'Open follow-ups still incomplete', count: Math.max(followupsCreated - followupsCompleted, 0), severity: (followupsCreated > 0 && (followupsCompleted / followupsCreated) < 0.6) ? 'high' : 'medium', description: 'Prioritize high-pipeline accounts first.' },
-          { label: 'Meetings held without completed follow-up', count: Math.max(companiesWithMeeting - companiesWithMeetingAndFollowup, 0), severity: 'medium', description: 'Commercial engagement without clear next steps.' }
+          { label: 'Open follow-ups still incomplete', count: Math.max(salesFollowupsCreated - salesFollowupsCompleted, 0), severity: (salesFollowupsCreated > 0 && (salesFollowupsCompleted / salesFollowupsCreated) < 0.6) ? 'high' : 'medium', description: 'Prioritize high-pipeline accounts first.' },
+          { label: 'Meetings held without completed follow-up', count: Math.max(salesCompaniesWithMeeting - salesCompaniesWithMeetingAndFollowup, 0), severity: 'medium', description: 'Commercial engagement without clear next steps.' }
         ],
         unavailable_components: salesWeighted.unavailable,
         unavailable_metrics: [
