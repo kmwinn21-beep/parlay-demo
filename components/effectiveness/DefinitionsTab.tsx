@@ -238,6 +238,28 @@ const SECTIONS: { title: string; items: Def[] }[] = [
     ],
   },
   {
+    title: 'Sales Execution',
+    items: [
+      {
+        term: 'Sales Effectiveness Score',
+        description: 'Sales Effectiveness Score is a 0–100 composite score that measures how effectively the sales team converted conference participation into commercial execution.',
+        calculation: '(Meeting Execution × 25%) + (Follow-up Execution × 20%) + (Pipeline Influence Execution × 25%) + (Target Account Execution × 15%) + (Rep Productivity × 15%)',
+      },
+      {
+        term: 'Rep Productivity',
+        description: 'Rep Productivity includes both meetings held and touchpoints logged. Touchpoint types are customer-defined in Parlay and counted equally.',
+      },
+      {
+        term: 'Sales Activity',
+        description: 'Sales Activity equals meetings held plus touchpoints logged.',
+      },
+      {
+        term: 'Pipeline per Sales Activity',
+        description: 'Directional pipeline influence divided by total sales activities (meetings held + touchpoints logged). Pipeline influence may be proxy-based unless CRM opportunity attribution is connected.',
+      },
+    ],
+  },
+  {
     title: 'Operational & Cost',
     items: [
       {
