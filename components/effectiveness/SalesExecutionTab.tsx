@@ -59,7 +59,6 @@ function fmtRepCurrency(v: number) {
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
-  const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
   const [showHeatmapInfo, setShowHeatmapInfo] = useState(false);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
@@ -242,16 +241,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
 
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
       <div className="card p-5 w-full lg:col-span-1 flex flex-col">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
-          <InfoButton onClick={() => setShowQuadrantInfo((v) => !v)} title="How quadrant works" />
-        </div>
+        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
-        {showQuadrantInfo && (
-          <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 p-2 text-[11px] text-blue-800">
-            Quadrants compare each rep’s sales activity (meetings held + touchpoints) to team average and pipeline influence to team average.
-          </div>
-        )}
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
           <div className="relative w-full aspect-square rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
             <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -284,15 +275,34 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
-        <div className="flex items-center gap-2">
+      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col relative">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
-          <InfoButton onClick={() => setShowHeatmapInfo((v) => !v)} title="How heatmap works" />
+          <button
+            type="button"
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
+            onClick={() => setShowHeatmapInfo((v) => !v)}
+            title="About Sales Execution Risk Heatmap"
+            aria-label="About Sales Execution Risk Heatmap"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
         </div>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
         {showHeatmapInfo && (
-          <div className="mb-3 rounded-md border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-900">
-            H = Healthy (≥75%), W = Watch (50–74%), R = Risk (&lt;50%), and — = Unavailable when there is no attributable data.
+          <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-sm space-y-2">
+            <div className="font-semibold text-slate-900">Sales Execution Risk Heatmap</div>
+            <p>The Sales Execution Risk Heatmap shows rep-level execution health across key sales behaviors. It is designed to help sales leadership identify where coaching or follow-up action may be needed after a conference.</p>
+            <p><span className="font-semibold">Healthy:</span> performance is within an acceptable range · <span className="font-semibold">Watch:</span> performance may need attention · <span className="font-semibold">Risk:</span> performance is meaningfully below expectations · <span className="font-semibold">Unavailable:</span> not enough data exists to evaluate this metric.</p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li><span className="font-semibold">Hold Rate:</span> Measures how effectively a rep converted scheduled meetings into held meetings. A low hold rate may indicate weak pre-conference qualification, poor onsite scheduling discipline, attendee no-shows, or a need for better meeting confirmation processes.</li>
+              <li><span className="font-semibold">Follow-up:</span> Measures whether a rep completed the follow-ups created from conference interactions. Conference ROI often leaks after the event, and low follow-up completion means meaningful conversations may not be turning into next steps.</li>
+              <li><span className="font-semibold">Target:</span> Measures whether the rep engaged assigned target accounts or strategically important accounts. This helps leadership confirm time was spent with the accounts that mattered most.</li>
+              <li><span className="font-semibold">Pipe/Act:</span> Pipeline per Activity. Measures directional pipeline influence relative to total sales activity. Sales Activity = meetings held + touchpoints logged. This helps distinguish productive activity from low-yield activity.</li>
+              <li><span className="font-semibold">Activity:</span> Measures whether the rep logged enough sales activity at the conference. Sales Activity = meetings held + touchpoints logged. This indicates whether the rep was sufficiently active to create commercial momentum.</li>
+            </ol>
           </div>
         )}
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
