@@ -727,7 +727,7 @@ export async function GET(
       }
       attributionMethodCounts.attendee_owner += 1;
       const share = 1 / repsForComp.size;
-      for (const repName of repsForComp) {
+      for (const repName of Array.from(repsForComp)) {
         const acc = repAccMap.get(repName);
         if (!acc) continue;
         acc.followupsCreated += share;
