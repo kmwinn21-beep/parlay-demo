@@ -21,6 +21,16 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase() ?? '').join('') || '—';
 }
 
+const DEFAULT_EXPECTED_PIPELINE_PER_ACTIVITY = 15000;
+
+function benchmarkInterpretation(targetPercent: number | null) {
+  if (targetPercent == null || !isFinite(targetPercent)) return null;
+  if (targetPercent >= 100) return 'Above target';
+  if (targetPercent >= 85) return 'Near target';
+  if (targetPercent >= 60) return 'Below target';
+  return 'Weak';
+}
+
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
@@ -93,6 +103,32 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
 
   const riskEmpty = riskRows.length < 2;
 
+  const benchmarkData = sx.pipeline_per_activity_benchmark ?? sx.components?.rep_productivity?.metrics ?? null;
+  const totalPipelineInfluenceRaw = benchmarkData?.total_pipeline_influence ?? sx.pipeline_quality?.total_pipeline_influence ?? data.pipeline.total_pipeline_influence ?? null;
+  const meetingsHeldRaw = benchmarkData?.meetings_held ?? sx.components?.meeting_execution?.metrics?.meetings_held ?? data.engagement.total_held ?? null;
+  const touchpointsRaw = benchmarkData?.touchpoints_logged ?? sx.components?.rep_productivity?.metrics?.touchpoints_logged ?? 0;
+  const configuredExpectedRaw = benchmarkData?.expected_pipeline_per_sales_activity ?? data.effectiveness_defaults?.expected_pipeline_per_sales_activity ?? null;
+
+  const totalPipelineInfluence = totalPipelineInfluenceRaw == null ? null : Number(totalPipelineInfluenceRaw);
+  const meetingsHeld = Number(meetingsHeldRaw ?? 0);
+  const touchpointsLogged = Number(touchpointsRaw ?? 0);
+  const salesActivities = Number(benchmarkData?.sales_activities ?? (meetingsHeld + touchpointsLogged));
+  const configuredExpected = configuredExpectedRaw == null ? null : Number(configuredExpectedRaw);
+  const hasConfiguredExpected = Number.isFinite(configuredExpected) && configuredExpected > 0;
+  const expectedPipelinePerActivity = hasConfiguredExpected ? configuredExpected : DEFAULT_EXPECTED_PIPELINE_PER_ACTIVITY;
+  const pipelinePerActivity = totalPipelineInfluence != null && salesActivities > 0 ? totalPipelineInfluence / salesActivities : null;
+  const targetPercent = pipelinePerActivity != null && expectedPipelinePerActivity > 0 ? (pipelinePerActivity / expectedPipelinePerActivity) * 100 : null;
+  const progressWidth = targetPercent == null ? null : Math.max(0, Math.min(targetPercent, 100));
+  const benchmarkInterpret = benchmarkInterpretation(targetPercent);
+
+  const benchmarkUnavailable = totalPipelineInfluence == null
+    ? 'Pipeline influence unavailable'
+    : salesActivities <= 0
+      ? 'No sales activity available'
+      : !hasConfiguredExpected
+        ? 'Expected benchmark not configured'
+        : null;
+
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div className="sm:col-span-2 rounded-xl p-4" style={{ backgroundColor: color(sx.sales_effectiveness_score) + '15', borderLeft: `4px solid ${color(sx.sales_effectiveness_score)}` }}>
@@ -105,7 +141,6 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         {sx.sales_execution_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{sx.sales_execution_rank}</div><div className="text-xs text-gray-400">of {sx.sales_execution_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       </div>
 
-      <div className="hidden lg:block lg:col-span-1" aria-hidden="true" />
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
@@ -113,7 +148,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
-      <div className="card p-5 w-full lg:col-span-1 flex flex-col">
+      <div className="card p-5 w-full lg:col-span-3 flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
@@ -148,7 +183,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 w-full lg:col-span-3 overflow-x-auto flex flex-col">
+      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
@@ -165,10 +200,26 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">{(['healthy', 'watch', 'risk', 'unavailable'] as RiskStatus[]).map((s) => <div key={s} className="flex items-center gap-1"><span className={`inline-block w-3 h-3 rounded-sm ${RISK_META[s].bg}`} />{RISK_META[s].label}</div>)}</div>
           <div className="mt-2 text-[11px] text-gray-500">{riskRows.filter((r) => r.statuses[1] === 'risk' || r.statuses[4] === 'risk').length} reps show follow-up or activity risk.</div>
+          <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold text-brand-primary">Pipeline / Activity Benchmark</div>
+              <div className="text-[11px] font-semibold text-brand-secondary">{pipelinePerActivity == null ? '—' : `${fmt$(pipelinePerActivity)} actual`}</div>
+            </div>
+            {benchmarkUnavailable ? (
+              <div className="text-[11px] text-gray-500">{benchmarkUnavailable}</div>
+            ) : (
+              <>
+                <div className="text-[11px] text-gray-500">{fmt$(expectedPipelinePerActivity)} expected</div>
+                <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-brand-secondary" style={{ width: `${progressWidth ?? 0}%` }} />
+                </div>
+                <div className="text-[11px] text-gray-500">{fmtPct(targetPercent)} of target{benchmarkInterpret ? ` · ${benchmarkInterpret}` : ''}</div>
+              </>
+            )}
+          </div>
         </>}
       </div>
 
-      <div className="hidden lg:block lg:col-span-1" aria-hidden="true" />
     </div>
   </div>;
 }
