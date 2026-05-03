@@ -274,7 +274,7 @@ export async function GET(
     const effDefaults: Record<string, string> = {};
     for (const r of effRow) effDefaults[String(r.key)] = String(r.value ?? '');
 
-    const adminSettingsRows = await runQuery(`SELECT key, value FROM settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
+    const adminSettingsRows = await runQuery(`SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
     const adminSettings: Record<string, string> = {};
     for (const r of adminSettingsRows) adminSettings[String(r.key)] = String(r.value ?? '');
 
