@@ -236,7 +236,11 @@ export async function GET(
 
     // Fetch conference year for annual budget lookup
     const confRow = await runQuery(
-      `SELECT name, start_date, end_date, location FROM conferences WHERE id = ${cid}`
+      `SELECT c.name, c.start_date, c.end_date, c.location, c.conference_strategy_type_id,
+              co.value AS conference_strategy_type_display_name, co.action_key AS conference_strategy_type_key
+       FROM conferences c
+       LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+       WHERE c.id = ${cid}`
     );
     const confInfo = confRow[0] ?? {};
 
@@ -1466,6 +1470,11 @@ export async function GET(
 
     return NextResponse.json({
       conference: { ...confInfo, conf_event_type: confEventType },
+      conference_strategy: {
+        id: confInfo.conference_strategy_type_id != null ? Number(confInfo.conference_strategy_type_id) : null,
+        key: confInfo.conference_strategy_type_key ? String(confInfo.conference_strategy_type_key) : null,
+        display_name: confInfo.conference_strategy_type_display_name ? String(confInfo.conference_strategy_type_display_name) : null,
+      },
       ces: {
         score: ces,
         dim1_icp_target: Math.round(dim1IcpTarget * 10) / 10,

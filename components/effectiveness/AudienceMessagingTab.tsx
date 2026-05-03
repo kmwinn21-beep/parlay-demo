@@ -7,6 +7,7 @@ const fmtNum=(n:number|null|undefined)=>n==null?'—':Math.round(n).toLocaleStri
 
 export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const m = data.marketing_audience as any;
+  const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -14,6 +15,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Marketing Audience Signal Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
+        <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div>
         <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">{[
           ['icp_target_quality','ICP & Target Quality'],
           ['buyer_role_access','Buyer Role Access'],

@@ -12,7 +12,10 @@ export async function GET(
   try {
     await dbReady;
     const confResult = await db.execute({
-      sql: 'SELECT * FROM conferences WHERE id = ?',
+      sql: `SELECT c.*, co.value AS conference_strategy_type_display_name, co.action_key AS conference_strategy_type_key
+            FROM conferences c
+            LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+            WHERE c.id = ?`,
       args: [params.id],
     });
 
@@ -70,7 +73,7 @@ export async function PUT(
   try {
     await dbReady;
     const body = await request.json();
-    const { name, start_date, end_date, location, notes, internal_attendees } = body;
+    const { name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id, name, internal_attendees FROM conferences WHERE id = ?',
@@ -82,8 +85,8 @@ export async function PUT(
     const prevInternalAttendees = existingResult.rows[0].internal_attendees as string | null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
-      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, params.id],
+      sql: 'UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ?, conference_strategy_type_id = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, params.id],
     });
 
     // Notify newly added internal attendees (best-effort)

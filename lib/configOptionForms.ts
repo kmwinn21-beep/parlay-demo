@@ -38,6 +38,10 @@ export const CATEGORY_FORM_USAGE: Record<string, FormChoice[]> = {
     { key: 'conference_detail', label: 'Conference Details' },
     { key: 'conference_form', label: 'Conference Form' },
   ],
+  conference_strategy_type: [
+    { key: 'conference_detail', label: 'Conference Details' },
+    { key: 'conference_form', label: 'Conference Form' },
+  ],
   user: [
     { key: 'attendee_detail', label: 'Attendee Detail' },
     { key: 'company_detail', label: 'Company Detail' },
