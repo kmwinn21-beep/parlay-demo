@@ -274,9 +274,13 @@ export async function GET(
     const effDefaults: Record<string, string> = {};
     for (const r of effRow) effDefaults[String(r.key)] = String(r.value ?? '');
 
-    const adminSettingsRows = await runQuery(`SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
     const adminSettings: Record<string, string> = {};
-    for (const r of adminSettingsRows) adminSettings[String(r.key)] = String(r.value ?? '');
+    try {
+      const adminSettingsRows = await runQuery(`SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
+      for (const r of adminSettingsRows) adminSettings[String(r.key)] = String(r.value ?? '');
+    } catch {
+      // Backward-compatible fallback if site_settings table is unavailable
+    }
 
     // CES benchmarks
     const DEFAULT_BENCHMARKS = {
@@ -1180,15 +1184,24 @@ export async function GET(
     const seniorityPriorityMap = parseJson<Record<string, string>>(adminSettings.icp_seniority_priority, {});
     const functionPriorityMap = parseJson<Record<string, string>>(adminSettings.icp_function_priority, {});
 
-    const engagedContacts = await runQuery(`${w}
-      SELECT cc.company_id, LOWER(TRIM(COALESCE(a.title,''))) AS title, LOWER(TRIM(COALESCE(a.seniority,''))) AS seniority, LOWER(TRIM(COALESCE(a.function,''))) AS function
-      FROM conference_companies cc
-      JOIN attendees a ON a.company_id = cc.company_id
-      LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
-      LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
-      LEFT JOIN company_hosted_attendance cha ON cha.company_id = cc.company_id
-      WHERE (COALESCE(cm.meetings_scheduled,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0)) > 0
-    `);
+    let engagedContacts: Record<string, unknown>[] = [];
+    try {
+      const attendeeCols = await runQuery(`PRAGMA table_info(attendees)`);
+      const colNames = new Set(attendeeCols.map(c => String(c.name ?? '').toLowerCase()));
+      const seniorityExpr = colNames.has('seniority') ? `LOWER(TRIM(COALESCE(a.seniority,'')))` : `''`;
+      const functionExpr = colNames.has('function') ? `LOWER(TRIM(COALESCE(a."function",'')))` : `''`;
+      engagedContacts = await runQuery(`${w}
+        SELECT cc.company_id, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
+        FROM conference_companies cc
+        JOIN attendees a ON a.company_id = cc.company_id
+        LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
+        LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
+        LEFT JOIN company_hosted_attendance cha ON cha.company_id = cc.company_id
+        WHERE (COALESCE(cm.meetings_scheduled,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0)) > 0
+      `);
+    } catch {
+      engagedContacts = [];
+    }
 
     const byCompany = new Map<number, {decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
     for (const row of engagedContacts) {
