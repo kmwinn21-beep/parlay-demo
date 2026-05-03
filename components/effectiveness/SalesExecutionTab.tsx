@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 
 type RepRow = Record<string, unknown>;
@@ -36,6 +37,21 @@ function toTitleCaseLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
+
+
+function InfoButton({ onClick, title }: { onClick: () => void; title: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-gray-300 text-[10px] text-gray-500 hover:bg-gray-100"
+      aria-label={title}
+      title={title}
+    >
+      i
+    </button>
+  );
+}
 function fmtRepCurrency(v: number) {
   return `$${Math.round(v).toLocaleString()}`;
 }
@@ -43,6 +59,7 @@ function fmtRepCurrency(v: number) {
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
+  const [showHeatmapInfo, setShowHeatmapInfo] = useState(false);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
@@ -55,6 +72,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     const meetingsScheduled = Number(r.meetings_scheduled ?? 0);
     const holdRate = meetingsScheduled > 0 ? (meetingsHeld / meetingsScheduled) * 100 : null;
     const followupRate = Number(r.followup_completion_rate ?? NaN);
+    const followupHealthReason = r.followup_health_reason != null ? String(r.followup_health_reason) : null;
     const targetAccountsEngaged = Number(r.target_accounts_engaged ?? NaN);
     const targetAccountsAssigned = Number(r.target_accounts_assigned ?? NaN);
     const targetEngagementRate = Number.isFinite(targetAccountsEngaged) && Number.isFinite(targetAccountsAssigned) && targetAccountsAssigned > 0
@@ -72,6 +90,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       meetingsScheduled,
       holdRate,
       followupRate: Number.isFinite(followupRate) ? followupRate : null,
+      followupHealthReason,
       targetAccountsEngaged: Number.isFinite(targetAccountsEngaged) ? targetAccountsEngaged : null,
       targetEngagementRate: Number.isFinite(targetEngagementRate) ? targetEngagementRate : null,
       pipelinePerActivity,
@@ -98,7 +117,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     const lowHoldRate: RiskStatus = rep.meetingsScheduled <= 0
       ? 'unavailable'
       : rep.meetingsScheduled >= 3 && (rep.holdRate ?? 0) < 50 ? 'risk' : (rep.holdRate ?? 0) < 65 ? 'watch' : 'healthy';
-    const lowFollowup: RiskStatus = rep.followupRate == null ? 'unavailable' : rep.followupRate < 50 ? 'risk' : rep.followupRate < 70 ? 'watch' : 'healthy';
+    const lowFollowup: RiskStatus = rep.followupRate == null ? 'unavailable' : rep.followupRate < 50 ? 'risk' : rep.followupRate < 75 ? 'watch' : 'healthy';
     const lowTarget: RiskStatus = rep.targetEngagementRate == null ? 'unavailable' : (rep.targetAccountsEngaged ?? 0) === 0 && rep.salesActivities > 0 ? 'risk' : rep.targetEngagementRate < avgTargetEngagement ? 'watch' : 'healthy';
     const lowPipelinePerActivity: RiskStatus = rep.pipelinePerActivity == null || avgPipelinePerActivity <= 0
       ? 'unavailable'
@@ -107,7 +126,14 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       ? 'unavailable'
       : rep.salesActivities < avgActivity * 0.5 ? 'risk' : rep.salesActivities < avgActivity * 0.85 ? 'watch' : 'healthy';
     const statuses = [lowHoldRate, lowFollowup, lowTarget, lowPipelinePerActivity, lowActivity] as RiskStatus[];
-    return { rep, statuses, score: riskStatus(statuses) };
+    const statusReasons = [
+      lowHoldRate === 'unavailable' ? 'No scheduled meetings for hold-rate analysis' : `${fmtNum(rep.meetingsHeld)} held of ${fmtNum(rep.meetingsScheduled)} scheduled`,
+      rep.followupHealthReason ?? (lowFollowup === 'unavailable' ? 'No follow-ups assigned to this rep' : `${fmtPct(rep.followupRate)} follow-up completion`),
+      lowTarget === 'unavailable' ? 'No target-account assignment available' : `${fmtPct(rep.targetEngagementRate)} target-account engagement`,
+      lowPipelinePerActivity === 'unavailable' ? 'No pipeline/activity benchmark available' : `${fmt$(rep.pipelinePerActivity)} pipeline per activity`,
+      lowActivity === 'unavailable' ? 'No rep activity benchmark available' : `${fmtNum(rep.salesActivities)} activities vs team average ${fmtNum(avgActivity)}`
+    ];
+    return { rep, statuses, statusReasons, score: riskStatus(statuses) };
   }).sort((a, b) => b.score - a.score || a.rep.repName.localeCompare(b.rep.repName));
 
   const riskEmpty = riskRows.length < 2;
@@ -249,9 +275,36 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
+      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col relative">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
+            onClick={() => setShowHeatmapInfo((v) => !v)}
+            title="About Sales Execution Risk Heatmap"
+            aria-label="About Sales Execution Risk Heatmap"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
+        {showHeatmapInfo && (
+          <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-sm space-y-2">
+            <div className="font-semibold text-slate-900">Sales Execution Risk Heatmap</div>
+            <p>The Sales Execution Risk Heatmap shows rep-level execution health across key sales behaviors. It is designed to help sales leadership identify where coaching or follow-up action may be needed after a conference.</p>
+            <p><span className="font-semibold">Healthy:</span> performance is within an acceptable range · <span className="font-semibold">Watch:</span> performance may need attention · <span className="font-semibold">Risk:</span> performance is meaningfully below expectations · <span className="font-semibold">Unavailable:</span> not enough data exists to evaluate this metric.</p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li><span className="font-semibold">Hold Rate:</span> Measures how effectively a rep converted scheduled meetings into held meetings. A low hold rate may indicate weak pre-conference qualification, poor onsite scheduling discipline, attendee no-shows, or a need for better meeting confirmation processes.</li>
+              <li><span className="font-semibold">Follow-up:</span> Measures whether a rep completed the follow-ups created from conference interactions. Conference ROI often leaks after the event, and low follow-up completion means meaningful conversations may not be turning into next steps.</li>
+              <li><span className="font-semibold">Target:</span> Measures whether the rep engaged assigned target accounts or strategically important accounts. This helps leadership confirm time was spent with the accounts that mattered most.</li>
+              <li><span className="font-semibold">Pipe/Act:</span> Pipeline per Activity. Measures directional pipeline influence relative to total sales activity. Sales Activity = meetings held + touchpoints logged. This helps distinguish productive activity from low-yield activity.</li>
+              <li><span className="font-semibold">Activity:</span> Measures whether the rep logged enough sales activity at the conference. Sales Activity = meetings held + touchpoints logged. This indicates whether the rep was sufficiently active to create commercial momentum.</li>
+            </ol>
+          </div>
+        )}
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
           <div className="min-w-[340px]">
             <div className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] gap-1 text-[11px] text-gray-500 mb-1">
@@ -260,7 +313,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
             {riskRows.map((row) => (
               <div key={row.rep.repName} className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] gap-1 mb-1 items-center">
                 <div className="text-xs font-medium text-gray-700 truncate pr-1" title={row.rep.repName}>{row.rep.repName}</div>
-                {row.statuses.map((status, i) => <div key={i} className={`h-7 rounded ${RISK_META[status].bg} ${RISK_META[status].text} flex items-center justify-center text-[11px] font-semibold`} title={RISK_META[status].label}>{RISK_META[status].short}</div>)}
+                {row.statuses.map((status, i) => <div key={i} className={`h-7 rounded ${RISK_META[status].bg} ${RISK_META[status].text} flex items-center justify-center text-[11px] font-semibold`} title={row.statusReasons?.[i] ?? RISK_META[status].label}>{RISK_META[status].short}</div>)}
               </div>
             ))}
           </div>
