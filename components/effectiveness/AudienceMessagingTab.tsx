@@ -14,6 +14,15 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Marketing Audience Signal Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
+        <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
+          {Object.entries(m.components ?? {}).map(([key, comp]: any) => (
+            <div key={key} className="flex justify-between text-xs">
+              <span className="text-gray-500">{key.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} <span className="text-gray-300">({Math.round((Number(comp.weight ?? 0))*100)}%)</span></span>
+              <span className="font-semibold" style={{ color: scoreColor(comp.score) }}>{comp.score != null ? Math.round(comp.score) : '—'} <span className="text-gray-400">· {comp.tier ?? '—'}</span></span>
+            </div>
+          ))}
+        </div>
+
       </div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center"><div className="text-xs text-gray-500">Audience Quality Rank</div>{m.audience_quality_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{m.audience_quality_rank}</div><div className="text-xs text-gray-400">of {m.audience_quality_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}</div>
     </div>

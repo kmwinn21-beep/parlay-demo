@@ -18,6 +18,15 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Sales Effectiveness Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_interpretation ?? 'Not scored'}</div>
+        <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
+          {Object.entries(sx.components ?? {}).map(([key, comp]: any) => (
+            <div key={key} className="flex justify-between text-xs">
+              <span className="text-gray-500">{key.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} <span className="text-gray-300">({Math.round((Number(comp.weight ?? 0))*100)}%)</span></span>
+              <span className="font-semibold" style={{ color: color(comp.score) }}>{comp.score ?? '—'} <span className="text-gray-400">· {comp.tier ?? '—'}</span></span>
+            </div>
+          ))}
+        </div>
+
       </div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
