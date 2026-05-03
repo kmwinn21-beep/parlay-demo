@@ -17,7 +17,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
           {Object.entries(m.components ?? {}).map(([key, comp]: any) => (
             <div key={key} className="flex justify-between text-xs">
-              <span className="text-gray-500">{key.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} <span className="text-gray-300">({Math.round((Number(comp.weight ?? 0))*100)}%)</span></span>
+              <span className="text-gray-500">{key.replace(/_/g,' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} <span className="text-gray-300">({Math.round((Number(comp.weight ?? 0))*100)}%)</span></span>
               <span className="font-semibold" style={{ color: scoreColor(comp.score) }}>{comp.score != null ? Math.round(comp.score) : '—'} <span className="text-gray-400">· {comp.tier ?? '—'}</span></span>
             </div>
           ))}
