@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 
 type RepRow = Record<string, unknown>;
@@ -36,6 +37,21 @@ function toTitleCaseLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
+
+
+function InfoButton({ onClick, title }: { onClick: () => void; title: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-gray-300 text-[10px] text-gray-500 hover:bg-gray-100"
+      aria-label={title}
+      title={title}
+    >
+      i
+    </button>
+  );
+}
 function fmtRepCurrency(v: number) {
   return `$${Math.round(v).toLocaleString()}`;
 }
@@ -43,6 +59,8 @@ function fmtRepCurrency(v: number) {
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
+  const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
+  const [showHeatmapInfo, setShowHeatmapInfo] = useState(false);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
@@ -224,8 +242,16 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
 
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
       <div className="card p-5 w-full lg:col-span-1 flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
+          <InfoButton onClick={() => setShowQuadrantInfo((v) => !v)} title="How quadrant works" />
+        </div>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
+        {showQuadrantInfo && (
+          <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 p-2 text-[11px] text-blue-800">
+            Quadrants compare each rep’s sales activity (meetings held + touchpoints) to team average and pipeline influence to team average.
+          </div>
+        )}
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
           <div className="relative w-full aspect-square rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
             <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -259,8 +285,16 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       </div>
 
       <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
+          <InfoButton onClick={() => setShowHeatmapInfo((v) => !v)} title="How heatmap works" />
+        </div>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
+        {showHeatmapInfo && (
+          <div className="mb-3 rounded-md border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-900">
+            H = Healthy (≥75%), W = Watch (50–74%), R = Risk (&lt;50%), and — = Unavailable when there is no attributable data.
+          </div>
+        )}
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
           <div className="min-w-[340px]">
             <div className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] gap-1 text-[11px] text-gray-500 mb-1">
