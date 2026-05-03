@@ -238,6 +238,38 @@ const SECTIONS: { title: string; items: Def[] }[] = [
     ],
   },
   {
+    title: 'Audience & Messaging Signals',
+    items: [
+      { term: 'Marketing Audience Signal Score', description: 'A 0–100 composite score measuring audience fit and directional market signal quality from conference participation.', calculation: '(ICP & Target Quality × 30%) + (Buyer Role Access × 25%) + (Net-New Market Reach × 20%) + (Engagement Depth × 15%) + (Message Resonance Proxy × 10%)' },
+      { term: 'Buyer Role Access', description: 'Uses ICP Admin Settings (Decision Maker titles, Influencer titles, Seniority priorities, Function priorities) to score whether the right buyer roles were reached.' },
+      { term: 'Decision Maker Access', description: 'Percent of engaged companies with at least one engaged contact matching configured Decision Maker titles.' },
+      { term: 'Influencer Access', description: 'Percent of engaged companies with at least one engaged contact matching configured Influencer titles.' },
+      { term: 'Message Resonance Proxy', description: 'Directional proxy based on meetings, follow-up attachment, and multi-touch depth. Not full marketing attribution.' },
+    ],
+  },
+  {
+    title: 'Sales Execution',
+    items: [
+      {
+        term: 'Sales Effectiveness Score',
+        description: 'Sales Effectiveness Score is a 0–100 composite score that measures how effectively the sales team converted conference participation into commercial execution.',
+        calculation: '(Meeting Execution × 25%) + (Follow-up Execution × 20%) + (Pipeline Influence Execution × 25%) + (Target Account Execution × 15%) + (Rep Productivity × 15%)',
+      },
+      {
+        term: 'Rep Productivity',
+        description: 'Rep Productivity includes both meetings held and touchpoints logged. Touchpoint types are customer-defined in Parlay and counted equally.',
+      },
+      {
+        term: 'Sales Activity',
+        description: 'Sales Activity equals meetings held plus touchpoints logged.',
+      },
+      {
+        term: 'Pipeline per Sales Activity',
+        description: 'Directional pipeline influence divided by total sales activities (meetings held + touchpoints logged). Pipeline influence may be proxy-based unless CRM opportunity attribution is connected.',
+      },
+    ],
+  },
+  {
     title: 'Operational & Cost',
     items: [
       {

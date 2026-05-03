@@ -764,6 +764,7 @@ export default function AdminPage() {
   const [icpTargetTitles, setIcpTargetTitles] = useState<string[]>([]);
   const [icpSeniorityPriority, setIcpSeniorityPriority] = useState<Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>>({});
   const [icpFunctionProductMapping, setIcpFunctionProductMapping] = useState<Record<string, string[]>>({});
+  const [icpFunctionPriority, setIcpFunctionPriority] = useState<Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>>({});
   const [icpDecisionMakerTitles, setIcpDecisionMakerTitles] = useState<string[]>([]);
   const [icpInfluencerTitles, setIcpInfluencerTitles] = useState<string[]>([]);
   const [savingBuyerPersona, setSavingBuyerPersona] = useState(false);
@@ -853,6 +854,7 @@ export default function AdminPage() {
         setIcpTargetTitles(tryParse(s['icp_target_titles'], []));
         setIcpSeniorityPriority(tryParse(s['icp_seniority_priority'], {}));
         setIcpFunctionProductMapping(tryParse(s['icp_function_product_mapping'], {}));
+        setIcpFunctionPriority(tryParse(s['icp_function_priority'], {}));
         setIcpDecisionMakerTitles(tryParse(s['icp_decision_maker_titles'], []));
         setIcpInfluencerTitles(tryParse(s['icp_influencer_titles'], []));
         setIcpPainPoints(tryParse(s['icp_pain_points'], []));
@@ -877,6 +879,7 @@ export default function AdminPage() {
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_target_titles', value: JSON.stringify(icpTargetTitles) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_seniority_priority', value: JSON.stringify(icpSeniorityPriority) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_function_product_mapping', value: JSON.stringify(icpFunctionProductMapping) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_function_priority', value: JSON.stringify(icpFunctionPriority) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_decision_maker_titles', value: JSON.stringify(icpDecisionMakerTitles) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_influencer_titles', value: JSON.stringify(icpInfluencerTitles) }) }),
       ]);
@@ -2507,6 +2510,7 @@ export default function AdminPage() {
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
                       <th className="text-left pb-1 font-medium">Function</th>
+                      <th className="text-left pb-1 font-medium">Priority</th>
                       <th className="text-left pb-1 font-medium">Product</th>
                     </tr>
                   </thead>
@@ -2517,6 +2521,15 @@ export default function AdminPage() {
                       return (
                         <tr key={f.value} className="border-b border-gray-50">
                           <td className="py-1.5 pr-4">{f.value}</td>
+                          <td className="py-1.5 pr-4">
+                            <select
+                              value={icpFunctionPriority[f.value] ?? 'Medium'}
+                              onChange={e => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                              className="input-field text-sm py-0.5"
+                            >
+                              {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          </td>
                           <td className="py-1.5">
                             <MultiSelectDropdown
                               options={productOpts.map(p => p.value)}
@@ -2529,7 +2542,7 @@ export default function AdminPage() {
                       );
                     })}
                     {(optionsByCategory['function'] ?? []).length === 0 && (
-                      <tr><td colSpan={2} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
+                      <tr><td colSpan={3} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
                     )}
                   </tbody>
                 </table>
