@@ -99,8 +99,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Sales Effectiveness Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_interpretation ?? 'Not scored'}</div>
-        <div className="hidden lg:block" aria-hidden="true" />
-    </div>
+      </div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
         {sx.sales_execution_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{sx.sales_execution_rank}</div><div className="text-xs text-gray-400">of {sx.sales_execution_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
@@ -111,12 +110,12 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-[320px_480px_minmax(0,1fr)] gap-6 items-start">
-      <div className="card p-5 w-full lg:w-[320px] flex flex-col">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+      <div className="card p-5 w-full lg:col-span-2 flex flex-col lg:aspect-square">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
-          <div className="relative w-full h-[320px] rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
+          <div className="relative w-full h-[320px] lg:h-full rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
             <svg viewBox="0 0 100 100" className="w-full h-full">
               <rect x="0" y="0" width="50" height="50" fill="#f8fafc" />
               <rect x="50" y="0" width="50" height="50" fill="#f0f9ff" />
@@ -147,7 +146,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 w-full lg:w-[480px] overflow-x-auto flex flex-col">
+      <div className="card p-5 w-full lg:col-span-3 overflow-x-auto flex flex-col lg:h-full">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
