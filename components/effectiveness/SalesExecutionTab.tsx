@@ -31,6 +31,15 @@ function benchmarkInterpretation(targetPercent: number | null) {
   return 'Weak';
 }
 
+
+function toTitleCaseLabel(key: string) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+}
+
+function fmtRepCurrency(v: number) {
+  return `$${Math.round(v).toLocaleString()}`;
+}
+
 export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
@@ -130,18 +139,74 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         ? 'Expected benchmark not configured'
         : null;
 
+  const pipelineInfluenceByRepRows = repPlot
+    .map((rep) => ({
+      rep_id: rep.repName,
+      rep_name: rep.repName,
+      pipeline_influence: Number.isFinite(rep.pipelineInfluence) ? Math.max(rep.pipelineInfluence, 0) : 0,
+    }))
+    .sort((a, b) => b.pipeline_influence - a.pipeline_influence || a.rep_name.localeCompare(b.rep_name));
+
+  const totalRepPipelineInfluence = pipelineInfluenceByRepRows.reduce((sum, rep) => sum + rep.pipeline_influence, 0);
+  const maxRepPipelineInfluence = pipelineInfluenceByRepRows.length > 0 ? Math.max(...pipelineInfluenceByRepRows.map((rep) => rep.pipeline_influence)) : 0;
+
+  const pipelineInfluenceByRep = pipelineInfluenceByRepRows.map((rep) => ({
+    ...rep,
+    contribution_percent: totalRepPipelineInfluence > 0 ? (rep.pipeline_influence / totalRepPipelineInfluence) * 100 : 0,
+    bar_width_percent: maxRepPipelineInfluence > 0 ? (rep.pipeline_influence / maxRepPipelineInfluence) * 100 : 0,
+  }));
+
+  const topPipelineInfluenceByRep = pipelineInfluenceByRep.slice(0, 6);
+  const hiddenRepCount = Math.max(pipelineInfluenceByRep.length - topPipelineInfluenceByRep.length, 0);
+  const showNoRepData = pipelineInfluenceByRep.length === 0;
+  const showNoAttributedPipeline = pipelineInfluenceByRep.length > 0 && totalRepPipelineInfluence <= 0;
+
   return <div className="p-6 space-y-6">
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div className="sm:col-span-2 rounded-xl p-4" style={{ backgroundColor: color(sx.sales_effectiveness_score) + '15', borderLeft: `4px solid ${color(sx.sales_effectiveness_score)}` }}>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
+      <div className="lg:col-span-2 rounded-xl p-4" style={{ backgroundColor: color(sx.sales_effectiveness_score) + '15', borderLeft: `4px solid ${color(sx.sales_effectiveness_score)}` }}>
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Sales Effectiveness Score</div>
         <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
         <div className="text-xs font-semibold" style={{ color: color(sx.sales_effectiveness_score) }}>{sx.sales_effectiveness_interpretation ?? 'Not scored'}</div>
+        <div className="mt-3 pt-3 border-t border-current border-opacity-20 space-y-1.5">
+          {Object.entries(sx.components ?? {}).map(([key, comp]: any) => (
+            <div key={key} className="flex justify-between text-xs">
+              <span className="text-gray-500">{toTitleCaseLabel(key)} <span className="text-gray-300">({Math.round((Number(comp.weight ?? 0)) * 100)}%)</span></span>
+              <span className="font-semibold" style={{ color: color(comp.score) }}>{comp.score != null ? Math.round(Number(comp.score)) : '—'} <span className="text-gray-400">· {comp.tier ?? '—'}</span></span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
+      <div className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center">
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
         {sx.sales_execution_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{sx.sales_execution_rank}</div><div className="text-xs text-gray-400">of {sx.sales_execution_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       </div>
-
+      <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Pipeline Influence by Rep</div>
+          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Directional</span>
+        </div>
+        <p className="text-[11px] text-gray-500 mt-1">Directional pipeline influence attributed to each rep</p>
+        {showNoRepData ? (
+          <div className="text-xs text-gray-500 mt-3">No rep-level pipeline influence available for this conference.</div>
+        ) : showNoAttributedPipeline ? (
+          <div className="text-xs text-gray-500 mt-3">No pipeline influence attributed yet.</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {topPipelineInfluenceByRep.map((rep) => (
+              <div key={rep.rep_id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="text-gray-700 truncate" title={rep.rep_name}>{rep.rep_name}</div>
+                  <div className="text-gray-500 font-medium">{fmtRepCurrency(rep.pipeline_influence)} · {Math.round(rep.contribution_percent)}%</div>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-brand-primary" style={{ width: `${Math.max(0, Math.min(rep.bar_width_percent, 100))}%` }} />
+                </div>
+              </div>
+            ))}
+            {hiddenRepCount > 0 && <div className="text-[11px] text-gray-400">+{hiddenRepCount} more reps</div>}
+          </div>
+        )}
+      </div>
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
