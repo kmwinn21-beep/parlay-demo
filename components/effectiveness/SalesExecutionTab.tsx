@@ -60,6 +60,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const sx = data.sales_execution;
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
   const [showHeatmapInfo, setShowHeatmapInfo] = useState(false);
+  const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
@@ -241,8 +242,33 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
 
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
       <div className="card p-5 w-full lg:col-span-1 flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
+          <button
+            type="button"
+            className="text-gray-400 hover:text-brand-secondary transition-colors"
+            onClick={() => setShowQuadrantInfo((v) => !v)}
+            title="About Rep Execution Quadrant"
+            aria-label="About Rep Execution Quadrant"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
+        {showQuadrantInfo && (
+          <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-sm space-y-2">
+            <div className="font-semibold text-slate-900">Rep Execution Quadrant</div>
+            <p>The Rep Execution Quadrant compares each rep’s sales activity against their directional pipeline influence. It helps sales leadership quickly identify which reps created strong commercial value, which reps were active but lower-yield, and which reps may have been under-leveraged at the conference.</p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li><span className="font-semibold">Top Performers:</span> Reps with stronger activity and stronger pipeline influence relative to the team.<br /><span className="font-semibold">Why it matters:</span> These reps converted conference participation into meaningful commercial signal and may represent the behaviors to replicate at future events.</li>
+              <li><span className="font-semibold">Strategic, Under-Leveraged:</span> Reps with stronger pipeline influence but lower activity volume.<br /><span className="font-semibold">Why it matters:</span> These reps may have touched high-value accounts or strategic opportunities, but there may have been missed capacity to engage more accounts or create more meetings/touchpoints.</li>
+              <li><span className="font-semibold">Busy, Low Yield:</span> Reps with higher activity volume but lower pipeline influence.<br /><span className="font-semibold">Why it matters:</span> This can indicate that the rep was active but may have spent time with lower-fit accounts, lower-value conversations, or interactions that did not convert into meaningful pipeline signal.</li>
+              <li><span className="font-semibold">Low Impact:</span> Reps with lower activity volume and lower pipeline influence.<br /><span className="font-semibold">Why it matters:</span> These reps may need better pre-conference planning, clearer target ownership, stronger onsite execution, or better follow-up discipline.</li>
+            </ol>
+          </div>
+        )}
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
           <div className="relative w-full aspect-square rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
             <svg viewBox="0 0 100 100" className="w-full h-full">
