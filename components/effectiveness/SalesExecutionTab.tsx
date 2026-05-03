@@ -94,6 +94,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       followupHealthReason,
       targetAccountsEngaged: Number.isFinite(targetAccountsEngaged) ? targetAccountsEngaged : null,
       targetEngagementRate: Number.isFinite(targetEngagementRate) ? targetEngagementRate : null,
+      targetHealthStatus: (r.target_health_status as RiskStatus | undefined) ?? null,
+      targetHealthReason: r.target_health_reason != null ? String(r.target_health_reason) : null,
       pipelinePerActivity,
     };
   }).filter((r) => Number.isFinite(r.salesActivities) && Number.isFinite(r.pipelineInfluence));
@@ -119,7 +121,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       ? 'unavailable'
       : rep.meetingsScheduled >= 3 && (rep.holdRate ?? 0) < 50 ? 'risk' : (rep.holdRate ?? 0) < 65 ? 'watch' : 'healthy';
     const lowFollowup: RiskStatus = rep.followupRate == null ? 'unavailable' : rep.followupRate < 50 ? 'risk' : rep.followupRate < 75 ? 'watch' : 'healthy';
-    const lowTarget: RiskStatus = rep.targetEngagementRate == null ? 'unavailable' : (rep.targetAccountsEngaged ?? 0) === 0 && rep.salesActivities > 0 ? 'risk' : rep.targetEngagementRate < avgTargetEngagement ? 'watch' : 'healthy';
+    const lowTarget: RiskStatus = rep.targetHealthStatus ?? (rep.targetEngagementRate == null ? 'unavailable' : (rep.targetAccountsEngaged ?? 0) === 0 && rep.salesActivities > 0 ? 'risk' : rep.targetEngagementRate < avgTargetEngagement ? 'watch' : 'healthy');
     const lowPipelinePerActivity: RiskStatus = rep.pipelinePerActivity == null || avgPipelinePerActivity <= 0
       ? 'unavailable'
       : rep.pipelinePerActivity < avgPipelinePerActivity * 0.5 ? 'risk' : rep.pipelinePerActivity < avgPipelinePerActivity * 0.85 ? 'watch' : 'healthy';
@@ -130,7 +132,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     const statusReasons = [
       lowHoldRate === 'unavailable' ? 'No scheduled meetings for hold-rate analysis' : `${fmtNum(rep.meetingsHeld)} held of ${fmtNum(rep.meetingsScheduled)} scheduled`,
       rep.followupHealthReason ?? (lowFollowup === 'unavailable' ? 'No follow-ups assigned to this rep' : `${fmtPct(rep.followupRate)} follow-up completion`),
-      lowTarget === 'unavailable' ? 'No target-account assignment available' : `${fmtPct(rep.targetEngagementRate)} target-account engagement`,
+      rep.targetHealthReason ?? (lowTarget === 'unavailable' ? 'No conference-specific target assignment available' : `${fmtPct(rep.targetEngagementRate)} conference-target engagement`),
       lowPipelinePerActivity === 'unavailable' ? 'No pipeline/activity benchmark available' : `${fmt$(rep.pipelinePerActivity)} pipeline per activity`,
       lowActivity === 'unavailable' ? 'No rep activity benchmark available' : `${fmtNum(rep.salesActivities)} activities vs team average ${fmtNum(avgActivity)}`
     ];

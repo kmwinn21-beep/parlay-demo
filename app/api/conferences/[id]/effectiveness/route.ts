@@ -789,7 +789,7 @@ export async function GET(
     const targetMeetingReps = await runQuery(
       `SELECT m.attendee_id, m.scheduled_by AS rep_raw
        FROM meetings m
-       LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+       LEFT JOIN config_options cop ON cop.category='action' AND LOWER(TRIM(m.outcome))=LOWER(TRIM(cop.value))
        WHERE m.conference_id = ${cid}
          AND cop.action_key='meeting_held'
          AND m.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
@@ -843,21 +843,41 @@ export async function GET(
       const ownerIds = companyAssignedMap.get(companyId) ?? [];
       ownerIds.map((id) => repNameMap.get(id) ?? id).forEach((repName) => addTargetRep(attendeeId, repName));
     }
-    for (const [attendeeId, repsSet] of targetToRepSet.entries()) {
-      for (const repName of repsSet) {
+    targetToRepSet.forEach((repsSet, attendeeId) => {
+      repsSet.forEach((repName) => {
         if (!repToTargetsEngaged.has(repName)) repToTargetsEngaged.set(repName, new Set());
         repToTargetsEngaged.get(repName)!.add(attendeeId);
-      }
-    }
+      });
+    });
     const totalConferenceTargets = new Set(targetRows.map((r) => Number(r.attendee_id))).size;
+    const targetHealthStatus = (rate: number | null, engaged: number, denominator: number): 'healthy' | 'watch' | 'risk' | 'unavailable' => {
+      if (denominator <= 0) return engaged > 0 ? 'watch' : 'unavailable';
+      if (rate == null || !isFinite(rate)) return 'unavailable';
+      if (rate >= 75) return 'healthy';
+      if (rate >= 50) return 'watch';
+      return 'risk';
+    };
 
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
       .sort(([, a], [, b]) => b.pipelineInfluence - a.pipelineInfluence)
-      .map(([name, acc]) => ({
+      .map(([name, acc]) => {
+        const targetEngaged = repToTargetsEngaged.get(name)?.size ?? 0;
+        const targetRate = totalConferenceTargets > 0 ? Math.round(((targetEngaged / totalConferenceTargets) * 100) * 10) / 10 : null;
+        const targetStatus = targetHealthStatus(targetRate, targetEngaged, totalConferenceTargets);
+        return {
+        conference_specific_targets_available: totalConferenceTargets,
+        conference_specific_targets_engaged: targetEngaged,
         target_accounts_assigned: totalConferenceTargets,
-        target_accounts_engaged: repToTargetsEngaged.get(name)?.size ?? 0,
-        target_engagement_rate: totalConferenceTargets > 0 ? Math.round((((repToTargetsEngaged.get(name)?.size ?? 0) / totalConferenceTargets) * 100) * 10) / 10 : null,
+        target_accounts_engaged: targetEngaged,
+        target_engagement_rate: targetRate,
+        target_health_status: targetStatus,
+        target_source_type: totalConferenceTargets > 0 ? 'conference_specific' : 'unavailable',
+        target_health_reason: totalConferenceTargets > 0
+          ? `${targetEngaged} of ${totalConferenceTargets} conference targets engaged`
+          : targetEngaged > 0
+            ? `${targetEngaged} conference targets engaged; no rep-level target denominator available`
+            : 'No conference-specific targets assigned to this rep',
         rep: name,
         meetings_held: Math.round(acc.meetingsHeld),
         meetings_scheduled: Math.round(acc.meetingsScheduled),
@@ -873,7 +893,7 @@ export async function GET(
         followup_health_reason: acc.followupsCreated > 0
           ? `${Math.round(acc.followupsCompleted * 10) / 10} of ${Math.round(acc.followupsCreated * 10) / 10} follow-ups completed`
           : 'No follow-ups assigned to this rep',
-      }));
+      };});
 
     // ── Audience / CMO Metrics ──────────────────────────────────────────────
     const icpCoverage = (await runQuery(
@@ -1601,6 +1621,13 @@ export async function GET(
           pipeline_per_meeting: salesMeetingsHeld > 0 ? totalPipelineInfluence / salesMeetingsHeld : null,
           pipeline_per_company: salesCompaniesEngaged > 0 ? totalPipelineInfluence / salesCompaniesEngaged : null,
           average_influenced_deal_size: null,
+        },
+        target_summary: {
+          conference_specific_targets_total: Number(targetEngagement.targets_total ?? 0),
+          conference_specific_targets_engaged: Number(targetEngagement.conference_specific_targets_engaged ?? 0),
+          conference_specific_target_engagement_rate: Number(targetEngagement.target_engagement_pct ?? 0),
+          general_status_targets_total: null,
+          target_source_used: 'conference_specific',
         },
         pipeline_quality: {
           total_pipeline_influence: totalPipelineInfluence,
