@@ -149,7 +149,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
-      <div className="card p-5 w-full lg:col-span-3 flex flex-col">
+      <div className="card p-5 w-full lg:col-span-1 flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
