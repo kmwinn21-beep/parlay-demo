@@ -1,134 +1,47 @@
 'use client';
-
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 
-function s(v: unknown, fallback = '—'): string {
-  return v != null && v !== '' ? String(v) : fallback;
-}
-
-function ProgressBar({ value, max = 100, color = '#1B76BC' }: { value: number; max?: number; color?: string }) {
-  const pct = Math.min(Math.round((value / Math.max(max, 1)) * 100), 100);
-  return (
-    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-      <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-    </div>
-  );
-}
+const scoreColor = (score: number | null | undefined) => { const s=Number(score??0); if(s>=90)return '#059669'; if(s>=75)return '#1B76BC'; if(s>=60)return '#d97706'; if(s>=50)return '#f97316'; return '#dc2626'; };
+const fmtPct=(n:number|null|undefined)=>n==null?'—':`${Math.round(n)}%`;
+const fmtNum=(n:number|null|undefined)=>n==null?'—':Math.round(n).toLocaleString();
 
 export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
-  const { audience } = data;
-  const icp = audience.icp_coverage;
-  const penetration = audience.account_penetration;
-  const seniority = (audience.seniority_mix ?? []) as Record<string, unknown>[];
-  const persona = (audience.persona_distribution ?? []) as Record<string, unknown>[];
-  const netNew = audience.net_new_logos;
-
-  const seniorityTotal = seniority.reduce((sum, r) => sum + Number(r.engaged_count ?? 0), 0);
-
-  const SENIORITY_COLORS: Record<string, string> = {
-    'C-Suite': '#1e3a5f',
-    'BOD': '#1e4976',
-    'VP/SVP': '#1B76BC',
-    'VP Level': '#2d8fd5',
-    'ED': '#3da8ee',
-    'Director': '#5bbcf8',
-    'Manager': '#93d5fb',
-  };
-
-  return (
-    <div className="p-6 space-y-6">
-      {/* ICP Coverage */}
-      <div className="card p-5">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">ICP Coverage</h3>
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          {[
-            { label: 'ICP Companies',   value: s(icp.icp_companies_total) },
-            { label: 'ICP Engaged',     value: s(icp.icp_companies_engaged) },
-            { label: 'Engagement Rate', value: icp.icp_company_engagement_pct != null ? `${icp.icp_company_engagement_pct}%` : '—' },
-          ].map(({ label, value }) => (
-            <div key={label} className="text-center rounded-xl border border-gray-100 bg-gray-50 p-3">
-              <div className="text-xl font-bold text-brand-secondary">{value}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{label}</div>
-            </div>
-          ))}
-        </div>
-        <div>
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-gray-500">ICP Attendee Coverage</span>
-            <span className="font-semibold text-brand-secondary">{Number(icp.icp_attendee_coverage_pct ?? 0)}%</span>
-          </div>
-          <ProgressBar value={Number(icp.icp_attendee_coverage_pct ?? 0)} />
-        </div>
+  const m = data.marketing_audience as any;
+  if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
+  return <div className="p-6 space-y-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="sm:col-span-2 rounded-xl p-4" style={{ backgroundColor: scoreColor(m.marketing_audience_signal_score)+'15', borderLeft:`4px solid ${scoreColor(m.marketing_audience_signal_score)}` }}>
+        <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Marketing Audience Signal Score</div>
+        <div className="flex items-end gap-1"><div className="text-4xl font-bold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_score ?? '—'}</div><div className="text-sm text-gray-400 mb-0.5">/100</div></div>
+        <div className="text-xs font-semibold" style={{ color: scoreColor(m.marketing_audience_signal_score)}}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
       </div>
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center"><div className="text-xs text-gray-500">Audience Quality Rank</div>{m.audience_quality_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{m.audience_quality_rank}</div><div className="text-xs text-gray-400">of {m.audience_quality_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}</div>
+    </div>
 
-      {/* Seniority Mix + Net-New */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <div className="card p-5">
-          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Seniority Mix (Engaged)</h3>
-          <div className="space-y-2">
-            {seniority.filter(r => r.seniority && Number(r.engaged_count ?? 0) > 0).map((r, i) => {
-              const sen = String(r.seniority ?? '');
-              const cnt = Number(r.engaged_count ?? 0);
-              const pct = seniorityTotal > 0 ? Math.round(cnt / seniorityTotal * 100) : 0;
-              return (
-                <div key={i}>
-                  <div className="flex justify-between text-xs mb-0.5">
-                    <span className="text-gray-600 font-medium">{sen}</span>
-                    <span className="text-gray-500">{cnt} <span className="text-gray-300">({pct}%)</span></span>
-                  </div>
-                  <ProgressBar value={cnt} max={seniorityTotal} color={SENIORITY_COLORS[sen] ?? '#1B76BC'} />
-                </div>
-              );
-            })}
-            {seniority.every(r => Number(r.engaged_count ?? 0) === 0) && (
-              <p className="text-xs text-gray-400 italic">No seniority data yet</p>
-            )}
-          </div>
-        </div>
+    <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">{[
+      ['ICP Engagement Rate', fmtPct(m.kpis.icp_engagement_rate)],
+      ['Target Engagement Rate', fmtPct(m.kpis.target_engagement_rate)],
+      ['Decision Maker Access', fmtPct(m.kpis.decision_maker_access_rate)],
+      ['Influencer Access', fmtPct(m.kpis.influencer_access_rate)],
+      ['Net-New Market Reach', fmtPct(m.kpis.net_new_market_reach_rate)],
+      ['Message Resonance Proxy', fmtPct(m.kpis.message_resonance_proxy)],
+    ].map(([l,v])=><div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}</div>
 
-        <div className="card p-5 space-y-4">
-          <div>
-            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-2">Net-New Logos</h3>
-            <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold text-brand-secondary">{Number(netNew.net_new_logos ?? 0)}</span>
-              <span className="text-sm text-gray-400 pb-1">({Number(netNew.net_new_rate_pct ?? 0)}% of engaged)</span>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-2">Account Penetration</h3>
-            <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-              <div><span className="block text-lg font-bold text-brand-secondary">{s(penetration.avg_contacts_per_company)}</span>Avg contacts/company</div>
-              <div><span className="block text-lg font-bold text-brand-secondary">{s(penetration.avg_engaged_contacts_per_company)}</span>Avg per engaged co.</div>
-              <div><span className="block text-lg font-bold text-gray-700">{s(penetration.unique_companies)}</span>Unique companies</div>
-              <div><span className="block text-lg font-bold text-gray-700">{s(penetration.engaged_companies)}</span>Engaged companies</div>
-            </div>
-          </div>
-        </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="card p-5 space-y-2"><h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Audience Fit</h3>
+        <div className="text-xs text-gray-500">ICP Engagement Rate <span className="float-right">{fmtPct(m.audience_fit.icp_engagement_rate)}</span></div>
+        <div className="text-xs text-gray-500">Target Engagement Rate <span className="float-right">{fmtPct(m.audience_fit.target_engagement_rate)}</span></div>
+        <div className="text-xs text-gray-500">Decision Maker Access <span className="float-right">{fmtPct(m.audience_fit.decision_maker_access_rate)}</span></div>
+        <div className="text-xs text-gray-500">Influencer Access <span className="float-right">{fmtPct(m.audience_fit.influencer_access_rate)}</span></div>
+        <div className="text-xs text-gray-500">Seniority Priority Fit <span className="float-right">{fmtPct(m.audience_fit.seniority_priority_fit)}</span></div>
+        <div className="text-xs text-gray-500">Function Priority Fit <span className="float-right">{fmtPct(m.audience_fit.function_priority_fit)}</span></div>
       </div>
-
-      {/* Persona Distribution */}
-      <div className="card p-5">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-3">Function Distribution</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {persona.filter(p => p.function).slice(0, 12).map((p, i) => {
-            const total2 = Number(p.total ?? 0);
-            const engaged = Number(p.engaged ?? 0);
-            const pct = total2 > 0 ? Math.round(engaged / total2 * 100) : 0;
-            return (
-              <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <div className="text-xs font-semibold text-gray-700 truncate mb-1">{String(p.function)}</div>
-                <div className="text-xs text-gray-500">{engaged} engaged / {total2} total</div>
-                <div className="mt-1.5">
-                  <ProgressBar value={engaged} max={Math.max(total2, 1)} />
-                </div>
-                <div className="text-xs text-brand-secondary font-semibold mt-0.5">{pct}%</div>
-              </div>
-            );
-          })}
-          {persona.length === 0 && <p className="text-xs text-gray-400 italic col-span-full">No function data yet</p>}
-        </div>
+      <div className="card p-5 space-y-2"><h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Market Reach & Audience Mix</h3>
+        <div className="text-xs text-gray-500">Total Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.total_companies_engaged)}</span></div>
+        <div className="text-xs text-gray-500">Net-New Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.net_new_companies_engaged)}</span></div>
+        <div className="text-xs text-gray-500">Known Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.known_companies_engaged)}</span></div>
+        <div className="text-xs text-gray-500">ICP Companies Engaged <span className="float-right">{fmtNum(m.reach_and_mix.icp_companies_engaged)}</span></div>
       </div>
     </div>
-  );
+  </div>;
 }

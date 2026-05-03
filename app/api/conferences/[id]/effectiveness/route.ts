@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
+import { DEFAULT_MARKETING_AUDIENCE_WEIGHTS, PRIORITY_SCORE, titleMatch, norm as normText } from '@/lib/effectiveness/marketingAudience';
 
 export const dynamic = 'force-dynamic';
 
@@ -272,6 +273,10 @@ export async function GET(
     const effRow = await runQuery(`SELECT key, value FROM effectiveness_defaults`);
     const effDefaults: Record<string, string> = {};
     for (const r of effRow) effDefaults[String(r.key)] = String(r.value ?? '');
+
+    const adminSettingsRows = await runQuery(`SELECT key, value FROM settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
+    const adminSettings: Record<string, string> = {};
+    for (const r of adminSettingsRows) adminSettings[String(r.key)] = String(r.value ?? '');
 
     // CES benchmarks
     const DEFAULT_BENCHMARKS = {
@@ -1168,6 +1173,39 @@ export async function GET(
     } catch { /* ranking is optional */ }
 
 
+
+    const parseJson = <T,>(v: string | undefined, fallback: T): T => { try { return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
+    const decisionMakerTitles = parseJson<string[]>(adminSettings.icp_decision_maker_titles, []).map(normText).filter(Boolean);
+    const influencerTitles = parseJson<string[]>(adminSettings.icp_influencer_titles, []).map(normText).filter(Boolean);
+    const seniorityPriorityMap = parseJson<Record<string, string>>(adminSettings.icp_seniority_priority, {});
+    const functionPriorityMap = parseJson<Record<string, string>>(adminSettings.icp_function_priority, {});
+
+    const engagedContacts = await runQuery(`${w}
+      SELECT cc.company_id, LOWER(TRIM(COALESCE(a.title,''))) AS title, LOWER(TRIM(COALESCE(a.seniority,''))) AS seniority, LOWER(TRIM(COALESCE(a.function,''))) AS function
+      FROM conference_companies cc
+      JOIN attendees a ON a.company_id = cc.company_id
+      LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
+      LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
+      LEFT JOIN company_hosted_attendance cha ON cha.company_id = cc.company_id
+      WHERE (COALESCE(cm.meetings_scheduled,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0)) > 0
+    `);
+
+    const byCompany = new Map<number, {decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
+    for (const row of engagedContacts) {
+      const cid2 = Number(row.company_id ?? 0); if (!cid2) continue;
+      const title = String(row.title ?? '');
+      const sen = String(row.seniority ?? '');
+      const fn = String(row.function ?? '');
+      const curr = byCompany.get(cid2) ?? { decision: false, influencer: false, seniorityScore: null, functionScore: null };
+      if (decisionMakerTitles.length && title && titleMatch(title, decisionMakerTitles)) curr.decision = true;
+      if (influencerTitles.length && title && titleMatch(title, influencerTitles)) curr.influencer = true;
+      const senPriority = String(seniorityPriorityMap[sen] ?? seniorityPriorityMap[sen.trim()] ?? 'Ignore').toLowerCase();
+      if (senPriority !== 'ignore' && PRIORITY_SCORE[senPriority] != null) curr.seniorityScore = Math.max(curr.seniorityScore ?? 0, PRIORITY_SCORE[senPriority]);
+      const fnPriority = String(functionPriorityMap[fn] ?? functionPriorityMap[fn.trim()] ?? 'Ignore').toLowerCase();
+      if (fnPriority !== 'ignore' && PRIORITY_SCORE[fnPriority] != null) curr.functionScore = Math.max(curr.functionScore ?? 0, PRIORITY_SCORE[fnPriority]);
+      byCompany.set(cid2, curr);
+    }
+
     const expectedSalesActivities = Number(effDefaults.expected_sales_activities ?? 60);
     const expectedCompaniesEngaged = Number(effDefaults.expected_companies_engaged ?? 30);
     const expectedPipelinePerSalesActivity = Number(effDefaults.expected_pipeline_per_sales_activity ?? 15000);
@@ -1265,6 +1303,72 @@ export async function GET(
         rep_allocated_cost: Math.round(repAllocatedCost),
         rep_ces: repCES,
       },
+
+      marketing_audience: (() => {
+        const companiesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+        const icpEngaged = Number(icpCoverage.icp_companies_engaged ?? 0);
+        const icpDen = Number(icpCoverage.icp_companies_total ?? 0) || null;
+        const targetEng = Number(targetEngagement.target_companies_engaged ?? 0);
+        const targetDen = Number(targetEngagement.targets_total ?? 0) || null;
+        const icpRate = icpDen ? pct(icpEngaged, icpDen) : (companiesEngaged > 0 ? pct(icpEngaged, companiesEngaged) : null);
+        const targetRate = targetDen ? pct(targetEng, targetDen) : null;
+        const icpTargetQuality = icpRate != null && targetRate != null ? icpRate * 0.5 + targetRate * 0.5 : (icpRate ?? targetRate ?? null);
+
+        const companyRows = Array.from(byCompany.values());
+        const companiesWithDecision = companyRows.filter(c => c.decision).length;
+        const companiesWithInfluencer = companyRows.filter(c => c.influencer).length;
+        const decisionRate = pct(companiesWithDecision, companiesEngaged);
+        const influencerRate = pct(companiesWithInfluencer, companiesEngaged);
+        const seniorityFit = companyRows.filter(c => c.seniorityScore != null).length ? companyRows.filter(c => c.seniorityScore != null).reduce((a,c)=>a+Number(c.seniorityScore),0)/companyRows.filter(c => c.seniorityScore != null).length : null;
+        const functionFit = companyRows.filter(c => c.functionScore != null).length ? companyRows.filter(c => c.functionScore != null).reduce((a,c)=>a+Number(c.functionScore),0)/companyRows.filter(c => c.functionScore != null).length : null;
+        const buyerRoleAccess = [
+          decisionRate != null ? decisionRate * 0.4 : null,
+          influencerRate != null ? influencerRate * 0.2 : null,
+          seniorityFit != null ? seniorityFit * 0.2 : null,
+          functionFit != null ? functionFit * 0.2 : null,
+        ].reduce((a,v)=>a+(v??0),0);
+
+        const netNew = Number(netNewLogos.net_new_logos ?? 0);
+        const netNewRate = pct(netNew, companiesEngaged);
+        const multi = Number(pipelineSummary.high_engagement_companies ?? 0);
+        const two = Number(pipelineSummary.two_touch_companies ?? 0);
+        const single = Number(pipelineSummary.single_touch_companies ?? 0);
+        const depth = companiesEngaged > 0 ? ((multi/companiesEngaged*100)*0.5)+((two/companiesEngaged*100)*0.3)+((single/companiesEngaged*100)*0.2) : null;
+        const companiesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
+        const companiesWithMeetingFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
+        const meetingRate = pct(companiesWithMeeting, companiesEngaged);
+        const followAttach = pct(companiesWithMeetingFollowup, companiesWithMeeting);
+        const multiRate = pct(multi, companiesEngaged);
+        const resonance = (meetingRate != null && followAttach != null && multiRate != null) ? (meetingRate*0.4)+(followAttach*0.3)+(multiRate*0.3) : null;
+
+        const rw = reweight([
+          { key: 'icp_target_quality', score: icpTargetQuality, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.icp_target_quality },
+          { key: 'buyer_role_access', score: buyerRoleAccess, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.buyer_role_access },
+          { key: 'net_new_market_reach', score: netNewRate, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.net_new_market_reach },
+          { key: 'engagement_depth', score: depth, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.engagement_depth },
+          { key: 'message_resonance_proxy', score: resonance, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.message_resonance_proxy },
+        ]);
+        return {
+          marketing_audience_signal_score: rw.score,
+          marketing_audience_signal_tier: tierFromScore(rw.score),
+          marketing_audience_signal_interpretation: rw.score != null ? `${tierFromScore(rw.score)} Audience Fit` : null,
+          audience_quality_rank: null,
+          audience_quality_rank_total: null,
+          components: { icp_target_quality: { score: icpTargetQuality, weight: 0.3, tier: tierFromScore(icpTargetQuality), confidence: 'Medium', metrics: { icp_companies_engaged: icpEngaged, icp_companies_denominator: icpDen, icp_engagement_rate: icpRate, target_accounts_engaged: targetEng, target_accounts_denominator: targetDen, target_engagement_rate: targetRate } }, buyer_role_access: { score: buyerRoleAccess, weight: 0.25, tier: tierFromScore(buyerRoleAccess), confidence: 'Medium', metrics: { companies_with_decision_maker_engaged: companiesWithDecision, decision_maker_access_rate: decisionRate, companies_with_influencer_engaged: companiesWithInfluencer, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit }, admin_settings_used: { decision_maker_titles_count: decisionMakerTitles.length, influencer_titles_count: influencerTitles.length, seniority_priority_map: seniorityPriorityMap, function_priority_map: functionPriorityMap } }, net_new_market_reach: { score: netNewRate, weight: 0.2, tier: tierFromScore(netNewRate), confidence: 'Medium', metrics: { net_new_companies_engaged: netNew, total_companies_engaged: companiesEngaged, net_new_market_reach_rate: netNewRate } }, engagement_depth: { score: depth, weight: 0.15, tier: tierFromScore(depth), confidence: 'Medium', metrics: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_engaged: companiesEngaged, engagement_depth_score: depth } }, message_resonance_proxy: { score: resonance, weight: 0.1, tier: tierFromScore(resonance), confidence: 'Medium', provenance: 'Proxy', metrics: { companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, meeting_rate: meetingRate, followup_attachment_rate: followAttach, multi_touch_rate: multiRate } } },
+          kpis: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, net_new_market_reach_rate: netNewRate, message_resonance_proxy: resonance },
+        audience_fit: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit },
+        reach_and_mix: { total_companies_engaged: companiesEngaged, net_new_companies_engaged: netNew, known_companies_engaged: companiesEngaged-netNew, icp_companies_engaged: icpEngaged, target_accounts_engaged: targetEng, companies_with_decision_maker_engaged: companiesWithDecision, companies_with_influencer_engaged: companiesWithInfluencer },
+        engagement_resonance: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, engagement_depth_score: depth, message_resonance_proxy: resonance },
+        opportunities_gaps: [
+          { label: 'High-fit companies without decision maker access', count: Math.max(companiesEngaged - companiesWithDecision, 0), severity: 'medium', description: 'Improve executive meeting access planning.' },
+          { label: 'Target accounts with shallow interactions', count: single, severity: 'medium', description: 'Increase multi-touch engagement for targets.' }
+        ],
+        unavailable_components: rw.unavailable,
+        unavailable_metrics: [],
+        original_weights: rw.originalWeights,
+        effective_weights: rw.effectiveWeights,
+        calculation_confidence: rw.confidence,
+      }; })(),
       sales_execution: {
         sales_effectiveness_score: salesWeighted.score,
         sales_effectiveness_tier: tierFromScore(salesWeighted.score),

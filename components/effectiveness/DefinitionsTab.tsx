@@ -238,6 +238,16 @@ const SECTIONS: { title: string; items: Def[] }[] = [
     ],
   },
   {
+    title: 'Audience & Messaging Signals',
+    items: [
+      { term: 'Marketing Audience Signal Score', description: 'A 0–100 composite score measuring audience fit and directional market signal quality from conference participation.', calculation: '(ICP & Target Quality × 30%) + (Buyer Role Access × 25%) + (Net-New Market Reach × 20%) + (Engagement Depth × 15%) + (Message Resonance Proxy × 10%)' },
+      { term: 'Buyer Role Access', description: 'Uses ICP Admin Settings (Decision Maker titles, Influencer titles, Seniority priorities, Function priorities) to score whether the right buyer roles were reached.' },
+      { term: 'Decision Maker Access', description: 'Percent of engaged companies with at least one engaged contact matching configured Decision Maker titles.' },
+      { term: 'Influencer Access', description: 'Percent of engaged companies with at least one engaged contact matching configured Influencer titles.' },
+      { term: 'Message Resonance Proxy', description: 'Directional proxy based on meetings, follow-up attachment, and multi-touch depth. Not full marketing attribution.' },
+    ],
+  },
+  {
     title: 'Sales Execution',
     items: [
       {

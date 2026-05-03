@@ -51,6 +51,7 @@ export interface EffectivenessData {
     rep_ces?: Record<string, unknown>[];
   };
   sales_execution?: Record<string, any>;
+  marketing_audience?: Record<string, any>;
   effectiveness_defaults: Record<string, string>;
 }
 
