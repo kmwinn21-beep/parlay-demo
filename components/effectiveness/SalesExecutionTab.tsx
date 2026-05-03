@@ -110,12 +110,12 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="card p-5 min-w-0">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-6 items-stretch">
+      <div className="card p-5 min-w-0 flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
         <p className="text-xs text-gray-500 mb-3">Sales activity vs. pipeline influence</p>
         {chartEmpty ? <div className="text-xs text-gray-500">Not enough rep-level activity and pipeline data to plot this view.</div> : <>
-          <div className="relative h-[300px] rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
+          <div className="relative aspect-square w-full rounded-lg border border-gray-100 bg-gray-50 overflow-hidden">
             <svg viewBox="0 0 100 100" className="w-full h-full">
               <rect x="0" y="0" width="50" height="50" fill="#f8fafc" />
               <rect x="50" y="0" width="50" height="50" fill="#f0f9ff" />
@@ -146,7 +146,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
 
-      <div className="card p-5 min-w-0 overflow-x-auto">
+      <div className="card p-5 min-w-0 overflow-x-auto flex flex-col">
         <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Risk Heatmap</h3>
         <p className="text-xs text-gray-500 mb-3">Rep-level coaching risks</p>
         {riskEmpty ? <div className="text-xs text-gray-500">Not enough rep-level data to identify execution risks.</div> : <>
