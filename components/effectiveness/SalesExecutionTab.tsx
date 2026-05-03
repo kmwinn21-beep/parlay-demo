@@ -114,8 +114,9 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const touchpointsLogged = Number(touchpointsRaw ?? 0);
   const salesActivities = Number(benchmarkData?.sales_activities ?? (meetingsHeld + touchpointsLogged));
   const configuredExpected = configuredExpectedRaw == null ? null : Number(configuredExpectedRaw);
-  const hasConfiguredExpected = Number.isFinite(configuredExpected) && configuredExpected > 0;
-  const expectedPipelinePerActivity = hasConfiguredExpected ? configuredExpected : DEFAULT_EXPECTED_PIPELINE_PER_ACTIVITY;
+  const configuredExpectedNum = configuredExpected ?? 0;
+  const hasConfiguredExpected = Number.isFinite(configuredExpectedNum) && configuredExpectedNum > 0;
+  const expectedPipelinePerActivity = hasConfiguredExpected ? configuredExpectedNum : DEFAULT_EXPECTED_PIPELINE_PER_ACTIVITY;
   const pipelinePerActivity = totalPipelineInfluence != null && salesActivities > 0 ? totalPipelineInfluence / salesActivities : null;
   const targetPercent = pipelinePerActivity != null && expectedPipelinePerActivity > 0 ? (pipelinePerActivity / expectedPipelinePerActivity) * 100 : null;
   const progressWidth = targetPercent == null ? null : Math.max(0, Math.min(targetPercent, 100));
