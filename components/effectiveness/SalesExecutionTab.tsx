@@ -297,6 +297,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           </table>
         )}
       </div>
+    </div>
+
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
@@ -454,6 +456,5 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         </>}
       </div>
     </div>
-  </div>
   </div>;
 }
