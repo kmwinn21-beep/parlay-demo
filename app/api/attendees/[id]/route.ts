@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { classifySeniority } from '@/lib/parsers';
+import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
 
 export async function GET(
   request: NextRequest,
@@ -24,6 +25,7 @@ export async function GET(
     }
 
     const attendee = attendeeResult.rows[0];
+    const title_match_metadata = await resolveAttendeeTitleMetadata(attendee.title ? String(attendee.title) : null);
 
     const conferencesResult = await db.execute({
       sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location
@@ -36,7 +38,7 @@ export async function GET(
 
     const conferences = conferencesResult.rows.map((r) => ({ ...r }));
 
-    return NextResponse.json({ ...attendee, conferences });
+    return NextResponse.json({ ...attendee, title_match_metadata, conferences });
   } catch (error) {
     console.error('GET /api/attendees/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch attendee' }, { status: 500 });

@@ -22,6 +22,7 @@ import { InternalRelationshipsSection } from '@/components/InternalRelationships
 import { TouchpointsSection } from '@/components/TouchpointsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
+import { BUYER_ROLE_OPTIONS, shouldWarnForTitleMetadata, type BuyerRoleKey, type TitleMatchMetadata } from '@/lib/titleNormalization';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -45,7 +46,7 @@ interface Attendee {
   company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
   email?: string; notes?: string; action?: string; next_steps?: string;
   next_steps_notes?: string; status?: string; seniority?: string; linkedin_url?: string; phone?: string;
-  function?: string; products?: string;
+  function?: string; products?: string; title_match_metadata?: TitleMatchMetadata;
   created_at: string; conferences: Conference[];
 }
 
@@ -94,11 +95,16 @@ export default function AttendeeDetailPage() {
   const [actionKeyMap, setActionKeyMap] = useState<Record<string, string | null>>({});
   const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
   const [functionOptions, setFunctionOptions] = useState<string[]>([]);
+  const [seniorityOptionRecords, setSeniorityOptionRecords] = useState<{ id: number; value: string }[]>([]);
+  const [functionOptionRecords, setFunctionOptionRecords] = useState<{ id: number; value: string }[]>([]);
   const [productsOptions, setProductsOptions] = useState<{ value: string; color: string | null }[]>([]);
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [showComposeEmail, setShowComposeEmail] = useState(false);
+  const [showTitleClassifier, setShowTitleClassifier] = useState(false);
+  const [titleRuleForm, setTitleRuleForm] = useState({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title' as BuyerRoleKey, confidence: 'high', notes: '', apply_all_exact: true });
+  const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
 
   // Follow-ups
@@ -221,9 +227,11 @@ export default function AttendeeDetailPage() {
       setActionOptions(actionData.map((o: { id: number; value: string; action_key: string | null }) => ({ id: Number(o.id), value: String(o.value), action_key: o.action_key ?? null })));
       setActionKeyMap(Object.fromEntries(actionData.map((o: { value: string; action_key: string | null }) => [o.value, o.action_key])));
       setSeniorityOptions(seniorityData.map((o: { value: string }) => o.value));
+      setSeniorityOptionRecords(seniorityData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setRelTypeOptions(relTypeData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setFunctionOptions(functionData.map((o: { value: string }) => o.value));
+      setFunctionOptionRecords(functionData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setProductsOptions(productsData.map((o: { value: string; color: string | null }) => ({ value: String(o.value), color: o.color ?? null })));
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '', function: atData.function || '' });
     } catch {
@@ -259,6 +267,62 @@ export default function AttendeeDetailPage() {
     setAttendee(prev => prev ? { ...prev, ...updated } : prev);
     return updated;
   }, [id]);
+
+
+  const openTitleClassifier = useCallback(() => {
+    if (!attendee) return;
+    const meta = attendee.title_match_metadata;
+    setTitleRuleForm({
+      normalized_title: meta?.normalized_title || attendee.title || '',
+      function_id: meta?.function_id ? String(meta.function_id) : '',
+      seniority_id: meta?.seniority_id ? String(meta.seniority_id) : '',
+      buyer_role: (meta?.buyer_role || 'target_title') as BuyerRoleKey,
+      confidence: 'high',
+      notes: '',
+      apply_all_exact: true,
+    });
+    setShowTitleClassifier(true);
+  }, [attendee]);
+
+  const saveTitleClassification = useCallback(async () => {
+    if (!attendee?.title) return;
+    setIsSavingTitleRule(true);
+    try {
+      const res = await fetch('/api/title-normalization-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_title: attendee.title,
+          normalized_title: titleRuleForm.normalized_title,
+          function_id: Number(titleRuleForm.function_id),
+          seniority_id: Number(titleRuleForm.seniority_id),
+          buyer_role: titleRuleForm.buyer_role,
+          confidence: titleRuleForm.confidence,
+          notes: titleRuleForm.notes,
+          apply_all_exact: titleRuleForm.apply_all_exact,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to save title classification');
+      }
+      const saved = await res.json();
+      const functionValue = functionOptionRecords.find(o => String(o.id) === titleRuleForm.function_id)?.value;
+      const seniorityValue = seniorityOptionRecords.find(o => String(o.id) === titleRuleForm.seniority_id)?.value;
+      setAttendee(prev => prev ? {
+        ...prev,
+        title_match_metadata: saved.metadata,
+        function: functionValue || prev.function,
+        seniority: seniorityValue || prev.seniority,
+      } : prev);
+      setShowTitleClassifier(false);
+      toast.success('Title classification saved. Scores will use this mapping going forward.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
+    } finally {
+      setIsSavingTitleRule(false);
+    }
+  }, [attendee, functionOptionRecords, seniorityOptionRecords, titleRuleForm]);
 
   const upsertConferenceDetail = useCallback(async (fields: Partial<ConferenceDetail>) => {
     if (!selectedConferenceId) return;
@@ -617,6 +681,12 @@ export default function AttendeeDetailPage() {
   if (!attendee) return null;
 
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
+  const titleMeta = attendee.title_match_metadata;
+  const showTitleWarning = attendee.title ? shouldWarnForTitleMetadata(titleMeta) : false;
+  const titleFunctionLabel = titleMeta?.function_id ? functionOptionRecords.find(o => o.id === titleMeta.function_id)?.value : null;
+  const titleSeniorityLabel = titleMeta?.seniority_id ? seniorityOptionRecords.find(o => o.id === titleMeta.seniority_id)?.value : null;
+  const titleTooltipId = `attendee-title-normalization-${attendee.id}`;
+  const hasTitleNormalizationTooltip = titleMeta?.source === 'user_confirmed' && Boolean(titleMeta.normalized_title || titleFunctionLabel || titleSeniorityLabel);
   const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
   const currentFunctions = new Set((attendee.function || '').split(',').map(s => s.trim()).filter(Boolean));
   const currentProducts = new Set((attendee.products || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -677,7 +747,55 @@ export default function AttendeeDetailPage() {
                     </div>
                     <div>
                       <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
-                      {attendee.title && <p className="text-gray-600 mt-1">{attendee.title}</p>}
+                      {attendee.title && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <span
+                            tabIndex={hasTitleNormalizationTooltip ? 0 : undefined}
+                            aria-describedby={hasTitleNormalizationTooltip ? titleTooltipId : undefined}
+                            className={`relative inline-flex text-gray-600 ${hasTitleNormalizationTooltip ? 'cursor-help outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary/30 focus-visible:ring-offset-2 rounded-sm group/title-tooltip' : ''}`}
+                          >
+                            {attendee.title}
+                            {hasTitleNormalizationTooltip && (
+                              <span
+                                id={titleTooltipId}
+                                role="tooltip"
+                                className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-64 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-xs text-gray-700 shadow-lg group-hover/title-tooltip:block group-focus/title-tooltip:block"
+                              >
+                                <span className="block font-semibold text-brand-primary mb-1">Title classification</span>
+                                <span className="grid grid-cols-[104px_1fr] gap-x-2 gap-y-1">
+                                  <span className="font-medium text-gray-400">Normalized Title</span>
+                                  <span className="text-gray-800">{titleMeta.normalized_title || '—'}</span>
+                                  <span className="font-medium text-gray-400">Function</span>
+                                  <span className="text-gray-800">{titleFunctionLabel || '—'}</span>
+                                  <span className="font-medium text-gray-400">Seniority</span>
+                                  <span className="text-gray-800">{titleSeniorityLabel || '—'}</span>
+                                </span>
+                              </span>
+                            )}
+                          </span>
+                          {showTitleWarning ? (
+                            <button
+                              type="button"
+                              onClick={openTitleClassifier}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-amber-600 hover:bg-amber-50"
+                              title="Classify attendee title"
+                              aria-label="Classify attendee title"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m0 3.75h.008v.008H12V16.5zM10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                            </button>
+                          ) : titleMeta?.source === 'user_confirmed' ? (
+                            <button
+                              type="button"
+                              onClick={openTitleClassifier}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-emerald-600 hover:bg-emerald-50"
+                              title="User-confirmed title mapping"
+                              aria-label="User-confirmed title mapping"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
                         {currentFunctions.size > 0 && Array.from(currentFunctions).map(f => (
@@ -1205,6 +1323,79 @@ export default function AttendeeDetailPage() {
         defaultCompanyId={attendee?.company_id}
         availableConferences={attendee?.conferences}
       />
+
+      {showTitleClassifier && attendee?.title && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
+                <p className="mt-1 text-xs text-gray-500">Apply to all attendees with this exact title.</p>
+              </div>
+              <button onClick={() => setShowTitleClassifier(false)} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                <p><span className="font-medium text-gray-700">Original Title:</span> {attendee.title}</p>
+                <p className="mt-1"><span className="font-medium text-gray-700">Suggested Match:</span> {titleMeta?.suggested_match || titleMeta?.normalized_title || 'No suggestion available'}</p>
+                <p className="mt-1 text-xs text-gray-500">Match: {titleMeta?.match_type || 'none'} · Confidence: {titleMeta?.match_confidence || 'low'}</p>
+              </div>
+              <div>
+                <label className="label">Normalized Title</label>
+                <input value={titleRuleForm.normalized_title} onChange={e => setTitleRuleForm(p => ({ ...p, normalized_title: e.target.value }))} className="input-field" placeholder="e.g. CHRO" />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">Function</label>
+                  <select value={titleRuleForm.function_id} onChange={e => setTitleRuleForm(p => ({ ...p, function_id: e.target.value }))} className="input-field">
+                    <option value="">Select function</option>
+                    {functionOptionRecords.map(option => <option key={option.id} value={option.id}>{option.value}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Seniority</label>
+                  <select value={titleRuleForm.seniority_id} onChange={e => setTitleRuleForm(p => ({ ...p, seniority_id: e.target.value }))} className="input-field">
+                    <option value="">Select seniority</option>
+                    {seniorityOptionRecords.map(option => <option key={option.id} value={option.id}>{option.value}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">Buyer Role</label>
+                  <select value={titleRuleForm.buyer_role} onChange={e => setTitleRuleForm(p => ({ ...p, buyer_role: e.target.value as BuyerRoleKey }))} className="input-field">
+                    {BUYER_ROLE_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Confidence</label>
+                  <select value={titleRuleForm.confidence} onChange={e => setTitleRuleForm(p => ({ ...p, confidence: e.target.value }))} className="input-field">
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">Notes</label>
+                <textarea value={titleRuleForm.notes} onChange={e => setTitleRuleForm(p => ({ ...p, notes: e.target.value }))} className="input-field min-h-[72px]" placeholder="Optional context for your team" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={titleRuleForm.apply_all_exact} onChange={e => setTitleRuleForm(p => ({ ...p, apply_all_exact: e.target.checked }))} />
+                Apply to all attendees with this exact title
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
+              <button onClick={() => setShowTitleClassifier(false)} className="btn-secondary">Cancel</button>
+              <button onClick={saveTitleClassification} disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id} className="btn-primary">
+                {isSavingTitleRule ? 'Saving…' : 'Save Classification'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showComposeEmail && attendee?.email && (
         <ComposeEmailModal
