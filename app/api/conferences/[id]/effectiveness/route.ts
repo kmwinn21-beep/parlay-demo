@@ -1083,7 +1083,8 @@ export async function GET(
     ];
     const costEfficiencyWaterfall = {
       final_score: adjustedScore,
-      components: componentWeights.map(c => ({ ...c, weighted_contribution: c.raw_score == null ? null : Number((c.raw_score * c.weight).toFixed(1)) })),
+      unavailable_reason: componentWeights.some(c => c.raw_score == null) ? 'One or more component scores are missing.' : null,
+      components: componentWeights.map(c => ({ ...c, tier: c.key === 'pipeline_influence_per_1k_spent' ? pipelineScore?.tier ?? null : c.key === 'cost_per_company_engaged' ? companyScore?.tier ?? null : meetingScore?.tier ?? null, weighted_contribution: c.raw_score == null ? null : Number((c.raw_score * c.weight).toFixed(1)) })),
     };
 
     const lineItemsTyped = (lineItems as Record<string, unknown>[]);
@@ -1093,12 +1094,13 @@ export async function GET(
       total_spend: spendTotal,
       categories: spendCategoriesRaw.map(c => ({ ...c, percent: spendTotal > 0 ? (c.amount / spendTotal) * 100 : 0 })),
       top_cost_driver: spendCategoriesRaw.sort((a,b)=>b.amount-a.amount)[0] ? (()=>{const t=spendCategoriesRaw.sort((a,b)=>b.amount-a.amount)[0]; return { ...t, percent: spendTotal>0 ? (t.amount/spendTotal)*100 : 0 };})() : null,
+      unavailable_reason: spendTotal <= 0 ? 'No conference_budget rows found for this conference.' : null,
     };
 
     const expectedReturnTarget = Number(effDefaults.expected_return_on_event_cost ?? 0) || null;
     const requiredPipeline = expectedReturnTarget != null && totalSpend > 0 ? totalSpend * expectedReturnTarget : null;
     const coverageRatio = requiredPipeline && requiredPipeline > 0 ? totalPI / requiredPipeline : null;
-    const breakEvenView = { total_spend: totalSpend || null, expected_return_target: expectedReturnTarget, required_pipeline: requiredPipeline, actual_pipeline_influence: totalPI || null, pipeline_coverage_ratio: coverageRatio, status: coverageRatio == null ? null : coverageRatio >= 1 ? 'above_target' : 'below_target' };
+    const breakEvenView = { total_spend: totalSpend || null, expected_return_target: expectedReturnTarget, required_pipeline: requiredPipeline, actual_pipeline_influence: totalPI || null, pipeline_coverage_ratio: coverageRatio, pipeline_coverage_percent: coverageRatio == null ? null : coverageRatio * 100, status: coverageRatio == null ? 'unavailable' : coverageRatio >= 1 ? 'cleared' : coverageRatio >= 0.75 ? 'near_target' : 'below_target', unavailable_reason: coverageRatio == null ? 'Spend, pipeline influence, or expected return target is missing.' : null };
 
     const ladderMetrics = [
       { key: 'cost_per_company_engaged', label: 'Cost per Company Engaged', value: costPerCompanyEngaged },
@@ -1107,7 +1109,7 @@ export async function GET(
       { key: 'cost_per_followup_created', label: 'Cost per Follow-up Created', value: (totalSpend > 0 && Number(engagementSummary.total_followups_created ?? 0) > 0) ? totalSpend / Number(engagementSummary.total_followups_created) : null },
       { key: 'cost_per_followup_completed', label: 'Cost per Follow-up Completed', value: (totalSpend > 0 && Number(engagementSummary.total_followups_completed ?? 0) > 0) ? totalSpend / Number(engagementSummary.total_followups_completed) : null },
     ];
-    const costPerOutcomeLadder = { metrics: ladderMetrics.map(m => ({ ...m, value: m.value == null ? null : Math.round(m.value), available: m.value != null })) };
+    const costPerOutcomeLadder = { total_event_cost: totalSpend || null, metrics: ladderMetrics.map(m => ({ ...m, numerator: totalSpend || null, denominator: m.value == null ? null : (m.value > 0 ? Math.round(totalSpend / m.value) : null), value: m.value == null ? null : Math.round(m.value), available: m.value != null })), unavailable_reason: ladderMetrics.filter(m => m.value != null).length === 0 ? 'Not enough outcome data to calculate per-outcome cost metrics.' : null };
     // dim7: use adjusted score
     const dim7CostEfficiency = adjustedScore;
 
@@ -1414,6 +1416,49 @@ export async function GET(
 
 
 
+    const numeric = (v: unknown) => (v == null ? null : Number(v));
+    const validForQuadrant: { conference_id: string; conference_name: string; cost_per_company_engaged: number; pipeline_influence_per_1k_spent: number; cost_efficiency_score: number | null; is_current: boolean }[] = [];
+    try {
+      const qRows = await runQuery(`${w}
+        , all_spend AS (
+          SELECT cb.conference_id,
+            COALESCE(SUM(COALESCE(NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL),0),COALESCE(CAST(json_extract(li.value, '$.budget') AS REAL),0),0)),0) AS total_spend
+          FROM conference_budget cb, json_each(cb.line_items) li
+          GROUP BY cb.conference_id
+        ),
+        all_company_engaged AS (
+          SELECT ca.conference_id, COUNT(DISTINCT CASE WHEN (COALESCE(cm.meetings_scheduled,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0))>0 THEN a.company_id END) AS companies_engaged
+          FROM conference_attendees ca
+          JOIN attendees a ON ca.attendee_id=a.id
+          LEFT JOIN company_meetings cm ON a.company_id=cm.company_id
+          LEFT JOIN company_touchpoints ct ON a.company_id=ct.company_id
+          LEFT JOIN company_hosted_attendance cha ON a.company_id=cha.company_id
+          GROUP BY ca.conference_id
+        )
+        SELECT c.id AS conference_id, c.name AS conference_name,
+          COALESCE(asp.total_spend,0) AS total_spend,
+          COALESCE(ap.total_pi,0) AS total_pi,
+          COALESCE(ace.companies_engaged,0) AS companies_engaged
+        FROM conferences c
+        LEFT JOIN all_spend asp ON c.id=asp.conference_id
+        LEFT JOIN all_pi ap ON c.id=ap.conference_id
+        LEFT JOIN all_company_engaged ace ON c.id=ace.conference_id`);
+      for (const row of qRows) {
+        const spend = numeric(row.total_spend) ?? 0;
+        const ce = numeric(row.companies_engaged) ?? 0;
+        const pi = numeric(row.total_pi) ?? 0;
+        const x = spend > 0 && ce > 0 ? spend / ce : null;
+        const y = spend > 0 ? pi / (spend / 1000) : null;
+        if (x != null && y != null && isFinite(x) && isFinite(y)) validForQuadrant.push({ conference_id: String(row.conference_id), conference_name: String(row.conference_name), cost_per_company_engaged: Math.round(x), pipeline_influence_per_1k_spent: Math.round(y), cost_efficiency_score: null, is_current: Number(row.conference_id)===cid });
+      }
+    } catch {}
+    const sortedX = validForQuadrant.map(v=>v.cost_per_company_engaged).sort((a,b)=>a-b);
+    const sortedY = validForQuadrant.map(v=>v.pipeline_influence_per_1k_spent).sort((a,b)=>a-b);
+    const median = (arr:number[]) => arr.length ? (arr.length%2 ? arr[(arr.length-1)/2] : (arr[arr.length/2-1]+arr[arr.length/2])/2) : null;
+    const xMedian = median(sortedX);
+    const yMedian = median(sortedY);
+    const currentPoint = validForQuadrant.find(v=>v.is_current) ?? null;
+    const currentQuadrant = currentPoint && xMedian != null && yMedian != null ? (currentPoint.cost_per_company_engaged <= xMedian && currentPoint.pipeline_influence_per_1k_spent >= yMedian ? 'Best Investments' : currentPoint.cost_per_company_engaged > xMedian && currentPoint.pipeline_influence_per_1k_spent >= yMedian ? 'Expensive but Justified' : currentPoint.cost_per_company_engaged <= xMedian ? 'Low Cost, Low Leverage' : 'Poor Investments') : null;
     const parseJson = <T,>(v: string | undefined, fallback: T): T => { try { return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
     const decisionMakerTitles = parseJson<string[]>(adminSettings.icp_decision_maker_titles, []).map(normText).filter(Boolean);
     const influencerTitles = parseJson<string[]>(adminSettings.icp_influencer_titles, []).map(normText).filter(Boolean);
