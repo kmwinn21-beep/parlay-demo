@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
 import { DEFAULT_MARKETING_AUDIENCE_WEIGHTS, PRIORITY_SCORE, titleMatch, norm as normText } from '@/lib/effectiveness/marketingAudience';
+import { getPreset, resolveStrategyKey } from '@/lib/effectiveness/strategyWeights';
 
 export const dynamic = 'force-dynamic';
 
@@ -984,6 +985,8 @@ export async function GET(
        WHERE ca.conference_id=${cid}`
     ))[0] ?? {};
 
+    const strategyKey = resolveStrategyKey(confInfo.conference_strategy_type_key != null ? String(confInfo.conference_strategy_type_key) : null);
+
     // ── Tier-Based Cost Efficiency Score ──────────────────────────────────────
     const unavailableMetrics: string[] = [];
 
@@ -1067,6 +1070,9 @@ export async function GET(
       // Diagnostics
       unavailable_metrics: unavailableMetrics,
       calculation_confidence: calculationConfidence,
+      strategy_modifier_applied: true,
+      original_weights: getPreset('cost_efficiency', 'pipeline_generation'),
+      effective_weights: getPreset('cost_efficiency', strategyKey),
     };
 
     // dim7: use adjusted score
@@ -1459,12 +1465,13 @@ export async function GET(
       ? (activityProductivity * 0.4) + (companyCoverage * 0.3) + (pipelineProductivity * 0.3)
       : ([activityProductivity, companyCoverage, pipelineProductivity].filter(v => v != null).reduce((a,b)=>a+Number(b),0) / Math.max([activityProductivity, companyCoverage, pipelineProductivity].filter(v => v != null).length, 1));
 
+    const salesPreset = getPreset('sales_effectiveness', strategyKey);
     const salesComponents = [
-      { key: 'meeting_execution', score: meetingExecution, weight: DEFAULT_SALES_WEIGHTS.meeting_execution },
-      { key: 'followup_execution', score: followupExecution, weight: DEFAULT_SALES_WEIGHTS.followup_execution },
-      { key: 'pipeline_influence_execution', score: pipelineInfluenceExecution, weight: DEFAULT_SALES_WEIGHTS.pipeline_influence_execution },
-      { key: 'target_account_execution', score: targetExecution, weight: DEFAULT_SALES_WEIGHTS.target_account_execution },
-      { key: 'rep_productivity', score: repProductivity, weight: DEFAULT_SALES_WEIGHTS.rep_productivity },
+      { key: 'meeting_execution', score: meetingExecution, weight: salesPreset.meeting_execution ?? DEFAULT_SALES_WEIGHTS.meeting_execution },
+      { key: 'followup_execution', score: followupExecution, weight: salesPreset.followup_execution ?? DEFAULT_SALES_WEIGHTS.followup_execution },
+      { key: 'pipeline_influence_execution', score: pipelineInfluenceExecution, weight: salesPreset.pipeline_influence_execution ?? DEFAULT_SALES_WEIGHTS.pipeline_influence_execution },
+      { key: 'target_account_execution', score: targetExecution, weight: salesPreset.target_account_execution ?? DEFAULT_SALES_WEIGHTS.target_account_execution },
+      { key: 'rep_productivity', score: repProductivity, weight: salesPreset.rep_productivity ?? DEFAULT_SALES_WEIGHTS.rep_productivity },
     ];
     const salesWeighted = reweight(salesComponents);
 
@@ -1472,10 +1479,13 @@ export async function GET(
       conference: { ...confInfo, conf_event_type: confEventType },
       conference_strategy: {
         id: confInfo.conference_strategy_type_id != null ? Number(confInfo.conference_strategy_type_id) : null,
-        key: confInfo.conference_strategy_type_key ? String(confInfo.conference_strategy_type_key) : null,
+        key: strategyKey,
         display_name: confInfo.conference_strategy_type_display_name ? String(confInfo.conference_strategy_type_display_name) : null,
       },
       ces: {
+        strategy_modifier_applied: true,
+        original_weights: getPreset('conference_effectiveness', 'pipeline_generation'),
+        effective_weights: getPreset('conference_effectiveness', strategyKey),
         score: ces,
         dim1_icp_target: Math.round(dim1IcpTarget * 10) / 10,
         dim2_meeting_exec: Math.round(dim2MeetingExec * 10) / 10,
@@ -1568,15 +1578,17 @@ export async function GET(
         const multiRate = pct(multi, companiesEngaged);
         const resonance = (meetingRate != null && followAttach != null && multiRate != null) ? (meetingRate*0.4)+(followAttach*0.3)+(multiRate*0.3) : null;
 
+        const marketingPreset = getPreset('marketing_audience_signal', strategyKey);
         const rw = reweight([
-          { key: 'icp_target_quality', score: icpTargetQuality, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.icp_target_quality },
-          { key: 'buyer_role_access', score: buyerRoleAccess, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.buyer_role_access },
-          { key: 'net_new_market_reach', score: netNewRate, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.net_new_market_reach },
-          { key: 'engagement_depth', score: depth, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.engagement_depth },
-          { key: 'message_resonance_proxy', score: resonance, weight: DEFAULT_MARKETING_AUDIENCE_WEIGHTS.message_resonance_proxy },
+          { key: 'icp_target_quality', score: icpTargetQuality, weight: marketingPreset.icp_target_quality ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.icp_target_quality },
+          { key: 'buyer_role_access', score: buyerRoleAccess, weight: marketingPreset.buyer_role_access ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.buyer_role_access },
+          { key: 'net_new_market_reach', score: netNewRate, weight: marketingPreset.net_new_market_reach ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.net_new_market_reach },
+          { key: 'engagement_depth', score: depth, weight: marketingPreset.engagement_depth ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.engagement_depth },
+          { key: 'message_resonance_proxy', score: resonance, weight: marketingPreset.message_resonance_proxy ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.message_resonance_proxy },
         ]);
         return {
           marketing_audience_signal_score: rw.score,
+          strategy_modifier_applied: true,
           marketing_audience_signal_tier: tierFromScore(rw.score),
           marketing_audience_signal_interpretation: rw.score != null ? `${tierFromScore(rw.score)} Audience Fit` : null,
           audience_quality_rank: null,
@@ -1599,16 +1611,17 @@ export async function GET(
       }; })(),
       sales_execution: {
         sales_effectiveness_score: salesWeighted.score,
+        strategy_modifier_applied: true,
         sales_effectiveness_tier: tierFromScore(salesWeighted.score),
         sales_effectiveness_interpretation: salesWeighted.score != null ? `${tierFromScore(salesWeighted.score)} Execution` : null,
         sales_execution_rank: null,
         sales_execution_rank_total: null,
         components: {
-          meeting_execution: { score: meetingExecution != null ? Math.round(meetingExecution) : null, weight: DEFAULT_SALES_WEIGHTS.meeting_execution, tier: tierFromScore(meetingExecution), confidence: 'High', metrics: { meetings_held: salesMeetingsHeld, meetings_scheduled: salesMeetingsScheduled, meeting_hold_rate: meetingHoldRate, companies_with_meeting: salesCompaniesWithMeeting, companies_with_meeting_and_followup: salesCompaniesWithMeetingAndFollowup, meeting_followup_attachment_rate: meetingFollowupAttachmentRate } },
-          followup_execution: { score: followupExecution != null ? Math.round(followupExecution) : null, weight: DEFAULT_SALES_WEIGHTS.followup_execution, tier: tierFromScore(followupExecution), confidence: 'High', metrics: { followups_created: salesFollowupsCreated, followups_completed: salesFollowupsCompleted, followup_completion_rate: followupExecution } },
-          pipeline_influence_execution: { score: pipelineInfluenceExecution != null ? Math.round(pipelineInfluenceExecution) : null, weight: DEFAULT_SALES_WEIGHTS.pipeline_influence_execution, tier: tierFromScore(pipelineInfluenceExecution), confidence: 'Medium', provenance: 'Proxy', metrics: { total_pipeline_influence: totalPipelineInfluence, total_spend: totalSpend, expected_return_target: expectedReturn, pipeline_influence_index: pipelineInfluenceExecution } },
-          target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: DEFAULT_SALES_WEIGHTS.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: salesTargetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
-          rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: DEFAULT_SALES_WEIGHTS.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: salesMeetingsHeld, touchpoints_logged: salesTouchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: salesCompaniesEngaged, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
+          meeting_execution: { score: meetingExecution != null ? Math.round(meetingExecution) : null, weight: salesPreset.meeting_execution, tier: tierFromScore(meetingExecution), confidence: 'High', metrics: { meetings_held: salesMeetingsHeld, meetings_scheduled: salesMeetingsScheduled, meeting_hold_rate: meetingHoldRate, companies_with_meeting: salesCompaniesWithMeeting, companies_with_meeting_and_followup: salesCompaniesWithMeetingAndFollowup, meeting_followup_attachment_rate: meetingFollowupAttachmentRate } },
+          followup_execution: { score: followupExecution != null ? Math.round(followupExecution) : null, weight: salesPreset.followup_execution, tier: tierFromScore(followupExecution), confidence: 'High', metrics: { followups_created: salesFollowupsCreated, followups_completed: salesFollowupsCompleted, followup_completion_rate: followupExecution } },
+          pipeline_influence_execution: { score: pipelineInfluenceExecution != null ? Math.round(pipelineInfluenceExecution) : null, weight: salesPreset.pipeline_influence_execution, tier: tierFromScore(pipelineInfluenceExecution), confidence: 'Medium', provenance: 'Proxy', metrics: { total_pipeline_influence: totalPipelineInfluence, total_spend: totalSpend, expected_return_target: expectedReturn, pipeline_influence_index: pipelineInfluenceExecution } },
+          target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: salesPreset.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: salesTargetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
+          rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: salesPreset.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: salesMeetingsHeld, touchpoints_logged: salesTouchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: salesCompaniesEngaged, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
         },
         followup_summary: {
           total_followups: salesFollowupsCreated,
