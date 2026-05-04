@@ -6,11 +6,22 @@ import { StrategyWeightNotice } from './StrategyWeightNotice';
 
 type RepRow = Record<string, unknown>;
 type RiskStatus = 'healthy' | 'watch' | 'risk' | 'unavailable';
+type SalesRepScoreRow = {
+  rep_name: string;
+  meeting_execution_score: number | null;
+  followup_execution_score: number | null;
+  pipeline_influence_execution_score: number | null;
+  target_account_execution_score: number | null;
+  rep_productivity_score: number | null;
+  sales_effectiveness_score: number | null;
+  sales_effectiveness_tier: string | null;
+};
 
 function fmtPct(v: number | null | undefined) { return v == null || isNaN(v) ? '—' : `${Math.round(v)}%`; }
 function fmtNum(v: number | null | undefined) { return v == null || isNaN(v) ? '—' : Math.round(v).toLocaleString(); }
 function fmt$(v: number | null | undefined) { return v == null || isNaN(v) ? '—' : `$${Math.round(v).toLocaleString()}`; }
 function color(score: number | null | undefined) { const s = Number(score ?? 0); if (s >= 90) return '#059669'; if (s >= 75) return '#1B76BC'; if (s >= 60) return '#d97706'; if (s >= 50) return '#f97316'; return '#dc2626'; }
+function tier(score: number | null | undefined) { if (score == null || !Number.isFinite(score)) return null; if (score >= 90) return 'Exceptional'; if (score >= 75) return 'Strong'; if (score >= 60) return 'Acceptable'; if (score >= 50) return 'Weak'; return 'Inefficient'; }
 
 const RISK_META: Record<RiskStatus, { label: string; short: string; bg: string; text: string }> = {
   healthy: { label: 'Healthy', short: 'H', bg: 'bg-emerald-100', text: 'text-emerald-800' },
@@ -192,6 +203,47 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const showNoRepData = pipelineInfluenceByRep.length === 0;
   const showNoAttributedPipeline = pipelineInfluenceByRep.length > 0 && totalRepPipelineInfluence <= 0;
 
+  const salesExecutionByRepRows: SalesRepScoreRow[] = repPlot.map((rep) => {
+    const activity = rep.salesActivities;
+    const meetingExecution = rep.meetingsScheduled > 0 && rep.holdRate != null ? Math.max(0, Math.min(rep.holdRate, 100)) : null;
+    const followupExecution = rep.followupRate != null ? Math.max(0, Math.min(rep.followupRate, 100)) : null;
+    const pipelineInfluenceExecution = rep.pipelinePerActivity != null && avgPipelinePerActivity > 0
+      ? Math.max(0, Math.min((rep.pipelinePerActivity / avgPipelinePerActivity) * 100, 100))
+      : null;
+    const targetAccountExecution = rep.targetEngagementRate != null ? Math.max(0, Math.min(rep.targetEngagementRate, 100)) : null;
+    const repProductivity = avgActivity > 0 ? Math.max(0, Math.min((activity / avgActivity) * 100, 100)) : null;
+
+    const effectiveWeights = (sx.effective_weights ?? {}) as Record<string, number>;
+    const components = [
+      { key: 'meeting_execution', score: meetingExecution },
+      { key: 'followup_execution', score: followupExecution },
+      { key: 'pipeline_influence_execution', score: pipelineInfluenceExecution },
+      { key: 'target_account_execution', score: targetAccountExecution },
+      { key: 'rep_productivity', score: repProductivity },
+    ];
+    const available = components.filter((c) => c.score != null);
+    const totalWeight = available.reduce((sum, c) => sum + Number(effectiveWeights[c.key] ?? 0), 0);
+    const score = totalWeight > 0
+      ? Math.round(available.reduce((sum, c) => sum + Number(c.score) * (Number(effectiveWeights[c.key] ?? 0) / totalWeight), 0))
+      : null;
+
+    return {
+      rep_name: rep.repName,
+      meeting_execution_score: meetingExecution,
+      followup_execution_score: followupExecution,
+      pipeline_influence_execution_score: pipelineInfluenceExecution,
+      target_account_execution_score: targetAccountExecution,
+      rep_productivity_score: repProductivity,
+      sales_effectiveness_score: score,
+      sales_effectiveness_tier: tier(score),
+    };
+  }).sort((a, b) => {
+    if (a.sales_effectiveness_score == null && b.sales_effectiveness_score == null) return a.rep_name.localeCompare(b.rep_name);
+    if (a.sales_effectiveness_score == null) return 1;
+    if (b.sales_effectiveness_score == null) return -1;
+    return b.sales_effectiveness_score - a.sales_effectiveness_score || a.rep_name.localeCompare(b.rep_name);
+  });
+
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
       <div className="lg:col-span-2 rounded-xl p-4" style={{ backgroundColor: color(sx.sales_effectiveness_score) + '15', borderLeft: `4px solid ${color(sx.sales_effectiveness_score)}` }}>
@@ -245,7 +297,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 items-stretch">
       <div className="card p-5 w-full lg:col-span-1 flex flex-col">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
@@ -368,6 +420,45 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
             )}
           </div>
         </>}
+      </div>
+
+
+      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
+        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Score by Rep</h3>
+        <p className="text-xs text-gray-500 mb-3">Rep-level sales execution component scores</p>
+        {salesExecutionByRepRows.length === 0 ? (
+          <div className="text-xs text-gray-500">Not enough rep-level sales execution data to calculate scores.</div>
+        ) : (
+          <>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="text-left px-2 py-2 font-semibold text-gray-500">Rep</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Mtg</th><th className="text-center px-2 py-2 font-semibold text-gray-500">FU</th><th className="text-center px-2 py-2 font-semibold text-gray-500">PI</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Tgt</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Prod</th><th className="text-right px-2 py-2 font-semibold text-gray-500">Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {salesExecutionByRepRows.map((row) => {
+                  const dim = (v: number | null) => v == null ? <span className="text-gray-300">—</span> : <span className="font-medium text-gray-600">{Math.round(v)}</span>;
+                  return <tr key={row.rep_name} className="hover:bg-gray-50">
+                    <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap">{row.rep_name}</td>
+                    <td className="px-2 py-2 text-center">{dim(row.meeting_execution_score)}</td>
+                    <td className="px-2 py-2 text-center">{dim(row.followup_execution_score)}</td>
+                    <td className="px-2 py-2 text-center">{dim(row.pipeline_influence_execution_score)}</td>
+                    <td className="px-2 py-2 text-center">{dim(row.target_account_execution_score)}</td>
+                    <td className="px-2 py-2 text-center">{dim(row.rep_productivity_score)}</td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap">
+                      {row.sales_effectiveness_score == null ? <span className="text-gray-300">—</span> : <>
+                        <span className="font-bold text-sm" style={{ color: color(row.sales_effectiveness_score) }}>{row.sales_effectiveness_score}</span>
+                        <span className="text-xs text-gray-400 ml-1">· {row.sales_effectiveness_tier ?? '—'}</span>
+                      </>}
+                    </td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-400 mt-3 leading-tight">Mtg = Meeting Execution · FU = Follow-up Execution · PI = Pipeline Influence · Tgt = Target Account Execution · Prod = Rep Productivity</p>
+          </>
+        )}
       </div>
 
     </div>
