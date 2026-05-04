@@ -685,6 +685,8 @@ export default function AttendeeDetailPage() {
   const showTitleWarning = attendee.title ? shouldWarnForTitleMetadata(titleMeta) : false;
   const titleFunctionLabel = titleMeta?.function_id ? functionOptionRecords.find(o => o.id === titleMeta.function_id)?.value : null;
   const titleSeniorityLabel = titleMeta?.seniority_id ? seniorityOptionRecords.find(o => o.id === titleMeta.seniority_id)?.value : null;
+  const titleTooltipId = `attendee-title-normalization-${attendee.id}`;
+  const hasTitleNormalizationTooltip = titleMeta?.source === 'user_confirmed' && Boolean(titleMeta.normalized_title || titleFunctionLabel || titleSeniorityLabel);
   const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
   const currentFunctions = new Set((attendee.function || '').split(',').map(s => s.trim()).filter(Boolean));
   const currentProducts = new Set((attendee.products || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -747,7 +749,30 @@ export default function AttendeeDetailPage() {
                       <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
                       {attendee.title && (
                         <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <p className="text-gray-600">{attendee.title}</p>
+                          <span
+                            tabIndex={hasTitleNormalizationTooltip ? 0 : undefined}
+                            aria-describedby={hasTitleNormalizationTooltip ? titleTooltipId : undefined}
+                            className={`relative inline-flex text-gray-600 ${hasTitleNormalizationTooltip ? 'cursor-help outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary/30 focus-visible:ring-offset-2 rounded-sm group/title-tooltip' : ''}`}
+                          >
+                            {attendee.title}
+                            {hasTitleNormalizationTooltip && (
+                              <span
+                                id={titleTooltipId}
+                                role="tooltip"
+                                className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-64 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-xs text-gray-700 shadow-lg group-hover/title-tooltip:block group-focus/title-tooltip:block"
+                              >
+                                <span className="block font-semibold text-brand-primary mb-1">Title classification</span>
+                                <span className="grid grid-cols-[104px_1fr] gap-x-2 gap-y-1">
+                                  <span className="font-medium text-gray-400">Normalized Title</span>
+                                  <span className="text-gray-800">{titleMeta.normalized_title || '—'}</span>
+                                  <span className="font-medium text-gray-400">Function</span>
+                                  <span className="text-gray-800">{titleFunctionLabel || '—'}</span>
+                                  <span className="font-medium text-gray-400">Seniority</span>
+                                  <span className="text-gray-800">{titleSeniorityLabel || '—'}</span>
+                                </span>
+                              </span>
+                            )}
+                          </span>
                           {showTitleWarning ? (
                             <button
                               type="button"
@@ -780,11 +805,6 @@ export default function AttendeeDetailPage() {
                           <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{s}</span>
                         )) : <span className="text-sm text-gray-400">—</span>}
                         {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
-                        {titleMeta?.source === 'user_confirmed' && (
-                          <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5" title={titleMeta.explanation || undefined}>
-                            {attendee.title} → {titleMeta.normalized_title}{titleFunctionLabel ? ` / ${titleFunctionLabel}` : ''}{titleSeniorityLabel ? ` / ${titleSeniorityLabel}` : ''}
-                          </span>
-                        )}
                         {/* LinkedIn icon */}
                         {attendee.linkedin_url ? (
                           <a href={attendee.linkedin_url} target="_blank" rel="noopener noreferrer" title="LinkedIn profile" className="flex-shrink-0">
