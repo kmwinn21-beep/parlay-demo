@@ -297,6 +297,11 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         description: 'A 0–100 score that measures how efficiently a conference converts event spend into meaningful account engagement, meetings, and pipeline influence. The score is calculated using three benchmark-scored components: Cost per Company Engaged (30%), Cost per Meeting Held (20%), and Pipeline Influence per $1,000 Spent (50%). Each component is scored against fixed benchmark ranges with linear interpolation. The raw score may be adjusted by an event-type modifier.',
         calculation: 'weighted score = (Pipeline per $1k Score × 50%) + (Company Engaged Score × 30%) + (Meeting Held Score × 20%); adjusted = raw + event_type_modifier (capped 0–100)',
       },
+      { term: 'Cost Efficiency Waterfall', description: 'A visual showing how each cost efficiency component contributed to the final Cost Efficiency Score.' },
+      { term: 'Spend Allocation Breakdown', description: 'A breakdown of total conference spend by cost category.' },
+      { term: 'Cost per Outcome Ladder', description: 'A ladder of per-outcome cost metrics showing what the conference cost per meaningful engagement or execution outcome.' },
+      { term: 'Break-even / Pipeline Coverage', description: 'Compares total spend, required pipeline, and actual pipeline influence to show whether the event cleared its economic hurdle.' },
+      { term: 'Cost Efficiency Quadrant', description: 'Portfolio comparison plotting conferences by cost per company engaged and pipeline influence per $1k spent.' },
       {
         term: 'Cost Efficiency Score Interpretation',
         description: 'Score ranges: 90–100 = Exceptional (exceptional cost efficiency — strong pipeline return and low cost per engagement); 75–89 = Strong (near-optimal cost-to-outcome ratio); 60–74 = Acceptable (some room for improvement); 50–59 = Weak (review cost allocation and engagement strategy); < 50 = Inefficient (significant underperformance relative to benchmarks).',

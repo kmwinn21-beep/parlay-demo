@@ -1075,6 +1075,39 @@ export async function GET(
       effective_weights: getPreset('cost_efficiency', strategyKey),
     };
 
+
+    const componentWeights = [
+      { key: 'pipeline_influence_per_1k_spent', label: 'Pipeline Influence per $1k Spent', raw_score: pipelineScore?.score ?? null, weight: 0.5 },
+      { key: 'cost_per_company_engaged', label: 'Cost per Company Engaged', raw_score: companyScore?.score ?? null, weight: 0.3 },
+      { key: 'cost_per_meeting_held', label: 'Cost per Meeting Held', raw_score: meetingScore?.score ?? null, weight: 0.2 },
+    ];
+    const costEfficiencyWaterfall = {
+      final_score: adjustedScore,
+      components: componentWeights.map(c => ({ ...c, weighted_contribution: c.raw_score == null ? null : Number((c.raw_score * c.weight).toFixed(1)) })),
+    };
+
+    const lineItemsTyped = (lineItems as Record<string, unknown>[]);
+    const spendCategoriesRaw = lineItemsTyped.map((li) => ({ id: String(li.id ?? li.label ?? 'other'), label: String(li.label ?? 'Other'), amount: Number(li.effective ?? 0) })).filter(c => c.amount > 0);
+    const spendTotal = spendCategoriesRaw.reduce((a, c) => a + c.amount, 0);
+    const spendAllocation = {
+      total_spend: spendTotal,
+      categories: spendCategoriesRaw.map(c => ({ ...c, percent: spendTotal > 0 ? (c.amount / spendTotal) * 100 : 0 })),
+      top_cost_driver: spendCategoriesRaw.sort((a,b)=>b.amount-a.amount)[0] ? (()=>{const t=spendCategoriesRaw.sort((a,b)=>b.amount-a.amount)[0]; return { ...t, percent: spendTotal>0 ? (t.amount/spendTotal)*100 : 0 };})() : null,
+    };
+
+    const expectedReturnTarget = Number(effDefaults.expected_return_on_event_cost ?? 0) || null;
+    const requiredPipeline = expectedReturnTarget != null && totalSpend > 0 ? totalSpend * expectedReturnTarget : null;
+    const coverageRatio = requiredPipeline && requiredPipeline > 0 ? totalPI / requiredPipeline : null;
+    const breakEvenView = { total_spend: totalSpend || null, expected_return_target: expectedReturnTarget, required_pipeline: requiredPipeline, actual_pipeline_influence: totalPI || null, pipeline_coverage_ratio: coverageRatio, status: coverageRatio == null ? null : coverageRatio >= 1 ? 'above_target' : 'below_target' };
+
+    const ladderMetrics = [
+      { key: 'cost_per_company_engaged', label: 'Cost per Company Engaged', value: costPerCompanyEngaged },
+      { key: 'cost_per_meeting_held', label: 'Cost per Meeting Held', value: costPerMeetingHeld },
+      { key: 'cost_per_icp_interaction', label: 'Cost per ICP Interaction', value: (totalSpend > 0 && Number(icpCoverage.icp_companies_engaged ?? 0) > 0) ? totalSpend / Number(icpCoverage.icp_companies_engaged) : null },
+      { key: 'cost_per_followup_created', label: 'Cost per Follow-up Created', value: (totalSpend > 0 && Number(engagementSummary.total_followups_created ?? 0) > 0) ? totalSpend / Number(engagementSummary.total_followups_created) : null },
+      { key: 'cost_per_followup_completed', label: 'Cost per Follow-up Completed', value: (totalSpend > 0 && Number(engagementSummary.total_followups_completed ?? 0) > 0) ? totalSpend / Number(engagementSummary.total_followups_completed) : null },
+    ];
+    const costPerOutcomeLadder = { metrics: ladderMetrics.map(m => ({ ...m, value: m.value == null ? null : Math.round(m.value), available: m.value != null })) };
     // dim7: use adjusted score
     const dim7CostEfficiency = adjustedScore;
 
