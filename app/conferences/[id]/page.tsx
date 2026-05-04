@@ -521,7 +521,17 @@ export default function ConferenceDetailPage() {
       });
       if (!res.ok) throw new Error('Update failed');
       const updated = await res.json();
-      setConference((prev) => prev ? { ...prev, ...updated } : prev);
+      const selectedStrategyId = editData.conference_strategy_type_id != null ? Number(editData.conference_strategy_type_id) : null;
+      const selectedStrategyDisplay = selectedStrategyId != null
+        ? (conferenceStrategyOptions.find((o) => o.id === selectedStrategyId)?.value ?? null)
+        : null;
+      setConference((prev) => prev ? {
+        ...prev,
+        ...updated,
+        conference_strategy_type_id: selectedStrategyId,
+        conference_strategy_type_display_name: selectedStrategyDisplay,
+        internal_attendees: editInternalAttendees.join(','),
+      } : prev);
       setIsEditing(false);
       toast.success('Conference updated!');
     } catch {
@@ -1122,11 +1132,11 @@ export default function ConferenceDetailPage() {
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
               )}
-              {conference.internal_attendees && (
-                <div className="mt-3">
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+                <div>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {conference.internal_attendees.split(',').filter(Boolean).map((user) => {
+                    {conference.internal_attendees?.split(',').filter(Boolean).map((user) => {
                       const parts = user.trim().split(/\s+/);
                       const initials = parts.length >= 2
                         ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
@@ -1145,11 +1155,14 @@ export default function ConferenceDetailPage() {
                         </span>
                       );
                     })}
+                    {!conference.internal_attendees?.trim() && (
+                      <span className="text-xs text-gray-400">None listed</span>
+                    )}
                   </div>
                 </div>
-              )}
-              <div className="mt-3 text-right text-xs text-gray-500">
-                Conference Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                <div className="text-right text-xs text-gray-500 sm:pb-1">
+                  Conference Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
