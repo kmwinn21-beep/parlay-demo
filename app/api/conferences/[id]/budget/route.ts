@@ -41,7 +41,7 @@ export async function PUT(
     const { line_items, return_on_cost, required_pipeline_multiple } = body as { line_items: unknown[]; return_on_cost: string | null; required_pipeline_multiple?: string | null };
     const parsedMultiple = Number(required_pipeline_multiple ?? 3.5);
     const safeMultiple = Number.isFinite(parsedMultiple) && parsedMultiple > 0 ? parsedMultiple : 3.5;
-    const budgetTotal = Array.isArray(line_items) ? line_items.reduce((sum, item) => {
+    const budgetTotal = Array.isArray(line_items) ? line_items.reduce<number>((sum: number, item: unknown) => {
       const raw = String((item as Record<string, unknown>)?.budget ?? '').replace(/[^0-9.]/g, '');
       const n = Number(raw);
       return sum + (Number.isFinite(n) ? n : 0);

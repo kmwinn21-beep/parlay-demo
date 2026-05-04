@@ -279,7 +279,7 @@ export async function GET(
     let lineItems: unknown[] = [];
     try { lineItems = JSON.parse(String(totalSpendRow[0]?.line_items_json ?? '[]')); } catch { /* empty */ }
     const budgetSettingsRow = await runQuery(`SELECT return_on_cost, required_pipeline_multiple, required_pipeline_amount FROM conference_budget WHERE conference_id = ${cid} LIMIT 1`);
-    const returnOnCostMultiple = Number(budgetSettingsRow[0]?.return_on_cost ?? effDefaults?.expected_return_on_event_cost ?? 0);
+    const returnOnCostMultiple = Number(budgetSettingsRow[0]?.return_on_cost ?? 0);
     const expectedReturnAmount = totalSpend > 0 && returnOnCostMultiple > 0 ? totalSpend * returnOnCostMultiple : null;
     const requiredPipelineMultiple = Number(budgetSettingsRow[0]?.required_pipeline_multiple ?? 3.5) > 0 ? Number(budgetSettingsRow[0]?.required_pipeline_multiple ?? 3.5) : 3.5;
     const persistedRequiredPipelineAmount = budgetSettingsRow[0]?.required_pipeline_amount != null ? Number(budgetSettingsRow[0]?.required_pipeline_amount) : null;
