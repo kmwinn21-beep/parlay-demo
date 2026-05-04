@@ -1124,9 +1124,14 @@ export default function ConferenceDetailPage() {
                     Awaiting Attendee Upload
                   </span>
                 ) : (
-                  <span className="badge-blue">
-                    {conference.attendees.length} attendees
-                  </span>
+                  <div className="inline-flex items-center gap-2">
+                    <span className="badge-blue">
+                      {conference.attendees.length} attendees
+                    </span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                    </span>
+                  </div>
                 )}
               </div>
               {conference.notes && (
@@ -1159,9 +1164,6 @@ export default function ConferenceDetailPage() {
                       <span className="text-xs text-gray-400">None listed</span>
                     )}
                   </div>
-                </div>
-                <div className="text-right text-xs text-gray-500 sm:pb-1">
-                  Conference Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
                 </div>
               </div>
             </div>
