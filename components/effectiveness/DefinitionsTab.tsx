@@ -29,8 +29,8 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Pipeline Influence Index — Rep (30%)',
-        description: 'Pipeline influenced by the rep relative to their equal-share of the conference cost and the expected return target. Capped at 100.',
-        calculation: 'MIN(rep pipeline influenced / (rep allocated cost × expected return target), 1) × 100',
+        description: 'Pipeline influenced by the rep relative to their equal-share of the conference required pipeline target. Capped at 100.',
+        calculation: 'MIN(rep pipeline influenced / rep allocated required pipeline, 1) × 100',
       },
       {
         term: 'Engagement Breadth — Rep (5%)',
@@ -79,8 +79,13 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Pipeline Influence Index (30%)',
-        description: 'Measures how much pipeline influence was generated relative to the expected return on event cost. Capped at 100.',
-        calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
+        description: 'Measures how much pipeline influence was generated relative to the required pipeline target for the event. Required pipeline is configured in Budget vs. Actual and capped at 100.',
+        calculation: 'MIN(total pipeline influence / required pipeline, 1) × 100',
+      },
+      {
+        term: 'Required Pipeline',
+        description: 'Expected return amount multiplied by Required Pipeline Multiple. Required Pipeline Multiple defaults to 3.5 and is editable in Budget vs. Actual.',
+        calculation: 'required pipeline = (total budget × expected return on cost multiple) × required pipeline multiple',
       },
       {
         term: 'Engagement Breadth (5%)',

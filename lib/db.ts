@@ -659,6 +659,8 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE conference_budget ADD COLUMN return_on_cost TEXT`,
+    `ALTER TABLE conference_budget ADD COLUMN required_pipeline_multiple TEXT`,
+    `ALTER TABLE conference_budget ADD COLUMN required_pipeline_amount REAL`,
     // Annual conference budget targets (per year, for global reporting)
     `CREATE TABLE IF NOT EXISTS annual_budgets (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,

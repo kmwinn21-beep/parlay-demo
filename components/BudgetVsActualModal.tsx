@@ -53,6 +53,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
   const [isSaving, setIsSaving] = useState(false);
 
   const [returnOnCost, setReturnOnCost] = useState('');
+  const [requiredPipelineMultiple, setRequiredPipelineMultiple] = useState('3.5');
   const [globalDefaultReturn, setGlobalDefaultReturn] = useState('');
 
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
@@ -71,7 +72,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
         fetch(`/api/conferences/${conferenceId}/budget`, { credentials: 'include' }),
       ]);
       const effData: Record<string, string> = effRes.ok ? await effRes.json() : {};
-      const budgetData: { line_items: LineItem[]; return_on_cost: string | null } = budgetRes.ok
+      const budgetData: { line_items: LineItem[]; return_on_cost: string | null; required_pipeline_multiple?: string | null } = budgetRes.ok
         ? await budgetRes.json()
         : { line_items: [], return_on_cost: null };
 
@@ -83,6 +84,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
       setAvailableCostTypes(defaultTypes);
       setGlobalDefaultReturn(globalReturn);
       setReturnOnCost(budgetData.return_on_cost ?? globalReturn);
+      setRequiredPipelineMultiple(budgetData.required_pipeline_multiple ?? '3.5');
 
       if (budgetData.line_items && budgetData.line_items.length > 0) {
         setItems(budgetData.line_items);
@@ -148,6 +150,11 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
   };
 
   const handleSave = async () => {
+    const requiredMult = parseDollar(requiredPipelineMultiple);
+    if (requiredMult == null || requiredMult <= 0) {
+      toast.error('Required Pipeline Multiple must be greater than 0.');
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/budget`, {
@@ -156,6 +163,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
         body: JSON.stringify({
           line_items: items,
           return_on_cost: returnOnCost.trim() || null,
+          required_pipeline_multiple: requiredPipelineMultiple.trim() || '3.5',
         }),
       });
       if (!res.ok) throw new Error();
@@ -179,6 +187,10 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
   const returnMultiplier = parseDollar(returnOnCost);
   const expectedReturnValue = hasBudgetTotals && returnMultiplier != null && returnMultiplier > 0
     ? totalBudget * returnMultiplier
+    : null;
+  const requiredPipelineMultipleValue = parseDollar(requiredPipelineMultiple);
+  const requiredPipelineAmount = expectedReturnValue != null && requiredPipelineMultipleValue != null && requiredPipelineMultipleValue > 0
+    ? expectedReturnValue * requiredPipelineMultipleValue
     : null;
 
   const existingLabels = new Set(items.map(it => it.label));
@@ -475,6 +487,29 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
                       <span className={`text-sm font-semibold ${expectedReturnValue != null ? 'text-green-700' : 'text-gray-300'}`}>
                         {expectedReturnValue != null ? fmtDollars(expectedReturnValue) : '—'}
                       </span>
+                    </div>
+                    <span />
+                  </div>
+                  <div className="sm:hidden space-y-2 pt-2">
+                    <p className="text-sm font-semibold text-gray-700">Required Pipeline Multiple</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-28 flex-shrink-0">
+                        <input type="text" inputMode="decimal" value={requiredPipelineMultiple} onChange={e => setRequiredPipelineMultiple(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))} className="input-field text-sm w-full" />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-gray-400 whitespace-nowrap">Expected return × pipeline multiple =</span>
+                        <span className={`text-sm font-semibold ${requiredPipelineAmount != null ? 'text-green-700' : 'text-gray-300'}`}>{requiredPipelineAmount != null ? fmtDollars(requiredPipelineAmount) : '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="hidden sm:grid grid-cols-[1fr_140px_290px_36px] gap-2 items-center pt-2">
+                    <p className="text-sm font-semibold text-gray-700 leading-snug">Required Pipeline Multiple</p>
+                    <div className="relative">
+                      <input type="text" inputMode="decimal" value={requiredPipelineMultiple} onChange={e => setRequiredPipelineMultiple(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))} className="input-field text-sm w-full" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 whitespace-nowrap">Expected return × pipeline multiple =</span>
+                      <span className={`text-sm font-semibold ${requiredPipelineAmount != null ? 'text-green-700' : 'text-gray-300'}`}>{requiredPipelineAmount != null ? fmtDollars(requiredPipelineAmount) : '—'}</span>
                     </div>
                     <span />
                   </div>
