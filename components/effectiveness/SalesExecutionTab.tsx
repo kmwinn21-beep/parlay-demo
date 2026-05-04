@@ -34,17 +34,6 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase() ?? '').join('') || '—';
 }
 
-const DEFAULT_EXPECTED_PIPELINE_PER_ACTIVITY = 15000;
-
-function benchmarkInterpretation(targetPercent: number | null) {
-  if (targetPercent == null || !isFinite(targetPercent)) return null;
-  if (targetPercent >= 100) return 'Above target';
-  if (targetPercent >= 85) return 'Near target';
-  if (targetPercent >= 60) return 'Below target';
-  return 'Weak';
-}
-
-
 function toTitleCaseLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
@@ -74,6 +63,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const reps = (data.pipeline.rep_attribution ?? []) as RepRow[];
   const [showHeatmapInfo, setShowHeatmapInfo] = useState(false);
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
+  const [showScoreByRepInfo, setShowScoreByRepInfo] = useState(false);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
@@ -154,34 +144,28 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
 
   const riskEmpty = riskRows.length < 2;
 
-  const benchmarkData = sx.pipeline_per_activity_benchmark ?? sx.components?.rep_productivity?.metrics ?? null;
-  const totalPipelineInfluenceRaw = benchmarkData?.total_pipeline_influence ?? sx.pipeline_quality?.total_pipeline_influence ?? data.pipeline.total_pipeline_influence ?? null;
-  const meetingsHeldRaw = benchmarkData?.meetings_held ?? sx.components?.meeting_execution?.metrics?.meetings_held ?? data.engagement.total_held ?? null;
-  const touchpointsRaw = benchmarkData?.touchpoints_logged ?? sx.components?.rep_productivity?.metrics?.touchpoints_logged ?? 0;
-  const configuredExpectedRaw = benchmarkData?.expected_pipeline_per_sales_activity ?? data.effectiveness_defaults?.expected_pipeline_per_sales_activity ?? null;
+  const totalPipelineInfluence = sx.pipeline_influence_by_rep?.total_pipeline_influence != null
+    ? Number(sx.pipeline_influence_by_rep.total_pipeline_influence)
+    : (sx.pipeline_quality?.total_pipeline_influence != null ? Number(sx.pipeline_quality.total_pipeline_influence) : null);
+  const requiredPipelineAmount = sx.pipeline_influence_by_rep?.required_pipeline_amount != null
+    ? Number(sx.pipeline_influence_by_rep.required_pipeline_amount)
+    : null;
+  const influencedPipelineGoalPercent = totalPipelineInfluence != null && requiredPipelineAmount != null && requiredPipelineAmount > 0
+    ? (totalPipelineInfluence / requiredPipelineAmount) * 100
+    : null;
+  const influencedPipelineGoalWidthPercent = influencedPipelineGoalPercent == null
+    ? null
+    : Math.max(0, Math.min(influencedPipelineGoalPercent, 100));
 
-  const totalPipelineInfluence = totalPipelineInfluenceRaw == null ? null : Number(totalPipelineInfluenceRaw);
-  const meetingsHeld = Number(meetingsHeldRaw ?? 0);
-  const touchpointsLogged = Number(touchpointsRaw ?? 0);
-  const salesActivities = Number(benchmarkData?.sales_activities ?? (meetingsHeld + touchpointsLogged));
-  const configuredExpected = configuredExpectedRaw == null ? null : Number(configuredExpectedRaw);
-  const configuredExpectedNum = configuredExpected ?? 0;
-  const hasConfiguredExpected = Number.isFinite(configuredExpectedNum) && configuredExpectedNum > 0;
-  const expectedPipelinePerActivity = hasConfiguredExpected ? configuredExpectedNum : DEFAULT_EXPECTED_PIPELINE_PER_ACTIVITY;
-  const pipelinePerActivity = totalPipelineInfluence != null && salesActivities > 0 ? totalPipelineInfluence / salesActivities : null;
-  const targetPercent = pipelinePerActivity != null && expectedPipelinePerActivity > 0 ? (pipelinePerActivity / expectedPipelinePerActivity) * 100 : null;
-  const progressWidth = targetPercent == null ? null : Math.max(0, Math.min(targetPercent, 100));
-  const benchmarkInterpret = benchmarkInterpretation(targetPercent);
-
-  const benchmarkUnavailable = totalPipelineInfluence == null
-    ? 'Pipeline influence unavailable'
-    : salesActivities <= 0
-      ? 'No sales activity available'
-      : !hasConfiguredExpected
-        ? 'Expected benchmark not configured'
-        : null;
-
-  const pipelineInfluenceByRepRows = repPlot
+  const pipelineInfluenceByRepRows = Array.isArray(sx.pipeline_influence_by_rep?.reps)
+    ? (sx.pipeline_influence_by_rep.reps as Array<Record<string, unknown>>).map((rep) => ({
+      rep_id: String(rep.rep_id ?? rep.rep_name ?? 'Unknown Rep'),
+      rep_name: String(rep.rep_name ?? 'Unknown Rep'),
+      pipeline_influence: Math.max(0, Number(rep.pipeline_influence ?? 0)),
+      contribution_percent: Number(rep.contribution_percent ?? 0),
+      bar_width_percent: Number(rep.bar_width_percent ?? 0),
+    }))
+    : repPlot
     .map((rep) => ({
       rep_id: rep.repName,
       rep_name: rep.repName,
@@ -192,10 +176,10 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const totalRepPipelineInfluence = pipelineInfluenceByRepRows.reduce((sum, rep) => sum + rep.pipeline_influence, 0);
   const maxRepPipelineInfluence = pipelineInfluenceByRepRows.length > 0 ? Math.max(...pipelineInfluenceByRepRows.map((rep) => rep.pipeline_influence)) : 0;
 
-  const pipelineInfluenceByRep = pipelineInfluenceByRepRows.map((rep) => ({
+  const pipelineInfluenceByRep = pipelineInfluenceByRepRows.map((rep: any) => ({
     ...rep,
-    contribution_percent: totalRepPipelineInfluence > 0 ? (rep.pipeline_influence / totalRepPipelineInfluence) * 100 : 0,
-    bar_width_percent: maxRepPipelineInfluence > 0 ? (rep.pipeline_influence / maxRepPipelineInfluence) * 100 : 0,
+    contribution_percent: Number.isFinite(rep.contribution_percent) && rep.contribution_percent > 0 ? rep.contribution_percent : (totalRepPipelineInfluence > 0 ? (rep.pipeline_influence / totalRepPipelineInfluence) * 100 : 0),
+    bar_width_percent: Number.isFinite(rep.bar_width_percent) && rep.bar_width_percent > 0 ? rep.bar_width_percent : (maxRepPipelineInfluence > 0 ? (rep.pipeline_influence / maxRepPipelineInfluence) * 100 : 0),
   }));
 
   const topPipelineInfluenceByRep = pipelineInfluenceByRep.slice(0, 6);
@@ -264,31 +248,53 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
         {sx.sales_execution_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{sx.sales_execution_rank}</div><div className="text-xs text-gray-400">of {sx.sales_execution_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       </div>
-      <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4 overflow-x-auto flex flex-col">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Pipeline Influence by Rep</div>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Directional</span>
+          <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Score by Rep</h3>
+          <InfoButton onClick={() => setShowScoreByRepInfo((v) => !v)} title="Sales Execution Score Abbreviations" />
         </div>
-        <p className="text-[11px] text-gray-500 mt-1">Directional pipeline influence attributed to each rep</p>
-        {showNoRepData ? (
-          <div className="text-xs text-gray-500 mt-3">No rep-level pipeline influence available for this conference.</div>
-        ) : showNoAttributedPipeline ? (
-          <div className="text-xs text-gray-500 mt-3">No pipeline influence attributed yet.</div>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {topPipelineInfluenceByRep.map((rep) => (
-              <div key={rep.rep_id} className="space-y-1">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <div className="text-gray-700 truncate" title={rep.rep_name}>{rep.rep_name}</div>
-                  <div className="text-gray-500 font-medium">{fmtRepCurrency(rep.pipeline_influence)} · {Math.round(rep.contribution_percent)}%</div>
-                </div>
-                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-primary" style={{ width: `${Math.max(0, Math.min(rep.bar_width_percent, 100))}%` }} />
-                </div>
-              </div>
-            ))}
-            {hiddenRepCount > 0 && <div className="text-[11px] text-gray-400">+{hiddenRepCount} more reps</div>}
+        {showScoreByRepInfo && (
+          <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-sm space-y-1">
+            <div className="font-semibold text-slate-900">Sales Execution Score Abbreviations</div>
+            <div>Mtg = Meeting Execution</div>
+            <div>FU = Follow-up Execution</div>
+            <div>PI = Pipeline Influence Execution</div>
+            <div>Tgt = Target Account Execution</div>
+            <div>Prod = Rep Productivity</div>
+            <div>Score = Final Sales Effectiveness Score for the rep</div>
+            <p className="pt-1">These component scores roll up into each rep’s Sales Effectiveness Score using the active Sales Effectiveness Score weights. If strategy-adjusted weights are applied for the conference, those adjusted weights are used.</p>
           </div>
+        )}
+        <p className="text-xs text-gray-500 mb-3">Rep-level sales execution component scores</p>
+        {salesExecutionByRepRows.length === 0 ? (
+          <div className="text-xs text-gray-500">Not enough rep-level sales execution data to calculate scores.</div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-2 py-2 font-semibold text-gray-500">Rep</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Mtg</th><th className="text-center px-2 py-2 font-semibold text-gray-500">FU</th><th className="text-center px-2 py-2 font-semibold text-gray-500">PI</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Tgt</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Prod</th><th className="text-right px-2 py-2 font-semibold text-gray-500">Score</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {salesExecutionByRepRows.map((row) => {
+                const dim = (v: number | null) => v == null ? <span className="text-gray-300">—</span> : <span className="font-medium text-gray-600">{Math.round(v)}</span>;
+                return <tr key={row.rep_name} className="hover:bg-gray-50">
+                  <td className="px-2 py-1 font-medium text-gray-800 whitespace-nowrap">{row.rep_name}</td>
+                  <td className="px-2 py-1 text-center">{dim(row.meeting_execution_score)}</td>
+                  <td className="px-2 py-1 text-center">{dim(row.followup_execution_score)}</td>
+                  <td className="px-2 py-1 text-center">{dim(row.pipeline_influence_execution_score)}</td>
+                  <td className="px-2 py-1 text-center">{dim(row.target_account_execution_score)}</td>
+                  <td className="px-2 py-1 text-center">{dim(row.rep_productivity_score)}</td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    {row.sales_effectiveness_score == null ? <span className="text-gray-300">—</span> : <>
+                      <span className="font-bold text-sm" style={{ color: color(row.sales_effectiveness_score) }}>{row.sales_effectiveness_score}</span>
+                      <span className="text-xs text-gray-400 ml-1">· {row.sales_effectiveness_tier ?? '—'}</span>
+                    </>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
@@ -353,9 +359,54 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
               <text x="2" y="92" fontSize="3" fill="#64748b">Low Impact</text>
             </svg>
           </div>
-          <div className="mt-2 text-[11px] text-gray-500">Avg activity threshold: {fmtNum(avgActivity)} · Avg pipeline threshold: {fmt$(avgPipeline)}</div>
-          <div className="mt-2 text-[11px] text-gray-500">{repWithQuadrant.filter((r) => r.quadrant === 'Top Performers').length} reps are above average on both activity and pipeline influence.</div>
         </>}
+      </div>
+
+      <div className="card p-5 w-full lg:col-span-2 flex flex-col">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Pipeline Influence by Rep</div>
+          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Directional</span>
+        </div>
+        <p className="text-[11px] text-gray-500 mt-1">Directional pipeline influence attributed to each rep</p>
+        {showNoRepData ? (
+          <div className="text-xs text-gray-500 mt-3">No rep-level pipeline influence available for this conference.</div>
+        ) : showNoAttributedPipeline ? (
+          <div className="text-xs text-gray-500 mt-3">No pipeline influence attributed yet.</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {topPipelineInfluenceByRep.map((rep) => (
+              <div key={rep.rep_id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="text-gray-700 truncate" title={rep.rep_name}>{rep.rep_name}</div>
+                  <div className="text-gray-500 font-medium">{fmtRepCurrency(rep.pipeline_influence)} · {Math.round(rep.contribution_percent)}%</div>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-brand-primary" style={{ width: `${Math.max(0, Math.min(rep.bar_width_percent, 100))}%` }} />
+                </div>
+              </div>
+            ))}
+            {hiddenRepCount > 0 && <div className="text-[11px] text-gray-400">+{hiddenRepCount} more reps</div>}
+          </div>
+        )}
+        <div className="py-5 mt-auto">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold text-brand-primary">Influenced Pipeline vs Goal</div>
+          </div>
+          {totalPipelineInfluence == null ? (
+            <div className="text-[11px] text-gray-500 mt-1">Influenced pipeline unavailable</div>
+          ) : (requiredPipelineAmount == null || requiredPipelineAmount <= 0) ? (
+            <div className="text-[11px] text-gray-500 mt-1">Required pipeline goal not configured</div>
+          ) : (
+            <>
+              <div className="text-[11px] text-gray-500 mt-1">{fmt$(totalPipelineInfluence)} actual</div>
+              <div className="text-[11px] text-gray-500">{fmt$(requiredPipelineAmount)} goal</div>
+              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
+                <div className="h-full rounded-full bg-red-500" style={{ width: `${influencedPipelineGoalWidthPercent ?? 0}%` }} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">{influencedPipelineGoalPercent == null ? '—' : `${influencedPipelineGoalPercent.toFixed(1)}%`} of goal</div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col relative">
@@ -402,65 +453,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">{(['healthy', 'watch', 'risk', 'unavailable'] as RiskStatus[]).map((s) => <div key={s} className="flex items-center gap-1"><span className={`inline-block w-3 h-3 rounded-sm ${RISK_META[s].bg}`} />{RISK_META[s].label}</div>)}</div>
           <div className="mt-2 text-[11px] text-gray-500">{riskRows.filter((r) => r.statuses[1] === 'risk' || r.statuses[4] === 'risk').length} reps show follow-up or activity risk.</div>
-          <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold text-brand-primary">Pipeline / Activity Benchmark</div>
-              <div className="text-[11px] font-semibold text-brand-secondary">{pipelinePerActivity == null ? '—' : `${fmt$(pipelinePerActivity)} actual`}</div>
-            </div>
-            {benchmarkUnavailable ? (
-              <div className="text-[11px] text-gray-500">{benchmarkUnavailable}</div>
-            ) : (
-              <>
-                <div className="text-[11px] text-gray-500">{fmt$(expectedPipelinePerActivity)} expected</div>
-                <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-secondary" style={{ width: `${progressWidth ?? 0}%` }} />
-                </div>
-                <div className="text-[11px] text-gray-500">{fmtPct(targetPercent)} of target{benchmarkInterpret ? ` · ${benchmarkInterpret}` : ''}</div>
-              </>
-            )}
-          </div>
         </>}
       </div>
-
-
-      <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col">
-        <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Sales Execution Score by Rep</h3>
-        <p className="text-xs text-gray-500 mb-3">Rep-level sales execution component scores</p>
-        {salesExecutionByRepRows.length === 0 ? (
-          <div className="text-xs text-gray-500">Not enough rep-level sales execution data to calculate scores.</div>
-        ) : (
-          <>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-2 py-2 font-semibold text-gray-500">Rep</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Mtg</th><th className="text-center px-2 py-2 font-semibold text-gray-500">FU</th><th className="text-center px-2 py-2 font-semibold text-gray-500">PI</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Tgt</th><th className="text-center px-2 py-2 font-semibold text-gray-500">Prod</th><th className="text-right px-2 py-2 font-semibold text-gray-500">Score</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {salesExecutionByRepRows.map((row) => {
-                  const dim = (v: number | null) => v == null ? <span className="text-gray-300">—</span> : <span className="font-medium text-gray-600">{Math.round(v)}</span>;
-                  return <tr key={row.rep_name} className="hover:bg-gray-50">
-                    <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap">{row.rep_name}</td>
-                    <td className="px-2 py-2 text-center">{dim(row.meeting_execution_score)}</td>
-                    <td className="px-2 py-2 text-center">{dim(row.followup_execution_score)}</td>
-                    <td className="px-2 py-2 text-center">{dim(row.pipeline_influence_execution_score)}</td>
-                    <td className="px-2 py-2 text-center">{dim(row.target_account_execution_score)}</td>
-                    <td className="px-2 py-2 text-center">{dim(row.rep_productivity_score)}</td>
-                    <td className="px-2 py-2 text-right whitespace-nowrap">
-                      {row.sales_effectiveness_score == null ? <span className="text-gray-300">—</span> : <>
-                        <span className="font-bold text-sm" style={{ color: color(row.sales_effectiveness_score) }}>{row.sales_effectiveness_score}</span>
-                        <span className="text-xs text-gray-400 ml-1">· {row.sales_effectiveness_tier ?? '—'}</span>
-                      </>}
-                    </td>
-                  </tr>;
-                })}
-              </tbody>
-            </table>
-            <p className="text-xs text-gray-400 mt-3 leading-tight">Mtg = Meeting Execution · FU = Follow-up Execution · PI = Pipeline Influence · Tgt = Target Account Execution · Prod = Rep Productivity</p>
-          </>
-        )}
-      </div>
-
     </div>
   </div>;
 }

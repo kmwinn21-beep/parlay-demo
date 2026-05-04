@@ -1654,6 +1654,35 @@ export async function GET(
           followups_without_rep_assignment: followupsWithoutRepAssignment,
           attribution_method_counts: attributionMethodCounts,
         } : undefined,
+        pipeline_influence_by_rep: (() => {
+          const rows = (repAttribution as Record<string, unknown>[])
+            .map((row) => {
+              const repName = String(row.rep ?? 'Unknown Rep');
+              const influence = Math.max(0, Number(row.pipeline_influence_attributed ?? 0));
+              return {
+                rep_id: repName,
+                rep_name: repName,
+                pipeline_influence: influence,
+              };
+            })
+            .sort((a, b) => b.pipeline_influence - a.pipeline_influence || a.rep_name.localeCompare(b.rep_name));
+          const total = rows.reduce((sum, row) => sum + row.pipeline_influence, 0);
+          const max = rows.length ? Math.max(...rows.map((row) => row.pipeline_influence)) : 0;
+          const goalPercent = totalPipelineInfluence != null && requiredPipelineAmount != null && requiredPipelineAmount > 0
+            ? (totalPipelineInfluence / requiredPipelineAmount) * 100
+            : null;
+          return {
+            total_pipeline_influence: totalPipelineInfluence,
+            required_pipeline_amount: requiredPipelineAmount,
+            influenced_pipeline_goal_percent: goalPercent,
+            progress_bar_width_percent: goalPercent == null ? null : Math.max(0, Math.min(goalPercent, 100)),
+            reps: rows.map((row) => ({
+              ...row,
+              contribution_percent: total > 0 ? (row.pipeline_influence / total) * 100 : 0,
+              bar_width_percent: max > 0 ? (row.pipeline_influence / max) * 100 : 0,
+            })),
+          };
+        })(),
         kpis: {
           meeting_hold_rate: meetingHoldRate,
           followup_completion_rate: followupExecution,
