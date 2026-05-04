@@ -3,6 +3,7 @@ import { db, dbReady } from '@/lib/db';
 import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
 import { DEFAULT_MARKETING_AUDIENCE_WEIGHTS, PRIORITY_SCORE, titleMatch, norm as normText } from '@/lib/effectiveness/marketingAudience';
 import { getPreset, resolveStrategyKey } from '@/lib/effectiveness/strategyWeights';
+import { normalizeTitleKey } from '@/lib/titleNormalization';
 
 export const dynamic = 'force-dynamic';
 
@@ -1418,15 +1419,36 @@ export async function GET(
       engagedContacts = [];
     }
 
+    const confirmedTitleRules = new Map<string, { normalizedTitle: string; buyerRole: string; functionId: number | null; seniorityId: number | null }>();
+    const configValueById = new Map<number, string>();
+    try {
+      const [ruleRows, configRows] = await Promise.all([
+        runQuery(`SELECT raw_title_key, normalized_title, buyer_role, function_id, seniority_id FROM title_normalization_rules WHERE source = 'user_confirmed'`),
+        runQuery(`SELECT id, value FROM config_options WHERE category IN ('function', 'seniority')`),
+      ]);
+      for (const row of configRows) configValueById.set(Number(row.id), String(row.value ?? '').toLowerCase().trim());
+      for (const row of ruleRows) {
+        confirmedTitleRules.set(String(row.raw_title_key), {
+          normalizedTitle: String(row.normalized_title ?? '').toLowerCase().trim(),
+          buyerRole: String(row.buyer_role ?? ''),
+          functionId: row.function_id == null ? null : Number(row.function_id),
+          seniorityId: row.seniority_id == null ? null : Number(row.seniority_id),
+        });
+      }
+    } catch { /* title_normalization_rules may not exist in older DBs yet */ }
+
     const byCompany = new Map<number, {name: string; decision: boolean; influencer: boolean; seniorityScore: number | null; functionScore: number | null}>();
     for (const row of engagedContacts) {
       const cid2 = Number(row.company_id ?? 0); if (!cid2) continue;
-      const title = String(row.title ?? '');
-      const sen = String(row.seniority ?? '');
-      const fn = String(row.function ?? '');
+      const rule = confirmedTitleRules.get(normalizeTitleKey(String(row.title ?? '')));
+      const title = rule?.normalizedTitle || String(row.title ?? '');
+      const sen = rule?.seniorityId ? (configValueById.get(rule.seniorityId) ?? String(row.seniority ?? '')) : String(row.seniority ?? '');
+      const fn = rule?.functionId ? (configValueById.get(rule.functionId) ?? String(row.function ?? '')) : String(row.function ?? '');
       const curr = byCompany.get(cid2) ?? { name: String(row.company_name ?? 'Unknown Company'), decision: false, influencer: false, seniorityScore: null, functionScore: null };
-      if (decisionMakerTitles.length && title && titleMatch(title, decisionMakerTitles)) curr.decision = true;
-      if (influencerTitles.length && title && titleMatch(title, influencerTitles)) curr.influencer = true;
+      if (rule?.buyerRole === 'decision_maker') curr.decision = true;
+      else if (decisionMakerTitles.length && title && titleMatch(title, decisionMakerTitles)) curr.decision = true;
+      if (rule?.buyerRole === 'influencer' || rule?.buyerRole === 'target_title') curr.influencer = true;
+      else if (influencerTitles.length && title && titleMatch(title, influencerTitles)) curr.influencer = true;
       const senPriority = String(seniorityPriorityMap[sen] ?? seniorityPriorityMap[sen.trim()] ?? 'Ignore').toLowerCase();
       if (senPriority !== 'ignore' && PRIORITY_SCORE[senPriority] != null) curr.seniorityScore = Math.max(curr.seniorityScore ?? 0, PRIORITY_SCORE[senPriority]);
       const fnPriority = String(functionPriorityMap[fn] ?? functionPriorityMap[fn.trim()] ?? 'Ignore').toLowerCase();
