@@ -15,6 +15,7 @@ import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 import { invalidateTagline } from '@/lib/useTagline';
 import { invalidateUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS, DEFAULT_RECOMMENDED_ACTIONS, DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS, DEFAULT_TARGET_PRIORITY_WEIGHTS, DEFAULT_TIER_THRESHOLDS, validateTargetPriorityWeights, type TargetPriorityWeights } from '@/lib/targeting/targetPriority';
 
 interface ConfigOption {
   id: number;
@@ -46,6 +47,7 @@ const CATEGORIES = [
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'attendee_conference_status', label: 'Attendee Conference Status' },
+  { key: 'target_recommended_action', label: 'Target Recommended Actions' },
   { key: 'user', label: 'Users' },
   { key: 'cost_type', label: 'Cost Types' },
 ];
@@ -780,6 +782,8 @@ export default function AdminPage() {
   const [icpMinTouchpoints, setIcpMinTouchpoints] = useState('1');
   const [icpIncludeNewCompanies, setIcpIncludeNewCompanies] = useState(true);
   const [savingThresholds, setSavingThresholds] = useState(false);
+  const [targetPriorityWeights, setTargetPriorityWeights] = useState<TargetPriorityWeights>(DEFAULT_TARGET_PRIORITY_WEIGHTS);
+  const [savingTargetPriorityWeights, setSavingTargetPriorityWeights] = useState(false);
 
   // ── Types tab ────────────────────────────────────────────────────────────────
 
@@ -866,12 +870,40 @@ export default function AdminPage() {
         setIcpWarmScore(s['icp_warm_score'] ?? '75');
         setIcpMinTouchpoints(s['icp_min_touchpoints'] ?? '1');
         setIcpIncludeNewCompanies(s['icp_include_new_companies'] !== 'false');
+        setTargetPriorityWeights(tryParse(s['icp_target_priority_weights'], DEFAULT_TARGET_PRIORITY_WEIGHTS));
       }
     } catch { toast.error('Failed to load ICP configuration.'); }
     finally { setIcpLoading(false); }
   };
 
   useEffect(() => { if (tab === 'icp') fetchIcpConfig(); }, [tab]);
+
+  const targetPriorityWeightError = validateTargetPriorityWeights(targetPriorityWeights);
+  const targetPriorityWeightTotal = Object.values(targetPriorityWeights).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
+
+  const handleTargetPriorityWeightChange = (key: keyof TargetPriorityWeights, value: string) => {
+    const n = Number(value);
+    setTargetPriorityWeights(prev => ({ ...prev, [key]: Number.isFinite(n) ? n : 0 }));
+  };
+
+  const handleSaveTargetPriorityWeights = async () => {
+    const validationError = validateTargetPriorityWeights(targetPriorityWeights);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    setSavingTargetPriorityWeights(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'icp_target_priority_weights', value: JSON.stringify(targetPriorityWeights) }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Target priority weights saved!');
+    } catch { toast.error('Failed to save target priority weights.'); }
+    finally { setSavingTargetPriorityWeights(false); }
+  };
 
   const handleSaveBuyerPersona = async () => {
     setSavingBuyerPersona(true);
@@ -2214,6 +2246,84 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* ── Card: Target Priority Scoring ── */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Target Priority Scoring</h2>
+              <p className="text-sm text-gray-500 mb-4">These weights determine how Parlay ranks companies for conference targeting. Higher weights make that factor more influential in the Target Priority Score.</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {([
+                  ['icp_fit', 'ICP Fit Weight'],
+                  ['buyer_access', 'Buyer Access Weight'],
+                  ['relationship_leverage', 'Relationship Leverage Weight'],
+                  ['conference_opportunity', 'Conference Opportunity Weight'],
+                ] as [keyof TargetPriorityWeights, string][]).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={targetPriorityWeights[key]}
+                      onChange={e => handleTargetPriorityWeightChange(key, e.target.value)}
+                      className="input-field text-sm w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                <p className={targetPriorityWeightError ? 'text-sm text-red-600' : 'text-sm text-gray-500'}>
+                  Total weight: <span className="font-semibold">{targetPriorityWeightTotal}</span>/100{targetPriorityWeightError ? ` — ${targetPriorityWeightError}` : ''}
+                </p>
+                <button className="btn-primary text-sm" onClick={handleSaveTargetPriorityWeights} disabled={savingTargetPriorityWeights || Boolean(targetPriorityWeightError)}>
+                  {savingTargetPriorityWeights ? 'Saving…' : 'Save Weights'}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Card: Target Priority Tiers ── */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Target Priority Tiers</h2>
+              <p className="text-sm text-gray-500 mb-4">These tiers translate the Target Priority Score into a recommended planning priority.</p>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {DEFAULT_TIER_THRESHOLDS.map((tier, idx) => {
+                  const next = DEFAULT_TIER_THRESHOLDS[idx + 1];
+                  const range = tier.key === 'low_priority' ? `Below ${DEFAULT_TIER_THRESHOLDS[idx - 1]?.min ?? 40}` : `${tier.min}–${next ? tier.min === 90 ? 100 : next.min - 1 : 100}`;
+                  return (
+                    <div key={tier.key} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-sm font-semibold text-gray-700">{tier.label}</p>
+                      <p className="text-xs text-gray-500 mt-1">{range}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Card: Recommended Target Actions ── */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Recommended Target Actions</h2>
+              <p className="text-sm text-gray-500 mb-4">Parlay recommends actions based on ICP fit, buyer access, relationship leverage, and event-specific opportunity.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <th className="text-left py-2 font-medium">Action</th>
+                      <th className="text-left py-2 font-medium">When Parlay recommends it</th>
+                      <th className="text-left py-2 font-medium">Active</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DEFAULT_RECOMMENDED_ACTIONS.map(action => (
+                      <tr key={action.key} className="border-b border-gray-50">
+                        <td className="py-2 pr-4 font-medium text-gray-700">{action.label}</td>
+                        <td className="py-2 pr-4 text-gray-500">{action.when}</td>
+                        <td className="py-2"><Toggle checked={action.active} onChange={() => undefined} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">V1 uses system-defined rules and stable action keys. Labels can be moved to editable config options without changing scoring logic.</p>
+            </div>
+
             {/* Unit Type requirement row */}
             <div className="card">
               <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">{unitTypeLabel || 'Unit Type'} Requirement</h2>
@@ -2570,6 +2680,34 @@ export default function AdminPage() {
               <button className="btn-primary text-sm" onClick={handleSaveBuyerPersona} disabled={savingBuyerPersona}>
                 {savingBuyerPersona ? 'Saving…' : 'Save Buyer Persona'}
               </button>
+            </div>
+          </div>
+
+          {/* ── Card: Relationship Leverage Settings ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Relationship Leverage Settings</h2>
+            <p className="text-sm text-gray-500 mb-4">Define which relationship signals should increase targeting priority. V1 uses read-only default weights from the targeting engine.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.entries(DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS).map(([key, weight]) => (
+                <div key={key} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <span className="text-sm text-gray-700">{key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}</span>
+                  <span className="text-xs font-semibold text-gray-500">{weight}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Card: Conference Opportunity Settings ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Conference Opportunity Settings</h2>
+            <p className="text-sm text-gray-500 mb-4">Define what makes a company a strong opportunity at a specific conference. V1 uses read-only default weights from the targeting engine.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.entries(DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS).map(([key, weight]) => (
+                <div key={key} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <span className="text-sm text-gray-700">{key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}</span>
+                  <span className="text-xs font-semibold text-gray-500">{weight}%</span>
+                </div>
+              ))}
             </div>
           </div>
 

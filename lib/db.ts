@@ -375,6 +375,15 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (rule_id) REFERENCES icp_rules(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE meetings ADD COLUMN meeting_type TEXT`,
+    // Target Priority recommended actions use stable action_key values; labels remain editable in config_options.
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Book Meeting', 0, 'book_meeting')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Route to Account Owner', 1, 'route_to_account_owner')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Invite to Hosted Event', 2, 'invite_to_hosted_event')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Rep Floor Outreach', 3, 'rep_floor_outreach')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Research Before Outreach', 4, 'research_before_outreach')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Monitor Only', 5, 'monitor_only')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Add to Nurture', 6, 'add_to_nurture')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Do Not Prioritize', 7, 'do_not_prioritize')`,
     // Form Builder tables
     `CREATE TABLE IF NOT EXISTS form_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
