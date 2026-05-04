@@ -260,6 +260,7 @@ export async function GET(
     // (actual if set/nonzero, else budget per line item)
     const totalSpendRow = await runQuery(
       `SELECT
+         cb.return_on_cost AS conference_return_on_cost,
          COALESCE(SUM(
            COALESCE(NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL), 0),
                     COALESCE(CAST(json_extract(li.value, '$.budget') AS REAL), 0), 0)
@@ -276,6 +277,7 @@ export async function GET(
        WHERE cb.conference_id = ${cid}`
     );
     const totalSpend = Number(totalSpendRow[0]?.total_spend ?? 0);
+    const conferenceReturnOnCost = totalSpendRow[0]?.conference_return_on_cost != null ? Number(totalSpendRow[0]?.conference_return_on_cost) : null;
     let lineItems: unknown[] = [];
     try { lineItems = JSON.parse(String(totalSpendRow[0]?.line_items_json ?? '[]')); } catch { /* empty */ }
 
@@ -1094,13 +1096,14 @@ export async function GET(
       total_spend: spendTotal,
       categories: spendCategoriesRaw.map(c => ({ ...c, percent: spendTotal > 0 ? (c.amount / spendTotal) * 100 : 0 })),
       top_cost_driver: spendCategoriesRaw.sort((a,b)=>b.amount-a.amount)[0] ? (()=>{const t=spendCategoriesRaw.sort((a,b)=>b.amount-a.amount)[0]; return { ...t, percent: spendTotal>0 ? (t.amount/spendTotal)*100 : 0 };})() : null,
-      unavailable_reason: spendTotal <= 0 ? 'No conference_budget rows found for this conference.' : null,
+      unavailable_reason: spendTotal <= 0 ? 'No Budget vs. Actual line items found for this conference.' : null,
     };
 
-    const expectedReturnTarget = Number(effDefaults.expected_return_on_event_cost ?? 0) || null;
+    const defaultExpectedReturnTarget = Number(effDefaults.expected_return_on_event_cost ?? 0) || null;
+    const expectedReturnTarget = conferenceReturnOnCost != null && isFinite(conferenceReturnOnCost) ? conferenceReturnOnCost : defaultExpectedReturnTarget;
     const requiredPipeline = expectedReturnTarget != null && totalSpend > 0 ? totalSpend * expectedReturnTarget : null;
     const coverageRatio = requiredPipeline && requiredPipeline > 0 ? totalPI / requiredPipeline : null;
-    const breakEvenView = { total_spend: totalSpend || null, expected_return_target: expectedReturnTarget, required_pipeline: requiredPipeline, actual_pipeline_influence: totalPI || null, pipeline_coverage_ratio: coverageRatio, pipeline_coverage_percent: coverageRatio == null ? null : coverageRatio * 100, status: coverageRatio == null ? 'unavailable' : coverageRatio >= 1 ? 'cleared' : coverageRatio >= 0.75 ? 'near_target' : 'below_target', unavailable_reason: coverageRatio == null ? 'Spend, pipeline influence, or expected return target is missing.' : null };
+    const breakEvenView = { total_spend: totalSpend || null, expected_return_target: expectedReturnTarget, required_pipeline: requiredPipeline, actual_pipeline_influence: totalPI || null, pipeline_coverage_ratio: coverageRatio, pipeline_coverage_percent: coverageRatio == null ? null : coverageRatio * 100, status: coverageRatio == null ? 'unavailable' : coverageRatio >= 1 ? 'cleared' : coverageRatio >= 0.75 ? 'near_target' : 'below_target', unavailable_reason: totalSpend <= 0 ? 'Total spend is missing.' : expectedReturnTarget == null ? 'Expected return target is missing.' : totalPI <= 0 ? 'Pipeline influence is missing.' : requiredPipeline == null || requiredPipeline <= 0 ? 'Required pipeline is invalid.' : null };
 
     const ladderMetrics = [
       { key: 'cost_per_company_engaged', label: 'Cost per Company Engaged', value: costPerCompanyEngaged },
