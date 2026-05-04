@@ -278,6 +278,13 @@ export async function GET(
     const totalSpend = Number(totalSpendRow[0]?.total_spend ?? 0);
     let lineItems: unknown[] = [];
     try { lineItems = JSON.parse(String(totalSpendRow[0]?.line_items_json ?? '[]')); } catch { /* empty */ }
+    const budgetSettingsRow = await runQuery(`SELECT return_on_cost, required_pipeline_multiple, required_pipeline_amount FROM conference_budget WHERE conference_id = ${cid} LIMIT 1`);
+    const returnOnCostMultiple = Number(budgetSettingsRow[0]?.return_on_cost ?? 0);
+    const expectedReturnAmount = totalSpend > 0 && returnOnCostMultiple > 0 ? totalSpend * returnOnCostMultiple : null;
+    const requiredPipelineMultiple = Number(budgetSettingsRow[0]?.required_pipeline_multiple ?? 3.5) > 0 ? Number(budgetSettingsRow[0]?.required_pipeline_multiple ?? 3.5) : 3.5;
+    const persistedRequiredPipelineAmount = budgetSettingsRow[0]?.required_pipeline_amount != null ? Number(budgetSettingsRow[0]?.required_pipeline_amount) : null;
+    const computedRequiredPipelineAmount = expectedReturnAmount != null ? expectedReturnAmount * requiredPipelineMultiple : null;
+    const requiredPipelineAmount = persistedRequiredPipelineAmount ?? computedRequiredPipelineAmount;
 
     // Annual budget for this conference's year
     const confYear = confInfo.start_date ? String(confInfo.start_date).substring(0, 4) : null;
@@ -1139,6 +1146,7 @@ export async function GET(
     const totalIcpAtConf = Number(icpCoverage.icp_companies_total ?? 0);
     const totalTargetAtConf = targetCompanyIdSet.size || Number(targetEngagement.targets_total ?? 0);
     const expectedReturnForRepCES = Number(effDefaults.expected_return_on_event_cost ?? 0);
+    const repRequiredPipelineAllocated = requiredPipelineAmount != null && numReps > 0 ? requiredPipelineAmount / numReps : null;
 
     const repCES = repAttribution.map((rep) => {
       const acc = repAccMap.get(rep.rep);
@@ -1175,8 +1183,11 @@ export async function GET(
       else dim2 = holdRate ?? fuSchedRate ?? null;
 
       // Dim 3: Pipeline Influence Index
-      const dim3 = (repAllocatedCost > 0 && expectedReturnForRepCES > 0)
-        ? Math.min(rep.pipeline_influence_attributed / (repAllocatedCost * expectedReturnForRepCES) * 100, 100)
+      const repPipelineDenominator = repRequiredPipelineAllocated && repRequiredPipelineAllocated > 0
+        ? repRequiredPipelineAllocated
+        : (repAllocatedCost > 0 && expectedReturnForRepCES > 0 ? repAllocatedCost * expectedReturnForRepCES : null);
+      const dim3 = repPipelineDenominator && repPipelineDenominator > 0
+        ? Math.min(rep.pipeline_influence_attributed / repPipelineDenominator * 100, 100)
         : null;
 
       // Dim 4: Engagement Breadth
@@ -1256,9 +1267,9 @@ export async function GET(
       (Number(engagementSummary.fu_scheduling_rate_pct ?? 0) * 0.5);
 
     const expectedReturn = Number(effDefaults.expected_return_on_event_cost ?? 0);
-    const targetInfluence = totalSpend > 0 && expectedReturn > 0
+    const targetInfluence = requiredPipelineAmount ?? (totalSpend > 0 && expectedReturn > 0
       ? totalSpend * expectedReturn
-      : null;
+      : null);
     const dim3PipelineIndex = targetInfluence
       ? Math.min(Number(pipelineSummary.total_pipeline_influence ?? 0) / targetInfluence * 100, 100)
       : 0;
@@ -1447,8 +1458,9 @@ export async function GET(
       : (meetingHoldRate ?? meetingFollowupAttachmentRate ?? null);
 
     const followupExecution = pct(salesFollowupsCompleted, salesFollowupsCreated);
-    const pipelineInfluenceExecution = (totalSpend > 0 && expectedReturn > 0)
-      ? Math.min(totalPipelineInfluence / (totalSpend * expectedReturn), 1) * 100
+    const pipelineDenominator = requiredPipelineAmount ?? ((totalSpend > 0 && expectedReturn > 0) ? totalSpend * expectedReturn : null);
+    const pipelineInfluenceExecution = (pipelineDenominator != null && pipelineDenominator > 0)
+      ? Math.min(totalPipelineInfluence / pipelineDenominator, 1) * 100
       : null;
 
     const targetDenominator = salesTargetsPresent > 0 ? salesTargetsPresent : null;
@@ -1519,6 +1531,12 @@ export async function GET(
       },
       operational: {
         line_items: lineItems,
+        required_pipeline: {
+          expected_return_multiple: returnOnCostMultiple || null,
+          expected_return_amount: expectedReturnAmount,
+          required_pipeline_multiple: requiredPipelineMultiple,
+          required_pipeline_amount: requiredPipelineAmount,
+        },
         cost_efficiency: costEfficiency,
         annual_budget: annualBudget,
         annual_budget_year: confYear ? Number(confYear) : null,
@@ -1619,7 +1637,7 @@ export async function GET(
         components: {
           meeting_execution: { score: meetingExecution != null ? Math.round(meetingExecution) : null, weight: salesPreset.meeting_execution, tier: tierFromScore(meetingExecution), confidence: 'High', metrics: { meetings_held: salesMeetingsHeld, meetings_scheduled: salesMeetingsScheduled, meeting_hold_rate: meetingHoldRate, companies_with_meeting: salesCompaniesWithMeeting, companies_with_meeting_and_followup: salesCompaniesWithMeetingAndFollowup, meeting_followup_attachment_rate: meetingFollowupAttachmentRate } },
           followup_execution: { score: followupExecution != null ? Math.round(followupExecution) : null, weight: salesPreset.followup_execution, tier: tierFromScore(followupExecution), confidence: 'High', metrics: { followups_created: salesFollowupsCreated, followups_completed: salesFollowupsCompleted, followup_completion_rate: followupExecution } },
-          pipeline_influence_execution: { score: pipelineInfluenceExecution != null ? Math.round(pipelineInfluenceExecution) : null, weight: salesPreset.pipeline_influence_execution, tier: tierFromScore(pipelineInfluenceExecution), confidence: 'Medium', provenance: 'Proxy', metrics: { total_pipeline_influence: totalPipelineInfluence, total_spend: totalSpend, expected_return_target: expectedReturn, pipeline_influence_index: pipelineInfluenceExecution } },
+          pipeline_influence_execution: { score: pipelineInfluenceExecution != null ? Math.round(pipelineInfluenceExecution) : null, weight: salesPreset.pipeline_influence_execution, tier: tierFromScore(pipelineInfluenceExecution), confidence: 'Medium', provenance: 'Proxy', metrics: { total_pipeline_influence: totalPipelineInfluence, total_spend: totalSpend, expected_return_target: expectedReturn, required_pipeline_amount: pipelineDenominator, pipeline_influence_index: pipelineInfluenceExecution } },
           target_account_execution: { score: targetExecution != null ? Math.round(targetExecution) : null, weight: salesPreset.target_account_execution, tier: tierFromScore(targetExecution), confidence: targetDenominator ? 'High' : 'Low', metrics: { target_accounts_engaged: salesTargetEngaged, target_accounts_denominator: targetDenominator, target_engagement_rate: targetExecution, denominator_type: targetDenominatorType } },
           rep_productivity: { score: repProductivity != null ? Math.round(repProductivity) : null, weight: salesPreset.rep_productivity, tier: tierFromScore(repProductivity), confidence: salesActivities > 0 ? 'Medium' : 'Low', metrics: { meetings_held: salesMeetingsHeld, touchpoints_logged: salesTouchpointsLogged, sales_activities: salesActivities, expected_sales_activities: expectedSalesActivities, activity_productivity_score: activityProductivity, companies_engaged_by_sales_team: salesCompaniesEngaged, expected_companies_engaged: expectedCompaniesEngaged, company_coverage_productivity_score: companyCoverage, pipeline_per_sales_activity: pipelinePerSalesActivity, expected_pipeline_per_sales_activity: expectedPipelinePerSalesActivity, pipeline_productivity_score: pipelineProductivity } }
         },
