@@ -985,6 +985,8 @@ export async function GET(
        WHERE ca.conference_id=${cid}`
     ))[0] ?? {};
 
+    const strategyKey = resolveStrategyKey(confInfo.conference_strategy_type_key != null ? String(confInfo.conference_strategy_type_key) : null);
+
     // ── Tier-Based Cost Efficiency Score ──────────────────────────────────────
     const unavailableMetrics: string[] = [];
 
@@ -1463,7 +1465,6 @@ export async function GET(
       ? (activityProductivity * 0.4) + (companyCoverage * 0.3) + (pipelineProductivity * 0.3)
       : ([activityProductivity, companyCoverage, pipelineProductivity].filter(v => v != null).reduce((a,b)=>a+Number(b),0) / Math.max([activityProductivity, companyCoverage, pipelineProductivity].filter(v => v != null).length, 1));
 
-    const strategyKey = resolveStrategyKey(confInfo.conference_strategy_type_key);
     const salesPreset = getPreset('sales_effectiveness', strategyKey);
     const salesComponents = [
       { key: 'meeting_execution', score: meetingExecution, weight: salesPreset.meeting_execution ?? DEFAULT_SALES_WEIGHTS.meeting_execution },
