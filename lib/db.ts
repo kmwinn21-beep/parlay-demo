@@ -383,6 +383,9 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Research Before Outreach', 4, 'research_before_outreach')`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Monitor Only', 5, 'monitor_only')`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Add to Nurture', 6, 'add_to_nurture')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
+     VALUES ('company_type', 'Prospect', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'prospect')`,
+    `UPDATE config_options SET action_key = 'prospect' WHERE category = 'company_type' AND value = 'Prospect' AND action_key IS NULL`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Do Not Prioritize', 7, 'do_not_prioritize')`,
     // Form Builder tables
     `CREATE TABLE IF NOT EXISTS form_templates (
@@ -905,6 +908,7 @@ export async function initDb(): Promise<void> {
     { category: 'company_type', value: 'Other' },
     { category: 'company_type', value: 'Capital' },
     { category: 'company_type', value: 'Operator' },
+    { category: 'company_type', value: 'Prospect' },
     { category: 'status', value: 'Client' },
     { category: 'status', value: 'Priority' },
     { category: 'status', value: 'Interested' },
