@@ -9,6 +9,7 @@ export interface TargetingApiResponse {
   generated_at?: string;
   scoring_config?: {
     recommended_actions?: RecommendedTargetAction[];
+    target_company_type_id?: number | null;
   };
   companies?: TargetingCompanyRecommendation[];
   pagination?: {
