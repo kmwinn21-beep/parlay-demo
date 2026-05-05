@@ -660,6 +660,25 @@ export async function GET(
     }));
 
 
+  const targetingCompanies: Array<Record<string, unknown>> = [];
+  try {
+    let offset = 0;
+    while (true) {
+      const params = new URLSearchParams({ batch: '1', offset: String(offset), limit: '50' });
+      const targetingRes = await fetch(`${request.nextUrl.origin}/api/conferences/${confId}/targeting?${params.toString()}`, {
+        headers: { cookie: request.headers.get('cookie') ?? '' },
+        cache: 'no-store',
+      });
+      if (!targetingRes.ok) break;
+      const targetingJson = await targetingRes.json() as { companies?: Array<Record<string, unknown>>; pagination?: { has_more?: boolean; next_offset?: number | null } };
+      targetingCompanies.push(...(targetingJson.companies ?? []));
+      if (!targetingJson.pagination?.has_more || targetingJson.pagination.next_offset == null) break;
+      offset = targetingJson.pagination.next_offset;
+    }
+  } catch {
+    // Fall through; assessment will use unavailable state when targeting data cannot be fetched.
+  }
+
   const preConferenceStrategyAssessment = computePreConferenceStrategyAssessment({
     totalAttendees,
     totalCompanies,
@@ -667,21 +686,25 @@ export async function GET(
     requiredPipelineAmount: null,
     totalBudget: null,
     scheduledMeetings: meetings.length,
-    companyScores: Array.from(new Map(attendees.map((a) => [Number(a.company_id), a])).values())
-      .filter((a) => a.company_id != null)
-      .map((a) => ({
-        isIcp: isIcpCompany(a),
-        icpFit: isIcpCompany(a) ? 100 : 35,
-        targetPriorityScore: Math.max(0, Math.min(100, (Number(attendeeHealthMap.get(Number(a.id)) ?? 0) + (isIcpCompany(a) ? 30 : 0)))),
-        targetPriorityTier: (Number(attendeeHealthMap.get(Number(a.id)) ?? 0) >= 80 ? 'must_target' : Number(attendeeHealthMap.get(Number(a.id)) ?? 0) >= 65 ? 'high_priority' : Number(attendeeHealthMap.get(Number(a.id)) ?? 0) >= 50 ? 'worth_engaging' : 'monitor'),
-        buyerAccessScore: Number(attendeeHealthMap.get(Number(a.id)) ?? 0),
-        relationshipLeverageScore: Number(attendeeHealthMap.get(Number(a.id)) ?? 0),
-        conferenceOpportunityScore: Number(attendeeHealthMap.get(Number(a.id)) ?? 0),
-        titleNeedsReview: !String(a.title ?? '').trim(),
-        hasMeeting: meetings.some((m) => Number(m.company_id) === Number(a.company_id)),
-        isCustomer: String(a.company_status ?? '').toLowerCase().includes('client'),
-        pipelineValue: null,
-      })),
+    clientAttendeeCount: clientCompanies.reduce((sum, c) => sum + c.attendeeCount, 0),
+    companyScores: targetingCompanies.map((company) => ({
+      isIcp: Number(company.icp_fit_score ?? 0) >= 60,
+      icpFit: company.icp_fit_score == null ? null : Number(company.icp_fit_score),
+      targetPriorityScore: company.target_priority_score == null ? null : Number(company.target_priority_score),
+      targetPriorityTier: String(company.target_priority_tier_key ?? company.target_priority_tier ?? 'low_priority').toLowerCase().replace(/\s+/g, '_'),
+      buyerAccessScore: company.buyer_access_score == null ? null : Number(company.buyer_access_score),
+      relationshipLeverageScore: company.relationship_leverage_score == null ? null : Number(company.relationship_leverage_score),
+      conferenceOpportunityScore: company.conference_opportunity_score == null ? null : Number(company.conference_opportunity_score),
+      titleNeedsReview: Boolean(company.title_review_summary && Number((company.title_review_summary as Record<string, unknown>).needs_review_count ?? 0) > 0),
+      hasMeeting: Number(company.scheduled_meeting_count ?? 0) > 0,
+      isCustomer: false,
+      pipelineValue: null,
+      recommendedActionKey: String((company.recommended_action as Record<string, unknown> | undefined)?.action_key ?? ''),
+      highBuyerFitAttendeeCount: Array.isArray(company.top_attendees)
+        ? (company.top_attendees as Array<Record<string, unknown>>).filter((a) => Number(a.buyer_fit_score ?? 0) >= 75).length
+        : 0,
+      confidenceLevel: company.confidence_level ? String(company.confidence_level) : null,
+    })),
   });
 
   return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, pre_conference_strategy_assessment: preConferenceStrategyAssessment });

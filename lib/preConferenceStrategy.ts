@@ -2,126 +2,97 @@ export type Confidence = 'High' | 'Medium' | 'Low';
 
 type CompanyScore = {
   isIcp: boolean;
-  icpFit: number;
-  targetPriorityScore: number;
+  icpFit: number | null;
+  targetPriorityScore: number | null;
   targetPriorityTier: string;
-  buyerAccessScore: number;
-  relationshipLeverageScore: number;
-  conferenceOpportunityScore: number;
+  buyerAccessScore: number | null;
+  relationshipLeverageScore: number | null;
+  conferenceOpportunityScore: number | null;
   titleNeedsReview: boolean;
   hasMeeting: boolean;
   isCustomer: boolean;
   pipelineValue: number | null;
+  recommendedActionKey?: string | null;
+  highBuyerFitAttendeeCount?: number;
+  confidenceLevel?: string | null;
 };
 
-type Input = {
-  totalAttendees: number;
-  totalCompanies: number;
-  internalAttendeeCount: number;
-  requiredPipelineAmount: number | null;
-  totalBudget: number | null;
-  companyScores: CompanyScore[];
-  scheduledMeetings: number;
-};
+type Input = { totalAttendees:number; totalCompanies:number; internalAttendeeCount:number; requiredPipelineAmount:number|null; totalBudget:number|null; companyScores:CompanyScore[]; scheduledMeetings:number; clientAttendeeCount:number; };
+const clamp=(v:number,min=0,max=100)=>Math.max(min,Math.min(max,v));
+const r=(v:number|null)=>v==null||!Number.isFinite(v)?null:Math.round(v);
+const i=(v:number|null)=>v==null?'Unavailable':v>=75?'Strong':v>=60?'Acceptable':v>=40?'Watch':'Low';
+const fit=(v:number|null)=>v==null?null:v>=90?'Exceptional Strategy Fit':v>=75?'Strong Strategy Fit':v>=60?'Moderate Strategy Fit':v>=40?'Limited Strategy Fit':'Weak Strategy Fit';
 
-const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
-const round = (v: number | null) => (v == null || !Number.isFinite(v) ? null : Math.round(v));
-const interp = (v: number | null) => v == null ? 'Unavailable' : v >= 75 ? 'Strong' : v >= 60 ? 'Acceptable' : v >= 40 ? 'Watch' : 'Low';
-const fitInterp = (v: number | null) => v == null ? null : v >= 90 ? 'Exceptional Strategy Fit' : v >= 75 ? 'Strong Strategy Fit' : v >= 60 ? 'Moderate Strategy Fit' : v >= 40 ? 'Limited Strategy Fit' : 'Weak Strategy Fit';
+function weightedAvailable(parts:{score:number|null;weight:number}[]){const avail=parts.filter(p=>p.score!=null); const tw=avail.reduce((s,p)=>s+p.weight,0); if(!tw) return {score:null,weights:new Map<number,number>()}; let sum=0; const m=new Map<number,number>(); for(const p of parts){if(p.score==null) continue; const ew=(p.weight/tw)*100; m.set(p.weight,ew); sum += (p.score as number)*(ew/100);} return {score:r(sum),weights:m};}
 
 export function computePreConferenceStrategyAssessment(input: Input) {
-  const { totalCompanies, totalAttendees, companyScores, requiredPipelineAmount, totalBudget } = input;
-  if (!totalCompanies || companyScores.length === 0) return { unavailable_reason: 'No companies available for assessment.' };
+  const c=input.companyScores; const total=Math.max(input.totalCompanies,1);
+  if(!c.length) return {unavailable_reason:'No scored target companies available for strategy assessment.'};
+  const byTier=(k:string)=>c.filter(x=>x.targetPriorityTier===k).length;
+  const must=byTier('must_target'), high=byTier('high_priority'), worth=byTier('worth_engaging');
+  const avg=(arr:(number|null)[])=>{const v=arr.filter((n):n is number=>n!=null); return v.length? v.reduce((a,b)=>a+b,0)/v.length : null;};
+  const highPlus=c.filter(x=>x.targetPriorityTier==='must_target'||x.targetPriorityTier==='high_priority');
+  const avgIcp=avg(c.map(x=>x.icpFit)); const avgTarget=avg(c.map(x=>x.targetPriorityScore)); const avgBuyer=avg(highPlus.map(x=>x.buyerAccessScore)); const avgRel=avg(highPlus.map(x=>x.relationshipLeverageScore));
+  const needsTitle=c.filter(x=>x.titleNeedsReview).length;
 
-  const must = companyScores.filter(c => c.targetPriorityTier === 'must_target').length;
-  const high = companyScores.filter(c => c.targetPriorityTier === 'high_priority').length;
-  const worth = companyScores.filter(c => c.targetPriorityTier === 'worth_engaging').length;
-  const monitor = companyScores.filter(c => c.targetPriorityTier === 'monitor').length;
-  const icp = companyScores.filter(c => c.isIcp);
-  const customers = companyScores.filter(c => c.isCustomer);
-  const avg = (arr: number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+  const icpRateScore=clamp(Math.min((c.filter(x=>x.isIcp).length/total)/0.15,1)*100);
+  const highIcpDensity=clamp(Math.min(c.filter(x=>(x.icpFit??0)>=75).length/50,1)*100);
+  const icpScore=r((icpRateScore*0.3)+((avgIcp??0)*0.5)+(highIcpDensity*0.2));
 
-  const icpRate = (icp.length / totalCompanies) * 100;
-  const avgIcpFit = avg(companyScores.map(c => c.icpFit));
-  const highIcpDensity = (companyScores.filter(c => c.icpFit >= 75).length / totalCompanies) * 100;
-  const icpOpportunity = clamp(icpRate * 0.4 + avgIcpFit * 0.4 + highIcpDensity * 0.2);
+  const mustScore=Math.min(must/10,1)*100, highScore=Math.min(high/50,1)*100, worthScore=Math.min(worth/75,1)*100;
+  const actionRate=(c.filter(x=>['book_meeting','route_to_account_owner'].includes((x.recommendedActionKey??'').toLowerCase())).length/total)*100;
+  const targetOpp=r(mustScore*0.2+highScore*0.3+worthScore*0.15+((avgTarget??0)*0.25)+(actionRate*0.1));
 
-  const mustScore = Math.min(must / 10, 1) * 100;
-  const highScore = Math.min(high / 25, 1) * 100;
-  const avgTarget = avg(companyScores.map(c => c.targetPriorityScore));
-  const bookRate = (companyScores.filter(c => c.hasMeeting).length / totalCompanies) * 100;
-  const targetOpportunity = clamp(mustScore * 0.3 + highScore * 0.3 + avgTarget * 0.25 + bookRate * 0.15);
+  const buyerStrongRate=highPlus.length? (highPlus.filter(x=>(x.buyerAccessScore??0)>=70).length/highPlus.length)*100 : null;
+  const highBuyerAttendees=c.reduce((s,x)=>s+(x.highBuyerFitAttendeeCount??0),0);
+  let buyerScore = r(((avgBuyer??0)*0.5)+((buyerStrongRate??0)*0.3)+(Math.min(highBuyerAttendees/25,1)*100*0.2));
+  const titleRate=(needsTitle/total)*100; if(buyerScore!=null && titleRate>25) buyerScore=Math.max(0,buyerScore-(titleRate>50?10:5));
 
-  const avgBuyer = avg(companyScores.map(c => c.buyerAccessScore));
-  const buyerDmRate = (companyScores.filter(c => c.buyerAccessScore >= 60).length / totalCompanies) * 100;
-  const highBuyerDensity = (companyScores.filter(c => c.buyerAccessScore >= 75).length / totalCompanies) * 100;
-  const titleReviewRate = (companyScores.filter(c => c.titleNeedsReview).length / totalCompanies) * 100;
-  const buyerPenalty = titleReviewRate > 25 ? (titleReviewRate > 40 ? 10 : 5) : 0;
-  const buyerAccess = clamp(avgBuyer * 0.5 + buyerDmRate * 0.3 + highBuyerDensity * 0.2 - buyerPenalty);
+  const relStrongRate=highPlus.length?(highPlus.filter(x=>(x.relationshipLeverageScore??0)>=70).length/highPlus.length)*100:null;
+  const warmCoverage=(c.filter(x=>(x.relationshipLeverageScore??0)>=60||x.hasMeeting).length/total)*100;
+  const relScore=r(((avgRel??0)*0.6)+((relStrongRate??0)*0.25)+(warmCoverage*0.15));
 
-  const avgRel = avg(companyScores.map(c => c.relationshipLeverageScore));
-  const warmRate = (companyScores.filter(c => c.relationshipLeverageScore >= 60).length / totalCompanies) * 100;
-  const overlapRate = (companyScores.filter(c => c.relationshipLeverageScore >= 40).length / totalCompanies) * 100;
-  const ownerCoverage = warmRate;
-  const relLeverage = clamp(avgRel * 0.5 + warmRate * 0.25 + overlapRate * 0.15 + ownerCoverage * 0.1);
+  const customers=c.filter(x=>x.isCustomer); const custBuyer=avg(customers.map(x=>x.buyerAccessScore)); const custRel=avg(customers.map(x=>x.relationshipLeverageScore));
+  const customerScore = r((Math.min(customers.length/20,1)*100*0.4)+(Math.min(input.clientAttendeeCount/50,1)*100*0.3)+((custBuyer??0)*0.15)+((custRel??0)*0.15));
 
-  const custRate = (customers.length / totalCompanies) * 100;
-  const custAttendeeDensity = totalAttendees ? (customers.length / totalAttendees) * 100 : 0;
-  const custBuyer = avg(customers.map(c => c.buyerAccessScore));
-  const custRel = avg(customers.map(c => c.relationshipLeverageScore));
-  const customerPresence = clamp(custRate * 0.4 + custAttendeeDensity * 0.2 + custBuyer * 0.2 + custRel * 0.2);
+  const realistic:null|number = null; const req=input.requiredPipelineAmount; const coverage=req&&realistic? realistic/req : null; const coveragePct=coverage==null?null:coverage*100;
+  const pipelineScore=coverage==null?null:r(Math.min(coverage,1)*100);
+  const economicsScore=input.totalBudget==null||coveragePct==null?null:r((coveragePct*0.4)+50*0.35+50*0.25);
 
-  const tierBase: Record<string, number> = { must_target: 0.25, high_priority: 0.15, worth_engaging: 0.075, monitor: 0.025, low_priority: 0 };
-  let realistic = 0;
-  let pipelineDataPoints = 0;
-  for (const c of companyScores) {
-    if (c.pipelineValue == null) continue;
-    pipelineDataPoints++;
-    let p = tierBase[c.targetPriorityTier] ?? 0;
-    if (c.buyerAccessScore >= 80) p += 0.05;
-    if (c.relationshipLeverageScore >= 80) p += 0.05;
-    if (c.hasMeeting) p += 0.05;
-    if (c.buyerAccessScore < 40) p -= 0.05;
-    if (c.titleNeedsReview) p -= 0.05;
-    p = Math.max(0, Math.min(0.35, p));
-    realistic += c.pipelineValue * p;
-  }
-  const pipelineConfidence: Confidence = pipelineDataPoints > Math.max(5, totalCompanies * 0.5) ? 'High' : pipelineDataPoints > 0 ? 'Medium' : 'Low';
-  const coverageRatio = requiredPipelineAmount && requiredPipelineAmount > 0 ? realistic / requiredPipelineAmount : null;
-  const coveragePercent = coverageRatio == null ? null : coverageRatio * 100;
-  const pipelinePotential = coverageRatio == null ? null : clamp(Math.min(coverageRatio, 1) * 100);
+  const components=[
+    {key:'icp_opportunity',label:'ICP Opportunity',original_weight:20,score:icpScore,unavailable_reason:null},
+    {key:'target_account_opportunity',label:'Target Account Opportunity',original_weight:20,score:targetOpp,unavailable_reason:null},
+    {key:'buyer_access',label:'Buyer Access',original_weight:15,score:buyerScore,unavailable_reason:null},
+    {key:'relationship_leverage',label:'Relationship Leverage',original_weight:15,score:relScore,unavailable_reason:null},
+    {key:'customer_presence',label:'Customer Presence',original_weight:10,score:customerScore,unavailable_reason:null},
+    {key:'pipeline_potential',label:'Pipeline Potential',original_weight:15,score:pipelineScore,unavailable_reason:'Required pipeline amount or pipeline influence values are unavailable.'},
+    {key:'event_economics_fit',label:'Event Economics Fit',original_weight:5,score:economicsScore,unavailable_reason:'Budget and/or pipeline inputs are unavailable.'},
+  ];
+  const fitScoreObj=weightedAvailable(components.map(c=>({score:c.score,weight:c.original_weight})));
+  const componentsOut=components.map(c=>({key:c.key,label:c.label,original_weight:c.original_weight,effective_weight:c.score==null?0:Number(((fitScoreObj.weights.get(c.original_weight)??0).toFixed(2))),score:c.score,interpretation:i(c.score),unavailable_reason:c.score==null?c.unavailable_reason:null}));
 
-  const budgetJustification = coveragePercent == null ? 40 : clamp(coveragePercent);
-  const costPerHigh = totalBudget && high > 0 ? totalBudget / high : null;
-  const costPerIcp = totalBudget && icp.length > 0 ? totalBudget / icp.length : null;
-  const costHighScore = costPerHigh == null ? 50 : clamp(100 - (costPerHigh / 100000) * 100);
-  const costIcpScore = costPerIcp == null ? 50 : clamp(100 - (costPerIcp / 100000) * 100);
-  const eventEco = clamp((coveragePercent ?? 0) * 0.5 + costHighScore * 0.3 + costIcpScore * 0.2);
+  const strategyScores=[
+    ['pipeline_generation','Pipeline Generation', {t:targetOpp,b:buyerScore,p:pipelineScore,icp:icpScore}, {t:30,b:25,p:25,icp:20}],
+    ['pipeline_acceleration','Pipeline Acceleration',{r:relScore,b:buyerScore,t:targetOpp,p:pipelineScore},{r:30,b:25,t:25,p:20}],
+    ['customer_retention_customer_nurture','Customer Retention / Customer Nurture',{c:customerScore,r:relScore,b:buyerScore,icp:icpScore},{c:40,r:25,b:20,icp:15}],
+    ['market_presence_brand_visibility','Market Presence / Brand Visibility',{icp:icpScore,t:targetOpp,b:buyerScore,c:customerScore,a:r(Math.min(input.totalAttendees/500,1)*100)},{icp:25,t:20,b:15,c:15,a:25}],
+    ['strategic_account_relationship_building','Strategic Account Relationship Building',{t:targetOpp,b:buyerScore,r:relScore,icp:icpScore},{t:30,b:30,r:25,icp:15}],
+  ].map(([key,label,scores,w])=>{const parts=Object.keys(w).map(k=>({score:(scores as any)[k]??null,weight:(w as any)[k]})); const sw=weightedAvailable(parts).score??0; return {key,label,score:sw};}).sort((a,b)=>b.score-a.score);
+  const top=strategyScores[0], second=strategyScores[1];
 
-  const components = [
-    ['icp_opportunity','ICP Opportunity',20,icpOpportunity],['target_account_opportunity','Target Account Opportunity',20,targetOpportunity],['buyer_access','Buyer Access',15,buyerAccess],['relationship_leverage','Relationship Leverage',15,relLeverage],['customer_presence','Customer Presence',10,customerPresence],['pipeline_potential','Pipeline Potential',15,pipelinePotential],['event_economics_fit','Event Economics Fit',5,eventEco],
-  ].map(([key,label,weight,score])=>({key,label,weight,score: round(score as number|null),interpretation: interp(round(score as number|null))}));
-
-  const strategyFitScore = round((icpOpportunity*0.2)+(targetOpportunity*0.2)+(buyerAccess*0.15)+(relLeverage*0.15)+(customerPresence*0.1)+((pipelinePotential ?? 0)*0.15)+(eventEco*0.05));
-  const strategyFitScoreValue = strategyFitScore ?? 0;
-
-  const strategies = [
-    { key:'pipeline_generation', label:'Pipeline Generation', score: icpOpportunity*0.25 + targetOpportunity*0.25 + buyerAccess*0.2 + ((coveragePercent ?? 0)*0.2) + (100-customerPresence)*0.1 },
-    { key:'strategic_account_relationship_building', label:'Strategic Account Relationship Building', score: avgTarget*0.3 + buyerAccess*0.3 + relLeverage*0.25 + mustScore*0.15 },
-    { key:'customer_retention_customer_nurture', label:'Customer Retention / Customer Nurture', score: customerPresence*0.45 + custBuyer*0.25 + custRel*0.2 + (100-(pipelinePotential ?? 30))*0.1 },
-    { key:'market_presence_brand_visibility', label:'Market Presence / Brand Visibility', score: clamp((totalAttendees/500)*100)*0.3 + icpOpportunity*0.2 + (100-buyerAccess)*0.2 + (100-(pipelinePotential ?? 0))*0.15 + (100-relLeverage)*0.15 },
-  ].sort((a,b)=>b.score-a.score);
+  const reasons=[`${must} Must Target, ${high} High Priority, and ${worth} Worth Engaging companies were identified.`,`Average Target Priority is ${r(avgTarget) ?? '—'} across scored companies.`,`Buyer Access score is ${buyerScore ?? '—'} and Relationship Leverage is ${relScore ?? '—'} among top targets.`, titleRate>25?`${needsTitle} companies need title review, reducing confidence in buyer-fit precision.`:'Title confidence is healthy across scored companies.'];
 
   return {
-    strategy_fit_score: strategyFitScore,
-    strategy_fit_interpretation: fitInterp(strategyFitScore),
-    components,
-    recommended_strategy: { id: null, key: strategies[0]?.key ?? null, label: strategies[0]?.label ?? 'Unavailable', score: round(strategies[0]?.score ?? null), reasons: ['Based on attendee/company mix and component scores.'], confidence: 'Medium' as Confidence },
-    secondary_strategy: { id: null, key: strategies[1]?.key ?? null, label: strategies[1]?.label ?? 'Unavailable', score: round(strategies[1]?.score ?? null), reasons: ['Secondary option from strategy scoring model.'], confidence: 'Medium' as Confidence },
-    pipeline_reality: { realistic_pipeline_goal: round(realistic), required_pipeline_amount: round(requiredPipelineAmount), coverage_percent: round(coveragePercent), coverage_ratio: coverageRatio, interpretation: coveragePercent == null ? 'Pipeline requirement unavailable.' : coveragePercent < 20 ? 'Direct pipeline generation is unlikely to meet required pipeline. Focus on relationship and account progression.' : 'Pipeline generation potential is meaningful for this event.', confidence: pipelineConfidence },
-    hosted_event_recommendation: { recommendation: buyerAccess >= 75 && must >= 8 && relLeverage >= 50 ? 'Host Executive Dinner' : customerPresence >= 70 ? 'Host Customer Dinner' : targetOpportunity >= 70 && buyerAccess >= 60 ? 'Host Prospect Reception' : strategyFitScoreValue >= 60 ? 'Meeting Suite Only' : 'Attend Only', score: round(clamp((companyScores.filter(c=>c.targetPriorityScore>=75).length/Math.max(totalCompanies,1))*100*0.25 + customerPresence*0.2 + buyerAccess*0.2 + relLeverage*0.15 + mustScore*0.1 + budgetJustification*0.1)), reasons: ['Evaluates buyer access, customer presence, leverage, and target density.'], confidence: 'Medium' as Confidence },
-    sponsorship_recommendation: { recommendation: 'Limited Sponsorship; Prioritize Meetings', score: round(clamp((clamp((totalAttendees/500)*100)*0.3)+(icpRate*0.2)+(targetOpportunity*0.2)+(customerPresence*0.15)+((pipelinePotential ?? 0)*0.1)+((customerPresence>60?70:40)*0.05))), reasons: ['Balances audience scale with ICP density and pipeline potential.'], confidence: 'Medium' as Confidence },
-    staffing_recommendation: (()=>{const raw=((must*0.5)+(high*0.25)+(input.scheduledMeetings*0.5))/10; const reps=Math.max(1,Math.ceil(raw)); const min=Math.max(1,reps-1); const max=reps+1; const gapMin=min-input.internalAttendeeCount; const gapMax=max-input.internalAttendeeCount; return {recommended_rep_count_min:min,recommended_rep_count_max:max,current_internal_attendee_count:input.internalAttendeeCount,coverage_gap_min:gapMin>0?gapMin:0,coverage_gap_max:gapMax>0?gapMax:0,interpretation:gapMax>0?'Additional internal attendees recommended for target coverage.':'Coverage appears sufficient based on current internal attendees.',confidence:'Medium' as Confidence};})(),
-    unavailable_reason: null,
+    strategy_fit_score: fitScoreObj.score,
+    strategy_fit_interpretation: fit(fitScoreObj.score),
+    components: componentsOut,
+    recommended_strategy:{id:null,key:top?.key??null,label:top?.label??'Unavailable',score:r(top?.score??null),reasons:reasons.slice(0,4),confidence:'Medium' as Confidence},
+    secondary_strategy:{id:null,key:second?.key??null,label:second?.label??'Unavailable',score:r(second?.score??null),reasons:[`Secondary strategy scored ${r(second?.score??null) ?? '—'} based on current component mix.`,reasons[0],pipelineScore==null?'Pipeline reality is unavailable because pipeline influence values or required pipeline data are missing.':'Pipeline potential was included in secondary scoring.'],confidence:'Medium' as Confidence},
+    pipeline_reality:{realistic_pipeline_goal:realistic,required_pipeline_amount:req,coverage_percent:r(coveragePct),coverage_ratio:coverage,interpretation:coverage==null?'Pipeline reality unavailable until pipeline influence values and required pipeline are configured.':coverage<0.2?'Direct pipeline generation is unlikely to meet required pipeline.':'Pipeline coverage appears achievable.',confidence:coverage==null?'Low':'Medium',unavailable_reason:coverage==null?'Missing required pipeline and/or company pipeline influence values.':null},
+    hosted_event_recommendation:{recommendation: buyerScore!=null&&buyerScore>=75&&must>=1?'Host Executive Dinner':targetOpp!=null&&targetOpp>=70?'Host Prospect Reception':'Meeting Suite Only',score:r(weightedAvailable([{score:r(Math.min((must+high)/Math.max(total,1)*100*2,100)),weight:25},{score:customerScore,weight:20},{score:buyerScore,weight:20},{score:relScore,weight:15},{score:r(mustScore),weight:10},{score:input.totalBudget==null?null:50,weight:10}]).score),reasons:[`${high} High Priority companies identified.`,`Buyer Access among high-priority targets is ${buyerScore ?? '—'}.`,customerScore!=null&&customerScore<50?'Customer presence is limited, favoring prospect-oriented formats.':'Customer presence supports relationship-oriented programming.'],confidence:input.totalBudget==null?'Low':'Medium'},
+    sponsorship_recommendation:(()=>{const m=r(weightedAvailable([{score:r(Math.min(input.totalAttendees/500,1)*100),weight:30},{score:icpRateScore,weight:20},{score:r(Math.min((total-customers.length)/Math.max(total,1)*100,100)),weight:20},{score:customerScore,weight:15},{score:pipelineScore,weight:10},{score:r(customerScore!=null&&customerScore>=60?70:40),weight:5}]).score); const rec=m==null?'Limited Sponsorship; Prioritize Meetings':m>=80?'Strong Sponsorship Fit':m>=60?'Selective Sponsorship / Speaking Slot':m>=40?'Limited Sponsorship; Prioritize Meetings':'Do Not Sponsor'; return {recommendation:rec,score:m,reasons:[`Audience scale score: ${r(Math.min(input.totalAttendees/500,1)*100) ?? '—'}.`,`ICP opportunity score: ${icpScore ?? '—'}.`,`Pipeline potential ${pipelineScore==null?'is unavailable and excluded from weighted score.':`is ${pipelineScore}.`}`],confidence:pipelineScore==null?'Low':'Medium'};})(),
+    staffing_recommendation:(()=>{const reps=Math.max(1,Math.ceil(((must*0.5)+(high*0.25)+(input.scheduledMeetings*0.5))/10)); const min=Math.max(1,reps-1),max=reps+1; const gapMin=Math.max(0,min-input.internalAttendeeCount),gapMax=Math.max(0,max-input.internalAttendeeCount); return {recommended_rep_count_min:min,recommended_rep_count_max:max,current_internal_attendee_count:input.internalAttendeeCount,coverage_gap_min:gapMin,coverage_gap_max:gapMax,interpretation:`Based on ${must} Must Target, ${high} High Priority, and ${input.scheduledMeetings} scheduled meetings, recommended coverage is ${min}-${max} internal attendees.`,confidence:'Medium' as Confidence};})(),
+    debug_summary:{total_scored_companies:c.length,must_target_count:must,high_priority_count:high,worth_engaging_count:worth,avg_target_priority:r(avgTarget),avg_icp_fit:r(avgIcp),avg_buyer_access:r(avgBuyer),avg_relationship_leverage:r(avgRel),avg_conference_opportunity:r(avg(c.map(x=>x.conferenceOpportunityScore))),needs_title_review_count:needsTitle},
+    unavailable_reason:null,
   };
 }

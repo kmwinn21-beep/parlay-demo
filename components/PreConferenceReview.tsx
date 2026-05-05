@@ -35,13 +35,14 @@ export interface ClientCompanyEntry {
 export interface PreConferenceStrategyAssessment {
   strategy_fit_score: number | null;
   strategy_fit_interpretation: string | null;
-  components: { key: string; label: string; weight: number; score: number | null; interpretation: string | null }[];
+  components: { key: string; label: string; original_weight: number; effective_weight: number; score: number | null; interpretation: string | null; unavailable_reason: string | null }[];
   recommended_strategy: { id: string | null; key: string | null; label: string; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
   secondary_strategy: { id: string | null; key: string | null; label: string; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
-  pipeline_reality: { realistic_pipeline_goal: number | null; required_pipeline_amount: number | null; coverage_percent: number | null; coverage_ratio: number | null; interpretation: string | null; confidence: "High"|"Medium"|"Low" };
+  pipeline_reality: { realistic_pipeline_goal: number | null; required_pipeline_amount: number | null; coverage_percent: number | null; coverage_ratio: number | null; interpretation: string | null; confidence: "High"|"Medium"|"Low"; unavailable_reason?: string | null };
   hosted_event_recommendation: { recommendation: string | null; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
   sponsorship_recommendation: { recommendation: string | null; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
   staffing_recommendation: { recommended_rep_count_min: number | null; recommended_rep_count_max: number | null; current_internal_attendee_count: number | null; coverage_gap_min: number | null; coverage_gap_max: number | null; interpretation: string | null; confidence: "High"|"Medium"|"Low" };
+  debug_summary?: Record<string, number | null>;
   unavailable_reason: string | null;
 }
 
