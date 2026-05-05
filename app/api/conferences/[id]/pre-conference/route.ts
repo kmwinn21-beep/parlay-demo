@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
+import { computeStrategyAssessment } from '@/lib/strategyAssessment';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -32,13 +33,13 @@ export async function GET(
   await dbReady;
 
   const confRow = await db.execute({
-    sql: 'SELECT id, name, start_date, end_date, location, internal_attendees FROM conferences WHERE id = ?',
+    sql: 'SELECT id, name, start_date, end_date, location, internal_attendees, conference_strategy_type_id FROM conferences WHERE id = ?',
     args: [confId],
   });
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -83,6 +84,11 @@ export async function GET(
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({ sql: `SELECT line_items, required_pipeline_amount FROM conference_budget WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] })),
+    conference.conference_strategy_type_id
+      ? db.execute({ sql: `SELECT value FROM config_options WHERE id = ?`, args: [conference.conference_strategy_type_id] }).catch(() => ({ rows: [] }))
+      : Promise.resolve({ rows: [] }),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -658,5 +664,50 @@ export async function GET(
       companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
     }));
 
-  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp });
+  // --- Strategy Assessment ---
+  const budgetRow = budgetRes.rows[0];
+  const budgetTotal = budgetRow
+    ? (() => {
+        try {
+          const items = JSON.parse(String(budgetRow.line_items ?? '[]')) as Array<{ budget?: string }>;
+          return items.reduce((sum, item) => {
+            const n = Number(String(item?.budget ?? '').replace(/[^0-9.]/g, ''));
+            return sum + (Number.isFinite(n) ? n : 0);
+          }, 0);
+        } catch { return 0; }
+      })()
+    : 0;
+  const requiredPipeline = budgetRow?.required_pipeline_amount != null
+    ? Number(budgetRow.required_pipeline_amount)
+    : null;
+  const avgCostPerUnit = avgCostRes.rows[0]?.value != null
+    ? Number(avgCostRes.rows[0].value)
+    : 0;
+  const conferenceStrategyType = strategyTypeLabelRes.rows[0]?.value
+    ? String(strategyTypeLabelRes.rows[0].value)
+    : null;
+
+  const internalRelationshipCount = new Set(internalRels.map(r => r.company_id as number)).size;
+
+  const icpCompaniesForScoring = Array.from(icpCompanyMap.values()).map(c => ({
+    wse: companyDetailMap.get(c.id)?.wse ?? null,
+  }));
+
+  const strategyAssessment = computeStrategyAssessment({
+    totalAttendees,
+    totalCompanies,
+    icpCount,
+    clientCompanyCount: clientCompanies.length,
+    seniorityBreakdown: landscape.seniorityBreakdown,
+    internalRelationshipCount,
+    scheduledMeetingCount: meetingCount,
+    internalRepCount: reps.length,
+    conferenceStrategyType,
+    budgetTotal,
+    requiredPipeline,
+    avgCostPerUnit,
+    icpCompanies: icpCompaniesForScoring,
+  });
+
+  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment });
 }
