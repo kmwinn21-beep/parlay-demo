@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { BUYER_ROLE_OPTIONS, type BuyerRoleKey } from '@/lib/titleNormalization';
 import {
   buildActionLabelMap,
   buildTargetBuckets,
@@ -215,6 +216,9 @@ function confidenceTone(confidence: string | null | undefined): 'green' | 'amber
   return 'gray';
 }
 
+type ConfigOptionRecord = { id: number; category: string; value: string };
+type TitleRuleForm = { normalized_title: string; function_id: string; seniority_id: string; buyer_role: BuyerRoleKey; confidence: string; notes: string; apply_all_exact: boolean };
+
 function KpiCard({ label, value }: { label: string; value: number | string | null }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 min-w-0">
@@ -224,7 +228,7 @@ function KpiCard({ label, value }: { label: string; value: number | string | nul
   );
 }
 
-function CompanyDetails({ company }: { company: TargetingCompanyRecommendation }) {
+function CompanyDetails({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
   const reasons = (company.why_this_target ?? []).slice(0, 5);
   const confidenceReasons = (company.confidence_reasons ?? []).slice(0, 3);
   const attendees = (company.top_attendees ?? []).slice(0, 3);
@@ -254,7 +258,7 @@ function CompanyDetails({ company }: { company: TargetingCompanyRecommendation }
                 </Link>
                 <span>{attendee.title ? ` — ${attendee.title}` : ''}</span>
                 {titleNeedsReview(attendee) && (
-                  <Link href={`/attendees/${attendee.attendee_id}`} className="ml-1 text-amber-600 hover:text-amber-700" title="Needs title review" aria-label="Needs title review">⚠️</Link>
+                  <button type="button" onClick={() => onReviewTitle(attendee)} className="ml-1 text-amber-600 hover:text-amber-700" title="Needs title review" aria-label="Needs title review">⚠️</button>
                 )}
                 {attendee.normalized_title && <span className="text-gray-400"> ({attendee.normalized_title})</span>}
                 <div className="flex flex-wrap gap-1 mt-1">
@@ -283,7 +287,7 @@ function CompanyDetails({ company }: { company: TargetingCompanyRecommendation }
   );
 }
 
-function CompanyRow({ company }: { company: TargetingCompanyRecommendation }) {
+function CompanyRow({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
@@ -308,7 +312,7 @@ function CompanyRow({ company }: { company: TargetingCompanyRecommendation }) {
       </tr>
       {expanded && (
         <tr className="border-b border-gray-100">
-          <td colSpan={9} className="px-3 pb-3 pt-0"><CompanyDetails company={company} /></td>
+          <td colSpan={9} className="px-3 pb-3 pt-0"><CompanyDetails company={company} onReviewTitle={onReviewTitle} /></td>
         </tr>
       )}
     </>
@@ -318,12 +322,72 @@ function CompanyRow({ company }: { company: TargetingCompanyRecommendation }) {
 export function TargetRecommendationsTab({ conferenceId }: { conferenceId: number }) {
   const [snapshot, setSnapshot] = useState<CompilationSnapshot>(() => getCompilationSnapshot(conferenceId));
   const [filters, setFilters] = useState<FilterState>({ tier: 'all', action: 'all', confidence: 'all', hasBuyerAccess: false, hasRelationship: false, needsTitleReview: false });
+  const [functionOptions, setFunctionOptions] = useState<ConfigOptionRecord[]>([]);
+  const [seniorityOptions, setSeniorityOptions] = useState<ConfigOptionRecord[]>([]);
+  const [titleReviewAttendee, setTitleReviewAttendee] = useState<NonNullable<TargetingCompanyRecommendation['top_attendees']>[number] | null>(null);
+  const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
+  const [titleRuleForm, setTitleRuleForm] = useState<TitleRuleForm>({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title', confidence: 'high', notes: '', apply_all_exact: true });
 
   useEffect(() => {
     const unsubscribe = subscribeToCompilation(conferenceId, () => setSnapshot(getCompilationSnapshot(conferenceId)));
     setSnapshot(startTargetRecommendationsCompilation(conferenceId));
     return unsubscribe;
   }, [conferenceId]);
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then(res => res.json())
+      .then((rows: ConfigOptionRecord[]) => {
+        setFunctionOptions(rows.filter(row => row.category === 'function'));
+        setSeniorityOptions(rows.filter(row => row.category === 'seniority'));
+      })
+      .catch(() => {
+        setFunctionOptions([]);
+        setSeniorityOptions([]);
+      });
+  }, []);
+
+  const openTitleReviewModal = (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => {
+    setTitleReviewAttendee(attendee);
+    setTitleRuleForm({
+      normalized_title: attendee.normalized_title || attendee.title || '',
+      function_id: attendee.function_id ? String(attendee.function_id) : '',
+      seniority_id: attendee.seniority_id ? String(attendee.seniority_id) : '',
+      buyer_role: (attendee.buyer_role_classification || 'target_title') as BuyerRoleKey,
+      confidence: attendee.title_match_confidence || 'high',
+      notes: '',
+      apply_all_exact: true,
+    });
+  };
+
+  const saveTitleClassification = async () => {
+    if (!titleReviewAttendee?.title) return;
+    setIsSavingTitleRule(true);
+    try {
+      const res = await fetch('/api/title-normalization-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_title: titleReviewAttendee.title,
+          normalized_title: titleRuleForm.normalized_title,
+          function_id: Number(titleRuleForm.function_id),
+          seniority_id: Number(titleRuleForm.seniority_id),
+          buyer_role: titleRuleForm.buyer_role,
+          confidence: titleRuleForm.confidence,
+          notes: titleRuleForm.notes,
+          apply_all_exact: titleRuleForm.apply_all_exact,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save title classification');
+      setTitleReviewAttendee(null);
+      setSnapshot(startTargetRecommendationsCompilation(conferenceId, true));
+      toast.success('Title classification saved.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
+    } finally {
+      setIsSavingTitleRule(false);
+    }
+  };
 
   const data = snapshot.data;
   const isCompiling = snapshot.status === 'compiling';
@@ -411,7 +475,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
             </label>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
@@ -426,8 +490,11 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <th className="text-left font-semibold py-2 px-3">Confidence</th>
               </tr>
             </thead>
-            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} />)}</tbody>
+            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} />)}</tbody>
           </table>
+        </div>
+        <div className="md:hidden p-3 space-y-3">
+          {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} />)}
         </div>
         {visibleCompanies.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No companies match the selected filters.</p>}
       </section>
@@ -493,6 +560,59 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
           ) : <p className="text-sm text-gray-400 py-6 text-center">No recommended actions available.</p>}
         </div>
       </section>
+
+      {titleReviewAttendee?.title && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[92vh] flex flex-col">
+            <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
+                <p className="mt-1 text-xs text-gray-500">Apply to all attendees with this exact title.</p>
+              </div>
+              <button onClick={() => setTitleReviewAttendee(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">×</button>
+            </div>
+            <div className="space-y-4 px-5 py-4 overflow-y-auto">
+              <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                <p><span className="font-medium text-gray-700">Attendee:</span> {titleReviewAttendee.attendee_name}</p>
+                <p><span className="font-medium text-gray-700">Original Title:</span> {titleReviewAttendee.title}</p>
+              </div>
+              <input value={titleRuleForm.normalized_title} onChange={e => setTitleRuleForm(p => ({ ...p, normalized_title: e.target.value }))} className="input-field" placeholder="Normalized Title" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <select value={titleRuleForm.function_id} onChange={e => setTitleRuleForm(p => ({ ...p, function_id: e.target.value }))} className="input-field"><option value="">Function</option>{functionOptions.map(option => <option key={option.id} value={option.id}>{option.value}</option>)}</select>
+                <select value={titleRuleForm.seniority_id} onChange={e => setTitleRuleForm(p => ({ ...p, seniority_id: e.target.value }))} className="input-field"><option value="">Seniority</option>{seniorityOptions.map(option => <option key={option.id} value={option.id}>{option.value}</option>)}</select>
+              </div>
+              <select value={titleRuleForm.buyer_role} onChange={e => setTitleRuleForm(p => ({ ...p, buyer_role: e.target.value as BuyerRoleKey }))} className="input-field">{BUYER_ROLE_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
+              <button onClick={() => setTitleReviewAttendee(null)} className="btn-secondary">Cancel</button>
+              <button onClick={saveTitleClassification} disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id} className="btn-primary">{isSavingTitleRule ? 'Saving…' : 'Save Classification'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileCompanyCard({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-200 p-3">
+      <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left">
+        <p className="font-semibold text-gray-900">{company.company_name}</p>
+        <p className="text-xs text-gray-500">Score {Math.round(scoreOrNull(company.target_priority_score) ?? 0)} · {company.target_priority_tier || '—'}</p>
+      </button>
+      {expanded && (
+        <>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <p>ICP: {Math.round(scoreOrNull(company.icp_fit_score) ?? 0)}</p>
+            <p>Buyer: {Math.round(scoreOrNull(company.buyer_access_score) ?? 0)}</p>
+            <p>Relationship: {Math.round(scoreOrNull(company.relationship_leverage_score) ?? 0)}</p>
+            <p>Opportunity: {Math.round(scoreOrNull(company.conference_opportunity_score) ?? 0)}</p>
+          </div>
+          <CompanyDetails company={company} onReviewTitle={onReviewTitle} />
+        </>
+      )}
     </div>
   );
 }
