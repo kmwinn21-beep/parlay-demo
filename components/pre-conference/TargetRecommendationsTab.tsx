@@ -494,7 +494,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
           </table>
         </div>
         <div className="md:hidden p-3 space-y-3">
-          {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} />)}
+          {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} />)}
         </div>
         {visibleCompanies.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No companies match the selected filters.</p>}
       </section>
@@ -594,7 +594,25 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   );
 }
 
-function MobileCompanyCard({ company }: { company: TargetingCompanyRecommendation }) {
+function MobileCompanyCard({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
   const [expanded, setExpanded] = useState(false);
-  return <div className="rounded-xl border border-gray-200 p-3"><button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left"><p className="font-semibold text-gray-900">{company.company_name}</p><p className="text-xs text-gray-500">Score {Math.round(scoreOrNull(company.target_priority_score) ?? 0)} · {company.target_priority_tier || '—'}</p></button>{expanded && <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600"><p>ICP: {Math.round(scoreOrNull(company.icp_fit_score) ?? 0)}</p><p>Buyer: {Math.round(scoreOrNull(company.buyer_access_score) ?? 0)}</p><p>Relationship: {Math.round(scoreOrNull(company.relationship_leverage_score) ?? 0)}</p><p>Opportunity: {Math.round(scoreOrNull(company.conference_opportunity_score) ?? 0)}</p></div>}</div>;
+  return (
+    <div className="rounded-xl border border-gray-200 p-3">
+      <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left">
+        <p className="font-semibold text-gray-900">{company.company_name}</p>
+        <p className="text-xs text-gray-500">Score {Math.round(scoreOrNull(company.target_priority_score) ?? 0)} · {company.target_priority_tier || '—'}</p>
+      </button>
+      {expanded && (
+        <>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <p>ICP: {Math.round(scoreOrNull(company.icp_fit_score) ?? 0)}</p>
+            <p>Buyer: {Math.round(scoreOrNull(company.buyer_access_score) ?? 0)}</p>
+            <p>Relationship: {Math.round(scoreOrNull(company.relationship_leverage_score) ?? 0)}</p>
+            <p>Opportunity: {Math.round(scoreOrNull(company.conference_opportunity_score) ?? 0)}</p>
+          </div>
+          <CompanyDetails company={company} onReviewTitle={onReviewTitle} />
+        </>
+      )}
+    </div>
+  );
 }
