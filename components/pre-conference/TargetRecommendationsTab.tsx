@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey } from '@/lib/titleNormalization';
+import { formatValuePill, useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import {
   buildActionLabelMap,
   buildTargetBuckets,
@@ -329,8 +330,9 @@ function CompanyDetails({ company, onReviewTitle }: { company: TargetingCompanyR
   );
 }
 
-function CompanyRow({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
+function CompanyRow({ company, onReviewTitle, avgCostPerUnit }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; avgCostPerUnit: number }) {
   const [expanded, setExpanded] = useState(false);
+  const companyValue = formatValuePill((company as TargetingCompanyRecommendation & { company_wse?: number | null }).company_wse, avgCostPerUnit);
   return (
     <>
       <tr className="border-b border-gray-100 align-top hover:bg-gray-50/60">
@@ -340,6 +342,7 @@ function CompanyRow({ company, onReviewTitle }: { company: TargetingCompanyRecom
           </button>
           <p className="text-xs text-gray-400 mt-0.5">{expanded ? 'Hide details' : 'Show details'}</p>
         </td>
+        <td className="py-3 px-3">{companyValue ? <Pill tone="green">{companyValue}</Pill> : <span className="text-gray-400">—</span>}</td>
         <td className="py-3 px-3"><ScoreBadge value={scoreOrNull(company.target_priority_score)} /></td>
         <td className="py-3 px-3"><Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill></td>
         <td className="py-3 px-3 min-w-44">
@@ -354,7 +357,7 @@ function CompanyRow({ company, onReviewTitle }: { company: TargetingCompanyRecom
       </tr>
       {expanded && (
         <tr className="border-b border-gray-100">
-          <td colSpan={9} className="px-3 pb-3 pt-0"><CompanyDetails company={company} onReviewTitle={onReviewTitle} /></td>
+          <td colSpan={10} className="px-3 pb-3 pt-0"><CompanyDetails company={company} onReviewTitle={onReviewTitle} /></td>
         </tr>
       )}
     </>
@@ -367,6 +370,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   const [functionOptions, setFunctionOptions] = useState<ConfigOptionRecord[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<ConfigOptionRecord[]>([]);
   const [titleReviewAttendee, setTitleReviewAttendee] = useState<NonNullable<TargetingCompanyRecommendation['top_attendees']>[number] | null>(null);
+  const avgCostPerUnit = useAvgCostPerUnit();
   const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
   const [titleRuleForm, setTitleRuleForm] = useState<TitleRuleForm>({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title', confidence: 'high', notes: '', apply_all_exact: true });
 
@@ -537,6 +541,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="text-left font-semibold py-2 px-3">Company</th>
+                <th className="text-left font-semibold py-2 px-3">Value</th>
                 <th className="text-left font-semibold py-2 px-3">Score</th>
                 <th className="text-left font-semibold py-2 px-3">Tier</th>
                 <th className="text-left font-semibold py-2 px-3">Recommended Action</th>
@@ -547,7 +552,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <th className="text-left font-semibold py-2 px-3">Confidence</th>
               </tr>
             </thead>
-            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} />)}</tbody>
+            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} avgCostPerUnit={avgCostPerUnit} />)}</tbody>
           </table>
         </div>
         <div className="md:hidden p-3 space-y-3">
