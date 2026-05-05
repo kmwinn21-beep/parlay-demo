@@ -85,7 +85,7 @@ export async function GET(
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
     db.execute({ sql: `SELECT line_items, required_pipeline_amount FROM conference_budget WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [] })),
-    db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] })),
     conference.conference_strategy_type_id
       ? db.execute({ sql: `SELECT value FROM config_options WHERE id = ?`, args: [conference.conference_strategy_type_id] }).catch(() => ({ rows: [] }))
       : Promise.resolve({ rows: [] }),
