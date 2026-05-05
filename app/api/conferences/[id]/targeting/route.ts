@@ -94,6 +94,7 @@ export async function GET(
     const recommendedActions: RecommendedTargetAction[] = DEFAULT_RECOMMENDED_ACTIONS.map(a => ({ ...a, label: actionLabels.get(a.key) ?? a.label }));
     const prospectTypeId = prospectTypeRes.rows.length > 0 ? Number(prospectTypeRes.rows[0].id) : null;
     const prospectTypeIdValue = prospectTypeId == null || !Number.isFinite(prospectTypeId) ? null : String(prospectTypeId);
+    const prospectTypeValue = prospectTypeRes.rows.length > 0 ? String(prospectTypeRes.rows[0].value ?? '') : '';
 
     const icpConfig = await getIcpConfig();
     const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
@@ -146,9 +147,9 @@ export async function GET(
             JOIN attendees a ON a.id = ca.attendee_id
             JOIN companies c ON c.id = a.company_id
             WHERE ca.conference_id = ?
-              AND c.company_type = ?
+              AND (c.company_type = ? OR LOWER(c.company_type) = LOWER(?))
             ORDER BY c.name, a.last_name, a.first_name`,
-      args: [conferenceId, prospectTypeIdValue],
+      args: [conferenceId, prospectTypeIdValue, prospectTypeValue],
     });
 
     const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; attendeeRows: Row[] }>();
