@@ -38,7 +38,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes, companyTypeOptsRes, productColorsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -80,19 +80,8 @@ export async function GET(
             WHERE f.conference_id = ?`,
       args: [confId],
     }),
-    // Prior conferences for each attendee (returns multiple rows per attendee)
-    db.execute({
-      sql: `SELECT ca.attendee_id, c.name as conference_name, c.start_date
-            FROM conference_attendees ca
-            JOIN conferences c ON ca.conference_id = c.id
-            WHERE ca.conference_id != ? AND c.end_date < (SELECT start_date FROM conferences WHERE id = ?)
-            ORDER BY c.start_date DESC`,
-      args: [confId, confId],
-    }),
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
-    db.execute({ sql: `SELECT value FROM site_settings WHERE key='prior_overlap_company_type'`, args: [] }),
-    db.execute({ sql: `SELECT id, value, action_key FROM config_options WHERE category = 'company_type'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
   ]);
 
@@ -412,43 +401,6 @@ export async function GET(
     if (a.wse && a.company_id) wseCompanyIds.add(a.company_id as number);
   }
 
-  // Prior overlap: resolve configured company type by stable config_options id/key first, with legacy display-name fallback.
-  const companyTypeOptions = companyTypeOptsRes.rows.map(row => ({
-    id: Number(row.id),
-    value: String(row.value ?? ''),
-    action_key: row.action_key ? String(row.action_key) : null,
-  }));
-  const overlapSettingRaw = overlapTypeRes.rows[0]?.value ? String(overlapTypeRes.rows[0].value).trim() : '';
-  const overlapSettingId = Number(overlapSettingRaw);
-  const overlapTargetOption = companyTypeOptions.find(option => {
-    if (Number.isFinite(overlapSettingId) && option.id === overlapSettingId) return true;
-    if (option.action_key && overlapSettingRaw && option.action_key === overlapSettingRaw) return true;
-    return overlapSettingRaw.length > 0 && option.value.toLowerCase() === overlapSettingRaw.toLowerCase();
-  }) ?? null;
-
-  const overlapTargetId = overlapTargetOption?.id ?? null;
-  const overlapTargetKey = overlapTargetOption?.action_key ?? null;
-  const priorOverlapTypeLabel = overlapTargetOption?.value ?? (overlapSettingRaw || 'Company Type');
-
-  const prevConfMap = new Map<number, string>();
-  for (const row of prevConfsRes.rows) {
-    const aid = row.attendee_id as number;
-    if (!prevConfMap.has(aid)) prevConfMap.set(aid, String(row.conference_name || ''));
-  }
-  const priorOverlapAttendees = attendees.filter((a) => {
-    if (!prevConfMap.has(a.id as number)) return false;
-    const types = String(a.company_type || '').split(',').map((t: string) => t.trim()).filter(Boolean);
-    const typeIds = types.map(t => Number(t)).filter(n => Number.isFinite(n));
-    if (overlapTargetId != null) {
-      if (typeIds.includes(overlapTargetId)) return true;
-      const matchingLegacy = types.some(typeLabel => companyTypeOptions.some(option => option.id === overlapTargetId && option.value.toLowerCase() === typeLabel.toLowerCase()));
-      return matchingLegacy;
-    }
-    if (overlapTargetKey) {
-      return types.some(typeLabel => companyTypeOptions.some(option => option.action_key === overlapTargetKey && option.value.toLowerCase() === typeLabel.toLowerCase()));
-    }
-    return false;
-  });
 
   // --- Client companies ---
   const unitTypeLabel = unitTypeRes.rows[0]?.value ? String(unitTypeRes.rows[0].value) : 'Units';
@@ -484,18 +436,6 @@ export async function GET(
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
     companyTypeBreakdown: Object.entries(companyTypeCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     seniorityBreakdown: Object.entries(seniorityCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
-    priorOverlapTypeLabel,
-    priorOverlapTypeOptionId: overlapTargetId,
-    priorOverlapTypeOptionKey: overlapTargetKey,
-    priorOverlapCount: priorOverlapAttendees.length,
-    priorOverlapAttendees: priorOverlapAttendees.map((a) => ({
-      id: a.id, first_name: a.first_name, last_name: a.last_name,
-      title: a.title, company_name: a.company_name,
-      seniority: resolveSeniority(a.seniority, a.title),
-      company_id: a.company_id ? Number(a.company_id) : null,
-      prior_conference: prevConfMap.get(a.id as number) ?? '',
-      assigned_user_names: resolveUserIds(a.company_assigned_user),
-    })),
     clientCompanies,
     unitTypeLabel,
   };

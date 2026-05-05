@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry } from '../PreConferenceReview';
 
-type OverlapAttendee = LandscapeData['priorOverlapAttendees'][number];
-
 function BarChart({ items, total, colorClass }: { items: { label: string; count: number }[]; total: number; colorClass: string }) {
   if (items.length === 0) return <p className="text-sm text-gray-400">No data</p>;
   return (
@@ -150,71 +148,6 @@ export function LandscapeTab({
         </div>
       </div>
 
-      {/* Prior overlap */}
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <h3 className="text-sm font-semibold text-gray-700">Prior Conference Overlap</h3>
-          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-            {data.priorOverlapCount} {data.priorOverlapTypeLabel}&apos;s
-          </span>
-        </div>
-        {data.priorOverlapAttendees.length === 0 ? (
-          <p className="text-sm text-gray-400">No returning {data.priorOverlapTypeLabel} attendees from prior conferences.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {data.priorOverlapAttendees.map((a) => {
-              const isTarget = targetMap.has(Number(a.id));
-              return (
-                <div
-                  key={String(a.id)}
-                  className="flex flex-col gap-2 p-3 rounded-lg border border-gray-100 hover:border-brand-secondary/40 hover:bg-blue-50/50 transition-colors relative"
-                >
-                  {/* Target button — upper right */}
-                  <div className="absolute top-2 right-2">
-                    <TargetBtn
-                      isTarget={isTarget}
-                      onClick={() => onToggleTarget({
-                        attendeeId: Number(a.id),
-                        firstName: String(a.first_name),
-                        lastName: String(a.last_name),
-                        title: a.title ? String(a.title) : null,
-                        seniority: a.seniority ?? null,
-                        companyName: a.company_name ? String(a.company_name) : null,
-                        companyId: a.company_id ?? null,
-                        companyWse: null,
-                        assignedUserNames: a.assigned_user_names,
-                      })}
-                    />
-                  </div>
-
-                  {/* Avatar + name row */}
-                  <div className="flex items-start gap-3 pr-5">
-                    <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-xs font-bold text-brand-secondary">
-                        {String(a.first_name)[0]}{String(a.last_name)[0]}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <Link href={`/attendees/${a.id}`} className="text-sm font-medium text-gray-800 truncate leading-tight hover:text-brand-secondary block">
-                        {String(a.first_name)} {String(a.last_name)}
-                      </Link>
-                      <p className="text-xs text-gray-500 truncate">{a.company_name ?? '—'}</p>
-                      {a.prior_conference && (
-                        <p className="text-xs text-gray-400 truncate">({a.prior_conference})</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Assigned user pill */}
-                  {a.assigned_user_names.length > 0 && (
-                    <UserPill name={a.assigned_user_names[0]} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
