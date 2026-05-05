@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
+import { computePreConferenceStrategyAssessment } from '@/lib/preConferenceStrategy';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -38,7 +39,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, econSettingsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -83,6 +84,10 @@ export async function GET(
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({
+      sql: `SELECT key, value FROM site_settings WHERE key IN ('avg_cost_per_unit','avg_annual_deal_size')`,
+      args: [],
+    }),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -93,6 +98,19 @@ export async function GET(
   const productColorMap = new Map<string, string | null>();
   for (const r of productColorsRes.rows) {
     productColorMap.set(String(r.value), r.color ? String(r.color) : null);
+  }
+  const econSettings = new Map<string, number>();
+  for (const row of econSettingsRes.rows) {
+    const parsed = Number(row.value);
+    if (Number.isFinite(parsed)) econSettings.set(String(row.key), parsed);
+  }
+  const avgCostPerUnit = econSettings.get('avg_cost_per_unit') ?? null;
+  const avgAnnualDealSize = econSettings.get('avg_annual_deal_size') ?? null;
+  const companyWseMap = new Map<number, number | null>();
+  for (const a of attendees) {
+    const cid = Number(a.company_id ?? 0);
+    if (!cid || companyWseMap.has(cid)) continue;
+    companyWseMap.set(cid, a.wse == null ? null : Number(a.wse));
   }
 
   const companyIds = uniqueNumbers(attendees.map((a) => a.company_id as number | null));
@@ -658,5 +676,58 @@ export async function GET(
       companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
     }));
 
-  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp });
+
+  const targetingCompanies: Array<Record<string, unknown>> = [];
+  try {
+    let offset = 0;
+    while (true) {
+      const params = new URLSearchParams({ batch: '1', offset: String(offset), limit: '50' });
+      const targetingRes = await fetch(`${request.nextUrl.origin}/api/conferences/${confId}/targeting?${params.toString()}`, {
+        headers: { cookie: request.headers.get('cookie') ?? '' },
+        cache: 'no-store',
+      });
+      if (!targetingRes.ok) break;
+      const targetingJson = await targetingRes.json() as { companies?: Array<Record<string, unknown>>; pagination?: { has_more?: boolean; next_offset?: number | null } };
+      targetingCompanies.push(...(targetingJson.companies ?? []));
+      if (!targetingJson.pagination?.has_more || targetingJson.pagination.next_offset == null) break;
+      offset = targetingJson.pagination.next_offset;
+    }
+  } catch {
+    // Fall through; assessment will use unavailable state when targeting data cannot be fetched.
+  }
+
+  const preConferenceStrategyAssessment = computePreConferenceStrategyAssessment({
+    totalAttendees,
+    totalCompanies,
+    internalAttendeeCount: parseIdList(conference.internal_attendees).length,
+    requiredPipelineAmount: null,
+    totalBudget: null,
+    scheduledMeetings: meetings.length,
+    clientAttendeeCount: clientCompanies.reduce((sum, c) => sum + c.attendeeCount, 0),
+    companyScores: targetingCompanies.map((company) => ({
+      isIcp: Number(company.icp_fit_score ?? 0) >= 60,
+      icpFit: company.icp_fit_score == null ? null : Number(company.icp_fit_score),
+      targetPriorityScore: company.target_priority_score == null ? null : Number(company.target_priority_score),
+      targetPriorityTier: String(company.target_priority_tier_key ?? company.target_priority_tier ?? 'low_priority').toLowerCase().replace(/\s+/g, '_'),
+      buyerAccessScore: company.buyer_access_score == null ? null : Number(company.buyer_access_score),
+      relationshipLeverageScore: company.relationship_leverage_score == null ? null : Number(company.relationship_leverage_score),
+      conferenceOpportunityScore: company.conference_opportunity_score == null ? null : Number(company.conference_opportunity_score),
+      titleNeedsReview: Boolean(company.title_review_summary && Number((company.title_review_summary as Record<string, unknown>).needs_review_count ?? 0) > 0),
+      hasMeeting: Number(company.scheduled_meeting_count ?? 0) > 0,
+      isCustomer: false,
+      pipelineValue: (() => {
+        const wse = companyWseMap.get(Number(company.company_id));
+        if (wse != null && avgCostPerUnit != null) return wse * avgCostPerUnit;
+        if (avgAnnualDealSize != null) return avgAnnualDealSize;
+        return null;
+      })(),
+      recommendedActionKey: String((company.recommended_action as Record<string, unknown> | undefined)?.action_key ?? ''),
+      highBuyerFitAttendeeCount: Array.isArray(company.top_attendees)
+        ? (company.top_attendees as Array<Record<string, unknown>>).filter((a) => Number(a.buyer_fit_score ?? 0) >= 75).length
+        : 0,
+      confidenceLevel: company.confidence_level ? String(company.confidence_level) : null,
+    })),
+  });
+
+  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, pre_conference_strategy_assessment: preConferenceStrategyAssessment });
 }
