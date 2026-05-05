@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
+import { computePreConferenceStrategyAssessment } from '@/lib/preConferenceStrategy';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -658,5 +659,30 @@ export async function GET(
       companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
     }));
 
-  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp });
+
+  const preConferenceStrategyAssessment = computePreConferenceStrategyAssessment({
+    totalAttendees,
+    totalCompanies,
+    internalAttendeeCount: parseIdList(conference.internal_attendees).length,
+    requiredPipelineAmount: null,
+    totalBudget: null,
+    scheduledMeetings: meetings.length,
+    companyScores: Array.from(new Map(attendees.map((a) => [Number(a.company_id), a])).values())
+      .filter((a) => a.company_id != null)
+      .map((a) => ({
+        isIcp: isIcpCompany(a),
+        icpFit: isIcpCompany(a) ? 100 : 35,
+        targetPriorityScore: Math.max(0, Math.min(100, (Number(attendeeHealthMap.get(Number(a.id)) ?? 0) + (isIcpCompany(a) ? 30 : 0)))),
+        targetPriorityTier: (Number(attendeeHealthMap.get(Number(a.id)) ?? 0) >= 80 ? 'must_target' : Number(attendeeHealthMap.get(Number(a.id)) ?? 0) >= 65 ? 'high_priority' : Number(attendeeHealthMap.get(Number(a.id)) ?? 0) >= 50 ? 'worth_engaging' : 'monitor'),
+        buyerAccessScore: Number(attendeeHealthMap.get(Number(a.id)) ?? 0),
+        relationshipLeverageScore: Number(attendeeHealthMap.get(Number(a.id)) ?? 0),
+        conferenceOpportunityScore: Number(attendeeHealthMap.get(Number(a.id)) ?? 0),
+        titleNeedsReview: !String(a.title ?? '').trim(),
+        hasMeeting: meetings.some((m) => Number(m.company_id) === Number(a.company_id)),
+        isCustomer: String(a.company_status ?? '').toLowerCase().includes('client'),
+        pipelineValue: null,
+      })),
+  });
+
+  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, pre_conference_strategy_assessment: preConferenceStrategyAssessment });
 }

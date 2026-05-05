@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
-import type { LandscapeData, TargetEntry, ClientCompanyEntry } from '../PreConferenceReview';
+import type { LandscapeData, TargetEntry, ClientCompanyEntry, PreConferenceStrategyAssessment } from '../PreConferenceReview';
 
 function BarChart({ items, total, colorClass }: { items: { label: string; count: number }[]; total: number; colorClass: string }) {
   if (items.length === 0) return <p className="text-sm text-gray-400">No data</p>;
@@ -91,13 +91,52 @@ export function LandscapeTab({
   data,
   targetMap,
   onToggleTarget,
+  strategyAssessment,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  strategyAssessment?: PreConferenceStrategyAssessment;
 }) {
   return (
     <div className="space-y-8">
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-gray-800">Pre-Conference Strategy Assessment</h3>
+          <p className="text-sm text-gray-500">Recommended strategy and planning guidance based on this conference’s attendee and company mix.</p>
+        </div>
+        {strategyAssessment?.unavailable_reason ? (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+            <p className="font-semibold">Pre-conference strategy assessment is unavailable.</p>
+            <p className="text-xs text-gray-500 mt-1">Configure ICP settings, budget/required pipeline, and target recommendations to generate strategy guidance.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Pre-Conference Strategy Fit Score</p>
+                <p className="text-3xl font-bold text-brand-primary mt-1">{strategyAssessment?.strategy_fit_score ?? '—'} <span className="text-base">/100</span></p>
+                <p className="text-sm text-gray-600">{strategyAssessment?.strategy_fit_interpretation ?? 'Unavailable'}</p>
+                <div className="h-px bg-gray-200 my-3" />
+                <div className="space-y-2">{strategyAssessment?.components?.map((c)=><div key={c.key} className="flex items-center justify-between text-xs"><span className="text-gray-600">{c.label} <span className="text-gray-400">({c.weight}%)</span></span><span className="font-medium text-gray-700">{c.score ?? '—'} · {c.interpretation ?? 'Unavailable'}</span></div>)}</div>
+              </div>
+              <div className="lg:col-span-2 rounded-xl border p-4" style={{ borderColor: 'rgb(var(--brand-primary-rgb) / 0.35)', backgroundColor: 'rgb(var(--brand-primary-rgb) / 0.08)' }}>
+                <p className="text-xs uppercase tracking-wide" style={{ color: 'rgb(var(--brand-primary-rgb))' }}>Recommended Strategy</p>
+                <p className="text-lg font-semibold mt-1" style={{ color: 'rgb(var(--brand-primary-rgb))' }}>{strategyAssessment?.recommended_strategy?.label ?? 'Unavailable'}</p>
+                <p className="text-xs text-gray-600 mt-3">Why this strategy</p>
+                <ul className="mt-1 space-y-1">{(strategyAssessment?.recommended_strategy?.reasons ?? []).slice(0,5).map((r,i)=><li className="text-xs text-gray-700" key={i}>• {r}</li>)}</ul>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Secondary Strategy</p>
+                <p className="text-sm font-semibold mt-1 text-gray-800">{strategyAssessment?.secondary_strategy?.label ?? 'Unavailable'}</p>
+                <p className="text-xs text-gray-600 mt-3">Why this secondary strategy</p>
+                <ul className="mt-1 space-y-1">{(strategyAssessment?.secondary_strategy?.reasons ?? []).slice(0,4).map((r,i)=><li className="text-xs text-gray-700" key={i}>• {r}</li>)}</ul>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+
       {/* 5-column layout: stat cards | charts (×3) | client attendees */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
         {/* Col 1: stacked stat cards */}

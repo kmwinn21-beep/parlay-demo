@@ -32,6 +32,19 @@ export interface ClientCompanyEntry {
   attendees: { id: number; firstName: string; lastName: string; title: string | null }[];
 }
 
+export interface PreConferenceStrategyAssessment {
+  strategy_fit_score: number | null;
+  strategy_fit_interpretation: string | null;
+  components: { key: string; label: string; weight: number; score: number | null; interpretation: string | null }[];
+  recommended_strategy: { id: string | null; key: string | null; label: string; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
+  secondary_strategy: { id: string | null; key: string | null; label: string; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
+  pipeline_reality: { realistic_pipeline_goal: number | null; required_pipeline_amount: number | null; coverage_percent: number | null; coverage_ratio: number | null; interpretation: string | null; confidence: "High"|"Medium"|"Low" };
+  hosted_event_recommendation: { recommendation: string | null; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
+  sponsorship_recommendation: { recommendation: string | null; score: number | null; reasons: string[]; confidence: "High"|"Medium"|"Low" };
+  staffing_recommendation: { recommended_rep_count_min: number | null; recommended_rep_count_max: number | null; current_internal_attendee_count: number | null; coverage_gap_min: number | null; coverage_gap_max: number | null; interpretation: string | null; confidence: "High"|"Medium"|"Low" };
+  unavailable_reason: string | null;
+}
+
 export interface LandscapeData {
   totalAttendees: number;
   totalCompanies: number;
@@ -177,6 +190,7 @@ export interface ProductIcpEntry {
 }
 
 export interface PreConferenceData {
+  pre_conference_strategy_assessment?: PreConferenceStrategyAssessment;
   summary: PreConferenceSummary;
   landscape: LandscapeData;
   icpCompanies: IcpCompany[];
@@ -381,7 +395,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {activeTab === 'landscape' && (
-                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} strategyAssessment={data.pre_conference_strategy_assessment} />
               )}
               {activeTab === 'icp' && (
                 <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} />
