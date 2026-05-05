@@ -38,7 +38,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes, productColorsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -80,18 +80,8 @@ export async function GET(
             WHERE f.conference_id = ?`,
       args: [confId],
     }),
-    // Prior conferences for each attendee (returns multiple rows per attendee)
-    db.execute({
-      sql: `SELECT ca.attendee_id, c.name as conference_name, c.start_date
-            FROM conference_attendees ca
-            JOIN conferences c ON ca.conference_id = c.id
-            WHERE ca.conference_id != ? AND c.end_date < (SELECT start_date FROM conferences WHERE id = ?)
-            ORDER BY c.start_date DESC`,
-      args: [confId, confId],
-    }),
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
-    db.execute({ sql: `SELECT value FROM site_settings WHERE key='prior_overlap_company_type'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
   ]);
 
@@ -411,24 +401,6 @@ export async function GET(
     if (a.wse && a.company_id) wseCompanyIds.add(a.company_id as number);
   }
 
-  // Prior overlap: build map of attendee_id → most recent conference name, filter to configured company type
-  const overlapCompanyType = (overlapTypeRes.rows[0]?.value as string) ?? 'Operator';
-  const overlapLabelRes = await db.execute({
-    sql: `SELECT value FROM config_options WHERE category='company_type' AND value=? LIMIT 1`,
-    args: [overlapCompanyType],
-  });
-  const priorOverlapTypeLabel = (overlapLabelRes.rows[0]?.value as string) ?? overlapCompanyType;
-
-  const prevConfMap = new Map<number, string>();
-  for (const row of prevConfsRes.rows) {
-    const aid = row.attendee_id as number;
-    if (!prevConfMap.has(aid)) prevConfMap.set(aid, String(row.conference_name || ''));
-  }
-  const priorOverlapAttendees = attendees.filter((a) => {
-    if (!prevConfMap.has(a.id as number)) return false;
-    const types = String(a.company_type || '').split(',').map((t: string) => t.trim());
-    return types.includes(overlapCompanyType);
-  });
 
   // --- Client companies ---
   const unitTypeLabel = unitTypeRes.rows[0]?.value ? String(unitTypeRes.rows[0].value) : 'Units';
@@ -464,16 +436,6 @@ export async function GET(
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
     companyTypeBreakdown: Object.entries(companyTypeCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     seniorityBreakdown: Object.entries(seniorityCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
-    priorOverlapTypeLabel,
-    priorOverlapCount: priorOverlapAttendees.length,
-    priorOverlapAttendees: priorOverlapAttendees.map((a) => ({
-      id: a.id, first_name: a.first_name, last_name: a.last_name,
-      title: a.title, company_name: a.company_name,
-      seniority: resolveSeniority(a.seniority, a.title),
-      company_id: a.company_id ? Number(a.company_id) : null,
-      prior_conference: prevConfMap.get(a.id as number) ?? '',
-      assigned_user_names: resolveUserIds(a.company_assigned_user),
-    })),
     clientCompanies,
     unitTypeLabel,
   };

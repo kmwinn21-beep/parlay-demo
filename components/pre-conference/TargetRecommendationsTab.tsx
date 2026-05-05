@@ -190,6 +190,48 @@ function ScoreBadge({ value }: { value: number | null }) {
   return <span className="font-semibold text-brand-primary tabular-nums">{Math.round(value)}</span>;
 }
 
+
+function InfoTooltip({ label, title, body, details }: { label: string; title: string; body: string; details?: string[] }) {
+  return (
+    <span className="group relative inline-flex items-center gap-1 normal-case">
+      <span>{label}</span>
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label={`${title} details`}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500 bg-white cursor-help"
+      >i</span>
+      <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-72 rounded-lg border border-gray-200 bg-white p-3 text-left normal-case shadow-lg group-hover:block group-focus-within:block">
+        <p className="text-xs font-semibold text-brand-primary">{title}</p>
+        <p className="mt-1 text-xs leading-relaxed text-gray-600">{body}</p>
+        {details && details.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {details.map((detail, index) => (
+              <li key={`${detail}-${index}`} className="text-xs leading-relaxed text-gray-500 flex gap-1.5"><span>•</span><span>{detail}</span></li>
+            ))}
+          </ul>
+        )}
+      </span>
+    </span>
+  );
+}
+
+function ScoreValueTooltip({ value, title, reasons }: { value: number | null; title: string; reasons: string[] }) {
+  if (value === null) return <span className="text-gray-400">—</span>;
+  if (reasons.length === 0) return <ScoreBadge value={value} />;
+  return (
+    <span className="group relative inline-block">
+      <span className="font-semibold text-brand-primary tabular-nums cursor-help">{Math.round(value)}</span>
+      <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-72 rounded-lg border border-gray-200 bg-white p-3 text-left shadow-lg group-hover:block group-focus-within:block">
+        <p className="text-xs font-semibold text-brand-primary">{title}: {Math.round(value)}</p>
+        <p className="mt-1 text-xs font-semibold text-gray-500">Why:</p>
+        <ul className="mt-1 space-y-1">
+          {reasons.slice(0, 5).map((reason, index) => <li key={`${reason}-${index}`} className="text-xs text-gray-600 leading-relaxed">• {reason}</li>)}
+        </ul>
+      </span>
+    </span>
+  );
+}
 function Pill({ children, tone = 'gray' }: { children: React.ReactNode; tone?: 'green' | 'blue' | 'amber' | 'gray' | 'red' }) {
   const classes = {
     green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -304,10 +346,10 @@ function CompanyRow({ company, onReviewTitle }: { company: TargetingCompanyRecom
           <Pill tone="blue">{company.recommended_action_label || company.recommended_action?.recommended_action_label || '—'}</Pill>
           {company.recommended_action_reason && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{company.recommended_action_reason}</p>}
         </td>
-        <td className="py-3 px-3"><ScoreBadge value={scoreOrNull(company.icp_fit_score)} /></td>
-        <td className="py-3 px-3"><ScoreBadge value={scoreOrNull(company.buyer_access_score)} /></td>
-        <td className="py-3 px-3"><ScoreBadge value={scoreOrNull(company.relationship_leverage_score)} /></td>
-        <td className="py-3 px-3"><ScoreBadge value={scoreOrNull(company.conference_opportunity_score)} /></td>
+        <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.icp_fit_score)} title="ICP Fit Score" reasons={[...(company.matched_icp_reasons ?? []), ...(company.failed_icp_reasons ?? []).map(r => `Gap: ${r}`)]} /></td>
+        <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.buyer_access_score)} title="Buyer Access Score" reasons={(company.top_attendees ?? []).flatMap(a => a.why_this_attendee ?? []).slice(0, 5)} /></td>
+        <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.relationship_leverage_score)} title="Relationship Leverage Score" reasons={company.relationship_reasons ?? []} /></td>
+        <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.conference_opportunity_score)} title="Conference Opportunity Score" reasons={[...(company.opportunity_reasons ?? []), `Attendees: ${company.attendee_count ?? 0}`, `High-priority attendees: ${company.high_priority_attendee_count ?? 0}`, `Scheduled meetings: ${company.scheduled_meeting_count ?? 0}`]} /></td>
         <td className="py-3 px-3"><Pill tone={confidenceTone(company.confidence_level)}>{company.confidence_level || '—'}</Pill></td>
       </tr>
       {expanded && (
@@ -498,10 +540,10 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <th className="text-left font-semibold py-2 px-3">Score</th>
                 <th className="text-left font-semibold py-2 px-3">Tier</th>
                 <th className="text-left font-semibold py-2 px-3">Recommended Action</th>
-                <th className="text-left font-semibold py-2 px-3">ICP</th>
-                <th className="text-left font-semibold py-2 px-3">Buyer</th>
-                <th className="text-left font-semibold py-2 px-3">Relationship</th>
-                <th className="text-left font-semibold py-2 px-3">Opportunity</th>
+                <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="ICP" title="ICP Fit Score" body="Measures how closely the company matches the ICP settings configured in Admin Settings." details={["Company type fit, units requirement, and service/product fit.", "ICP parameter match with exclusion logic from What We Are Not.", "Formula: Firmographic Fit + Service/Product Fit + ICP Parameter Fit + Exclusion Penalty."]} /></th>
+                <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="Buyer" title="Buyer Access Score" body="Measures whether the right people from this company are attending the conference." details={["Decision maker and influencer title matches.", "Seniority/function priority and product-function mapping.", "Uses human-in-the-loop title normalization when available."]} /></th>
+                <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="Relationship" title="Relationship Leverage Score" body="Measures how much existing relationship context the team has with this company." details={["Internal relationships and assigned rep/account owner.", "Prior meetings, touchpoints, and prior conference overlap.", "Client/known prospect status plus recent notes/activity."]} /></th>
+                <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="Opportunity" title="Conference Opportunity Score" body="Measures how strong the opportunity is at this specific conference." details={["Number of attendees and high-priority attendees present.", "Scheduled meetings and hosted/social event opportunity.", "Net-new or expansion opportunity signals."]} /></th>
                 <th className="text-left font-semibold py-2 px-3">Confidence</th>
               </tr>
             </thead>
