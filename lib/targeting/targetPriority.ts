@@ -82,6 +82,7 @@ export interface CompanyTargetScore {
   company_name: string;
   target_priority_score: number;
   target_priority_tier: string;
+  target_priority_tier_key: string;
   recommended_action: {
     recommended_action_key: string;
     recommended_action_label: string;
@@ -214,9 +215,9 @@ function actionLabel(config: TargetingScoringConfig, key: string): string {
   return config.recommended_actions.find(a => a.key === key)?.label ?? DEFAULT_RECOMMENDED_ACTIONS.find(a => a.key === key)?.label ?? key;
 }
 
-function classifyTier(score: number, thresholds: TierThreshold[]): string {
+function classifyTier(score: number, thresholds: TierThreshold[]): TierThreshold {
   const sorted = [...thresholds].sort((a, b) => b.min - a.min);
-  return sorted.find(t => score >= t.min)?.label ?? 'Low Priority';
+  return sorted.find(t => score >= t.min) ?? { key: 'low_priority', label: 'Low Priority', min: 0 };
 }
 
 export function validateTargetPriorityWeights(weights: TargetPriorityWeights): string | null {
@@ -439,6 +440,7 @@ export function scoreCompanyTarget(input: {
   const weights = config.target_priority_weights;
   const target_priority_score = weighted([[icp.score, weights.icp_fit], [buyer.score, weights.buyer_access], [relationship.score, weights.relationship_leverage], [opportunity.score, weights.conference_opportunity]]);
   const recommended_action = recommendAction({ targetScore: target_priority_score, icp: icp.score, buyer: buyer.score, relationship: relationship.score, opportunity: opportunity.score, signals: input.signals ?? {}, exclusionMatch: icp.exclusionMatch, config });
+  const tier = classifyTier(target_priority_score, config.tier_thresholds);
   const confidence_reasons: string[] = [];
   const highSignals = icp.confidenceSignals + (attendeeScores.some(a => a.title_match_confidence === 'high') ? 1 : 0) + (input.attendees.length > 0 ? 1 : 0) + (relationship.reasons.length > 0 ? 1 : 0);
   const lowSignals = (input.attendees.length === 0 ? 2 : 0) + (attendeeScores.some(a => a.title_match_confidence === 'low') ? 1 : 0);
@@ -450,7 +452,8 @@ export function scoreCompanyTarget(input: {
     company_id: input.company.id,
     company_name: input.company.name,
     target_priority_score,
-    target_priority_tier: classifyTier(target_priority_score, config.tier_thresholds),
+    target_priority_tier: tier.label,
+    target_priority_tier_key: tier.key,
     recommended_action,
     ...recommended_action,
     icp_fit_score: icp.score,

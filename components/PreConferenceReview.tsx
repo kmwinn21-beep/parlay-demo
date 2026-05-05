@@ -9,6 +9,7 @@ import { SocialEventsTab } from './pre-conference/SocialEventsTab';
 import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
+import { TargetRecommendationsTab } from './pre-conference/TargetRecommendationsTab';
 import { ParlayRecommendationsTab } from './pre-conference/ParlayRecommendationsTab';
 import { ProductIcpTab } from './pre-conference/ProductIcpTab';
 export type { ParlayRec, ParlayWatchItem, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
@@ -189,7 +190,7 @@ export interface PreConferenceData {
   productIcp: ProductIcpEntry[];
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'parlay_recommendations';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'target_recommendations' | 'parlay_recommendations';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -199,6 +200,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'relationships', label: 'Relationships' },
   { key: 'product_icp', label: 'Product ICP' },
   { key: 'conference_targets', label: 'Conference Targets' },
+  { key: 'target_recommendations', label: 'Target Recommendations' },
   { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
 ];
 
@@ -223,11 +225,21 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
     if (tabConfig.orderedKeys.length === 0) return TABS;
-    return tabConfig.orderedKeys
+    const tabs = tabConfig.orderedKeys
       .filter(k => tabConfig.isVisible(k))
       .map(k => TABS.find(t => t.key === k))
       .filter((t): t is { key: TabKey; label: string } => t !== undefined)
       .map(t => ({ key: t.key, label: tabConfig.getLabel(t.key) }));
+
+    const targetIndex = tabs.findIndex(t => t.key === 'target_recommendations');
+    const conferenceTargetsIndex = tabs.findIndex(t => t.key === 'conference_targets');
+    if (targetIndex !== -1 && conferenceTargetsIndex !== -1 && targetIndex !== conferenceTargetsIndex + 1) {
+      const [targetTab] = tabs.splice(targetIndex, 1);
+      const nextConferenceTargetsIndex = tabs.findIndex(t => t.key === 'conference_targets');
+      tabs.splice(nextConferenceTargetsIndex + 1, 0, targetTab);
+    }
+
+    return tabs;
   }, [tabConfig]);
 
   const load = useCallback(async () => {
@@ -396,6 +408,9 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   onToggleTarget={toggleTarget}
                   onSetTier={setTargetTier}
                 />
+              )}
+              {activeTab === 'target_recommendations' && (
+                <TargetRecommendationsTab conferenceId={conferenceId} />
               )}
               {activeTab === 'parlay_recommendations' && (
                 <ParlayRecommendationsTab

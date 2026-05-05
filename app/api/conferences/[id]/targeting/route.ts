@@ -70,21 +70,15 @@ export async function GET(
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
     if (conferenceRes.rows.length === 0) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 
-    const [settingsRes, seniorityRes, functionRes, actionsRes, attendeesRes] = await Promise.all([
+    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes] = await Promise.all([
       db.execute({ sql: 'SELECT key, value FROM site_settings', args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'seniority'", args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'function'", args: [] }),
       db.execute({ sql: "SELECT id, value, action_key FROM config_options WHERE category = 'target_recommended_action' ORDER BY sort_order, id", args: [] }).catch(() => ({ rows: [] as Row[] })),
       db.execute({
-        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id,
-                     c.name as company_name, c.company_type, c.services, c.status, c.icp, c.wse, c.assigned_user
-              FROM conference_attendees ca
-              JOIN attendees a ON a.id = ca.attendee_id
-              LEFT JOIN companies c ON c.id = a.company_id
-              WHERE ca.conference_id = ?
-              ORDER BY c.name, a.last_name, a.first_name`,
-        args: [conferenceId],
-      }),
+        sql: "SELECT id, value FROM config_options WHERE category = 'company_type' AND action_key = 'prospect' ORDER BY id LIMIT 1",
+        args: [],
+      }).catch(() => ({ rows: [] as Row[] })),
     ]);
 
     const settings: Record<string, string> = {};
@@ -98,6 +92,9 @@ export async function GET(
       if (key) actionLabels.set(key, String(r.value));
     }
     const recommendedActions: RecommendedTargetAction[] = DEFAULT_RECOMMENDED_ACTIONS.map(a => ({ ...a, label: actionLabels.get(a.key) ?? a.label }));
+    const prospectTypeId = prospectTypeRes.rows.length > 0 ? Number(prospectTypeRes.rows[0].id) : null;
+    const prospectTypeIdValue = prospectTypeId == null || !Number.isFinite(prospectTypeId) ? null : String(prospectTypeId);
+    const prospectTypeValue = prospectTypeRes.rows.length > 0 ? String(prospectTypeRes.rows[0].value ?? '') : '';
 
     const icpConfig = await getIcpConfig();
     const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
@@ -115,12 +112,52 @@ export async function GET(
       icp_config: icpConfig,
     });
 
-    const companyMap = new Map<number, { company: TargetingCompanyInput; attendees: TargetingAttendeeInput[] }>();
-    for (const r of attendeesRes.rows) {
+    const requestedOffset = Math.max(0, Number(request.nextUrl.searchParams.get('offset') ?? 0) || 0);
+    const requestedLimit = Number(request.nextUrl.searchParams.get('limit') ?? 0) || 0;
+    const batchMode = request.nextUrl.searchParams.get('batch') === '1' || requestedLimit > 0;
+    const batchLimit = batchMode ? Math.max(1, Math.min(50, requestedLimit || 25)) : Number.MAX_SAFE_INTEGER;
+
+    if (!prospectTypeIdValue) {
+      return NextResponse.json({
+        conference_id: conferenceId,
+        generated_at: new Date().toISOString(),
+        scoring_config: {
+          target_priority_weights: config.target_priority_weights,
+          tier_thresholds: config.tier_thresholds,
+          recommended_actions: config.recommended_actions,
+          target_company_type_id: null,
+        },
+        companies: [],
+        pagination: {
+          offset: batchMode ? requestedOffset : 0,
+          limit: batchMode ? batchLimit : 0,
+          total_companies: 0,
+          returned: 0,
+          has_more: false,
+          next_offset: null,
+        },
+        unavailable_reason: 'Prospect company type is not configured.',
+      });
+    }
+
+    const attendeesRes = await db.execute({
+      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id,
+                   c.name as company_name, c.company_type, c.services, c.status, c.icp, c.wse, c.assigned_user
+            FROM conference_attendees ca
+            JOIN attendees a ON a.id = ca.attendee_id
+            JOIN companies c ON c.id = a.company_id
+            WHERE ca.conference_id = ?
+              AND (c.company_type = ? OR LOWER(c.company_type) = LOWER(?))
+            ORDER BY c.name, a.last_name, a.first_name`,
+      args: [conferenceId, prospectTypeIdValue, prospectTypeValue],
+    });
+
+    const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; attendeeRows: Row[] }>();
+    for (const r of attendeesRes.rows as Row[]) {
       const companyId = r.company_id == null ? 0 : Number(r.company_id);
       if (!companyId) continue;
-      if (!companyMap.has(companyId)) {
-        companyMap.set(companyId, {
+      if (!rawCompanyMap.has(companyId)) {
+        rawCompanyMap.set(companyId, {
           company: {
             id: companyId,
             name: String(r.company_name ?? 'Unknown Company'),
@@ -131,20 +168,34 @@ export async function GET(
             wse: r.wse == null ? null : Number(r.wse),
             assigned_user: r.assigned_user ? String(r.assigned_user) : null,
           },
-          attendees: [],
+          attendeeRows: [],
         });
       }
-      const titleMeta = await resolveAttendeeTitleMetadata(r.title ? String(r.title) : null, null);
-      companyMap.get(companyId)!.attendees.push({
-        id: Number(r.id),
-        first_name: r.first_name ? String(r.first_name) : '',
-        last_name: r.last_name ? String(r.last_name) : '',
-        title: r.title ? String(r.title) : null,
-        seniority: r.seniority == null ? null : String(r.seniority),
-        company_id: companyId,
-        normalized_title_metadata: titleMeta,
-      });
+      rawCompanyMap.get(companyId)!.attendeeRows.push(r);
     }
+
+    const allCompanyEntries = Array.from(rawCompanyMap.values()).sort((a, b) => a.company.name.localeCompare(b.company.name));
+    const totalCompanies = allCompanyEntries.length;
+    const selectedCompanyEntries = batchMode
+      ? allCompanyEntries.slice(requestedOffset, requestedOffset + batchLimit)
+      : allCompanyEntries;
+
+    const companyMap = new Map<number, { company: TargetingCompanyInput; attendees: TargetingAttendeeInput[] }>();
+    await Promise.all(selectedCompanyEntries.map(async ({ company, attendeeRows }) => {
+      const attendees = await Promise.all(attendeeRows.map(async (r): Promise<TargetingAttendeeInput> => {
+        const titleMeta = await resolveAttendeeTitleMetadata(r.title ? String(r.title) : null, null);
+        return {
+          id: Number(r.id),
+          first_name: r.first_name ? String(r.first_name) : '',
+          last_name: r.last_name ? String(r.last_name) : '',
+          title: r.title ? String(r.title) : null,
+          seniority: r.seniority == null ? null : String(r.seniority),
+          company_id: company.id,
+          normalized_title_metadata: titleMeta,
+        };
+      }));
+      companyMap.set(company.id, { company, attendees });
+    }));
 
     const companyIds = Array.from(companyMap.keys());
     const attendeeIds = Array.from(companyMap.values()).flatMap(v => v.attendees.map((a: TargetingAttendeeInput) => a.id));
@@ -220,9 +271,18 @@ export async function GET(
         target_priority_weights: config.target_priority_weights,
         tier_thresholds: config.tier_thresholds,
         recommended_actions: config.recommended_actions,
+        target_company_type_id: prospectTypeId,
       },
       companies,
-      unavailable_reason: companies.length === 0 ? 'No conference attendees with companies were found.' : undefined,
+      pagination: {
+        offset: batchMode ? requestedOffset : 0,
+        limit: batchMode ? batchLimit : totalCompanies,
+        total_companies: totalCompanies,
+        returned: companies.length,
+        has_more: batchMode ? requestedOffset + batchLimit < totalCompanies : false,
+        next_offset: batchMode && requestedOffset + batchLimit < totalCompanies ? requestedOffset + batchLimit : null,
+      },
+      unavailable_reason: totalCompanies === 0 ? 'No conference attendees with companies were found.' : undefined,
     });
   } catch (error) {
     console.error('GET /api/conferences/[id]/targeting error:', error);
