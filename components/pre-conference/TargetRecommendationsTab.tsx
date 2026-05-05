@@ -332,7 +332,7 @@ function CompanyDetails({ company, onReviewTitle }: { company: TargetingCompanyR
 
 function CompanyRow({ company, onReviewTitle, avgCostPerUnit }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; avgCostPerUnit: number }) {
   const [expanded, setExpanded] = useState(false);
-  const companyValue = formatValuePill((company as TargetingCompanyRecommendation & { company_wse?: number | null }).company_wse, avgCostPerUnit);
+  const companyValue = formatValuePill(company.wse, avgCostPerUnit);
   return (
     <>
       <tr className="border-b border-gray-100 align-top hover:bg-gray-50/60">

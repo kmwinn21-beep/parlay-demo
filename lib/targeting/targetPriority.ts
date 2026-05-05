@@ -80,6 +80,7 @@ export interface TargetingCompanySignals {
 export interface CompanyTargetScore {
   company_id: number;
   company_name: string;
+  wse: number | null;
   target_priority_score: number;
   target_priority_tier: string;
   target_priority_tier_key: string;
@@ -451,6 +452,7 @@ export function scoreCompanyTarget(input: {
   return {
     company_id: input.company.id,
     company_name: input.company.name,
+    wse: input.company.wse ?? null,
     target_priority_score,
     target_priority_tier: tier.label,
     target_priority_tier_key: tier.key,
