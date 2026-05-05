@@ -1325,8 +1325,8 @@ export default function AttendeeDetailPage() {
       />
 
       {showTitleClassifier && attendee?.title && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[92vh] flex flex-col">
             <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
@@ -1336,7 +1336,7 @@ export default function AttendeeDetailPage() {
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="space-y-4 px-5 py-4">
+            <div className="space-y-4 px-5 py-4 overflow-y-auto">
               <div className="rounded-lg bg-gray-50 p-3 text-sm">
                 <p><span className="font-medium text-gray-700">Original Title:</span> {attendee.title}</p>
                 <p className="mt-1"><span className="font-medium text-gray-700">Suggested Match:</span> {titleMeta?.suggested_match || titleMeta?.normalized_title || 'No suggestion available'}</p>
@@ -1387,7 +1387,7 @@ export default function AttendeeDetailPage() {
                 Apply to all attendees with this exact title
               </label>
             </div>
-            <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4 flex-shrink-0">
               <button onClick={() => setShowTitleClassifier(false)} className="btn-secondary">Cancel</button>
               <button onClick={saveTitleClassification} disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id} className="btn-primary">
                 {isSavingTitleRule ? 'Saving…' : 'Save Classification'}
