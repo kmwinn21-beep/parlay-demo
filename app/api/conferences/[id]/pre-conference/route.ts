@@ -39,7 +39,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, econSettingsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -84,6 +84,10 @@ export async function GET(
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({
+      sql: `SELECT key, value FROM site_settings WHERE key IN ('avg_cost_per_unit','avg_annual_deal_size')`,
+      args: [],
+    }),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -94,6 +98,19 @@ export async function GET(
   const productColorMap = new Map<string, string | null>();
   for (const r of productColorsRes.rows) {
     productColorMap.set(String(r.value), r.color ? String(r.color) : null);
+  }
+  const econSettings = new Map<string, number>();
+  for (const row of econSettingsRes.rows) {
+    const parsed = Number(row.value);
+    if (Number.isFinite(parsed)) econSettings.set(String(row.key), parsed);
+  }
+  const avgCostPerUnit = econSettings.get('avg_cost_per_unit') ?? null;
+  const avgAnnualDealSize = econSettings.get('avg_annual_deal_size') ?? null;
+  const companyWseMap = new Map<number, number | null>();
+  for (const a of attendees) {
+    const cid = Number(a.company_id ?? 0);
+    if (!cid || companyWseMap.has(cid)) continue;
+    companyWseMap.set(cid, a.wse == null ? null : Number(a.wse));
   }
 
   const companyIds = uniqueNumbers(attendees.map((a) => a.company_id as number | null));
@@ -698,7 +715,12 @@ export async function GET(
       titleNeedsReview: Boolean(company.title_review_summary && Number((company.title_review_summary as Record<string, unknown>).needs_review_count ?? 0) > 0),
       hasMeeting: Number(company.scheduled_meeting_count ?? 0) > 0,
       isCustomer: false,
-      pipelineValue: null,
+      pipelineValue: (() => {
+        const wse = companyWseMap.get(Number(company.company_id));
+        if (wse != null && avgCostPerUnit != null) return wse * avgCostPerUnit;
+        if (avgAnnualDealSize != null) return avgAnnualDealSize;
+        return null;
+      })(),
       recommendedActionKey: String((company.recommended_action as Record<string, unknown> | undefined)?.action_key ?? ''),
       highBuyerFitAttendeeCount: Array.isArray(company.top_attendees)
         ? (company.top_attendees as Array<Record<string, unknown>>).filter((a) => Number(a.buyer_fit_score ?? 0) >= 75).length
