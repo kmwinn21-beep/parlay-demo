@@ -421,11 +421,27 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
 
   const visibleCompanies = filteredCompanies.slice(0, TOP_COMPANY_LIMIT);
 
+  const refreshRecommendations = () => {
+    setSnapshot(startTargetRecommendationsCompilation(conferenceId, true));
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-bold text-brand-primary">Target Recommendations</h3>
-        <p className="text-sm text-gray-500 mt-1">Which companies should we target at this conference, and why?</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-brand-primary">Target Recommendations</h3>
+            <p className="text-sm text-gray-500 mt-1">Which companies should we target at this conference, and why?</p>
+          </div>
+          <button
+            type="button"
+            onClick={refreshRecommendations}
+            disabled={isCompiling}
+            className="self-start rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-brand-secondary transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Refresh Recommendations
+          </button>
+        </div>
         {isCompiling && (
           <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-brand-secondary">
             <p className="font-semibold">Compiling target recommendations in batches…</p>
