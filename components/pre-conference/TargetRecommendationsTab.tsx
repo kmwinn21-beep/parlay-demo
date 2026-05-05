@@ -380,7 +380,6 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
       });
       if (!res.ok) throw new Error('Failed to save title classification');
       setTitleReviewAttendee(null);
-      setSnapshot(startTargetRecommendationsCompilation(conferenceId, true));
       toast.success('Title classification saved.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
@@ -583,7 +582,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
             <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
-                <p className="mt-1 text-xs text-gray-500">Apply to all attendees with this exact title.</p>
+                <p className="mt-1 text-xs text-gray-500">Classify this attendee title and optionally apply it to others with the same exact title.</p>
               </div>
               <button onClick={() => setTitleReviewAttendee(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">×</button>
             </div>
@@ -598,6 +597,15 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <select value={titleRuleForm.seniority_id} onChange={e => setTitleRuleForm(p => ({ ...p, seniority_id: e.target.value }))} className="input-field"><option value="">Seniority</option>{seniorityOptions.map(option => <option key={option.id} value={option.id}>{option.value}</option>)}</select>
               </div>
               <select value={titleRuleForm.buyer_role} onChange={e => setTitleRuleForm(p => ({ ...p, buyer_role: e.target.value as BuyerRoleKey }))} className="input-field">{BUYER_ROLE_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select>
+              <label className="flex items-start gap-2 rounded-lg border border-gray-200 p-3 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={titleRuleForm.apply_all_exact}
+                  onChange={e => setTitleRuleForm(p => ({ ...p, apply_all_exact: e.target.checked }))}
+                />
+                <span>Apply to all attendees with this exact title.</span>
+              </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
               <button onClick={() => setTitleReviewAttendee(null)} className="btn-secondary">Cancel</button>
