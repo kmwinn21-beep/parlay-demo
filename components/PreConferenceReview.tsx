@@ -288,6 +288,27 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
     }
   }, [conferenceId, targetMap]);
 
+  const addTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
+    if (targetMap.has(entry.attendeeId)) return;
+    setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier }));
+    try {
+      await fetch(`/api/conferences/${conferenceId}/targets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: entry.attendeeId }),
+      });
+      if (tier !== 'unassigned') {
+        await fetch(`/api/conferences/${conferenceId}/targets/${entry.attendeeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier }),
+        });
+      }
+    } catch {
+      setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
+    }
+  }, [conferenceId, targetMap]);
+
   const setTargetTier = useCallback(async (attendeeId: number, tier: string) => {
     setTargetMap(prev => {
       const next = new Map(prev);
@@ -409,7 +430,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                 />
               )}
               {activeTab === 'target_recommendations' && (
-                <TargetRecommendationsTab conferenceId={conferenceId} />
+                <TargetRecommendationsTab conferenceId={conferenceId} targetMap={targetMap} onAddTargetWithTier={addTargetWithTier} />
               )}
               {activeTab === 'parlay_recommendations' && (
                 <ParlayRecommendationsTab

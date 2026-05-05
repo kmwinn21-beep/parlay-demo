@@ -18,6 +18,7 @@ import {
   type TargetingApiResponse,
   type TargetingCompanyRecommendation,
 } from '@/lib/targeting/targetRecommendationsView';
+import type { TargetEntry } from '../PreConferenceReview';
 
 type FilterState = {
   tier: string;
@@ -271,13 +272,93 @@ function KpiCard({ label, value }: { label: string; value: number | string | nul
   );
 }
 
-function CompanyDetails({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
+function companyTierToConferenceTier(tierKey: string | null | undefined): string {
+  const key = stableKey(tierKey ?? '');
+  if (key === 'must_target') return '1';
+  if (key === 'high_priority') return '2';
+  if (key === 'worth_engaging') return '3';
+  return 'unassigned';
+}
+
+function AddTargetPill({ isTarget, onClick }: { isTarget: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); if (!isTarget) onClick(); }}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border transition-colors ${
+        isTarget
+          ? 'bg-red-50 text-red-600 border-red-200 cursor-default'
+          : 'bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200'
+      }`}
+    >
+      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" />
+        <line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" />
+        <line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" />
+      </svg>
+      {isTarget ? 'Target Added' : 'Add Target'}
+    </button>
+  );
+}
+
+function CompanyDetails({
+  company,
+  onReviewTitle,
+  targetMap,
+  onAddTargetWithTier,
+}: {
+  company: TargetingCompanyRecommendation;
+  onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void;
+  targetMap: Map<number, TargetEntry>;
+  onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
+}) {
   const reasons = (company.why_this_target ?? []).slice(0, 5);
   const confidenceReasons = (company.confidence_reasons ?? []).slice(0, 3);
   const attendees = (company.top_attendees ?? []).slice(0, 3);
+  const conferenceTier = companyTierToConferenceTier(company.target_priority_tier_key || company.target_priority_tier);
 
   return (
     <div className="mt-2 grid gap-4 lg:grid-cols-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Top attendees</p>
+        {attendees.length > 0 ? (
+          <div className="space-y-1.5">
+            {attendees.map(attendee => {
+              const isTarget = targetMap.has(attendee.attendee_id);
+              const nameParts = attendee.attendee_name.split(' ');
+              const entry: Omit<TargetEntry, 'tier'> = {
+                attendeeId: attendee.attendee_id,
+                firstName: nameParts[0] ?? '',
+                lastName: nameParts.slice(1).join(' ') || '',
+                title: attendee.title ?? null,
+                seniority: attendee.seniority_label ?? null,
+                companyName: company.company_name,
+                companyId: company.company_id,
+                companyWse: company.wse ?? null,
+                assignedUserNames: [],
+              };
+              return (
+                <div key={attendee.attendee_id} className="text-xs text-gray-600 min-w-0">
+                  <Link href={`/attendees/${attendee.attendee_id}`} className="font-semibold text-gray-800 hover:text-brand-secondary transition-colors">
+                    {attendee.attendee_name}
+                  </Link>
+                  <span>{attendee.title ? ` — ${attendee.title}` : ''}</span>
+                  {titleNeedsReview(attendee) && (
+                    <button type="button" onClick={() => onReviewTitle(attendee)} className="ml-1 text-amber-600 hover:text-amber-700" title="Needs title review" aria-label="Needs title review">⚠️</button>
+                  )}
+                  {attendee.normalized_title && <span className="text-gray-400"> ({attendee.normalized_title})</span>}
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    <Pill tone="blue">Buyer Fit {Math.round(scoreOrNull(attendee.buyer_fit_score) ?? 0)}</Pill>
+                    <Pill>{String(attendee.buyer_role_classification) === 'decision_maker' ? 'DM' : String(attendee.buyer_role_classification) === 'influencer' ? 'Inf.' : String(attendee.buyer_role_classification) === 'target_title' ? 'Target' : String(attendee.buyer_role_classification).replace(/_/g, ' ')}</Pill>
+                    <Pill tone={confidenceTone(attendee.title_match_confidence)}>{attendee.title_match_confidence}</Pill>
+                    <AddTargetPill isTarget={isTarget} onClick={() => void onAddTargetWithTier(entry, conferenceTier)} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : <p className="text-xs text-gray-400">No attendee details available.</p>}
+      </div>
       <div>
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Why this target</p>
         {reasons.length > 0 ? (
@@ -289,30 +370,6 @@ function CompanyDetails({ company, onReviewTitle }: { company: TargetingCompanyR
             ))}
           </ul>
         ) : <p className="text-xs text-gray-400">No reasons available.</p>}
-      </div>
-      <div>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Top attendees</p>
-        {attendees.length > 0 ? (
-          <div className="space-y-1.5">
-            {attendees.map(attendee => (
-              <div key={attendee.attendee_id} className="text-xs text-gray-600 min-w-0">
-                <Link href={`/attendees/${attendee.attendee_id}`} className="font-semibold text-gray-800 hover:text-brand-secondary transition-colors">
-                  {attendee.attendee_name}
-                </Link>
-                <span>{attendee.title ? ` — ${attendee.title}` : ''}</span>
-                {titleNeedsReview(attendee) && (
-                  <button type="button" onClick={() => onReviewTitle(attendee)} className="ml-1 text-amber-600 hover:text-amber-700" title="Needs title review" aria-label="Needs title review">⚠️</button>
-                )}
-                {attendee.normalized_title && <span className="text-gray-400"> ({attendee.normalized_title})</span>}
-                <div className="flex flex-wrap gap-1 mt-1">
-                  <Pill tone="blue">Buyer Fit {Math.round(scoreOrNull(attendee.buyer_fit_score) ?? 0)}</Pill>
-                  <Pill>{String(attendee.buyer_role_classification) === 'decision_maker' ? 'DM' : String(attendee.buyer_role_classification) === 'influencer' ? 'Inf.' : String(attendee.buyer_role_classification) === 'target_title' ? 'Target' : String(attendee.buyer_role_classification).replace(/_/g, ' ')}</Pill>
-                  <Pill tone={confidenceTone(attendee.title_match_confidence)}>{attendee.title_match_confidence}</Pill>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : <p className="text-xs text-gray-400">No attendee details available.</p>}
       </div>
       <div>
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Confidence</p>
@@ -330,7 +387,7 @@ function CompanyDetails({ company, onReviewTitle }: { company: TargetingCompanyR
   );
 }
 
-function CompanyRow({ company, onReviewTitle, avgCostPerUnit }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; avgCostPerUnit: number }) {
+function CompanyRow({ company, onReviewTitle, avgCostPerUnit, targetMap, onAddTargetWithTier }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; avgCostPerUnit: number; targetMap: Map<number, TargetEntry>; onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   const companyValue = formatValuePill(company.wse, avgCostPerUnit);
   return (
@@ -357,14 +414,14 @@ function CompanyRow({ company, onReviewTitle, avgCostPerUnit }: { company: Targe
       </tr>
       {expanded && (
         <tr className="border-b border-gray-100">
-          <td colSpan={10} className="px-3 pb-3 pt-0"><CompanyDetails company={company} onReviewTitle={onReviewTitle} /></td>
+          <td colSpan={10} className="px-3 pb-3 pt-0"><CompanyDetails company={company} onReviewTitle={onReviewTitle} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} /></td>
         </tr>
       )}
     </>
   );
 }
 
-export function TargetRecommendationsTab({ conferenceId }: { conferenceId: number }) {
+export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), onAddTargetWithTier = async () => {} }: { conferenceId: number; targetMap?: Map<number, TargetEntry>; onAddTargetWithTier?: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
   const [snapshot, setSnapshot] = useState<CompilationSnapshot>(() => getCompilationSnapshot(conferenceId));
   const [filters, setFilters] = useState<FilterState>({ tier: 'all', action: 'all', confidence: 'all', hasBuyerAccess: false, hasRelationship: false, needsTitleReview: false });
   const [functionOptions, setFunctionOptions] = useState<ConfigOptionRecord[]>([]);
@@ -373,6 +430,8 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   const avgCostPerUnit = useAvgCostPerUnit();
   const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
   const [titleRuleForm, setTitleRuleForm] = useState<TitleRuleForm>({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title', confidence: 'high', notes: '', apply_all_exact: true });
+  const [titleReviewListOpen, setTitleReviewListOpen] = useState(false);
+  const [dismissedTitleReviewIds, setDismissedTitleReviewIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const unsubscribe = subscribeToCompilation(conferenceId, () => setSnapshot(getCompilationSnapshot(conferenceId)));
@@ -406,26 +465,59 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
     });
   };
 
+  const closeTitleModal = () => {
+    setTitleReviewAttendee(null);
+    setTitleReviewListOpen(false);
+  };
+
+  const postTitleRule = async (attendee: NonNullable<typeof titleReviewAttendee>) => {
+    const res = await fetch('/api/title-normalization-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        raw_title: attendee.title,
+        normalized_title: titleRuleForm.normalized_title,
+        function_id: Number(titleRuleForm.function_id),
+        seniority_id: Number(titleRuleForm.seniority_id),
+        buyer_role: titleRuleForm.buyer_role,
+        confidence: titleRuleForm.confidence,
+        notes: titleRuleForm.notes,
+        apply_all_exact: titleRuleForm.apply_all_exact,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to save title classification');
+  };
+
   const saveTitleClassification = async () => {
     if (!titleReviewAttendee?.title) return;
     setIsSavingTitleRule(true);
     try {
-      const res = await fetch('/api/title-normalization-rules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          raw_title: titleReviewAttendee.title,
-          normalized_title: titleRuleForm.normalized_title,
-          function_id: Number(titleRuleForm.function_id),
-          seniority_id: Number(titleRuleForm.seniority_id),
-          buyer_role: titleRuleForm.buyer_role,
-          confidence: titleRuleForm.confidence,
-          notes: titleRuleForm.notes,
-          apply_all_exact: titleRuleForm.apply_all_exact,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save title classification');
-      setTitleReviewAttendee(null);
+      await postTitleRule(titleReviewAttendee);
+      if (titleReviewListOpen) {
+        setDismissedTitleReviewIds(prev => { const next = new Set(prev); next.add(titleReviewAttendee.attendee_id); return next; });
+      }
+      closeTitleModal();
+      toast.success('Title classification saved.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
+    } finally {
+      setIsSavingTitleRule(false);
+    }
+  };
+
+  const saveTitleClassificationAndNext = async () => {
+    if (!titleReviewAttendee?.title) return;
+    const currentId = titleReviewAttendee.attendee_id;
+    const remaining = visibleTitleReviewItems.filter(a => a.attendee_id !== currentId);
+    setIsSavingTitleRule(true);
+    try {
+      await postTitleRule(titleReviewAttendee);
+      setDismissedTitleReviewIds(prev => { const next = new Set(prev); next.add(currentId); return next; });
+      if (remaining.length > 0) {
+        openTitleReviewModal(remaining[0]);
+      } else {
+        closeTitleModal();
+      }
       toast.success('Title classification saved.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
@@ -443,6 +535,10 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   const summary = useMemo(() => summarizeTargetRecommendations(companies), [companies]);
   const buckets = useMemo(() => buildTargetBuckets(companies), [companies]);
   const titleReviewItems = useMemo(() => collectTitleReviewItems(companies).slice(0, 12), [companies]);
+  const visibleTitleReviewItems = useMemo(
+    () => titleReviewItems.filter(a => !dismissedTitleReviewIds.has(a.attendee_id)),
+    [titleReviewItems, dismissedTitleReviewIds],
+  );
   const actionCounts = useMemo(() => countRecommendedActions(companies, actionLabelMap), [companies, actionLabelMap]);
 
   const tiers = useMemo(() => Array.from(new Map(companies.map(company => [stableKey(company.target_priority_tier_key || company.target_priority_tier), company.target_priority_tier])).entries()).filter(([key]) => key), [companies]);
@@ -552,11 +648,11 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <th className="text-left font-semibold py-2 px-3">Confidence</th>
               </tr>
             </thead>
-            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} avgCostPerUnit={avgCostPerUnit} />)}</tbody>
+            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} avgCostPerUnit={avgCostPerUnit} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}</tbody>
           </table>
         </div>
         <div className="md:hidden p-3 space-y-3">
-          {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} />)}
+          {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}
         </div>
         {visibleCompanies.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No companies match the selected filters.</p>}
       </section>
@@ -587,9 +683,9 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h4 className="font-bold text-brand-primary">Needs Title Review</h4>
           <p className="text-xs text-gray-500 mt-0.5 mb-3">Review fuzzy, low-confidence, or unmatched titles to improve Buyer Access and Target Priority Scores.</p>
-          {titleReviewItems.length > 0 ? (
+          {visibleTitleReviewItems.length > 0 ? (
             <div className="space-y-2">
-              {titleReviewItems.map(attendee => (
+              {visibleTitleReviewItems.map(attendee => (
                 <div key={attendee.attendee_id} className="rounded-lg border border-gray-100 p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{attendee.attendee_name}</p>
@@ -600,7 +696,12 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                       <Pill tone={confidenceTone(attendee.title_match_confidence)}>{attendee.title_match_confidence}</Pill>
                     </div>
                   </div>
-                  <Link href={`/attendees/${attendee.attendee_id}`} className="text-xs font-semibold text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap">Review Title</Link>
+                  <button
+                    onClick={() => { setTitleReviewListOpen(true); openTitleReviewModal(attendee); }}
+                    className="text-xs font-semibold text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap"
+                  >
+                    Review Title
+                  </button>
                 </div>
               ))}
             </div>
@@ -631,7 +732,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
                 <p className="mt-1 text-xs text-gray-500">Classify this attendee title and optionally apply it to others with the same exact title.</p>
               </div>
-              <button onClick={() => setTitleReviewAttendee(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">×</button>
+              <button onClick={closeTitleModal} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">×</button>
             </div>
             <div className="space-y-4 px-5 py-4 overflow-y-auto">
               <div className="rounded-lg bg-gray-50 p-3 text-sm">
@@ -655,7 +756,16 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
-              <button onClick={() => setTitleReviewAttendee(null)} className="btn-secondary">Cancel</button>
+              <button onClick={closeTitleModal} className="btn-secondary">Cancel</button>
+              {titleReviewListOpen && visibleTitleReviewItems.filter(a => a.attendee_id !== titleReviewAttendee?.attendee_id).length > 0 && (
+                <button
+                  onClick={saveTitleClassificationAndNext}
+                  disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id}
+                  className="btn-secondary"
+                >
+                  {isSavingTitleRule ? 'Saving…' : 'Save & Next'}
+                </button>
+              )}
               <button onClick={saveTitleClassification} disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id} className="btn-primary">{isSavingTitleRule ? 'Saving…' : 'Save Classification'}</button>
             </div>
           </div>
@@ -665,7 +775,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   );
 }
 
-function MobileCompanyCard({ company, onReviewTitle }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void }) {
+function MobileCompanyCard({ company, onReviewTitle, targetMap, onAddTargetWithTier }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; targetMap: Map<number, TargetEntry>; onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="rounded-xl border border-gray-200 p-3">
@@ -681,7 +791,7 @@ function MobileCompanyCard({ company, onReviewTitle }: { company: TargetingCompa
             <p>Relationship: {Math.round(scoreOrNull(company.relationship_leverage_score) ?? 0)}</p>
             <p>Opportunity: {Math.round(scoreOrNull(company.conference_opportunity_score) ?? 0)}</p>
           </div>
-          <CompanyDetails company={company} onReviewTitle={onReviewTitle} />
+          <CompanyDetails company={company} onReviewTitle={onReviewTitle} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />
         </>
       )}
     </div>
