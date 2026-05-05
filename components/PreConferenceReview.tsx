@@ -13,6 +13,7 @@ import { TargetRecommendationsTab } from './pre-conference/TargetRecommendations
 import { ParlayRecommendationsTab } from './pre-conference/ParlayRecommendationsTab';
 import { ProductIcpTab } from './pre-conference/ProductIcpTab';
 export type { ParlayRec, ParlayWatchItem, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
+export type { StrategyAssessment } from '@/lib/strategyAssessment';
 
 export interface PreConferenceSummary {
   conference: { id: number; name: string; start_date: string | null; end_date: string | null; location: string | null };
@@ -185,6 +186,7 @@ export interface PreConferenceData {
   byRep: ByRepEntry[];
   relationships: RelationshipRow[];
   productIcp: ProductIcpEntry[];
+  strategyAssessment: import('@/lib/strategyAssessment').StrategyAssessment | null;
 }
 
 type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'target_recommendations' | 'parlay_recommendations';
@@ -381,7 +383,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {activeTab === 'landscape' && (
-                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} strategyAssessment={data.strategyAssessment ?? null} />
               )}
               {activeTab === 'icp' && (
                 <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} />
