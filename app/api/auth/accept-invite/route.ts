@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
+import { createNotifications } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token');
@@ -65,6 +66,29 @@ export async function POST(request: NextRequest) {
           WHERE id = ?`,
     args: [password_hash, Number(user.id)],
   });
+
+  // Notify administrators that an invited user has activated their account.
+  try {
+    const adminRows = await db.execute({
+      sql: 'SELECT id FROM users WHERE role = ? AND active = 1',
+      args: ['administrator'],
+    });
+    const adminUserIds = adminRows.rows.map(row => Number(row.id)).filter(id => !Number.isNaN(id));
+    const activatedName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || String(user.email);
+    await createNotifications({
+      userIds: adminUserIds,
+      type: 'conference',
+      recordId: Number(user.id),
+      recordName: 'User Activation',
+      message: `${activatedName} has activated their invited account.`,
+      changedByEmail: String(user.email),
+      changedByConfigId: user.config_id == null ? null : Number(user.config_id),
+      entityType: 'system',
+      entityId: 0,
+    });
+  } catch (error) {
+    console.error('Failed to notify administrators of invite activation:', error);
+  }
 
   // Ensure the user is linked to their rep profile in config_options.
   // Normally set during invite creation, but may be null for users created before
