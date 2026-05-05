@@ -437,7 +437,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
     try {
       await postTitleRule(titleReviewAttendee);
       if (titleReviewListOpen) {
-        setDismissedTitleReviewIds(prev => new Set([...prev, titleReviewAttendee.attendee_id]));
+        setDismissedTitleReviewIds(prev => { const next = new Set(prev); next.add(titleReviewAttendee.attendee_id); return next; });
       }
       closeTitleModal();
       toast.success('Title classification saved.');
@@ -455,7 +455,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
     setIsSavingTitleRule(true);
     try {
       await postTitleRule(titleReviewAttendee);
-      setDismissedTitleReviewIds(prev => new Set([...prev, currentId]));
+      setDismissedTitleReviewIds(prev => { const next = new Set(prev); next.add(currentId); return next; });
       if (remaining.length > 0) {
         openTitleReviewModal(remaining[0]);
       } else {
