@@ -373,6 +373,8 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   const avgCostPerUnit = useAvgCostPerUnit();
   const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
   const [titleRuleForm, setTitleRuleForm] = useState<TitleRuleForm>({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title', confidence: 'high', notes: '', apply_all_exact: true });
+  const [titleReviewListOpen, setTitleReviewListOpen] = useState(false);
+  const [dismissedTitleReviewIds, setDismissedTitleReviewIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const unsubscribe = subscribeToCompilation(conferenceId, () => setSnapshot(getCompilationSnapshot(conferenceId)));
@@ -406,26 +408,59 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
     });
   };
 
+  const closeTitleModal = () => {
+    setTitleReviewAttendee(null);
+    setTitleReviewListOpen(false);
+  };
+
+  const postTitleRule = async (attendee: NonNullable<typeof titleReviewAttendee>) => {
+    const res = await fetch('/api/title-normalization-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        raw_title: attendee.title,
+        normalized_title: titleRuleForm.normalized_title,
+        function_id: Number(titleRuleForm.function_id),
+        seniority_id: Number(titleRuleForm.seniority_id),
+        buyer_role: titleRuleForm.buyer_role,
+        confidence: titleRuleForm.confidence,
+        notes: titleRuleForm.notes,
+        apply_all_exact: titleRuleForm.apply_all_exact,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to save title classification');
+  };
+
   const saveTitleClassification = async () => {
     if (!titleReviewAttendee?.title) return;
     setIsSavingTitleRule(true);
     try {
-      const res = await fetch('/api/title-normalization-rules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          raw_title: titleReviewAttendee.title,
-          normalized_title: titleRuleForm.normalized_title,
-          function_id: Number(titleRuleForm.function_id),
-          seniority_id: Number(titleRuleForm.seniority_id),
-          buyer_role: titleRuleForm.buyer_role,
-          confidence: titleRuleForm.confidence,
-          notes: titleRuleForm.notes,
-          apply_all_exact: titleRuleForm.apply_all_exact,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save title classification');
-      setTitleReviewAttendee(null);
+      await postTitleRule(titleReviewAttendee);
+      if (titleReviewListOpen) {
+        setDismissedTitleReviewIds(prev => new Set([...prev, titleReviewAttendee.attendee_id]));
+      }
+      closeTitleModal();
+      toast.success('Title classification saved.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
+    } finally {
+      setIsSavingTitleRule(false);
+    }
+  };
+
+  const saveTitleClassificationAndNext = async () => {
+    if (!titleReviewAttendee?.title) return;
+    const currentId = titleReviewAttendee.attendee_id;
+    const remaining = visibleTitleReviewItems.filter(a => a.attendee_id !== currentId);
+    setIsSavingTitleRule(true);
+    try {
+      await postTitleRule(titleReviewAttendee);
+      setDismissedTitleReviewIds(prev => new Set([...prev, currentId]));
+      if (remaining.length > 0) {
+        openTitleReviewModal(remaining[0]);
+      } else {
+        closeTitleModal();
+      }
       toast.success('Title classification saved.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save title classification');
@@ -443,6 +478,10 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
   const summary = useMemo(() => summarizeTargetRecommendations(companies), [companies]);
   const buckets = useMemo(() => buildTargetBuckets(companies), [companies]);
   const titleReviewItems = useMemo(() => collectTitleReviewItems(companies).slice(0, 12), [companies]);
+  const visibleTitleReviewItems = useMemo(
+    () => titleReviewItems.filter(a => !dismissedTitleReviewIds.has(a.attendee_id)),
+    [titleReviewItems, dismissedTitleReviewIds],
+  );
   const actionCounts = useMemo(() => countRecommendedActions(companies, actionLabelMap), [companies, actionLabelMap]);
 
   const tiers = useMemo(() => Array.from(new Map(companies.map(company => [stableKey(company.target_priority_tier_key || company.target_priority_tier), company.target_priority_tier])).entries()).filter(([key]) => key), [companies]);
@@ -587,9 +626,9 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h4 className="font-bold text-brand-primary">Needs Title Review</h4>
           <p className="text-xs text-gray-500 mt-0.5 mb-3">Review fuzzy, low-confidence, or unmatched titles to improve Buyer Access and Target Priority Scores.</p>
-          {titleReviewItems.length > 0 ? (
+          {visibleTitleReviewItems.length > 0 ? (
             <div className="space-y-2">
-              {titleReviewItems.map(attendee => (
+              {visibleTitleReviewItems.map(attendee => (
                 <div key={attendee.attendee_id} className="rounded-lg border border-gray-100 p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{attendee.attendee_name}</p>
@@ -600,7 +639,12 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                       <Pill tone={confidenceTone(attendee.title_match_confidence)}>{attendee.title_match_confidence}</Pill>
                     </div>
                   </div>
-                  <Link href={`/attendees/${attendee.attendee_id}`} className="text-xs font-semibold text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap">Review Title</Link>
+                  <button
+                    onClick={() => { setTitleReviewListOpen(true); openTitleReviewModal(attendee); }}
+                    className="text-xs font-semibold text-brand-secondary hover:text-brand-primary transition-colors whitespace-nowrap"
+                  >
+                    Review Title
+                  </button>
                 </div>
               ))}
             </div>
@@ -631,7 +675,7 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
                 <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
                 <p className="mt-1 text-xs text-gray-500">Classify this attendee title and optionally apply it to others with the same exact title.</p>
               </div>
-              <button onClick={() => setTitleReviewAttendee(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">×</button>
+              <button onClick={closeTitleModal} className="text-gray-400 hover:text-gray-600" aria-label="Close title classification modal">×</button>
             </div>
             <div className="space-y-4 px-5 py-4 overflow-y-auto">
               <div className="rounded-lg bg-gray-50 p-3 text-sm">
@@ -655,7 +699,16 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
-              <button onClick={() => setTitleReviewAttendee(null)} className="btn-secondary">Cancel</button>
+              <button onClick={closeTitleModal} className="btn-secondary">Cancel</button>
+              {titleReviewListOpen && visibleTitleReviewItems.filter(a => a.attendee_id !== titleReviewAttendee?.attendee_id).length > 0 && (
+                <button
+                  onClick={saveTitleClassificationAndNext}
+                  disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id}
+                  className="btn-secondary"
+                >
+                  {isSavingTitleRule ? 'Saving…' : 'Save & Next'}
+                </button>
+              )}
               <button onClick={saveTitleClassification} disabled={isSavingTitleRule || !titleRuleForm.normalized_title || !titleRuleForm.function_id || !titleRuleForm.seniority_id} className="btn-primary">{isSavingTitleRule ? 'Saving…' : 'Save Classification'}</button>
             </div>
           </div>
