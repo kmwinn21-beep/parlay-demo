@@ -280,6 +280,41 @@ function CompanyDetails({ company }: { company: TargetingCompanyRecommendation }
   );
 }
 
+
+function CompanyCard({ company }: { company: TargetingCompanyRecommendation }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full text-left flex items-start justify-between gap-3"
+      >
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-900 truncate">{company.company_name}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{expanded ? 'Tap to collapse' : 'Tap to expand details'}</p>
+        </div>
+        <span className="text-gray-400 text-xs">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div><p className="text-gray-400">Score</p><ScoreBadge value={scoreOrNull(company.target_priority_score)} /></div>
+        <div><p className="text-gray-400">Tier</p><Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill></div>
+        <div><p className="text-gray-400">ICP</p><ScoreBadge value={scoreOrNull(company.icp_fit_score)} /></div>
+        <div><p className="text-gray-400">Buyer</p><ScoreBadge value={scoreOrNull(company.buyer_access_score)} /></div>
+        <div><p className="text-gray-400">Relationship</p><ScoreBadge value={scoreOrNull(company.relationship_leverage_score)} /></div>
+        <div><p className="text-gray-400">Opportunity</p><ScoreBadge value={scoreOrNull(company.conference_opportunity_score)} /></div>
+      </div>
+
+      <div className="mt-2">
+        <p className="text-xs text-gray-400 mb-1">Recommended Action</p>
+        <Pill tone="blue">{company.recommended_action_label || company.recommended_action?.recommended_action_label || '—'}</Pill>
+      </div>
+
+      {expanded && <CompanyDetails company={company} />}
+    </div>
+  );
+}
+
 function CompanyRow({ company }: { company: TargetingCompanyRecommendation }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -408,7 +443,10 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
             </label>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 md:hidden p-3">
+          {visibleCompanies.map(company => <CompanyCard key={company.company_id} company={company} />)}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
