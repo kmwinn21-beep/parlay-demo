@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   buildActionLabelMap,
   buildTargetBuckets,
@@ -26,12 +27,126 @@ type FilterState = {
 };
 
 const TOP_COMPANY_LIMIT = 25;
+const TARGETING_BATCH_SIZE = 25;
 
-function LoadingState() {
+type CompilationStatus = 'idle' | 'compiling' | 'ready' | 'error';
+
+type CompilationSnapshot = {
+  status: CompilationStatus;
+  data: TargetingApiResponse | null;
+  error: string | null;
+  completed: number;
+  total: number | null;
+};
+
+const compilationStore = new Map<number, CompilationSnapshot>();
+const compilationPromises = new Map<number, Promise<void>>();
+const compilationListeners = new Map<number, Set<() => void>>();
+
+function defaultSnapshot(): CompilationSnapshot {
+  return { status: 'idle', data: null, error: null, completed: 0, total: null };
+}
+
+function getCompilationSnapshot(conferenceId: number): CompilationSnapshot {
+  return compilationStore.get(conferenceId) ?? defaultSnapshot();
+}
+
+function setCompilationSnapshot(conferenceId: number, snapshot: CompilationSnapshot) {
+  compilationStore.set(conferenceId, snapshot);
+  compilationListeners.get(conferenceId)?.forEach(listener => listener());
+}
+
+function subscribeToCompilation(conferenceId: number, listener: () => void): () => void {
+  const listeners = compilationListeners.get(conferenceId) ?? new Set<() => void>();
+  listeners.add(listener);
+  compilationListeners.set(conferenceId, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) compilationListeners.delete(conferenceId);
+  };
+}
+
+async function fetchTargetingBatch(conferenceId: number, offset: number): Promise<TargetingApiResponse> {
+  const params = new URLSearchParams({ batch: '1', offset: String(offset), limit: String(TARGETING_BATCH_SIZE) });
+  const res = await fetch(`/api/conferences/${conferenceId}/targeting?${params.toString()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load targeting recommendations');
+  return res.json() as Promise<TargetingApiResponse>;
+}
+
+function startTargetRecommendationsCompilation(conferenceId: number, force = false): CompilationSnapshot {
+  const current = getCompilationSnapshot(conferenceId);
+  if (!force && (current.status === 'compiling' || current.status === 'ready' || compilationPromises.has(conferenceId))) return current;
+
+  const initial: CompilationSnapshot = { status: 'compiling', data: null, error: null, completed: 0, total: null };
+  setCompilationSnapshot(conferenceId, initial);
+
+  const promise = (async () => {
+    let offset = 0;
+    let total: number | null = null;
+    let unavailableReason: string | undefined;
+    let scoringConfig: TargetingApiResponse['scoring_config'];
+    const companies: NonNullable<TargetingApiResponse['companies']> = [];
+
+    try {
+      while (true) {
+        const batch = await fetchTargetingBatch(conferenceId, offset);
+        unavailableReason = batch.unavailable_reason ?? unavailableReason;
+        scoringConfig = scoringConfig ?? batch.scoring_config;
+        companies.push(...(batch.companies ?? []));
+
+        const pagination = batch.pagination;
+        total = pagination?.total_companies ?? companies.length;
+        const completed = Math.min(total, pagination ? pagination.offset + pagination.returned : companies.length);
+        setCompilationSnapshot(conferenceId, {
+          status: 'compiling',
+          data: { ...batch, companies: sortCompaniesByPriority(companies), scoring_config: scoringConfig },
+          error: null,
+          completed,
+          total,
+        });
+
+        if (!pagination?.has_more || pagination.next_offset == null) break;
+        offset = pagination.next_offset;
+      }
+
+      const readyData: TargetingApiResponse = {
+        conference_id: conferenceId,
+        generated_at: new Date().toISOString(),
+        scoring_config: scoringConfig,
+        companies: sortCompaniesByPriority(companies),
+        pagination: total == null ? undefined : {
+          offset: 0,
+          limit: companies.length,
+          total_companies: total,
+          returned: companies.length,
+          has_more: false,
+          next_offset: null,
+        },
+        unavailable_reason: companies.length === 0 ? unavailableReason : undefined,
+      };
+
+      setCompilationSnapshot(conferenceId, { status: 'ready', data: readyData, error: null, completed: companies.length, total });
+      toast.success('Target recommendations are ready.');
+    } catch {
+      setCompilationSnapshot(conferenceId, { status: 'error', data: null, error: 'Unable to load target recommendations.', completed: companies.length, total });
+      toast.error('Unable to load target recommendations.');
+    } finally {
+      compilationPromises.delete(conferenceId);
+    }
+  })();
+
+  compilationPromises.set(conferenceId, promise);
+  return initial;
+}
+
+function LoadingState({ completed, total }: { completed: number; total: number | null }) {
+  const progressLabel = total ? `${Math.min(completed, total)} of ${total} companies compiled` : 'Preparing company batches';
   return (
     <div className="text-center py-16">
       <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
       <p className="text-gray-500 text-sm font-medium">Generating target recommendations…</p>
+      <p className="text-gray-400 text-xs mt-1">{progressLabel}</p>
+      <p className="text-gray-400 text-xs mt-2">You can leave this tab while recommendations compile. We’ll notify you when they’re ready.</p>
     </div>
   );
 }
@@ -198,30 +313,18 @@ function CompanyRow({ company }: { company: TargetingCompanyRecommendation }) {
 }
 
 export function TargetRecommendationsTab({ conferenceId }: { conferenceId: number }) {
-  const [data, setData] = useState<TargetingApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [snapshot, setSnapshot] = useState<CompilationSnapshot>(() => getCompilationSnapshot(conferenceId));
   const [filters, setFilters] = useState<FilterState>({ tier: 'all', action: 'all', confidence: 'all', hasBuyerAccess: false, hasRelationship: false, needsTitleReview: false });
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(false);
-      try {
-        const res = await fetch(`/api/conferences/${conferenceId}/targeting`, { cache: 'no-store' });
-        if (!res.ok) throw new Error('Failed to load targeting recommendations');
-        const json = await res.json() as TargetingApiResponse;
-        if (!cancelled) setData(json);
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => { cancelled = true; };
+    const unsubscribe = subscribeToCompilation(conferenceId, () => setSnapshot(getCompilationSnapshot(conferenceId)));
+    setSnapshot(startTargetRecommendationsCompilation(conferenceId));
+    return unsubscribe;
   }, [conferenceId]);
+
+  const data = snapshot.data;
+  const isCompiling = snapshot.status === 'compiling';
+  const hasData = Boolean(data?.companies?.length);
 
   const companies = useMemo(() => sortCompaniesByPriority(data?.companies ?? []), [data]);
   const actionLabelMap = useMemo(() => buildActionLabelMap(data?.scoring_config?.recommended_actions), [data]);
@@ -245,9 +348,9 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
     return true;
   }), [companies, filters]);
 
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState onRetry={() => { setData(null); setLoading(true); setError(false); fetch(`/api/conferences/${conferenceId}/targeting`, { cache: 'no-store' }).then(async res => { if (!res.ok) throw new Error(); setData(await res.json() as TargetingApiResponse); }).catch(() => setError(true)).finally(() => setLoading(false)); }} />;
-  if (!data || companies.length === 0) return <EmptyState reason={data?.unavailable_reason} />;
+  if ((snapshot.status === 'idle' || isCompiling) && !hasData) return <LoadingState completed={snapshot.completed} total={snapshot.total} />;
+  if (snapshot.status === 'error' && !hasData) return <ErrorState onRetry={() => setSnapshot(startTargetRecommendationsCompilation(conferenceId, true))} />;
+  if (snapshot.status === 'ready' && (!data || companies.length === 0)) return <EmptyState reason={data?.unavailable_reason} />;
 
   const visibleCompanies = filteredCompanies.slice(0, TOP_COMPANY_LIMIT);
 
@@ -256,6 +359,14 @@ export function TargetRecommendationsTab({ conferenceId }: { conferenceId: numbe
       <div>
         <h3 className="text-lg font-bold text-brand-primary">Target Recommendations</h3>
         <p className="text-sm text-gray-500 mt-1">Which companies should we target at this conference, and why?</p>
+        {isCompiling && (
+          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-brand-secondary">
+            <p className="font-semibold">Compiling target recommendations in batches…</p>
+            <p className="text-xs text-brand-secondary/80 mt-0.5">
+              {snapshot.total ? `${Math.min(snapshot.completed, snapshot.total)} of ${snapshot.total} companies compiled.` : 'Preparing company batches.'} You can leave this tab and we’ll notify you when recommendations are ready.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

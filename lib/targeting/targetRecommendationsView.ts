@@ -11,6 +11,14 @@ export interface TargetingApiResponse {
     recommended_actions?: RecommendedTargetAction[];
   };
   companies?: TargetingCompanyRecommendation[];
+  pagination?: {
+    offset: number;
+    limit: number;
+    total_companies: number;
+    returned: number;
+    has_more: boolean;
+    next_offset: number | null;
+  };
   unavailable_reason?: string;
   error?: string;
 }
