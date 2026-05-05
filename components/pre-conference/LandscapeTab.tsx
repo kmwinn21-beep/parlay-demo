@@ -82,11 +82,11 @@ function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
 
   return (
     <div
-      className="rounded-xl p-4 flex flex-col"
+      className="rounded-xl p-4 flex flex-col w-full"
       style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
     >
       <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-        Pre-Conference Strategy Fit Score
+        Pre-Conference Strategy Score
       </div>
       <div className="flex items-end gap-1 mt-1">
         <div className="text-4xl font-bold" style={{ color }}>{sa.strategyFitScore}</div>
@@ -115,7 +115,7 @@ function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
 function PrimaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
   return (
     <div
-      className="rounded-xl p-4 flex flex-col"
+      className="rounded-xl p-4 flex flex-col w-full"
       style={{
         borderLeft: '4px solid rgb(var(--brand-primary-rgb))',
         backgroundColor: 'rgb(var(--brand-primary-rgb) / 0.08)',
@@ -128,7 +128,7 @@ function PrimaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
         Recommended Strategy
       </div>
       <div
-        className="text-lg font-bold leading-tight"
+        className="text-base font-bold leading-tight"
         style={{ color: 'rgb(var(--brand-primary-rgb))' }}
       >
         {sa.primaryStrategy}
@@ -158,13 +158,13 @@ function PrimaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
 
 function SecondaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col">
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col w-full">
       <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">
         Secondary Strategy
       </div>
       {sa.secondaryStrategy ? (
         <>
-          <div className="text-lg font-bold text-brand-secondary leading-tight">
+          <div className="text-base font-bold text-brand-secondary leading-tight">
             {sa.secondaryStrategy}
           </div>
           {sa.secondaryStrategyReasons.length > 0 && (
@@ -305,17 +305,17 @@ function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
 function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
   return (
     <div className="pb-2 border-b border-gray-100 mb-6">
-      <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 items-stretch">
         {/* Score card — 2 cols */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 flex">
           <StrategyFitScoreCard sa={sa} />
         </div>
         {/* Recommended Strategy — 1 col */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 flex">
           <PrimaryStrategyCard sa={sa} />
         </div>
         {/* Secondary Strategy — 1 col */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 flex">
           <SecondaryStrategyCard sa={sa} />
         </div>
         {/* Actions panel — 2 cols */}
