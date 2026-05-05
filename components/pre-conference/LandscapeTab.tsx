@@ -188,68 +188,13 @@ function SecondaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
   );
 }
 
-// ─── Pipeline Reality card ─────────────────────────────────────────────────────
-
-function PipelineRealityCard({ sa }: { sa: StrategyAssessment }) {
-  const [showChart, setShowChart] = useState(false);
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 relative flex flex-col">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Pipeline Reality</div>
-        <button
-          onClick={() => setShowChart(v => !v)}
-          className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
-          title="View pipeline bar chart"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </button>
-      </div>
-
-      {showChart ? (
-        <div className="flex-1">
-          <PipelineBarChart realistic={sa.realisticPipelineGoal} required={sa.requiredPipeline} />
-        </div>
-      ) : (
-        <div className="flex-1 space-y-2">
-          <div className="flex justify-between items-baseline">
-            <span className="text-xs text-gray-500">Realistic Goal</span>
-            <span className="text-sm font-bold text-brand-secondary">{fmtDollars(sa.realisticPipelineGoal)}</span>
-          </div>
-          {sa.requiredPipeline != null && (
-            <div className="flex justify-between items-baseline">
-              <span className="text-xs text-gray-500">Required Pipeline</span>
-              <span className="text-sm font-semibold text-gray-600">{fmtDollars(sa.requiredPipeline)}</span>
-            </div>
-          )}
-          <div className="flex justify-between items-baseline">
-            <span className="text-xs text-gray-500">Coverage</span>
-            <span className="text-sm font-semibold text-gray-700">{sa.pipelineCoverageRate.toFixed(1)}%</span>
-          </div>
-          {sa.requiredPipeline != null && sa.realisticPipelineGoal < sa.requiredPipeline && (
-            <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-1.5 bg-brand-secondary rounded-full"
-                style={{ width: `${sa.pipelineCoverageRate}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Hosted Event card ─────────────────────────────────────────────────────────
+// ─── Shared pill ──────────────────────────────────────────────────────────────
 
 function FitScorePill({ score }: { score: number }) {
   const color = scoreColor(score);
   return (
     <span
-      className="inline-block px-2 py-0.5 rounded-full text-xs font-bold"
+      className="inline-block px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0"
       style={{ color, backgroundColor: color + '18' }}
     >
       {score}
@@ -257,85 +202,100 @@ function FitScorePill({ score }: { score: number }) {
   );
 }
 
-function HostedEventCard({ sa }: { sa: StrategyAssessment }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Hosted Event</div>
-        <FitScorePill score={sa.hostedEventFitScore} />
-      </div>
-      <div className="text-sm font-semibold text-gray-900 leading-snug flex-1">
-        {sa.hostedEventRecommendation}
-      </div>
-      <div className="mt-3">
-        <div className="text-xs text-gray-400 mb-1">Fit Score</div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-1.5 rounded-full"
-            style={{ width: `${sa.hostedEventFitScore}%`, backgroundColor: scoreColor(sa.hostedEventFitScore) }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── Combined actions panel (right 2 cols) ────────────────────────────────────
 
-// ─── Sponsorship card ──────────────────────────────────────────────────────────
-
-function SponsorshipCard({ sa }: { sa: StrategyAssessment }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Sponsorship</div>
-        <FitScorePill score={sa.sponsorshipFitScore} />
-      </div>
-      <div className="text-sm font-semibold text-gray-900 leading-snug flex-1">
-        {sa.sponsorshipRecommendation}
-      </div>
-      <div className="mt-3">
-        <div className="text-xs text-gray-400 mb-1">Fit Score</div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-1.5 rounded-full"
-            style={{ width: `${sa.sponsorshipFitScore}%`, backgroundColor: scoreColor(sa.sponsorshipFitScore) }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Staffing card ─────────────────────────────────────────────────────────────
-
-function StaffingCard({ sa }: { sa: StrategyAssessment }) {
+function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
+  const [showChart, setShowChart] = useState(false);
   const isCovered = sa.currentRepCount >= sa.recommendedRepMin;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
-      <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Staffing</div>
-      <div className="flex items-center gap-2 mb-1">
-        <div className="text-sm font-semibold text-gray-900">
-          {sa.recommendedRepMin}–{sa.recommendedRepMax} reps recommended
+    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 h-full">
+      {/* Pipeline Reality */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Pipeline Reality</div>
+          <button
+            onClick={() => setShowChart(v => !v)}
+            className="text-gray-400 hover:text-brand-secondary transition-colors"
+            title="View pipeline bar chart"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
+        {showChart ? (
+          <PipelineBarChart realistic={sa.realisticPipelineGoal} required={sa.requiredPipeline} />
+        ) : (
+          <div className="flex gap-4 text-xs">
+            <div>
+              <div className="text-gray-400">Realistic Goal</div>
+              <div className="font-bold text-brand-secondary">{fmtDollars(sa.realisticPipelineGoal)}</div>
+            </div>
+            {sa.requiredPipeline != null && (
+              <div>
+                <div className="text-gray-400">Required</div>
+                <div className="font-semibold text-gray-600">{fmtDollars(sa.requiredPipeline)}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-gray-400">Coverage</div>
+              <div className="font-semibold text-gray-700">{sa.pipelineCoverageRate.toFixed(1)}%</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* Hosted Event */}
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Hosted Event</div>
+          <div className="text-xs font-semibold text-gray-800">{sa.hostedEventRecommendation}</div>
+        </div>
+        <FitScorePill score={sa.hostedEventFitScore} />
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* Sponsorship */}
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Sponsorship</div>
+          <div className="text-xs font-semibold text-gray-800">{sa.sponsorshipRecommendation}</div>
+        </div>
+        <FitScorePill score={sa.sponsorshipFitScore} />
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* Staffing */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Staffing</div>
+          <div className="text-xs font-semibold text-gray-800">
+            {sa.recommendedRepMin}–{sa.recommendedRepMax} reps recommended
+          </div>
+          <div className="text-xs text-gray-400">Current: {sa.currentRepCount} rep{sa.currentRepCount !== 1 ? 's' : ''}</div>
+          {!isCovered && (
+            <div className="text-xs text-amber-600 font-medium mt-0.5">
+              Coverage gap: add {sa.recommendedRepMin - sa.currentRepCount}–{sa.recommendedRepMax - sa.currentRepCount} more
+            </div>
+          )}
         </div>
         {isCovered ? (
-          <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         ) : (
-          <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
         )}
       </div>
-      <div className="text-xs text-gray-500">
-        Current: {sa.currentRepCount} rep{sa.currentRepCount !== 1 ? 's' : ''} attending
-      </div>
-      {!isCovered && (
-        <div className="mt-2 text-xs text-amber-600 font-medium">
-          Coverage gap: add {sa.recommendedRepMin - sa.currentRepCount}–{sa.recommendedRepMax - sa.currentRepCount} more rep{sa.recommendedRepMax - sa.currentRepCount !== 1 ? 's' : ''}
-        </div>
-      )}
     </div>
   );
 }
@@ -344,20 +304,24 @@ function StaffingCard({ sa }: { sa: StrategyAssessment }) {
 
 function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
   return (
-    <div className="space-y-4 pb-2 border-b border-gray-100 mb-6">
-      {/* Row A: Scorecard + Strategy cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <StrategyFitScoreCard sa={sa} />
-        <PrimaryStrategyCard sa={sa} />
-        <SecondaryStrategyCard sa={sa} />
-      </div>
-
-      {/* Row B: Action cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <PipelineRealityCard sa={sa} />
-        <HostedEventCard sa={sa} />
-        <SponsorshipCard sa={sa} />
-        <StaffingCard sa={sa} />
+    <div className="pb-2 border-b border-gray-100 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+        {/* Score card — 2 cols */}
+        <div className="lg:col-span-2">
+          <StrategyFitScoreCard sa={sa} />
+        </div>
+        {/* Recommended Strategy — 1 col */}
+        <div className="lg:col-span-1">
+          <PrimaryStrategyCard sa={sa} />
+        </div>
+        {/* Secondary Strategy — 1 col */}
+        <div className="lg:col-span-1">
+          <SecondaryStrategyCard sa={sa} />
+        </div>
+        {/* Actions panel — 2 cols */}
+        <div className="lg:col-span-2">
+          <ActionsPanel sa={sa} />
+        </div>
       </div>
     </div>
   );
