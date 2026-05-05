@@ -428,7 +428,7 @@ export async function GET(
 
   const overlapTargetId = overlapTargetOption?.id ?? null;
   const overlapTargetKey = overlapTargetOption?.action_key ?? null;
-  const priorOverlapTypeLabel = overlapTargetOption?.value ?? overlapSettingRaw || 'Company Type';
+  const priorOverlapTypeLabel = overlapTargetOption?.value ?? (overlapSettingRaw || 'Company Type');
 
   const prevConfMap = new Map<number, string>();
   for (const row of prevConfsRes.rows) {
