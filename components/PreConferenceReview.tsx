@@ -40,6 +40,8 @@ export interface LandscapeData {
   companyTypeBreakdown: { label: string; count: number }[];
   seniorityBreakdown: { label: string; count: number }[];
   priorOverlapTypeLabel: string;
+  priorOverlapTypeOptionId: number | null;
+  priorOverlapTypeOptionKey: string | null;
   priorOverlapCount: number;
   priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; company_id: number | null; seniority: string | null; prior_conference: string; assigned_user_names: string[] }[];
   clientCompanies: ClientCompanyEntry[];
