@@ -27,6 +27,8 @@ const TIER_CONFIG = [
     activeBg: 'bg-red-50',
     activeBorder: 'border-red-200',
     activeText: 'text-red-600',
+    cardBorder: 'border-red-300',
+    cardBg: 'bg-white',
   },
   {
     key: '2',
@@ -34,6 +36,8 @@ const TIER_CONFIG = [
     activeBg: 'bg-brand-primary/10',
     activeBorder: 'border-brand-primary/40',
     activeText: 'text-brand-primary',
+    cardBorder: 'border-brand-primary/40',
+    cardBg: 'bg-white',
   },
   {
     key: '3',
@@ -41,6 +45,8 @@ const TIER_CONFIG = [
     activeBg: 'bg-brand-highlight/10',
     activeBorder: 'border-brand-highlight/40',
     activeText: 'text-brand-highlight',
+    cardBorder: 'border-brand-highlight/40',
+    cardBg: 'bg-white',
   },
   {
     key: 'unassigned',
@@ -48,6 +54,8 @@ const TIER_CONFIG = [
     activeBg: 'bg-gray-50',
     activeBorder: 'border-gray-200',
     activeText: 'text-gray-500',
+    cardBorder: 'border-gray-200',
+    cardBg: 'bg-white',
   },
 ];
 
@@ -102,8 +110,9 @@ function DashboardTargetCard({
   avgCostPerUnit: number;
 }) {
   const valuePill = formatValuePill(entry.companyWse, avgCostPerUnit);
+  const tierConfig = TIER_CONFIG.find(t => t.key === entry.tier);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-3 hover:shadow-sm transition-all">
+    <div className={`${tierConfig?.cardBg ?? 'bg-white'} border-2 ${tierConfig?.cardBorder ?? 'border-gray-200'} rounded-xl p-3 hover:shadow-sm transition-all`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1">
           <Link
@@ -122,8 +131,11 @@ function DashboardTargetCard({
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
         {entry.assignedUserNames[0] && <UserPill name={entry.assignedUserNames[0]} />}
         {hasMeeting && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Meeting Scheduled
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+            Scheduled
           </span>
         )}
         {valuePill && (

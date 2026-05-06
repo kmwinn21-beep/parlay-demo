@@ -151,8 +151,11 @@ function TargetCard({
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
         {entry.assignedUserNames[0] && <UserPill name={entry.assignedUserNames[0]} />}
         {hasMeeting && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Meeting Scheduled
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+            Scheduled
           </span>
         )}
         {valuePill && (
