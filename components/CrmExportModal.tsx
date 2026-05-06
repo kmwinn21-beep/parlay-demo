@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Props {
   conferenceId: number;
@@ -11,6 +11,7 @@ interface Props {
 }
 
 type Provider = 'hubspot' | 'salesforce';
+type FilterMode = 'all' | 'filter';
 
 function formatDateRange(start?: string, end?: string): string {
   const fmt = (s: string) => {
@@ -44,11 +45,10 @@ const CRM_FILES: Record<Provider, string[]> = {
   ],
 };
 
-// Step indicator
 function StepIndicator({ step }: { step: number }) {
   return (
     <div className="flex items-center gap-0 mb-6">
-      {[1, 2, 3].map((n, i) => (
+      {[1, 2, 3, 4].map((n, i) => (
         <div key={n} className="flex items-center">
           <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
             step === n
@@ -63,38 +63,56 @@ function StepIndicator({ step }: { step: number }) {
               </svg>
             ) : n}
           </div>
-          {i < 2 && (
-            <div className={`w-10 h-0.5 mx-0.5 ${step > n ? 'bg-emerald-400' : 'bg-gray-200'}`} />
+          {i < 3 && (
+            <div className={`w-8 h-0.5 mx-0.5 ${step > n ? 'bg-emerald-400' : 'bg-gray-200'}`} />
           )}
         </div>
       ))}
-      <span className="ml-3 text-xs text-gray-400 font-medium">Step {step} of 3</span>
+      <span className="ml-3 text-xs text-gray-400 font-medium">Step {step} of 4</span>
     </div>
   );
 }
 
 export function CrmExportModal({ conferenceId, conferenceName, startDate, endDate, onClose }: Props) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [provider, setProvider] = useState<Provider | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [selectedCompanyTypes, setSelectedCompanyTypes] = useState<string[]>([]);
+  const [availableCompanyTypes, setAvailableCompanyTypes] = useState<string[]>([]);
+  const [filterTypeError, setFilterTypeError] = useState(false);
+  const [companyTypeDropdownOpen, setCompanyTypeDropdownOpen] = useState(false);
   const [campaignName, setCampaignName] = useState(conferenceName);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  // Load stored campaign name mapping on mount
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch available company types on mount
   useEffect(() => {
-    fetch(`/api/conferences/${conferenceId}/crm-mapping`)
+    fetch('/api/config?category=company_type')
       .then(r => r.json())
-      .then((d: { hubspot: string | null; salesforce: string | null }) => {
-        // Will be applied when provider is selected
-        if (provider && d[provider]) setCampaignName(d[provider]!);
+      .then((d: { value: string }[]) => {
+        setAvailableCompanyTypes(Array.isArray(d) ? d.map(x => x.value).filter(Boolean) : []);
       })
       .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  // When provider changes on step 2, try to load stored mapping
+  // Close dropdown on outside click
   useEffect(() => {
-    if (!provider || step !== 2) return;
+    if (!companyTypeDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setCompanyTypeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [companyTypeDropdownOpen]);
+
+  // When provider changes on step 3 (campaign attribution), load stored mapping
+  useEffect(() => {
+    if (!provider || step !== 3) return;
     fetch(`/api/conferences/${conferenceId}/crm-mapping`)
       .then(r => r.json())
       .then((d: { hubspot: string | null; salesforce: string | null }) => {
@@ -109,11 +127,14 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
     if (!provider) return;
     setLoading(true);
     setError(null);
+    const companyTypeFilter = filterMode === 'filter' && selectedCompanyTypes.length > 0
+      ? selectedCompanyTypes
+      : null;
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/crm-export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, campaignName }),
+        body: JSON.stringify({ provider, campaignName, companyTypeFilter }),
       });
 
       if (!res.ok) {
@@ -133,7 +154,6 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // Fire-and-forget: persist campaign name mapping
       fetch(`/api/conferences/${conferenceId}/crm-mapping`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,12 +168,40 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
     }
   };
 
+  const goNext = () => {
+    if (step === 2) {
+      if (filterMode === 'filter' && selectedCompanyTypes.length === 0) {
+        setFilterTypeError(true);
+        return;
+      }
+      setFilterTypeError(false);
+    }
+    setError(null);
+    setStep(prev => (prev + 1) as 2 | 3 | 4);
+  };
+
+  const goBack = () => {
+    setError(null);
+    setFilterTypeError(false);
+    setStep(prev => (prev - 1) as 1 | 2 | 3);
+  };
+
+  const toggleCompanyType = (t: string) => {
+    setSelectedCompanyTypes(prev =>
+      prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+    );
+    setFilterTypeError(false);
+  };
+
   const providerLabel = provider === 'hubspot' ? 'HubSpot' : provider === 'salesforce' ? 'Salesforce' : '';
   const dateRange = formatDateRange(startDate, endDate);
+  const filterSummary = filterMode === 'filter' && selectedCompanyTypes.length > 0
+    ? selectedCompanyTypes.join(', ')
+    : 'All companies and contacts';
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-      {/* No click-outside dismiss — user must explicitly cancel */}
+      {/* No click-outside dismiss */}
       <div className="absolute inset-0 bg-black/40" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh]">
 
@@ -183,7 +231,6 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
                 Choose the CRM you want to import this data into. Files will be formatted and named for the selected platform.
               </p>
               <div className="grid grid-cols-2 gap-3">
-                {/* HubSpot */}
                 <button
                   type="button"
                   onClick={() => setProvider('hubspot')}
@@ -209,7 +256,6 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
                   </p>
                 </button>
 
-                {/* Salesforce */}
                 <button
                   type="button"
                   onClick={() => setProvider('salesforce')}
@@ -238,8 +284,142 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
             </div>
           )}
 
-          {/* ── STEP 2 — Campaign Attribution ── */}
-          {step === 2 && provider && (
+          {/* ── STEP 2 — Filter by company type ── */}
+          {step === 2 && (
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Filter companies and contacts</h2>
+              <p className="text-sm text-gray-500 mb-5">
+                By default, all companies and contacts from this conference will be exported. You can filter to only include specific company types — for example, only your prospects or target accounts. This filter applies to both the companies file and the contacts file.
+              </p>
+
+              <div className="space-y-3">
+                {/* Option A */}
+                <button
+                  type="button"
+                  onClick={() => { setFilterMode('all'); setFilterTypeError(false); }}
+                  className={`w-full rounded-xl border-2 p-4 text-left transition-all ${
+                    filterMode === 'all'
+                      ? 'border-brand-primary bg-brand-primary/5'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      filterMode === 'all' ? 'border-brand-primary' : 'border-gray-300'
+                    }`}>
+                      {filterMode === 'all' && <div className="w-2 h-2 rounded-full bg-brand-primary" />}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">Export everything</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Include all companies and contacts from this conference regardless of company type</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Option B */}
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('filter')}
+                  className={`w-full rounded-xl border-2 p-4 text-left transition-all ${
+                    filterMode === 'filter'
+                      ? 'border-brand-primary bg-brand-primary/5'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      filterMode === 'filter' ? 'border-brand-primary' : 'border-gray-300'
+                    }`}>
+                      {filterMode === 'filter' && <div className="w-2 h-2 rounded-full bg-brand-primary" />}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">Filter by company type</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Only include companies and contacts that match one or more company types</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Multi-select dropdown — shown when Option B is selected */}
+              {filterMode === 'filter' && (
+                <div className="mt-4" ref={dropdownRef}>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setCompanyTypeDropdownOpen(v => !v)}
+                      className={`input-field text-sm w-full text-left flex items-center flex-wrap gap-1.5 min-h-[40px] pr-8 ${
+                        filterTypeError ? 'border-red-400 focus:ring-red-300' : ''
+                      }`}
+                    >
+                      {selectedCompanyTypes.length === 0 ? (
+                        <span className="text-gray-400">Select company types…</span>
+                      ) : (
+                        selectedCompanyTypes.map(t => (
+                          <span
+                            key={t}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{ backgroundColor: 'rgb(var(--brand-primary-rgb) / 0.12)', color: 'rgb(var(--brand-primary-rgb))' }}
+                          >
+                            {t}
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={e => { e.stopPropagation(); toggleCompanyType(t); }}
+                              onKeyDown={e => e.key === 'Enter' && (e.stopPropagation(), toggleCompanyType(t))}
+                              className="cursor-pointer hover:opacity-70 leading-none"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </span>
+                          </span>
+                        ))
+                      )}
+                      <svg
+                        className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${companyTypeDropdownOpen ? 'rotate-180' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {companyTypeDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                        {availableCompanyTypes.length === 0 ? (
+                          <p className="text-sm text-gray-400 px-3 py-2">No company types configured.</p>
+                        ) : (
+                          availableCompanyTypes.map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => toggleCompanyType(t)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors"
+                            >
+                              {selectedCompanyTypes.includes(t) ? (
+                                <svg className="w-4 h-4 text-brand-primary flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                <div className="w-4 h-4 flex-shrink-0" />
+                              )}
+                              {t}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {filterTypeError && (
+                    <p className="text-xs text-red-600 mt-1.5">Select at least one company type to continue.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 3 — Campaign Attribution ── */}
+          {step === 3 && provider && (
             <div>
               <h2 className="text-lg font-bold text-gray-900 mb-1">
                 Conference attribution in {providerLabel}
@@ -287,8 +467,8 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
             </div>
           )}
 
-          {/* ── STEP 3 — Confirm & Export ── */}
-          {step === 3 && provider && (
+          {/* ── STEP 4 — Confirm & Export ── */}
+          {step === 4 && provider && (
             <div>
               {done ? (
                 <div className="text-center py-6">
@@ -307,7 +487,6 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
                 <>
                   <h2 className="text-lg font-bold text-gray-900 mb-4">Ready to export</h2>
 
-                  {/* Summary card */}
                   <div className="rounded-xl border border-gray-200 bg-gray-50 divide-y divide-gray-200 mb-4">
                     <div className="flex items-center justify-between px-4 py-3 text-sm">
                       <span className="text-gray-500 font-medium">CRM</span>
@@ -320,6 +499,10 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
                     <div className="flex items-center justify-between px-4 py-3 text-sm">
                       <span className="text-gray-500 font-medium">Campaign name</span>
                       <span className="text-gray-900 font-semibold">{campaignName}</span>
+                    </div>
+                    <div className="flex items-start justify-between px-4 py-3 text-sm">
+                      <span className="text-gray-500 font-medium flex-shrink-0">Company filter</span>
+                      <span className="text-gray-900 font-semibold text-right ml-4">{filterSummary}</span>
                     </div>
                     <div className="px-4 py-3">
                       <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Files that will be generated</p>
@@ -358,7 +541,7 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
               {step > 1 && (
                 <button
                   type="button"
-                  onClick={() => { setStep(prev => (prev - 1) as 1 | 2 | 3); setError(null); }}
+                  onClick={goBack}
                   className="btn-secondary text-sm"
                   disabled={loading}
                 >
@@ -367,7 +550,7 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
               )}
             </div>
             <div className="flex items-center gap-2">
-              {step < 3 && (
+              {step < 4 && (
                 <button
                   type="button"
                   onClick={onClose}
@@ -380,7 +563,7 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
               {step === 1 && (
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={goNext}
                   disabled={!provider}
                   className="btn-primary text-sm disabled:opacity-50"
                 >
@@ -390,13 +573,23 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
               {step === 2 && (
                 <button
                   type="button"
-                  onClick={() => setStep(3)}
-                  className="btn-primary text-sm"
+                  onClick={goNext}
+                  disabled={filterMode === 'filter' && selectedCompanyTypes.length === 0}
+                  className="btn-primary text-sm disabled:opacity-50"
                 >
                   Next →
                 </button>
               )}
               {step === 3 && (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="btn-primary text-sm"
+                >
+                  Next →
+                </button>
+              )}
+              {step === 4 && (
                 <button
                   type="button"
                   onClick={handleDownload}

@@ -7,6 +7,7 @@ import { db, dbReady } from '@/lib/db';
 
 function csvEscape(v: unknown): string {
   const s = v == null ? '' : String(v);
+  if (s === 'null' || s === 'undefined' || s === 'NaN') return '';
   if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
   return s;
 }
@@ -16,6 +17,8 @@ function csvFile(headers: string[], rows: unknown[][]): string {
 }
 
 // ─── Field helpers ────────────────────────────────────────────────────────────
+
+const EM_DASH = ' — ';
 
 function rootDomain(url: unknown): string {
   const s = url == null ? '' : String(url).trim();
@@ -58,6 +61,11 @@ function addDaysToISO(isoOrDate: unknown, days: number): string {
   return dateOnly ? `${dateOnly}T00:00:00Z` : '';
 }
 
+function meetingTitle(meetingType: unknown, conferenceName: string): string {
+  const t = meetingType == null ? '' : String(meetingType).trim();
+  return `${t || 'Meeting'}${EM_DASH}${conferenceName}`;
+}
+
 const HS_OUTCOME: Record<string, string> = {
   'Meeting Held': 'COMPLETED',
   'Meeting Scheduled': 'SCHEDULED',
@@ -70,14 +78,22 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-function formatDate(dateStr: unknown): string {
-  const s = dateStr == null ? '' : String(dateStr).trim();
-  if (!s) return '';
-  try {
-    return new Date(s.includes('T') ? s : `${s}T00:00:00Z`).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
-    });
-  } catch { return s; }
+// ─── Company type filter ──────────────────────────────────────────────────────
+
+function buildFilterSet(companyTypeFilter: unknown): Set<string> | null {
+  if (!Array.isArray(companyTypeFilter) || companyTypeFilter.length === 0) return null;
+  return new Set((companyTypeFilter as unknown[]).map(t => String(t ?? '').trim().toLowerCase()).filter(Boolean));
+}
+
+function passesCompanyTypeFilter(
+  filterSet: Set<string> | null,
+  companyId: unknown,
+  companyType: unknown
+): boolean {
+  if (!filterSet) return true;
+  if (companyId == null) return false;
+  const t = String(companyType ?? '').trim().toLowerCase();
+  return filterSet.has(t);
 }
 
 // ─── README templates ─────────────────────────────────────────────────────────
@@ -195,9 +211,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const conferenceId = Number(params.id);
   if (isNaN(conferenceId)) return NextResponse.json({ error: 'Invalid conference ID' }, { status: 400 });
 
-  const body = await request.json() as { provider?: string; campaignName?: string };
+  const body = await request.json() as { provider?: string; campaignName?: string; companyTypeFilter?: unknown };
   const provider = body.provider as 'hubspot' | 'salesforce' | undefined;
   const campaignName = body.campaignName?.trim() ?? '';
+  const filterSet = buildFilterSet(body.companyTypeFilter);
 
   if (!provider || !['hubspot', 'salesforce'].includes(provider)) {
     return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
@@ -216,10 +233,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   // Fetch all data in parallel
   const [contactRows, companyRows, meetingRows, followUpRows, noteRows] = await Promise.all([
-    // Contacts
+    // Contacts (includes company_type for filtering)
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.email, a.title, a.phone, a.status,
-                   c.id as company_id, c.name as company_name, c.website as company_website
+                   c.id as company_id, c.name as company_name, c.website as company_website,
+                   c.company_type
             FROM conference_attendees ca
             JOIN attendees a ON a.id = ca.attendee_id
             LEFT JOIN companies c ON c.id = a.company_id
@@ -237,34 +255,59 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             WHERE ca.conference_id = ?`,
       args: [conferenceId],
     }),
-    // Meetings
+    // Meetings (includes first_name, last_name, company_type for filtering)
     db.execute({
       sql: `SELECT m.id, m.meeting_type, m.meeting_date, m.meeting_time, m.location,
-                   m.outcome, m.scheduled_by, a.email as attendee_email
+                   m.outcome, m.scheduled_by,
+                   a.email as attendee_email, a.first_name, a.last_name,
+                   c.id as company_id, c.company_type
             FROM meetings m
             JOIN attendees a ON a.id = m.attendee_id
+            LEFT JOIN companies c ON c.id = a.company_id
             WHERE m.conference_id = ?`,
       args: [conferenceId],
     }),
-    // Follow-ups (tasks)
+    // Follow-ups / tasks (includes first_name, last_name, company_type for filtering)
     db.execute({
       sql: `SELECT fu.id, fu.next_steps, fu.next_steps_notes, fu.completed, fu.created_at,
-                   a.email as attendee_email
+                   a.email as attendee_email, a.first_name, a.last_name,
+                   c.id as company_id, c.company_type
             FROM follow_ups fu
             JOIN attendees a ON a.id = fu.attendee_id
+            LEFT JOIN companies c ON c.id = a.company_id
             WHERE fu.conference_id = ?`,
       args: [conferenceId],
     }),
-    // Notes (entity_notes for attendees in this conference)
+    // Notes (includes first_name, last_name, company_type for filtering)
     db.execute({
-      sql: `SELECT en.id, en.content, en.rep, en.created_at, a.email as attendee_email
+      sql: `SELECT en.id, en.content, en.rep, en.created_at,
+                   a.email as attendee_email, a.first_name, a.last_name,
+                   c.id as company_id, c.company_type
             FROM entity_notes en
             JOIN attendees a ON a.id = en.entity_id AND en.entity_type = 'attendee'
             JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
+            LEFT JOIN companies c ON c.id = a.company_id
             WHERE en.entity_type = 'attendee'`,
       args: [conferenceId],
     }),
   ]);
+
+  // Apply company type filter
+  const companies = companyRows.rows.filter(r =>
+    passesCompanyTypeFilter(filterSet, r.id, r.company_type)
+  );
+  const contacts = contactRows.rows.filter(r =>
+    passesCompanyTypeFilter(filterSet, r.company_id, r.company_type)
+  );
+  const meetings = meetingRows.rows.filter(r =>
+    passesCompanyTypeFilter(filterSet, r.company_id, r.company_type)
+  );
+  const followUps = followUpRows.rows.filter(r =>
+    passesCompanyTypeFilter(filterSet, r.company_id, r.company_type)
+  );
+  const notes = noteRows.rows.filter(r =>
+    passesCompanyTypeFilter(filterSet, r.company_id, r.company_type)
+  );
 
   const timestamp = new Date().toISOString().replace('.000Z', 'Z');
   const slug = slugify(conferenceName);
@@ -274,68 +317,64 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   if (provider === 'hubspot') {
     // FILE 1 — Companies
-    const companiesHs = csvFile(
+    zip.file(`${folder}/1_companies.csv`, csvFile(
       ['Company name', 'Company Domain Name', 'Website URL', 'Company Type', 'Description', 'Company owner', 'Campaign Name'],
-      companyRows.rows.map(r => [
-        r.name, rootDomain(r.website), r.website, r.company_type,
-        r.company_notes, r.owner_email, campaignName,
+      companies.map(r => [
+        r.name ?? '', rootDomain(r.website), r.website ?? '', r.company_type ?? '',
+        r.company_notes ?? '', r.owner_email ?? '', campaignName,
       ])
-    );
-    zip.file(`${folder}/1_companies.csv`, companiesHs);
+    ));
 
     // FILE 2 — Contacts
-    const contactsHs = csvFile(
+    zip.file(`${folder}/2_contacts.csv`, csvFile(
       ['First Name', 'Last Name', 'Email', 'Job Title', 'Phone Number', 'Company Name', 'Website URL', 'Lead Status', 'Lead Source', 'Campaign Name'],
-      contactRows.rows.map(r => [
-        r.first_name, r.last_name, r.email, r.title, r.phone,
-        r.company_name, r.company_website,
+      contacts.map(r => [
+        r.first_name ?? '', r.last_name ?? '', r.email ?? '', r.title ?? '', r.phone ?? '',
+        r.company_name ?? '', r.company_website ?? '',
         r.status ? 'OPEN' : 'NEW',
         'Conference', campaignName,
       ])
-    );
-    zip.file(`${folder}/2_contacts.csv`, contactsHs);
+    ));
 
     // FILE 3 — Meetings
-    const meetingsHs = csvFile(
-      ['Email', 'Meeting Title', 'Meeting Start Time', 'Meeting End Time', 'Meeting Location', 'Meeting Outcome', 'Meeting Body', 'Campaign Name'],
-      meetingRows.rows.map(r => {
+    zip.file(`${folder}/3_meetings.csv`, csvFile(
+      ['Email', 'First Name', 'Last Name', 'Meeting Title', 'Meeting Start Time', 'Meeting End Time', 'Meeting Location', 'Meeting Outcome', 'Meeting Body', 'Campaign Name'],
+      meetings.map(r => {
         const startISO = toISO(r.meeting_date, r.meeting_time);
         const endISO = addMinutesToISO(startISO, 60);
         const outcome = String(r.outcome ?? '');
         return [
-          r.attendee_email,
-          `${r.meeting_type} — ${conferenceName}`,
-          startISO, endISO, r.location,
+          r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '',
+          meetingTitle(r.meeting_type, conferenceName),
+          startISO, endISO, r.location ?? '',
           HS_OUTCOME[outcome] ?? 'SCHEDULED',
           outcome, campaignName,
         ];
       })
-    );
-    zip.file(`${folder}/3_meetings.csv`, meetingsHs);
+    ));
 
     // FILE 4 — Tasks
-    const tasksHs = csvFile(
-      ['Email', 'Task Title', 'Task Notes', 'Due Date', 'Task Status', 'Task Priority', 'Campaign Name'],
-      followUpRows.rows.map(r => [
-        r.attendee_email, r.next_steps, r.next_steps_notes,
+    zip.file(`${folder}/4_tasks.csv`, csvFile(
+      ['Email', 'First Name', 'Last Name', 'Task Title', 'Task Notes', 'Due Date', 'Task Status', 'Task Priority', 'Campaign Name'],
+      followUps.map(r => [
+        r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '',
+        r.next_steps ?? '', r.next_steps_notes ?? '',
         addDaysToISO(r.created_at, 7),
         r.completed ? 'COMPLETED' : 'NOT_STARTED',
         'MEDIUM', campaignName,
       ])
-    );
-    zip.file(`${folder}/4_tasks.csv`, tasksHs);
+    ));
 
     // FILE 5 — Notes
-    const notesHs = csvFile(
-      ['Email', 'Note Body', 'Note Timestamp', 'Campaign Name'],
-      noteRows.rows.map(r => {
+    zip.file(`${folder}/5_notes.csv`, csvFile(
+      ['Email', 'First Name', 'Last Name', 'Note Body', 'Note Timestamp', 'Campaign Name'],
+      notes.map(r => {
         const body = `[Conference: ${conferenceName}] [Rep: ${r.rep ?? ''}] ${r.content ?? ''}`;
         const createdAt = String(r.created_at ?? '');
         const tsISO = createdAt ? (createdAt.includes('T') ? createdAt : `${createdAt}T00:00:00Z`) : '';
-        return [r.attendee_email, body, tsISO, campaignName];
+        return [r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '', body, tsISO, campaignName];
       })
-    );
-    zip.file(`${folder}/5_notes.csv`, notesHs);
+    ));
 
     zip.file(`${folder}/HubSpot Import Instructions - READ ME.txt`, hubspotReadme(conferenceName, campaignName, timestamp));
 
@@ -343,63 +382,59 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Salesforce
 
     // FILE 1 — Accounts
-    const accountsSf = csvFile(
+    zip.file(`${folder}/1_accounts.csv`, csvFile(
       ['Account Name', 'Website', 'Type', 'Description', 'Account Owner', 'Campaign Name'],
-      companyRows.rows.map(r => [
-        r.name, r.website, r.company_type, r.company_notes, r.owner_name, campaignName,
+      companies.map(r => [
+        r.name ?? '', r.website ?? '', r.company_type ?? '', r.company_notes ?? '', r.owner_name ?? '', campaignName,
       ])
-    );
-    zip.file(`${folder}/1_accounts.csv`, accountsSf);
+    ));
 
     // FILE 2 — Contacts
-    const contactsSf = csvFile(
+    zip.file(`${folder}/2_contacts.csv`, csvFile(
       ['First Name', 'Last Name', 'Email', 'Title', 'Phone', 'Account Name', 'Website', 'Lead Source', 'Campaign Name'],
-      contactRows.rows.map(r => [
-        r.first_name, r.last_name, r.email, r.title, r.phone,
-        r.company_name, r.company_website, 'Conference', campaignName,
+      contacts.map(r => [
+        r.first_name ?? '', r.last_name ?? '', r.email ?? '', r.title ?? '', r.phone ?? '',
+        r.company_name ?? '', r.company_website ?? '', 'Conference', campaignName,
       ])
-    );
-    zip.file(`${folder}/2_contacts.csv`, contactsSf);
+    ));
 
     // FILE 3 — Events
-    const eventsSf = csvFile(
-      ['Contact Email', 'Subject', 'Start Date Time', 'End Date Time', 'Location', 'Description', 'Assigned To', 'Campaign Name'],
-      meetingRows.rows.map(r => {
+    zip.file(`${folder}/3_events.csv`, csvFile(
+      ['Contact Email', 'First Name', 'Last Name', 'Subject', 'Start Date Time', 'End Date Time', 'Location', 'Description', 'Assigned To', 'Campaign Name'],
+      meetings.map(r => {
         const startISO = toISO(r.meeting_date, r.meeting_time);
         const endISO = addMinutesToISO(startISO, 60);
         return [
-          r.attendee_email,
-          `${r.meeting_type} — ${conferenceName}`,
-          startISO, endISO, r.location, r.outcome,
-          r.scheduled_by, campaignName,
+          r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '',
+          meetingTitle(r.meeting_type, conferenceName),
+          startISO, endISO, r.location ?? '', r.outcome ?? '',
+          r.scheduled_by ?? '', campaignName,
         ];
       })
-    );
-    zip.file(`${folder}/3_events.csv`, eventsSf);
+    ));
 
     // FILE 4 — Tasks
-    const tasksSf = csvFile(
-      ['Contact Email', 'Subject', 'Comments', 'Due Date', 'Status', 'Priority', 'Campaign Name'],
-      followUpRows.rows.map(r => [
-        r.attendee_email, r.next_steps, r.next_steps_notes,
+    zip.file(`${folder}/4_tasks.csv`, csvFile(
+      ['Contact Email', 'First Name', 'Last Name', 'Subject', 'Comments', 'Due Date', 'Status', 'Priority', 'Campaign Name'],
+      followUps.map(r => [
+        r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '',
+        r.next_steps ?? '', r.next_steps_notes ?? '',
         addDaysToDate(r.created_at, 7),
         r.completed ? 'Completed' : 'Not Started',
         'Normal', campaignName,
       ])
-    );
-    zip.file(`${folder}/4_tasks.csv`, tasksSf);
+    ));
 
     // FILE 5 — Notes
-    const notesSf = csvFile(
-      ['Contact Email', 'Title', 'Content', 'Campaign Name'],
-      noteRows.rows.map(r => {
+    zip.file(`${folder}/5_notes.csv`, csvFile(
+      ['Contact Email', 'First Name', 'Last Name', 'Title', 'Content', 'Campaign Name'],
+      notes.map(r => {
         const body = `[Conference: ${conferenceName}] [Rep: ${r.rep ?? ''}] ${r.content ?? ''}`;
         const title = body.slice(0, 255);
         const content = Buffer.from(body).toString('base64');
-        return [r.attendee_email, title, content, campaignName];
+        return [r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '', title, content, campaignName];
       })
-    );
-    zip.file(`${folder}/5_notes.csv`, notesSf);
+    ));
 
     zip.file(`${folder}/Salesforce Import Instructions - READ ME.txt`, salesforceReadme(conferenceName, campaignName, timestamp));
   }
