@@ -14,6 +14,7 @@ export interface AddableAttendee {
   seniority: string | null;
   companyName: string | null;
   companyId: number | null;
+  companyWse?: number | null;
 }
 
 export interface AddableGroup {
@@ -56,22 +57,12 @@ const TIERS = [
   },
 ];
 
-const SENIORITY_COLORS: Record<string, string> = {
-  'C-Suite': '#7c3aed',
-  'VP/SVP': '#1B76BC',
-  'Director': '#059669',
-  'Manager': '#f59e0b',
-  'Other': '#6b7280',
-};
-
-function getSeniorityColor(s: string | null): string {
-  if (!s) return '#6b7280';
-  return SENIORITY_COLORS[s] ?? '#6b7280';
-}
-
 function SeniorityPill({ seniority }: { seniority: string | null }) {
   if (!seniority) return null;
-  const color = getSeniorityColor(seniority);
+  const COLORS: Record<string, string> = {
+    'C-Suite': '#7c3aed', 'VP/SVP': '#1B76BC', 'Director': '#059669', 'Manager': '#f59e0b', 'Other': '#6b7280',
+  };
+  const color = COLORS[seniority] ?? '#6b7280';
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
       style={{ color, borderColor: `${color}60`, backgroundColor: `${color}14` }}>
@@ -80,13 +71,22 @@ function SeniorityPill({ seniority }: { seniority: string | null }) {
   );
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.trim().substring(0, 2).toUpperCase();
+}
+
 function UserPill({ name }: { name: string }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap">
-      <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <span
+      title={name}
+      className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap"
+    >
+      <svg className="w-3 h-3 opacity-70 flex-shrink-0 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
-      {name}
+      {getInitials(name)}
     </span>
   );
 }
@@ -152,8 +152,11 @@ function TargetCard({
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
         {entry.assignedUserNames[0] && <UserPill name={entry.assignedUserNames[0]} />}
         {hasMeeting && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Meeting Scheduled
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+            Scheduled
           </span>
         )}
         {valuePill && (
@@ -166,7 +169,15 @@ function TargetCard({
   );
 }
 
+const TIER_BAR_COLORS: Record<string, string> = {
+  '1': '#dc2626',
+  '2': 'rgb(var(--brand-primary-rgb, 30 58 95))',
+  '3': 'rgb(var(--brand-highlight-rgb, 5 150 105))',
+  'unassigned': '#9ca3af',
+};
+
 export function ConferenceTargetsTab({
+  conferenceId,
   conferenceName,
   targetMap,
   meetingAttendeeIds,
@@ -176,6 +187,7 @@ export function ConferenceTargetsTab({
   onAddTargets,
   loadingAddAttendees,
 }: {
+  conferenceId: number;
   conferenceName: string;
   targetMap: Map<number, TargetEntry>;
   meetingAttendeeIds: Set<number>;
@@ -188,11 +200,30 @@ export function ConferenceTargetsTab({
   const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
+  const [conversionPct, setConversionPct] = useState(60);
+  const [meetingsConvPct, setMeetingsConvPct] = useState(60);
+  const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/conferences/${conferenceId}/budget`).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/effectiveness').then(r => r.ok ? r.json() : null),
+    ]).then(([budgetData, effectivenessData]) => {
+      const val = (budgetData as { required_pipeline_amount?: number | null } | null)?.required_pipeline_amount;
+      if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
+      const mhRate = (effectivenessData as Record<string, string> | null)?.meetings_held_conversion_rate;
+      if (mhRate != null) {
+        const pct = parseFloat(mhRate);
+        if (!isNaN(pct) && pct > 0) setMeetingsConvPct(pct);
+      }
+    }).catch(() => {});
+  }, [conferenceId]);
 
   // Add-target dropdown state
   const [showAdd, setShowAdd] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [addPending, setAddPending] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const addDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -249,14 +280,31 @@ export function ConferenceTargetsTab({
   }
   const hasValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
 
-  // Seniority breakdown from targets
-  const senCount: Record<string, number> = {};
+  // Pipeline coverage
+  const totalTargetValue = Object.values(tierValueSum).reduce((a, b) => a + b, 0);
+  const convertedValue = Math.round(totalTargetValue * conversionPct / 100);
+  const coverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedValue / requiredPipeline : null;
+  const maxTierValue = Math.max(1, ...Object.values(tierValueSum));
+
+  // Meetings pipeline — same dedup logic but filtered to targets with meetings scheduled
+  const meetingCompanyBestTier = new Map<number, { tier: string; wse: number }>();
   for (const t of targets) {
-    const s = t.seniority ?? 'Unknown';
-    senCount[s] = (senCount[s] ?? 0) + 1;
+    if (!meetingAttendeeIds.has(t.attendeeId)) continue;
+    if (t.companyId == null || t.companyWse == null) continue;
+    const existing = meetingCompanyBestTier.get(t.companyId);
+    if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+      meetingCompanyBestTier.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+    }
   }
-  const senBreakdown = Object.entries(senCount).sort((a, b) => b[1] - a[1]);
-  const maxSen = Math.max(1, ...Object.values(senCount));
+  const meetingTierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of Array.from(meetingCompanyBestTier.values())) {
+    meetingTierValueSum[tier] = (meetingTierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const totalMeetingValue = Object.values(meetingTierValueSum).reduce((a, b) => a + b, 0);
+  const convertedMeetingValue = Math.round(totalMeetingValue * meetingsConvPct / 100);
+  const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
+  const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
+  const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   async function handleDrop(tier: string) {
     if (draggingId === null) return;
@@ -285,29 +333,173 @@ export function ConferenceTargetsTab({
 
   return (
     <div className="space-y-6">
-      {/* Header row: count card + seniority chart */}
-      <div className="flex flex-wrap gap-4 items-start">
-        <div className="rounded-xl border-2 border-brand-accent bg-white p-4 flex flex-col items-center min-w-[100px]">
-          <span className="text-3xl font-bold text-brand-primary leading-tight">{targets.length}</span>
-          <span className="text-xs font-semibold text-gray-500 mt-0.5 text-center">Target{targets.length !== 1 ? 's' : ''}</span>
-        </div>
-
-        {senBreakdown.length > 0 && (
-          <div className="flex-1 min-w-[200px] rounded-xl border border-gray-200 bg-white p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Seniority Breakdown</p>
-            <div className="space-y-2">
-              {senBreakdown.map(([label, count]) => (
-                <div key={label} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div className="h-2 rounded-full" style={{ width: `${Math.round((count / maxSen) * 100)}%`, backgroundColor: getSeniorityColor(label) }} />
-                  </div>
-                  <span className="text-xs text-gray-500 w-5 text-right flex-shrink-0">{count}</span>
-                </div>
-              ))}
+      {/* Header row: pipeline value chart + meetings pipeline chart */}
+      <div className="flex flex-wrap gap-4 items-stretch">
+        {/* Targeted Pipeline Value chart */}
+        <div className="flex-1 min-w-[220px] rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Targeted Pipeline Value</p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Conversion:</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={conversionPct}
+                onChange={e => {
+                  const v = Math.max(0, Math.min(100, Number(e.target.value)));
+                  if (!isNaN(v)) setConversionPct(v);
+                }}
+                className="w-12 text-xs text-center border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-brand-primary"
+              />
+              <span className="text-xs text-gray-400">%</span>
             </div>
           </div>
-        )}
+
+          {/* Required pipeline comparison bar */}
+          {requiredPipeline != null && (
+            <div className="mb-3 pb-3 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+              </div>
+              <div className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-3 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
+                    backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-xs text-gray-400">
+                  Projected at {conversionPct}%:{' '}
+                  <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+                </span>
+                {coverageRatio != null && (
+                  <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                    ({Math.round((coverageRatio ?? 0) * 100)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Per-tier value bars */}
+          {hasValues ? (
+            <div className="space-y-2">
+              {TIERS.map(tier => {
+                const val = tierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-600 w-28 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
+                          backgroundColor: TIER_BAR_COLORS[tier.key] ?? '#9ca3af',
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+          )}
+        </div>
+
+        {/* Targeted Pipeline Value of Scheduled Meetings chart */}
+        <div className="flex-1 min-w-[220px] rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Targeted Pipeline Value of Scheduled Meetings</p>
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+              <span className="text-xs text-gray-400">Conversion:</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={meetingsConvPct}
+                onChange={e => {
+                  const v = Math.max(0, Math.min(100, Number(e.target.value)));
+                  if (!isNaN(v)) setMeetingsConvPct(v);
+                }}
+                className="w-12 text-xs text-center border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-brand-primary"
+              />
+              <span className="text-xs text-gray-400">%</span>
+            </div>
+          </div>
+
+          {/* Required pipeline comparison bar */}
+          {requiredPipeline != null && (
+            <div className="mb-3 pb-3 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+              </div>
+              <div className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-3 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
+                    backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-xs text-gray-400">
+                  Projected at {meetingsConvPct}%:{' '}
+                  <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
+                </span>
+                {meetingsCoverageRatio != null && (
+                  <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                    ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Per-tier value bars for companies with meetings */}
+          {hasMeetingValues ? (
+            <div className="space-y-2">
+              {TIERS.map(tier => {
+                const val = meetingTierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-600 w-28 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
+                          backgroundColor: TIER_BAR_COLORS[tier.key] ?? '#9ca3af',
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">
+              {avgCostPerUnit > 0
+                ? meetingAttendeeIds.size === 0
+                  ? 'No meetings scheduled yet.'
+                  : 'No target companies with scheduled meetings.'
+                : 'Set avg. cost per unit in Admin Settings to see values.'}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Kanban */}
@@ -320,58 +512,126 @@ export function ConferenceTargetsTab({
               <button
                 type="button"
                 onClick={() => { setShowAdd(prev => !prev); setSelectedIds(new Set()); }}
-                disabled={loadingAddAttendees || addPending}
+                disabled={addPending}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-wait"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
+                {loadingAddAttendees ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
                 Target
               </button>
 
               {showAdd && (
-                <div className="absolute right-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-30 flex flex-col max-h-[480px]">
+                <div className="absolute right-0 top-full mt-1 w-[32rem] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-30 flex flex-col max-h-[480px]">
                   {/* Dropdown header */}
                   <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
                     <span className="text-sm font-semibold text-gray-800">Add Targets</span>
-                    <span className="text-xs text-gray-400">{selectedIds.size} selected</span>
+                    <div className="flex items-center gap-3">
+                      {!loadingAddAttendees && (addableGroups ?? []).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allLabels = (addableGroups ?? []).map(g => g.label);
+                            const allExpanded = allLabels.every(l => expandedGroups.has(l));
+                            setExpandedGroups(allExpanded ? new Set() : new Set(allLabels));
+                          }}
+                          className="text-xs text-brand-secondary hover:text-brand-primary transition-colors font-medium"
+                        >
+                          {(addableGroups ?? []).every(g => expandedGroups.has(g.label)) ? 'Collapse all' : 'Expand all'}
+                        </button>
+                      )}
+                      <span className="text-xs text-gray-400">{selectedIds.size} selected</span>
+                    </div>
                   </div>
 
                   {/* Attendee list */}
-                  {(addableGroups ?? []).length === 0 ? (
+                  {loadingAddAttendees && (addableGroups ?? []).length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-xs">
+                      <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                      Loading recommendations…
+                    </div>
+                  ) : (addableGroups ?? []).length === 0 ? (
                     <p className="px-4 py-8 text-center text-xs text-gray-400">
                       All conference attendees are already targets.
                     </p>
                   ) : (
                     <div className="overflow-y-auto flex-1">
-                      {(addableGroups ?? []).map(group => (
-                        <div key={group.label}>
-                          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
-                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group.label}</span>
-                          </div>
-                          {group.attendees.map(a => (
-                            <label key={a.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(a.id)}
-                                onChange={() => setSelectedIds(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
-                                  return next;
-                                })}
-                                className="mt-0.5 flex-shrink-0 accent-brand-primary"
-                              />
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-800 leading-tight">
-                                  {a.firstName} {a.lastName}
-                                  {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
-                                </p>
-                                {a.companyName && <p className="text-xs text-gray-400 truncate">{a.companyName}</p>}
+                      {(addableGroups ?? []).map(group => {
+                        const isExpanded = expandedGroups.has(group.label);
+                        const selectedInGroup = group.attendees.filter(a => selectedIds.has(a.id)).length;
+                        return (
+                          <div key={group.label}>
+                            {/* Collapsible group header */}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedGroups(prev => {
+                                const next = new Set(prev);
+                                if (next.has(group.label)) next.delete(group.label); else next.add(group.label);
+                                return next;
+                              })}
+                              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100 sticky top-0 z-10 hover:bg-gray-100 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{group.label}</span>
+                                <span className="text-xs text-gray-400">({group.attendees.length})</span>
+                                {selectedInGroup > 0 && (
+                                  <span className="text-xs font-semibold text-brand-secondary">{selectedInGroup} selected</span>
+                                )}
                               </div>
-                            </label>
-                          ))}
+                              <svg
+                                className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {/* Attendees (only when expanded) */}
+                            {isExpanded && group.attendees.map(a => {
+                              const companyValue = (a.companyWse != null && avgCostPerUnit > 0)
+                                ? '$' + Math.round(a.companyWse * avgCostPerUnit).toLocaleString('en-US')
+                                : null;
+                              return (
+                                <label key={a.id} className="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedIds.has(a.id)}
+                                    onChange={() => setSelectedIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                                      return next;
+                                    })}
+                                    className="mt-0.5 flex-shrink-0 accent-brand-primary"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-gray-800 leading-tight">
+                                      {a.firstName} {a.lastName}
+                                      {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
+                                    </p>
+                                    {a.companyName && (
+                                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                                        <p className="text-xs text-gray-400 truncate">{a.companyName}</p>
+                                        {companyValue && (
+                                          <span className="text-xs font-semibold text-green-700 flex-shrink-0">{companyValue}</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                      {loadingAddAttendees && (
+                        <div className="flex items-center gap-2 px-4 py-3 text-gray-400 text-xs border-t border-gray-100">
+                          <div className="w-3 h-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                          Loading more…
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
 

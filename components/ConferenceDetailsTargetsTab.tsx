@@ -15,6 +15,21 @@ interface AttendeeRaw {
   company_name: string | null;
   company_id: number | null;
   company_type: string | null;
+  company_wse: number | null;
+}
+
+const TARGETING_TIER_TO_CONF_TIER: Record<string, string> = {
+  must_target: '1',
+  high_priority: '2',
+  worth_engaging: '3',
+  monitor: 'unassigned',
+  low_priority: 'unassigned',
+  unscored: 'unassigned',
+};
+
+interface CompanyTierInfo {
+  tierKey: string;
+  score: number;
 }
 
 interface Props {
@@ -22,6 +37,16 @@ interface Props {
   conferenceName: string;
   meetingAttendeeIds: Set<number>;
 }
+
+const TIER_GROUP_ORDER = ['must_target', 'high_priority', 'worth_engaging', 'monitor', 'low_priority', 'unscored'] as const;
+const TIER_GROUP_LABELS: Record<string, string> = {
+  must_target: 'Must Target',
+  high_priority: 'High Priority',
+  worth_engaging: 'Worth Engaging',
+  monitor: 'Monitor',
+  low_priority: 'Low Priority',
+  unscored: 'Other',
+};
 
 function resolveAttSeniority(raw: string | null, title: string | null, senMap: Map<string, string>): string {
   if (!raw) return effectiveSeniority(undefined, title ?? undefined) || 'Other';
@@ -34,26 +59,26 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
   const [targetMap, setTargetMap] = useState<Map<number, TargetEntry>>(new Map());
   const [allAttendees, setAllAttendees] = useState<AttendeeRaw[]>([]);
   const [seniorityMap, setSeniorityMap] = useState<Map<string, string>>(new Map());
+  const [companyTierMap, setCompanyTierMap] = useState<Map<number, CompanyTierInfo>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadingAttendees, setLoadingAttendees] = useState(true);
 
   useEffect(() => {
+    // Phase 1: fast — load targets, attendees, seniority so the charts and
+    // kanban render immediately.
     Promise.all([
       fetch(`/api/conferences/${conferenceId}/targets`).then(r => r.ok ? r.json() : []),
       fetch(`/api/conferences/${conferenceId}`).then(r => r.ok ? r.json() : {}),
       fetch('/api/config?category=seniority').then(r => r.ok ? r.json() : []),
     ])
       .then(([targets, confData, senOptions]) => {
-        // Targets
         const tMap = new Map<number, TargetEntry>();
         for (const t of (targets as TargetEntry[])) tMap.set(t.attendeeId, t);
         setTargetMap(tMap);
 
-        // Conference attendees
         const attendees: AttendeeRaw[] = ((confData as { attendees?: AttendeeRaw[] }).attendees ?? []);
         setAllAttendees(attendees);
 
-        // Seniority ID → label map
         const sMap = new Map<string, string>();
         for (const o of (senOptions as { id: number; value: string }[])) {
           sMap.set(String(o.id), o.value);
@@ -61,53 +86,106 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
         setSeniorityMap(sMap);
       })
       .catch(() => {})
-      .finally(() => { setLoading(false); setLoadingAttendees(false); });
+      .finally(() => setLoading(false));
+
+    // Phase 2: batch-load targeting scores progressively, same approach as
+    // Target Recommendations tab. Each batch merges into companyTierMap so
+    // the + Target dropdown populates incrementally as data arrives.
+    let cancelled = false;
+    (async () => {
+      let offset = 0;
+      const BATCH = 25;
+      try {
+        while (!cancelled) {
+          const params = new URLSearchParams({ batch: '1', offset: String(offset), limit: String(BATCH) });
+          const res = await fetch(`/api/conferences/${conferenceId}/targeting?${params.toString()}`, { cache: 'no-store' });
+          if (!res.ok || cancelled) break;
+          const data = (await res.json()) as {
+            companies?: Array<{ company_id: number; target_priority_tier_key: string; target_priority_score: number }>;
+            pagination?: { has_more: boolean; next_offset: number | null };
+          };
+          if (cancelled) break;
+          const batch = data.companies ?? [];
+          setCompanyTierMap(prev => {
+            const next = new Map(prev);
+            for (const c of batch) {
+              next.set(c.company_id, {
+                tierKey: c.target_priority_tier_key ?? 'unscored',
+                score: c.target_priority_score ?? 0,
+              });
+            }
+            return next;
+          });
+          // Enable the + Target button after the first batch so the user
+          // isn't blocked waiting for all companies to load.
+          setLoadingAttendees(false);
+          if (!data.pagination?.has_more || data.pagination.next_offset == null) break;
+          offset = data.pagination.next_offset;
+        }
+      } catch { /* ignore */ } finally {
+        if (!cancelled) setLoadingAttendees(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [conferenceId]);
 
-  // Build grouped attendee list for the "+ Target" dropdown, excluding existing targets
+  // Build grouped attendee list for the "+ Target" dropdown, excluding existing targets.
+  // Groups ordered Must Target → High Priority → Worth Engaging → Monitor → Low Priority → Other.
+  // Companies within each group sorted by target_priority_score descending.
   const addableGroups = useMemo<AddableGroup[]>(() => {
     if (loadingAttendees) return [];
 
-    const g1: AttendeeRaw[] = [];
-    const g2: AttendeeRaw[] = [];
-    const g3: AttendeeRaw[] = [];
-    const g4: AttendeeRaw[] = [];
+    // Per-tier buckets: tierKey → companyId → { score, attendees }
+    const tierBuckets = new Map<string, Map<number, { score: number; attendees: AttendeeRaw[] }>>();
+    for (const tierKey of TIER_GROUP_ORDER) tierBuckets.set(tierKey, new Map());
 
     for (const a of allAttendees) {
       if (targetMap.has(a.id)) continue;
+      const companyId = a.company_id ?? 0;
+      // Only include attendees from companies returned by the targeting API
+      // (which already filters to the configured target company type).
+      if (companyTierMap.size > 0 && companyId > 0 && !companyTierMap.has(companyId)) continue;
+      const tierInfo = companyId > 0 ? companyTierMap.get(companyId) : undefined;
+      const tierKey: string = tierInfo?.tierKey ?? 'unscored';
+      const score = tierInfo?.score ?? 0;
 
-      const sen = resolveAttSeniority(a.seniority, a.title, seniorityMap);
-      const ct = (a.company_type ?? '').toLowerCase();
-      const isOperator = ct.includes('operator');
-      const isCapital = ct.includes('capital');
-
-      if (sen === 'C-Suite' && isOperator) g1.push(a);
-      else if ((sen === 'VP/SVP' || sen === 'SVP' || sen === 'VP') && isOperator) g2.push(a);
-      else if (isCapital) g3.push(a);
-      else g4.push(a);
+      const bucket = tierBuckets.get(tierKey) ?? tierBuckets.get('unscored')!;
+      if (!bucket.has(companyId)) bucket.set(companyId, { score, attendees: [] });
+      bucket.get(companyId)!.attendees.push(a);
     }
 
-    const byFirstName = (a: AttendeeRaw, b: AttendeeRaw) => a.first_name.localeCompare(b.first_name);
-    const toAddable = (arr: AttendeeRaw[]) =>
-      arr.sort(byFirstName).map(a => ({
-        id: a.id,
-        firstName: a.first_name,
-        lastName: a.last_name,
-        title: a.title ?? null,
-        seniority: resolveAttSeniority(a.seniority, a.title, seniorityMap),
-        companyName: a.company_name ?? null,
-        companyId: a.company_id ?? null,
-      }));
+    const groups: AddableGroup[] = [];
+    for (const tierKey of TIER_GROUP_ORDER) {
+      const companyMap = tierBuckets.get(tierKey);
+      if (!companyMap || companyMap.size === 0) continue;
 
-    return (
-      [
-        { label: 'C-Suite · Operator', attendees: toAddable(g1) },
-        { label: 'VP/SVP · Operator', attendees: toAddable(g2) },
-        { label: 'Capital', attendees: toAddable(g3) },
-        { label: 'Other', attendees: toAddable(g4) },
-      ] as AddableGroup[]
-    ).filter(g => g.attendees.length > 0);
-  }, [allAttendees, targetMap, seniorityMap, loadingAttendees]);
+      // Sort companies by score descending, then flatten attendees
+      const sortedCompanies = Array.from(companyMap.values())
+        .sort((a, b) => b.score - a.score);
+
+      const attendees = sortedCompanies.flatMap(({ attendees: atts }) =>
+        [...atts]
+          .sort((a, b) => a.first_name.localeCompare(b.first_name))
+          .map(a => ({
+            id: a.id,
+            firstName: a.first_name,
+            lastName: a.last_name,
+            title: a.title ?? null,
+            seniority: resolveAttSeniority(a.seniority, a.title, seniorityMap),
+            companyName: a.company_name ?? null,
+            companyId: a.company_id ?? null,
+            companyWse: a.company_wse ?? null,
+          }))
+      );
+
+      if (attendees.length > 0) {
+        groups.push({ label: TIER_GROUP_LABELS[tierKey] ?? tierKey, attendees });
+      }
+    }
+
+    return groups;
+  }, [allAttendees, targetMap, seniorityMap, companyTierMap, loadingAttendees]);
 
   const toggleTarget = useCallback(async (entry: Omit<TargetEntry, 'tier'>) => {
     const isTarget = targetMap.has(entry.attendeeId);
@@ -147,23 +225,28 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
     } catch { /* optimistic only */ }
   }, [conferenceId]);
 
-  // Batch-add multiple attendees as Unassigned targets
   const addTargets = useCallback(async (entries: Array<Omit<TargetEntry, 'tier'>>) => {
+    // Resolve the conference tier for each entry from its company's targeting tier
+    const withTiers = entries.map(e => {
+      const tierInfo = companyTierMap.get(e.companyId ?? 0);
+      const tier = TARGETING_TIER_TO_CONF_TIER[tierInfo?.tierKey ?? 'unscored'] ?? 'unassigned';
+      return { ...e, tier };
+    });
     setTargetMap(prev => {
       const next = new Map(prev);
-      for (const e of entries) next.set(e.attendeeId, { ...e, tier: 'unassigned' });
+      for (const e of withTiers) next.set(e.attendeeId, e);
       return next;
     });
     await Promise.all(
-      entries.map(e =>
+      withTiers.map(e =>
         fetch(`/api/conferences/${conferenceId}/targets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendee_id: e.attendeeId }),
+          body: JSON.stringify({ attendee_id: e.attendeeId, tier: e.tier }),
         }).catch(() => {}),
       ),
     );
-  }, [conferenceId]);
+  }, [conferenceId, companyTierMap]);
 
   if (loading) {
     return (
@@ -176,6 +259,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
 
   return (
     <ConferenceTargetsTab
+      conferenceId={conferenceId}
       conferenceName={conferenceName}
       targetMap={targetMap}
       meetingAttendeeIds={meetingAttendeeIds}
