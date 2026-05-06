@@ -56,22 +56,12 @@ const TIERS = [
   },
 ];
 
-const SENIORITY_COLORS: Record<string, string> = {
-  'C-Suite': '#7c3aed',
-  'VP/SVP': '#1B76BC',
-  'Director': '#059669',
-  'Manager': '#f59e0b',
-  'Other': '#6b7280',
-};
-
-function getSeniorityColor(s: string | null): string {
-  if (!s) return '#6b7280';
-  return SENIORITY_COLORS[s] ?? '#6b7280';
-}
-
 function SeniorityPill({ seniority }: { seniority: string | null }) {
   if (!seniority) return null;
-  const color = getSeniorityColor(seniority);
+  const COLORS: Record<string, string> = {
+    'C-Suite': '#7c3aed', 'VP/SVP': '#1B76BC', 'Director': '#059669', 'Manager': '#f59e0b', 'Other': '#6b7280',
+  };
+  const color = COLORS[seniority] ?? '#6b7280';
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
       style={{ color, borderColor: `${color}60`, backgroundColor: `${color}14` }}>
@@ -207,16 +197,22 @@ export function ConferenceTargetsTab({
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
   const [conversionPct, setConversionPct] = useState(60);
+  const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`/api/conferences/${conferenceId}/budget`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { required_pipeline_amount?: number | null } | null) => {
-        const val = data?.required_pipeline_amount;
-        if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
-      })
-      .catch(() => {});
+    Promise.all([
+      fetch(`/api/conferences/${conferenceId}/budget`).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/effectiveness').then(r => r.ok ? r.json() : null),
+    ]).then(([budgetData, effectivenessData]) => {
+      const val = (budgetData as { required_pipeline_amount?: number | null } | null)?.required_pipeline_amount;
+      if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
+      const mhRate = (effectivenessData as Record<string, string> | null)?.meetings_held_conversion_rate;
+      if (mhRate != null) {
+        const pct = parseFloat(mhRate);
+        if (!isNaN(pct) && pct > 0) setMeetingsConvPct(pct);
+      }
+    }).catch(() => {});
   }, [conferenceId]);
 
   // Add-target dropdown state
@@ -285,14 +281,25 @@ export function ConferenceTargetsTab({
   const coverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedValue / requiredPipeline : null;
   const maxTierValue = Math.max(1, ...Object.values(tierValueSum));
 
-  // Seniority breakdown from targets
-  const senCount: Record<string, number> = {};
+  // Meetings pipeline — same dedup logic but filtered to targets with meetings scheduled
+  const meetingCompanyBestTier = new Map<number, { tier: string; wse: number }>();
   for (const t of targets) {
-    const s = t.seniority ?? 'Unknown';
-    senCount[s] = (senCount[s] ?? 0) + 1;
+    if (!meetingAttendeeIds.has(t.attendeeId)) continue;
+    if (t.companyId == null || t.companyWse == null) continue;
+    const existing = meetingCompanyBestTier.get(t.companyId);
+    if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+      meetingCompanyBestTier.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+    }
   }
-  const senBreakdown = Object.entries(senCount).sort((a, b) => b[1] - a[1]);
-  const maxSen = Math.max(1, ...Object.values(senCount));
+  const meetingTierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of Array.from(meetingCompanyBestTier.values())) {
+    meetingTierValueSum[tier] = (meetingTierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const totalMeetingValue = Object.values(meetingTierValueSum).reduce((a, b) => a + b, 0);
+  const convertedMeetingValue = Math.round(totalMeetingValue * meetingsConvPct / 100);
+  const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
+  const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
+  const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   async function handleDrop(tier: string) {
     if (draggingId === null) return;
@@ -321,18 +328,12 @@ export function ConferenceTargetsTab({
 
   return (
     <div className="space-y-6">
-      {/* Header row: count card + pipeline value chart + seniority chart */}
+      {/* Header row: pipeline value chart + meetings pipeline chart */}
       <div className="flex flex-wrap gap-4 items-stretch">
-        {/* Targets count card */}
-        <div className="rounded-xl border-2 border-brand-accent bg-white p-4 flex flex-col items-center justify-center min-w-[100px]">
-          <span className="text-3xl font-bold text-brand-primary leading-tight">{targets.length}</span>
-          <span className="text-xs font-semibold text-gray-500 mt-0.5 text-center">Target{targets.length !== 1 ? 's' : ''}</span>
-        </div>
-
-        {/* Pipeline value chart */}
+        {/* Targeted Pipeline Value chart */}
         <div className="flex-1 min-w-[220px] rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pipeline Value</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Targeted Pipeline Value</p>
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-gray-400">Conversion:</span>
               <input
@@ -409,23 +410,91 @@ export function ConferenceTargetsTab({
           )}
         </div>
 
-        {/* Seniority breakdown chart */}
-        {senBreakdown.length > 0 && (
-          <div className="flex-1 min-w-[200px] rounded-xl border border-gray-200 bg-white p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Seniority Breakdown</p>
-            <div className="space-y-2">
-              {senBreakdown.map(([label, count]) => (
-                <div key={label} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div className="h-2 rounded-full" style={{ width: `${Math.round((count / maxSen) * 100)}%`, backgroundColor: getSeniorityColor(label) }} />
-                  </div>
-                  <span className="text-xs text-gray-500 w-5 text-right flex-shrink-0">{count}</span>
-                </div>
-              ))}
+        {/* Targeted Pipeline Value of Scheduled Meetings chart */}
+        <div className="flex-1 min-w-[220px] rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Targeted Pipeline Value of Scheduled Meetings</p>
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+              <span className="text-xs text-gray-400">Conversion:</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={meetingsConvPct}
+                onChange={e => {
+                  const v = Math.max(0, Math.min(100, Number(e.target.value)));
+                  if (!isNaN(v)) setMeetingsConvPct(v);
+                }}
+                className="w-12 text-xs text-center border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-brand-primary"
+              />
+              <span className="text-xs text-gray-400">%</span>
             </div>
           </div>
-        )}
+
+          {/* Required pipeline comparison bar */}
+          {requiredPipeline != null && (
+            <div className="mb-3 pb-3 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+              </div>
+              <div className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-3 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
+                    backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-xs text-gray-400">
+                  Projected at {meetingsConvPct}%:{' '}
+                  <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
+                </span>
+                {meetingsCoverageRatio != null && (
+                  <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                    ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Per-tier value bars for companies with meetings */}
+          {hasMeetingValues ? (
+            <div className="space-y-2">
+              {TIERS.map(tier => {
+                const val = meetingTierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-600 w-28 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
+                          backgroundColor: TIER_BAR_COLORS[tier.key] ?? '#9ca3af',
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">
+              {avgCostPerUnit > 0
+                ? meetingAttendeeIds.size === 0
+                  ? 'No meetings scheduled yet.'
+                  : 'No target companies with scheduled meetings.'
+                : 'Set avg. cost per unit in Admin Settings to see values.'}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Kanban */}

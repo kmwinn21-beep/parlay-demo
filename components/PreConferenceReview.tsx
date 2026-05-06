@@ -224,21 +224,11 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
     if (tabConfig.orderedKeys.length === 0) return TABS;
-    const tabs = tabConfig.orderedKeys
+    return tabConfig.orderedKeys
       .filter(k => tabConfig.isVisible(k))
       .map(k => TABS.find(t => t.key === k))
       .filter((t): t is { key: TabKey; label: string } => t !== undefined)
       .map(t => ({ key: t.key, label: tabConfig.getLabel(t.key) }));
-
-    const targetIndex = tabs.findIndex(t => t.key === 'target_recommendations');
-    const conferenceTargetsIndex = tabs.findIndex(t => t.key === 'conference_targets');
-    if (targetIndex !== -1 && conferenceTargetsIndex !== -1 && targetIndex !== conferenceTargetsIndex + 1) {
-      const [targetTab] = tabs.splice(targetIndex, 1);
-      const nextConferenceTargetsIndex = tabs.findIndex(t => t.key === 'conference_targets');
-      tabs.splice(nextConferenceTargetsIndex + 1, 0, targetTab);
-    }
-
-    return tabs;
   }, [tabConfig]);
 
   const load = useCallback(async () => {
