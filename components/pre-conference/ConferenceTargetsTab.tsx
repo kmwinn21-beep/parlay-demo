@@ -223,6 +223,7 @@ export function ConferenceTargetsTab({
   const [showAdd, setShowAdd] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [addPending, setAddPending] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const addDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -529,11 +530,26 @@ export function ConferenceTargetsTab({
                   {/* Dropdown header */}
                   <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
                     <span className="text-sm font-semibold text-gray-800">Add Targets</span>
-                    <span className="text-xs text-gray-400">{selectedIds.size} selected</span>
+                    <div className="flex items-center gap-3">
+                      {!loadingAddAttendees && (addableGroups ?? []).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allLabels = (addableGroups ?? []).map(g => g.label);
+                            const allExpanded = allLabels.every(l => expandedGroups.has(l));
+                            setExpandedGroups(allExpanded ? new Set() : new Set(allLabels));
+                          }}
+                          className="text-xs text-brand-secondary hover:text-brand-primary transition-colors font-medium"
+                        >
+                          {(addableGroups ?? []).every(g => expandedGroups.has(g.label)) ? 'Collapse all' : 'Expand all'}
+                        </button>
+                      )}
+                      <span className="text-xs text-gray-400">{selectedIds.size} selected</span>
+                    </div>
                   </div>
 
                   {/* Attendee list */}
-                  {loadingAddAttendees ? (
+                  {loadingAddAttendees && (addableGroups ?? []).length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-xs">
                       <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
                       Loading recommendations…
@@ -544,46 +560,78 @@ export function ConferenceTargetsTab({
                     </p>
                   ) : (
                     <div className="overflow-y-auto flex-1">
-                      {(addableGroups ?? []).map(group => (
-                        <div key={group.label}>
-                          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
-                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group.label}</span>
+                      {(addableGroups ?? []).map(group => {
+                        const isExpanded = expandedGroups.has(group.label);
+                        const selectedInGroup = group.attendees.filter(a => selectedIds.has(a.id)).length;
+                        return (
+                          <div key={group.label}>
+                            {/* Collapsible group header */}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedGroups(prev => {
+                                const next = new Set(prev);
+                                if (next.has(group.label)) next.delete(group.label); else next.add(group.label);
+                                return next;
+                              })}
+                              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100 sticky top-0 z-10 hover:bg-gray-100 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{group.label}</span>
+                                <span className="text-xs text-gray-400">({group.attendees.length})</span>
+                                {selectedInGroup > 0 && (
+                                  <span className="text-xs font-semibold text-brand-secondary">{selectedInGroup} selected</span>
+                                )}
+                              </div>
+                              <svg
+                                className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {/* Attendees (only when expanded) */}
+                            {isExpanded && group.attendees.map(a => {
+                              const companyValue = (a.companyWse != null && avgCostPerUnit > 0)
+                                ? '$' + Math.round(a.companyWse * avgCostPerUnit).toLocaleString('en-US')
+                                : null;
+                              return (
+                                <label key={a.id} className="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedIds.has(a.id)}
+                                    onChange={() => setSelectedIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                                      return next;
+                                    })}
+                                    className="mt-0.5 flex-shrink-0 accent-brand-primary"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-gray-800 leading-tight">
+                                      {a.firstName} {a.lastName}
+                                      {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
+                                    </p>
+                                    {a.companyName && (
+                                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                                        <p className="text-xs text-gray-400 truncate">{a.companyName}</p>
+                                        {companyValue && (
+                                          <span className="text-xs font-semibold text-green-700 flex-shrink-0">{companyValue}</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
+                              );
+                            })}
                           </div>
-                          {group.attendees.map(a => {
-                            const companyValue = (a.companyWse != null && avgCostPerUnit > 0)
-                              ? '$' + Math.round(a.companyWse * avgCostPerUnit).toLocaleString('en-US')
-                              : null;
-                            return (
-                              <label key={a.id} className="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedIds.has(a.id)}
-                                  onChange={() => setSelectedIds(prev => {
-                                    const next = new Set(prev);
-                                    if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
-                                    return next;
-                                  })}
-                                  className="mt-0.5 flex-shrink-0 accent-brand-primary"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-medium text-gray-800 leading-tight">
-                                    {a.firstName} {a.lastName}
-                                    {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
-                                  </p>
-                                  {a.companyName && (
-                                    <div className="flex items-center justify-between gap-2 mt-0.5">
-                                      <p className="text-xs text-gray-400 truncate">{a.companyName}</p>
-                                      {companyValue && (
-                                        <span className="text-xs font-semibold text-green-700 flex-shrink-0">{companyValue}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </label>
-                            );
-                          })}
+                        );
+                      })}
+                      {loadingAddAttendees && (
+                        <div className="flex items-center gap-2 px-4 py-3 text-gray-400 text-xs border-t border-gray-100">
+                          <div className="w-3 h-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                          Loading more…
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
 
