@@ -142,7 +142,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
       type="button"
       onClick={handleOpen}
       disabled={loading}
-      className="flex items-center gap-1.5 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap text-gray-500 hover:text-brand-secondary cursor-pointer disabled:opacity-50"
+      className="flex items-center gap-1 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap text-gray-500 hover:text-brand-secondary cursor-pointer disabled:opacity-50"
     >
       {loading ? (
         <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
