@@ -65,7 +65,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
 
   useEffect(() => {
     // Phase 1: fast — load targets, attendees, seniority so the charts and
-    // kanban render immediately without waiting for the slower targeting API.
+    // kanban render immediately.
     Promise.all([
       fetch(`/api/conferences/${conferenceId}/targets`).then(r => r.ok ? r.json() : []),
       fetch(`/api/conferences/${conferenceId}`).then(r => r.ok ? r.json() : {}),
@@ -88,23 +88,46 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    // Phase 2: background — load targeting scores for the + Target dropdown.
-    // loadingAttendees stays true until this resolves.
-    fetch(`/api/conferences/${conferenceId}/targeting`)
-      .then(r => r.ok ? r.json() : { companies: [] })
-      .then((targetingData: { companies?: Array<{ company_id: number; target_priority_tier_key: string; target_priority_score: number }> }) => {
-        const companies = targetingData.companies ?? [];
-        const ctMap = new Map<number, CompanyTierInfo>();
-        for (const c of companies) {
-          ctMap.set(c.company_id, {
-            tierKey: c.target_priority_tier_key ?? 'unscored',
-            score: c.target_priority_score ?? 0,
+    // Phase 2: batch-load targeting scores progressively, same approach as
+    // Target Recommendations tab. Each batch merges into companyTierMap so
+    // the + Target dropdown populates incrementally as data arrives.
+    let cancelled = false;
+    (async () => {
+      let offset = 0;
+      const BATCH = 25;
+      try {
+        while (!cancelled) {
+          const params = new URLSearchParams({ batch: '1', offset: String(offset), limit: String(BATCH) });
+          const res = await fetch(`/api/conferences/${conferenceId}/targeting?${params.toString()}`, { cache: 'no-store' });
+          if (!res.ok || cancelled) break;
+          const data = (await res.json()) as {
+            companies?: Array<{ company_id: number; target_priority_tier_key: string; target_priority_score: number }>;
+            pagination?: { has_more: boolean; next_offset: number | null };
+          };
+          if (cancelled) break;
+          const batch = data.companies ?? [];
+          setCompanyTierMap(prev => {
+            const next = new Map(prev);
+            for (const c of batch) {
+              next.set(c.company_id, {
+                tierKey: c.target_priority_tier_key ?? 'unscored',
+                score: c.target_priority_score ?? 0,
+              });
+            }
+            return next;
           });
+          // Enable the + Target button after the first batch so the user
+          // isn't blocked waiting for all companies to load.
+          setLoadingAttendees(false);
+          if (!data.pagination?.has_more || data.pagination.next_offset == null) break;
+          offset = data.pagination.next_offset;
         }
-        setCompanyTierMap(ctMap);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingAttendees(false));
+      } catch { /* ignore */ } finally {
+        if (!cancelled) setLoadingAttendees(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [conferenceId]);
 
   // Build grouped attendee list for the "+ Target" dropdown, excluding existing targets.
