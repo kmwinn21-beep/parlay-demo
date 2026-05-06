@@ -375,6 +375,18 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (rule_id) REFERENCES icp_rules(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE meetings ADD COLUMN meeting_type TEXT`,
+    // Target Priority recommended actions use stable action_key values; labels remain editable in config_options.
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Book Meeting', 0, 'book_meeting')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Route to Account Owner', 1, 'route_to_account_owner')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Invite to Hosted Event', 2, 'invite_to_hosted_event')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Rep Floor Outreach', 3, 'rep_floor_outreach')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Research Before Outreach', 4, 'research_before_outreach')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Monitor Only', 5, 'monitor_only')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Add to Nurture', 6, 'add_to_nurture')`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
+     VALUES ('company_type', 'Prospect', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'prospect')`,
+    `UPDATE config_options SET action_key = 'prospect' WHERE category = 'company_type' AND value = 'Prospect' AND action_key IS NULL`,
+    `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Do Not Prioritize', 7, 'do_not_prioritize')`,
     // Form Builder tables
     `CREATE TABLE IF NOT EXISTS form_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -659,6 +671,8 @@ export async function initDb(): Promise<void> {
       FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
     )`,
     `ALTER TABLE conference_budget ADD COLUMN return_on_cost TEXT`,
+    `ALTER TABLE conference_budget ADD COLUMN required_pipeline_multiple TEXT`,
+    `ALTER TABLE conference_budget ADD COLUMN required_pipeline_amount REAL`,
     // Annual conference budget targets (per year, for global reporting)
     `CREATE TABLE IF NOT EXISTS annual_budgets (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -667,6 +681,7 @@ export async function initDb(): Promise<void> {
       created_at TEXT    DEFAULT (datetime('now'))
     )`,
     `ALTER TABLE conferences ADD COLUMN conf_event_type TEXT`,
+    `ALTER TABLE conferences ADD COLUMN conference_strategy_type_id INTEGER REFERENCES config_options(id)`,
     `ALTER TABLE conferences ADD COLUMN cost_efficiency_modifier REAL`,
     `ALTER TABLE conferences ADD COLUMN cost_efficiency_modifier_reason TEXT`,
     `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('ces_benchmarks', '{"cost_per_company":{"elite_max":350,"strong_max":650,"healthy_max":1000,"weak_max":1600},"cost_per_meeting":{"elite_max":400,"strong_max":700,"healthy_max":1100,"weak_max":1800},"pipeline_per_1k":{"elite_min":10000,"strong_min":6000,"healthy_min":3500,"weak_min":1500}}')`,
@@ -810,6 +825,14 @@ export async function initDb(): Promise<void> {
     { category: 'event_type', value: 'Company Hosted', sort_order: 4 },
     { category: 'event_type', value: 'Partner', sort_order: 5 },
     { category: 'event_type', value: 'Conference Event', sort_order: 6 },
+    { category: 'conference_strategy_type', value: 'Pipeline Generation', sort_order: 1 },
+    { category: 'conference_strategy_type', value: 'Pipeline Acceleration', sort_order: 2 },
+    { category: 'conference_strategy_type', value: 'Customer Retention / Customer Nurture', sort_order: 3 },
+    { category: 'conference_strategy_type', value: 'Market Presence / Brand Visibility', sort_order: 4 },
+    { category: 'conference_strategy_type', value: 'Strategic Account Relationship Building', sort_order: 5 },
+    { category: 'conference_strategy_type', value: 'Partner / Ecosystem Development', sort_order: 6 },
+    { category: 'conference_strategy_type', value: 'Competitive Defense', sort_order: 7 },
+    { category: 'conference_strategy_type', value: 'Thought Leadership', sort_order: 8 },
     { category: 'rep_relationship_type', value: 'Strong', sort_order: 1 },
     { category: 'rep_relationship_type', value: 'Former Client', sort_order: 2 },
     { category: 'rep_relationship_type', value: 'Other', sort_order: 3 },
@@ -877,6 +900,7 @@ export async function initDb(): Promise<void> {
     { category: 'company_type', value: 'Other' },
     { category: 'company_type', value: 'Capital' },
     { category: 'company_type', value: 'Operator' },
+    { category: 'company_type', value: 'Prospect' },
     { category: 'status', value: 'Client' },
     { category: 'status', value: 'Priority' },
     { category: 'status', value: 'Interested' },
@@ -920,6 +944,14 @@ export async function initDb(): Promise<void> {
     { category: 'event_type', value: 'Company Hosted' },
     { category: 'event_type', value: 'Partner' },
     { category: 'event_type', value: 'Conference Event' },
+    { category: 'conference_strategy_type', value: 'Pipeline Generation' },
+    { category: 'conference_strategy_type', value: 'Pipeline Acceleration' },
+    { category: 'conference_strategy_type', value: 'Customer Retention / Customer Nurture' },
+    { category: 'conference_strategy_type', value: 'Market Presence / Brand Visibility' },
+    { category: 'conference_strategy_type', value: 'Strategic Account Relationship Building' },
+    { category: 'conference_strategy_type', value: 'Partner / Ecosystem Development' },
+    { category: 'conference_strategy_type', value: 'Competitive Defense' },
+    { category: 'conference_strategy_type', value: 'Thought Leadership' },
     { category: 'rep_relationship_type', value: 'Strong' },
     { category: 'rep_relationship_type', value: 'Former Client' },
     { category: 'rep_relationship_type', value: 'Other' },

@@ -9,9 +9,11 @@ import { SocialEventsTab } from './pre-conference/SocialEventsTab';
 import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
+import { TargetRecommendationsTab } from './pre-conference/TargetRecommendationsTab';
 import { ParlayRecommendationsTab } from './pre-conference/ParlayRecommendationsTab';
 import { ProductIcpTab } from './pre-conference/ProductIcpTab';
 export type { ParlayRec, ParlayWatchItem, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
+export type { StrategyAssessment } from '@/lib/strategyAssessment';
 
 export interface PreConferenceSummary {
   conference: { id: number; name: string; start_date: string | null; end_date: string | null; location: string | null };
@@ -38,9 +40,6 @@ export interface LandscapeData {
   wseCount: number;
   companyTypeBreakdown: { label: string; count: number }[];
   seniorityBreakdown: { label: string; count: number }[];
-  priorOverlapTypeLabel: string;
-  priorOverlapCount: number;
-  priorOverlapAttendees: { id: number; first_name: string; last_name: string; title: string | null; company_name: string | null; company_id: number | null; seniority: string | null; prior_conference: string; assigned_user_names: string[] }[];
   clientCompanies: ClientCompanyEntry[];
   unitTypeLabel: string;
 }
@@ -187,9 +186,10 @@ export interface PreConferenceData {
   byRep: ByRepEntry[];
   relationships: RelationshipRow[];
   productIcp: ProductIcpEntry[];
+  strategyAssessment: import('@/lib/strategyAssessment').StrategyAssessment | null;
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'parlay_recommendations';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'target_recommendations' | 'parlay_recommendations';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -199,6 +199,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'relationships', label: 'Relationships' },
   { key: 'product_icp', label: 'Product ICP' },
   { key: 'conference_targets', label: 'Conference Targets' },
+  { key: 'target_recommendations', label: 'Target Recommendations' },
   { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
 ];
 
@@ -223,11 +224,21 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
     if (tabConfig.orderedKeys.length === 0) return TABS;
-    return tabConfig.orderedKeys
+    const tabs = tabConfig.orderedKeys
       .filter(k => tabConfig.isVisible(k))
       .map(k => TABS.find(t => t.key === k))
       .filter((t): t is { key: TabKey; label: string } => t !== undefined)
       .map(t => ({ key: t.key, label: tabConfig.getLabel(t.key) }));
+
+    const targetIndex = tabs.findIndex(t => t.key === 'target_recommendations');
+    const conferenceTargetsIndex = tabs.findIndex(t => t.key === 'conference_targets');
+    if (targetIndex !== -1 && conferenceTargetsIndex !== -1 && targetIndex !== conferenceTargetsIndex + 1) {
+      const [targetTab] = tabs.splice(targetIndex, 1);
+      const nextConferenceTargetsIndex = tabs.findIndex(t => t.key === 'conference_targets');
+      tabs.splice(nextConferenceTargetsIndex + 1, 0, targetTab);
+    }
+
+    return tabs;
   }, [tabConfig]);
 
   const load = useCallback(async () => {
@@ -274,6 +285,27 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
       } else {
         setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
       }
+    }
+  }, [conferenceId, targetMap]);
+
+  const addTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
+    if (targetMap.has(entry.attendeeId)) return;
+    setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier }));
+    try {
+      await fetch(`/api/conferences/${conferenceId}/targets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: entry.attendeeId }),
+      });
+      if (tier !== 'unassigned') {
+        await fetch(`/api/conferences/${conferenceId}/targets/${entry.attendeeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier }),
+        });
+      }
+    } catch {
+      setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
     }
   }, [conferenceId, targetMap]);
 
@@ -372,7 +404,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {activeTab === 'landscape' && (
-                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} strategyAssessment={data.strategyAssessment ?? null} />
               )}
               {activeTab === 'icp' && (
                 <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} />
@@ -396,6 +428,9 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   onToggleTarget={toggleTarget}
                   onSetTier={setTargetTier}
                 />
+              )}
+              {activeTab === 'target_recommendations' && (
+                <TargetRecommendationsTab conferenceId={conferenceId} targetMap={targetMap} onAddTargetWithTier={addTargetWithTier} />
               )}
               {activeTab === 'parlay_recommendations' && (
                 <ParlayRecommendationsTab

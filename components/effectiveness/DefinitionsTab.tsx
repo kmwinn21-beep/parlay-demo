@@ -29,8 +29,8 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Pipeline Influence Index — Rep (30%)',
-        description: 'Pipeline influenced by the rep relative to their equal-share of the conference cost and the expected return target. Capped at 100.',
-        calculation: 'MIN(rep pipeline influenced / (rep allocated cost × expected return target), 1) × 100',
+        description: 'Pipeline influenced by the rep relative to their equal-share of the conference required pipeline target. Capped at 100.',
+        calculation: 'MIN(rep pipeline influenced / rep allocated required pipeline, 1) × 100',
       },
       {
         term: 'Engagement Breadth — Rep (5%)',
@@ -79,8 +79,13 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Pipeline Influence Index (30%)',
-        description: 'Measures how much pipeline influence was generated relative to the expected return on event cost. Capped at 100.',
-        calculation: 'MIN(total pipeline influence / (total spend × expected return target), 1) × 100',
+        description: 'Measures how much pipeline influence was generated relative to the required pipeline target for the event. Required pipeline is configured in Budget vs. Actual and capped at 100.',
+        calculation: 'MIN(total pipeline influence / required pipeline, 1) × 100',
+      },
+      {
+        term: 'Required Pipeline',
+        description: 'Expected return amount multiplied by Required Pipeline Multiple. Required Pipeline Multiple defaults to 3.5 and is editable in Budget vs. Actual.',
+        calculation: 'required pipeline = (total budget × expected return on cost multiple) × required pipeline multiple',
       },
       {
         term: 'Engagement Breadth (5%)',
@@ -178,8 +183,8 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       },
       {
         term: 'Target Engagement Rate',
-        description: 'The percentage of pre-designated target attendees whose companies received engagement.',
-        calculation: 'engaged targets / total targets × 100',
+        description: 'The percentage of conference-specific targets (for this conference only) that received meaningful engagement via held meetings, touchpoints, follow-ups, or social attendance signals.',
+        calculation: 'engaged conference targets / total conference targets × 100',
       },
       {
         term: 'Hold Rate',
@@ -234,6 +239,38 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         term: 'Audience Quality Score (AQS)',
         description: 'A composite score measuring the overall quality of the conference audience across ICP fit, seniority, and multi-contact coverage.',
         calculation: '(ICP rate × 40%) + (senior contact rate × 40%) + (multi-contact company rate × 20%)',
+      },
+    ],
+  },
+  {
+    title: 'Audience & Messaging Signals',
+    items: [
+      { term: 'Marketing Audience Signal Score', description: 'A 0–100 composite score measuring audience fit and directional market signal quality from conference participation.', calculation: '(ICP & Target Quality × 30%) + (Buyer Role Access × 25%) + (Net-New Market Reach × 20%) + (Engagement Depth × 15%) + (Message Resonance Proxy × 10%)' },
+      { term: 'Buyer Role Access', description: 'Uses ICP Admin Settings (Decision Maker titles, Influencer titles, Seniority priorities, Function priorities) to score whether the right buyer roles were reached.' },
+      { term: 'Decision Maker Access', description: 'Percent of engaged companies with at least one engaged contact matching configured Decision Maker titles.' },
+      { term: 'Influencer Access', description: 'Percent of engaged companies with at least one engaged contact matching configured Influencer titles.' },
+      { term: 'Message Resonance Proxy', description: 'Directional proxy based on meetings, follow-up attachment, and multi-touch depth. Not full marketing attribution.' },
+    ],
+  },
+  {
+    title: 'Sales Execution',
+    items: [
+      {
+        term: 'Sales Effectiveness Score',
+        description: 'Sales Effectiveness Score is a 0–100 composite score that measures how effectively the sales team converted conference participation into commercial execution.',
+        calculation: '(Meeting Execution × 25%) + (Follow-up Execution × 20%) + (Pipeline Influence Execution × 25%) + (Target Account Execution × 15%) + (Rep Productivity × 15%)',
+      },
+      {
+        term: 'Rep Productivity',
+        description: 'Rep Productivity includes both meetings held and touchpoints logged. Touchpoint types are customer-defined in Parlay and counted equally.',
+      },
+      {
+        term: 'Sales Activity',
+        description: 'Sales Activity equals meetings held plus touchpoints logged.',
+      },
+      {
+        term: 'Pipeline per Sales Activity',
+        description: 'Directional pipeline influence divided by total sales activities (meetings held + touchpoints logged). Pipeline influence may be proxy-based unless CRM opportunity attribution is connected.',
       },
     ],
   },

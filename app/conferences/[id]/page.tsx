@@ -107,6 +107,8 @@ interface Conference {
   location: string;
   notes?: string;
   internal_attendees?: string;
+  conference_strategy_type_id?: number | null;
+  conference_strategy_type_display_name?: string | null;
   created_at: string;
   attendees: Attendee[];
 }
@@ -275,6 +277,7 @@ export default function ConferenceDetailPage() {
   const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
+  const [conferenceStrategyOptions, setConferenceStrategyOptions] = useState<{ id: number; value: string }[]>([]);
   const [meetingCompanyTypeOpts, setMeetingCompanyTypeOpts] = useState<string[]>([]);
   const [meetingSeniorityOpts, setMeetingSeniorityOpts] = useState<string[]>([]);
 
@@ -365,7 +368,7 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes, conferenceStrategyRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
@@ -377,6 +380,7 @@ export default function ConferenceDetailPage() {
         fetch('/api/config?category=event_type&form=conference_detail'),
         fetch('/api/config?category=company_type&form=conference_detail'),
         fetch('/api/config?category=seniority&form=conference_detail'),
+        fetch('/api/config?category=conference_strategy_type&form=conference_detail'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -390,6 +394,7 @@ export default function ConferenceDetailPage() {
       const userData = userRes.ok ? await userRes.json() : [];
       const companyTypeData = companyTypeRes.ok ? await companyTypeRes.json() : [];
       const seniorityData = seniorityRes.ok ? await seniorityRes.json() : [];
+      const conferenceStrategyData = conferenceStrategyRes.ok ? await conferenceStrategyRes.json() : [];
       setConference(data);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
@@ -406,12 +411,14 @@ export default function ConferenceDetailPage() {
       setEventTypeOptions(eventTypeData.map((o: { value: string }) => o.value));
       setMeetingCompanyTypeOpts(companyTypeData.map((o: { value: string }) => o.value));
       setMeetingSeniorityOpts(seniorityData.map((o: { value: string }) => o.value));
+      setConferenceStrategyOptions(conferenceStrategyData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setEditData({
         name: data.name,
         start_date: data.start_date,
         end_date: data.end_date,
         location: data.location,
         notes: data.notes || '',
+        conference_strategy_type_id: data.conference_strategy_type_id ?? null,
       });
       setEditInternalAttendees(
         data.internal_attendees ? data.internal_attendees.split(',').filter(Boolean) : []
@@ -514,7 +521,17 @@ export default function ConferenceDetailPage() {
       });
       if (!res.ok) throw new Error('Update failed');
       const updated = await res.json();
-      setConference((prev) => prev ? { ...prev, ...updated } : prev);
+      const selectedStrategyId = editData.conference_strategy_type_id != null ? Number(editData.conference_strategy_type_id) : null;
+      const selectedStrategyDisplay = selectedStrategyId != null
+        ? (conferenceStrategyOptions.find((o) => o.id === selectedStrategyId)?.value ?? null)
+        : null;
+      setConference((prev) => prev ? {
+        ...prev,
+        ...updated,
+        conference_strategy_type_id: selectedStrategyId,
+        conference_strategy_type_display_name: selectedStrategyDisplay,
+        internal_attendees: editInternalAttendees.join(','),
+      } : prev);
       setIsEditing(false);
       toast.success('Conference updated!');
     } catch {
@@ -949,6 +966,17 @@ export default function ConferenceDetailPage() {
                 />
               </div>
               <div>
+                <label className="label">Conference Strategy</label>
+                <select
+                  value={editData.conference_strategy_type_id ? String(editData.conference_strategy_type_id) : ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, conference_strategy_type_id: e.target.value ? Number(e.target.value) : null }))}
+                  className="input-field"
+                >
+                  <option value="">Select conference strategy...</option>
+                  {conferenceStrategyOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.value}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="label">End Date *</label>
                 <input
                   type="date"
@@ -1096,19 +1124,24 @@ export default function ConferenceDetailPage() {
                     Awaiting Attendee Upload
                   </span>
                 ) : (
-                  <span className="badge-blue">
-                    {conference.attendees.length} attendees
-                  </span>
+                  <div className="inline-flex items-center gap-2">
+                    <span className="badge-blue">
+                      {conference.attendees.length} attendees
+                    </span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                    </span>
+                  </div>
                 )}
               </div>
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
               )}
-              {conference.internal_attendees && (
-                <div className="mt-3">
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+                <div>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {conference.internal_attendees.split(',').filter(Boolean).map((user) => {
+                    {conference.internal_attendees?.split(',').filter(Boolean).map((user) => {
                       const parts = user.trim().split(/\s+/);
                       const initials = parts.length >= 2
                         ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
@@ -1127,9 +1160,12 @@ export default function ConferenceDetailPage() {
                         </span>
                       );
                     })}
+                    {!conference.internal_attendees?.trim() && (
+                      <span className="text-xs text-gray-400">None listed</span>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
               <button

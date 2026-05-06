@@ -4,8 +4,330 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry } from '../PreConferenceReview';
+import type { StrategyAssessment } from '@/lib/strategyAssessment';
 
-type OverlapAttendee = LandscapeData['priorOverlapAttendees'][number];
+// ─── Shared helpers ────────────────────────────────────────────────────────────
+
+function scoreColor(score: number): string {
+  if (score >= 70) return '#059669';
+  if (score >= 60) return '#1B76BC';
+  if (score >= 45) return '#d97706';
+  return '#dc2626';
+}
+
+function componentTierLabel(score: number): string {
+  if (score >= 75) return 'Strong';
+  if (score >= 60) return 'Good';
+  if (score >= 45) return 'Moderate';
+  return 'Weak';
+}
+
+function fmtDollars(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
+// ─── Pipeline Reality popover bar chart ────────────────────────────────────────
+
+function PipelineBarChart({ realistic, required }: { realistic: number; required: number | null }) {
+  const max = Math.max(realistic, required ?? 0, 1);
+  const realisticPct = Math.min((realistic / max) * 100, 100);
+  const requiredPct = required ? Math.min((required / max) * 100, 100) : 100;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex justify-between text-xs mb-1">
+          <span className="text-gray-500 font-medium">Realistic Goal</span>
+          <span className="font-bold text-brand-secondary">{fmtDollars(realistic)}</span>
+        </div>
+        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-3 rounded-full bg-brand-secondary" style={{ width: `${realisticPct}%` }} />
+        </div>
+      </div>
+      {required != null && (
+        <div>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-gray-500 font-medium">Required Pipeline</span>
+            <span className="font-bold text-gray-600">{fmtDollars(required)}</span>
+          </div>
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-3 rounded-full bg-gray-300" style={{ width: `${requiredPct}%` }} />
+          </div>
+        </div>
+      )}
+      {required != null && (
+        <p className="text-xs text-gray-400 pt-1 border-t border-gray-100">
+          Coverage: <span className="font-semibold text-gray-600">{Math.min(Math.round((realistic / required) * 1000) / 10, 100).toFixed(1)}%</span> of required pipeline is realistically achievable.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Score Fit Card (mirrors Sales Effectiveness Score card) ───────────────────
+
+function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
+  const color = scoreColor(sa.strategyFitScore);
+  const components: [string, number, string][] = [
+    ['ICP Opportunity', sa.icpOpportunityScore, '20%'],
+    ['Target Account Opp.', sa.targetAccountOpportunityScore, '20%'],
+    ['Buyer Access', sa.buyerAccessScore, '15%'],
+    ['Relationship Leverage', sa.relationshipLeverageScore, '15%'],
+    ['Customer Presence', sa.customerPresenceScore, '10%'],
+    ['Pipeline Potential', sa.pipelinePotentialScore, '15%'],
+    ['Event Economics', sa.eventEconomicsFitScore, '5%'],
+  ];
+
+  return (
+    <div
+      className="rounded-xl p-4 flex flex-col w-full"
+      style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
+    >
+      <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
+        Pre-Conference Strategy Score
+      </div>
+      <div className="flex items-end gap-1 mt-1">
+        <div className="text-4xl font-bold" style={{ color }}>{sa.strategyFitScore}</div>
+        <div className="text-sm text-gray-400 mb-0.5">/100</div>
+      </div>
+      <div className="text-xs font-semibold mb-3" style={{ color }}>{sa.strategyFitInterpretation}</div>
+
+      <div className="mt-auto pt-3 border-t space-y-1.5" style={{ borderColor: color + '33' }}>
+        {components.map(([label, score, weight]) => (
+          <div key={label} className="flex justify-between text-xs">
+            <span className="text-gray-500">
+              {label} <span className="text-gray-300">({weight})</span>
+            </span>
+            <span className="font-semibold" style={{ color: scoreColor(score) }}>
+              {score} <span className="text-gray-400">· {componentTierLabel(score)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Recommended Strategy card (brand Primary #1) ──────────────────────────────
+
+function PrimaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
+  return (
+    <div
+      className="rounded-xl p-4 flex flex-col w-full"
+      style={{
+        borderLeft: '4px solid rgb(var(--brand-primary-rgb))',
+        backgroundColor: 'rgb(var(--brand-primary-rgb) / 0.08)',
+      }}
+    >
+      <div
+        className="text-xs font-bold uppercase tracking-wide mb-1"
+        style={{ color: 'rgb(var(--brand-primary-rgb) / 0.6)' }}
+      >
+        Recommended Strategy
+      </div>
+      <div
+        className="text-base font-bold leading-tight"
+        style={{ color: 'rgb(var(--brand-primary-rgb))' }}
+      >
+        {sa.primaryStrategy}
+      </div>
+
+      {sa.primaryStrategyReasons.length > 0 && (
+        <>
+          <div
+            className="mt-3 pt-3 border-t"
+            style={{ borderColor: 'rgb(var(--brand-primary-rgb) / 0.15)' }}
+          />
+          <ul className="space-y-1.5 -mt-1">
+            {sa.primaryStrategyReasons.map((r, i) => (
+              <li key={i} className="flex gap-1.5 text-xs" style={{ color: 'rgb(var(--brand-primary-rgb) / 0.8)' }}>
+                <span className="mt-0.5 flex-shrink-0">•</span>
+                <span>{r}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Secondary Strategy card (gray, rank-card style) ──────────────────────────
+
+function SecondaryStrategyCard({ sa }: { sa: StrategyAssessment }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col w-full">
+      <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">
+        Secondary Strategy
+      </div>
+      {sa.secondaryStrategy ? (
+        <>
+          <div className="text-base font-bold text-brand-secondary leading-tight">
+            {sa.secondaryStrategy}
+          </div>
+          {sa.secondaryStrategyReasons.length > 0 && (
+            <>
+              <div className="mt-3 pt-3 border-t border-gray-200" />
+              <ul className="space-y-1.5 -mt-1">
+                {sa.secondaryStrategyReasons.map((r, i) => (
+                  <li key={i} className="flex gap-1.5 text-xs text-gray-600">
+                    <span className="mt-0.5 flex-shrink-0">•</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      ) : (
+        <div className="text-sm text-gray-400">No secondary strategy identified.</div>
+      )}
+    </div>
+  );
+}
+
+// ─── Shared pill ──────────────────────────────────────────────────────────────
+
+function FitScorePill({ score }: { score: number }) {
+  const color = scoreColor(score);
+  return (
+    <span
+      className="inline-block px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0"
+      style={{ color, backgroundColor: color + '18' }}
+    >
+      {score}
+    </span>
+  );
+}
+
+// ─── Combined actions panel (right 2 cols) ────────────────────────────────────
+
+function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
+  const [showChart, setShowChart] = useState(false);
+  const isCovered = sa.currentRepCount >= sa.recommendedRepMin;
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 h-full">
+      {/* Pipeline Reality */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Pipeline Reality</div>
+          <button
+            onClick={() => setShowChart(v => !v)}
+            className="text-gray-400 hover:text-brand-secondary transition-colors"
+            title="View pipeline bar chart"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
+        {showChart ? (
+          <PipelineBarChart realistic={sa.realisticPipelineGoal} required={sa.requiredPipeline} />
+        ) : (
+          <div className="flex gap-4 text-xs">
+            <div>
+              <div className="text-gray-400">Realistic Goal</div>
+              <div className="font-bold text-brand-secondary">{fmtDollars(sa.realisticPipelineGoal)}</div>
+            </div>
+            {sa.requiredPipeline != null && (
+              <div>
+                <div className="text-gray-400">Required</div>
+                <div className="font-semibold text-gray-600">{fmtDollars(sa.requiredPipeline)}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-gray-400">Coverage</div>
+              <div className="font-semibold text-gray-700">{sa.pipelineCoverageRate.toFixed(1)}%</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* Hosted Event */}
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Hosted Event</div>
+          <div className="text-xs font-semibold text-gray-800">{sa.hostedEventRecommendation}</div>
+        </div>
+        <FitScorePill score={sa.hostedEventFitScore} />
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* Sponsorship */}
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Sponsorship</div>
+          <div className="text-xs font-semibold text-gray-800">{sa.sponsorshipRecommendation}</div>
+        </div>
+        <FitScorePill score={sa.sponsorshipFitScore} />
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* Staffing */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Staffing</div>
+          <div className="text-xs font-semibold text-gray-800">
+            {sa.recommendedRepMin}–{sa.recommendedRepMax} reps recommended
+          </div>
+          <div className="text-xs text-gray-400">Current: {sa.currentRepCount} rep{sa.currentRepCount !== 1 ? 's' : ''}</div>
+          {!isCovered && (
+            <div className="text-xs text-amber-600 font-medium mt-0.5">
+              Coverage gap: add {sa.recommendedRepMin - sa.currentRepCount}–{sa.recommendedRepMax - sa.currentRepCount} more
+            </div>
+          )}
+        </div>
+        {isCovered ? (
+          <svg className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Full section ──────────────────────────────────────────────────────────────
+
+function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
+  return (
+    <div className="pb-2 border-b border-gray-100 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 items-stretch">
+        {/* Score card — 2 cols */}
+        <div className="lg:col-span-2 flex">
+          <StrategyFitScoreCard sa={sa} />
+        </div>
+        {/* Recommended Strategy — 1 col */}
+        <div className="lg:col-span-1 flex">
+          <PrimaryStrategyCard sa={sa} />
+        </div>
+        {/* Secondary Strategy — 1 col */}
+        <div className="lg:col-span-1 flex">
+          <SecondaryStrategyCard sa={sa} />
+        </div>
+        {/* Actions panel — 2 cols */}
+        <div className="lg:col-span-2">
+          <ActionsPanel sa={sa} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Existing landscape helpers ────────────────────────────────────────────────
 
 function BarChart({ items, total, colorClass }: { items: { label: string; count: number }[]; total: number; colorClass: string }) {
   if (items.length === 0) return <p className="text-sm text-gray-400">No data</p>;
@@ -42,7 +364,6 @@ function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unit
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      {/* Header row */}
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left gap-2"
@@ -59,7 +380,6 @@ function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unit
         </div>
       </button>
 
-      {/* Unit type pill row */}
       {co.wse != null && (
         <div className="px-3 pt-1.5 pb-1">
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20">
@@ -68,7 +388,6 @@ function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unit
         </div>
       )}
 
-      {/* Expanded attendee list */}
       {expanded && co.attendees.length > 0 && (
         <div className="divide-y divide-gray-100 border-t border-gray-100">
           {co.attendees.map(a => (
@@ -89,17 +408,24 @@ function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unit
   );
 }
 
+// ─── Main export ───────────────────────────────────────────────────────────────
+
 export function LandscapeTab({
   data,
   targetMap,
   onToggleTarget,
+  strategyAssessment,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  strategyAssessment: StrategyAssessment | null;
 }) {
   return (
     <div className="space-y-8">
+      {/* Strategy Assessment (above existing charts) */}
+      {strategyAssessment && <StrategyAssessmentSection sa={strategyAssessment} />}
+
       {/* 5-column layout: stat cards | charts (×3) | client attendees */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
         {/* Col 1: stacked stat cards */}
@@ -128,7 +454,7 @@ export function LandscapeTab({
           </div>
         </div>
 
-        {/* Col 5: Client Attendees — absolute inside so expansion never affects row height */}
+        {/* Col 5: Client Attendees */}
         <div className="relative min-h-[200px]">
           <div className="absolute inset-0 flex flex-col border border-gray-200 rounded-xl overflow-hidden">
             <div className="px-3 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
@@ -148,72 +474,6 @@ export function LandscapeTab({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Prior overlap */}
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <h3 className="text-sm font-semibold text-gray-700">Prior Conference Overlap</h3>
-          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-            {data.priorOverlapCount} {data.priorOverlapTypeLabel}&apos;s
-          </span>
-        </div>
-        {data.priorOverlapAttendees.length === 0 ? (
-          <p className="text-sm text-gray-400">No returning {data.priorOverlapTypeLabel} attendees from prior conferences.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {data.priorOverlapAttendees.map((a) => {
-              const isTarget = targetMap.has(Number(a.id));
-              return (
-                <div
-                  key={String(a.id)}
-                  className="flex flex-col gap-2 p-3 rounded-lg border border-gray-100 hover:border-brand-secondary/40 hover:bg-blue-50/50 transition-colors relative"
-                >
-                  {/* Target button — upper right */}
-                  <div className="absolute top-2 right-2">
-                    <TargetBtn
-                      isTarget={isTarget}
-                      onClick={() => onToggleTarget({
-                        attendeeId: Number(a.id),
-                        firstName: String(a.first_name),
-                        lastName: String(a.last_name),
-                        title: a.title ? String(a.title) : null,
-                        seniority: a.seniority ?? null,
-                        companyName: a.company_name ? String(a.company_name) : null,
-                        companyId: a.company_id ?? null,
-                        companyWse: null,
-                        assignedUserNames: a.assigned_user_names,
-                      })}
-                    />
-                  </div>
-
-                  {/* Avatar + name row */}
-                  <div className="flex items-start gap-3 pr-5">
-                    <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-xs font-bold text-brand-secondary">
-                        {String(a.first_name)[0]}{String(a.last_name)[0]}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <Link href={`/attendees/${a.id}`} className="text-sm font-medium text-gray-800 truncate leading-tight hover:text-brand-secondary block">
-                        {String(a.first_name)} {String(a.last_name)}
-                      </Link>
-                      <p className="text-xs text-gray-500 truncate">{a.company_name ?? '—'}</p>
-                      {a.prior_conference && (
-                        <p className="text-xs text-gray-400 truncate">({a.prior_conference})</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Assigned user pill */}
-                  {a.assigned_user_names.length > 0 && (
-                    <UserPill name={a.assigned_user_names[0]} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );

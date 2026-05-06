@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
+import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
 
 function fmt$(n: unknown) {
@@ -55,6 +56,7 @@ function RepMetricCell({ value, score, tier }: { value: unknown; score: unknown;
 
 export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const { operational, ces } = data;
+  const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   const costs = operational.cost_efficiency;
   const repRows = (operational.rep_cost_efficiency ?? []) as Record<string, unknown>[];
   const repAllocatedCost = Number(operational.rep_allocated_cost ?? 0);
@@ -116,6 +118,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>
               </div>
               <div className="text-xs font-semibold mt-0.5" style={{ color: scoreColor(cesScore) }}>{scoreGrade(cesScore)}</div>
+              <div className="mt-2 text-[11px] text-gray-500 text-right">Conference Strategy: {strategyLabel}</div><StrategyWeightNotice applied={(data as any).sales_execution?.strategy_modifier_applied || (data as any).marketing_audience?.strategy_modifier_applied || (data as any).operational?.cost_efficiency?.strategy_modifier_applied || (data as any).ces?.strategy_modifier_applied} strategyLabel={strategyLabel} />
 
               {/* Component breakdown inside the score card */}
               {(companyScore != null || meetingScore != null || pipelineScore != null) && (

@@ -15,6 +15,7 @@ import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 import { invalidateTagline } from '@/lib/useTagline';
 import { invalidateUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS, DEFAULT_RECOMMENDED_ACTIONS, DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS, DEFAULT_TARGET_PRIORITY_WEIGHTS, DEFAULT_TIER_THRESHOLDS, validateTargetPriorityWeights, type TargetPriorityWeights } from '@/lib/targeting/targetPriority';
 
 interface ConfigOption {
   id: number;
@@ -42,9 +43,11 @@ const CATEGORIES = [
   { key: 'icp', label: 'ICP' },
   { key: 'meeting_type', label: 'Meeting Type' },
   { key: 'event_type', label: 'Event Type' },
+  { key: 'conference_strategy_type', label: 'Conference Strategy Type' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'attendee_conference_status', label: 'Attendee Conference Status' },
+  { key: 'target_recommended_action', label: 'Target Recommended Actions' },
   { key: 'user', label: 'Users' },
   { key: 'cost_type', label: 'Cost Types' },
 ];
@@ -479,6 +482,30 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
+function IcpSettingsSection({ title, description, open, onToggle, children }: { title: string; description: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <section className="card p-0 overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+      >
+        <span>
+          <span className="block text-base font-semibold text-brand-primary font-serif">{title}</span>
+          <span className="block text-sm text-gray-500 mt-0.5">{description}</span>
+        </span>
+        <svg className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div className={`border-t border-gray-100 px-4 sm:px-6 py-5 space-y-6 ${open ? '' : 'hidden'}`} aria-hidden={!open}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
 function TagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (tags: string[]) => void; placeholder: string }) {
   const [inputValue, setInputValue] = useState('');
   const add = (raw: string) => {
@@ -764,6 +791,7 @@ export default function AdminPage() {
   const [icpTargetTitles, setIcpTargetTitles] = useState<string[]>([]);
   const [icpSeniorityPriority, setIcpSeniorityPriority] = useState<Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>>({});
   const [icpFunctionProductMapping, setIcpFunctionProductMapping] = useState<Record<string, string[]>>({});
+  const [icpFunctionPriority, setIcpFunctionPriority] = useState<Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>>({});
   const [icpDecisionMakerTitles, setIcpDecisionMakerTitles] = useState<string[]>([]);
   const [icpInfluencerTitles, setIcpInfluencerTitles] = useState<string[]>([]);
   const [savingBuyerPersona, setSavingBuyerPersona] = useState(false);
@@ -778,6 +806,10 @@ export default function AdminPage() {
   const [icpMinTouchpoints, setIcpMinTouchpoints] = useState('1');
   const [icpIncludeNewCompanies, setIcpIncludeNewCompanies] = useState(true);
   const [savingThresholds, setSavingThresholds] = useState(false);
+  const [targetPriorityWeights, setTargetPriorityWeights] = useState<TargetPriorityWeights>(DEFAULT_TARGET_PRIORITY_WEIGHTS);
+  const [savingTargetPriorityWeights, setSavingTargetPriorityWeights] = useState(false);
+  const [basicIcpOpen, setBasicIcpOpen] = useState(true);
+  const [advancedIcpOpen, setAdvancedIcpOpen] = useState(false);
 
   // ── Types tab ────────────────────────────────────────────────────────────────
 
@@ -853,6 +885,7 @@ export default function AdminPage() {
         setIcpTargetTitles(tryParse(s['icp_target_titles'], []));
         setIcpSeniorityPriority(tryParse(s['icp_seniority_priority'], {}));
         setIcpFunctionProductMapping(tryParse(s['icp_function_product_mapping'], {}));
+        setIcpFunctionPriority(tryParse(s['icp_function_priority'], {}));
         setIcpDecisionMakerTitles(tryParse(s['icp_decision_maker_titles'], []));
         setIcpInfluencerTitles(tryParse(s['icp_influencer_titles'], []));
         setIcpPainPoints(tryParse(s['icp_pain_points'], []));
@@ -863,12 +896,40 @@ export default function AdminPage() {
         setIcpWarmScore(s['icp_warm_score'] ?? '75');
         setIcpMinTouchpoints(s['icp_min_touchpoints'] ?? '1');
         setIcpIncludeNewCompanies(s['icp_include_new_companies'] !== 'false');
+        setTargetPriorityWeights(tryParse(s['icp_target_priority_weights'], DEFAULT_TARGET_PRIORITY_WEIGHTS));
       }
     } catch { toast.error('Failed to load ICP configuration.'); }
     finally { setIcpLoading(false); }
   };
 
   useEffect(() => { if (tab === 'icp') fetchIcpConfig(); }, [tab]);
+
+  const targetPriorityWeightError = validateTargetPriorityWeights(targetPriorityWeights);
+  const targetPriorityWeightTotal = Object.values(targetPriorityWeights).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
+
+  const handleTargetPriorityWeightChange = (key: keyof TargetPriorityWeights, value: string) => {
+    const n = Number(value);
+    setTargetPriorityWeights(prev => ({ ...prev, [key]: Number.isFinite(n) ? n : 0 }));
+  };
+
+  const handleSaveTargetPriorityWeights = async () => {
+    const validationError = validateTargetPriorityWeights(targetPriorityWeights);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    setSavingTargetPriorityWeights(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'icp_target_priority_weights', value: JSON.stringify(targetPriorityWeights) }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Target priority weights saved!');
+    } catch { toast.error('Failed to save target priority weights.'); }
+    finally { setSavingTargetPriorityWeights(false); }
+  };
 
   const handleSaveBuyerPersona = async () => {
     setSavingBuyerPersona(true);
@@ -877,6 +938,7 @@ export default function AdminPage() {
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_target_titles', value: JSON.stringify(icpTargetTitles) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_seniority_priority', value: JSON.stringify(icpSeniorityPriority) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_function_product_mapping', value: JSON.stringify(icpFunctionProductMapping) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_function_priority', value: JSON.stringify(icpFunctionPriority) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_decision_maker_titles', value: JSON.stringify(icpDecisionMakerTitles) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_influencer_titles', value: JSON.stringify(icpInfluencerTitles) }) }),
       ]);
@@ -2210,6 +2272,12 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            <IcpSettingsSection
+              title="Basic ICP Settings"
+              description="Define your core ICP, buyer persona, pain points, and use case."
+              open={basicIcpOpen}
+              onToggle={() => setBasicIcpOpen(open => !open)}
+            >
             {/* Unit Type requirement row */}
             <div className="card">
               <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">{unitTypeLabel || 'Unit Type'} Requirement</h2>
@@ -2507,6 +2575,7 @@ export default function AdminPage() {
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
                       <th className="text-left pb-1 font-medium">Function</th>
+                      <th className="text-left pb-1 font-medium">Priority</th>
                       <th className="text-left pb-1 font-medium">Product</th>
                     </tr>
                   </thead>
@@ -2517,6 +2586,15 @@ export default function AdminPage() {
                       return (
                         <tr key={f.value} className="border-b border-gray-50">
                           <td className="py-1.5 pr-4">{f.value}</td>
+                          <td className="py-1.5 pr-4">
+                            <select
+                              value={icpFunctionPriority[f.value] ?? 'Medium'}
+                              onChange={e => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                              className="input-field text-sm py-0.5"
+                            >
+                              {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          </td>
                           <td className="py-1.5">
                             <MultiSelectDropdown
                               options={productOpts.map(p => p.value)}
@@ -2529,7 +2607,7 @@ export default function AdminPage() {
                       );
                     })}
                     {(optionsByCategory['function'] ?? []).length === 0 && (
-                      <tr><td colSpan={2} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
+                      <tr><td colSpan={3} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -2620,12 +2698,126 @@ export default function AdminPage() {
             </div>
           </div>
 
+            </IcpSettingsSection>
+
+            <IcpSettingsSection
+              title="Advanced ICP Settings"
+              description="Configure targeting scores, recommended actions, relationship leverage, and conference opportunity logic."
+              open={advancedIcpOpen}
+              onToggle={() => setAdvancedIcpOpen(open => !open)}
+            >
+            {/* ── Card: Target Priority Scoring ── */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Target Priority Scoring</h2>
+              <p className="text-sm text-gray-500 mb-4">These weights determine how Parlay ranks companies for conference targeting. Higher weights make that factor more influential in the Target Priority Score.</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {([
+                  ['icp_fit', 'ICP Fit Weight'],
+                  ['buyer_access', 'Buyer Access Weight'],
+                  ['relationship_leverage', 'Relationship Leverage Weight'],
+                  ['conference_opportunity', 'Conference Opportunity Weight'],
+                ] as [keyof TargetPriorityWeights, string][]).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={targetPriorityWeights[key]}
+                      onChange={e => handleTargetPriorityWeightChange(key, e.target.value)}
+                      className="input-field text-sm w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                <p className={targetPriorityWeightError ? 'text-sm text-red-600' : 'text-sm text-gray-500'}>
+                  Total weight: <span className="font-semibold">{targetPriorityWeightTotal}</span>/100{targetPriorityWeightError ? ` — ${targetPriorityWeightError}` : ''}
+                </p>
+                <button className="btn-primary text-sm" onClick={handleSaveTargetPriorityWeights} disabled={savingTargetPriorityWeights || Boolean(targetPriorityWeightError)}>
+                  {savingTargetPriorityWeights ? 'Saving…' : 'Save Weights'}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Card: Target Priority Tiers ── */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Target Priority Tiers</h2>
+              <p className="text-sm text-gray-500 mb-4">These tiers translate the Target Priority Score into a recommended planning priority.</p>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {DEFAULT_TIER_THRESHOLDS.map((tier, idx) => {
+                  const next = DEFAULT_TIER_THRESHOLDS[idx + 1];
+                  const range = tier.key === 'low_priority' ? `Below ${DEFAULT_TIER_THRESHOLDS[idx - 1]?.min ?? 40}` : `${tier.min}–${next ? tier.min === 90 ? 100 : next.min - 1 : 100}`;
+                  return (
+                    <div key={tier.key} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-sm font-semibold text-gray-700">{tier.label}</p>
+                      <p className="text-xs text-gray-500 mt-1">{range}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Card: Recommended Target Actions ── */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Recommended Target Actions</h2>
+              <p className="text-sm text-gray-500 mb-4">Parlay recommends actions based on ICP fit, buyer access, relationship leverage, and event-specific opportunity.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <th className="text-left py-2 font-medium">Action</th>
+                      <th className="text-left py-2 font-medium">When Parlay recommends it</th>
+                      <th className="text-left py-2 font-medium">Active</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DEFAULT_RECOMMENDED_ACTIONS.map(action => (
+                      <tr key={action.key} className="border-b border-gray-50">
+                        <td className="py-2 pr-4 font-medium text-gray-700">{action.label}</td>
+                        <td className="py-2 pr-4 text-gray-500">{action.when}</td>
+                        <td className="py-2"><Toggle checked={action.active} onChange={() => undefined} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">V1 uses system-defined rules and stable action keys. Labels can be moved to editable config options without changing scoring logic.</p>
+            </div>
+
+          {/* ── Card: Relationship Leverage Settings ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Relationship Leverage Settings</h2>
+            <p className="text-sm text-gray-500 mb-4">Define which relationship signals should increase targeting priority. V1 uses read-only default weights from the targeting engine.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.entries(DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS).map(([key, weight]) => (
+                <div key={key} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <span className="text-sm text-gray-700">{key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}</span>
+                  <span className="text-xs font-semibold text-gray-500">{weight}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Card: Conference Opportunity Settings ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Conference Opportunity Settings</h2>
+            <p className="text-sm text-gray-500 mb-4">Define what makes a company a strong opportunity at a specific conference. V1 uses read-only default weights from the targeting engine.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.entries(DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS).map(([key, weight]) => (
+                <div key={key} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <span className="text-sm text-gray-700">{key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}</span>
+                  <span className="text-xs font-semibold text-gray-500">{weight}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* ── Card: Engagement Thresholds ── */}
           <div className="card">
             <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Engagement Thresholds</h2>
             <p className="text-sm text-gray-500 mb-4">Benchmarks Parlay uses when ranking prospects. Helps distinguish companies worth pursuing aggressively from those that need more nurturing.</p>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Active Pursuit Score</label>
                 <input type="number" value={icpPursuitScore} onChange={e => setIcpPursuitScore(e.target.value)} className="input-field text-sm w-full" />
@@ -2659,6 +2851,7 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+            </IcpSettingsSection>
           </div>
         )
       )}

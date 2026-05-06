@@ -24,7 +24,7 @@ export interface AddableGroup {
 const TIERS = [
   {
     key: '1' as const,
-    label: 'Tier 1',
+    label: 'Must Target',
     labelClass: 'text-red-600',
     bg: 'bg-red-50',
     border: 'border-red-200',
@@ -32,7 +32,7 @@ const TIERS = [
   },
   {
     key: '2' as const,
-    label: 'Tier 2',
+    label: 'High Priority',
     labelClass: 'text-brand-primary',
     bg: 'bg-brand-primary/10',
     border: 'border-brand-primary/40',
@@ -40,7 +40,7 @@ const TIERS = [
   },
   {
     key: '3' as const,
-    label: 'Tier 3',
+    label: 'Worth Engaging',
     labelClass: 'text-brand-highlight',
     bg: 'bg-brand-highlight/10',
     border: 'border-brand-highlight/40',
@@ -48,7 +48,7 @@ const TIERS = [
   },
   {
     key: 'unassigned' as const,
-    label: 'Unassigned',
+    label: 'Monitor',
     labelClass: 'text-gray-500',
     bg: 'bg-gray-50',
     border: 'border-gray-200',

@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
+import { computeStrategyAssessment } from '@/lib/strategyAssessment';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -32,13 +33,13 @@ export async function GET(
   await dbReady;
 
   const confRow = await db.execute({
-    sql: 'SELECT id, name, start_date, end_date, location, internal_attendees FROM conferences WHERE id = ?',
+    sql: 'SELECT id, name, start_date, end_date, location, internal_attendees, conference_strategy_type_id FROM conferences WHERE id = ?',
     args: [confId],
   });
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, prevConfsRes, icpConfig, actionOptsRes, overlapTypeRes, productColorsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -80,19 +81,14 @@ export async function GET(
             WHERE f.conference_id = ?`,
       args: [confId],
     }),
-    // Prior conferences for each attendee (returns multiple rows per attendee)
-    db.execute({
-      sql: `SELECT ca.attendee_id, c.name as conference_name, c.start_date
-            FROM conference_attendees ca
-            JOIN conferences c ON ca.conference_id = c.id
-            WHERE ca.conference_id != ? AND c.end_date < (SELECT start_date FROM conferences WHERE id = ?)
-            ORDER BY c.start_date DESC`,
-      args: [confId, confId],
-    }),
     getIcpConfig(),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
-    db.execute({ sql: `SELECT value FROM site_settings WHERE key='prior_overlap_company_type'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({ sql: `SELECT line_items, required_pipeline_amount FROM conference_budget WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] })),
+    conference.conference_strategy_type_id
+      ? db.execute({ sql: `SELECT value FROM config_options WHERE id = ?`, args: [conference.conference_strategy_type_id] }).catch(() => ({ rows: [] }))
+      : Promise.resolve({ rows: [] }),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -411,24 +407,6 @@ export async function GET(
     if (a.wse && a.company_id) wseCompanyIds.add(a.company_id as number);
   }
 
-  // Prior overlap: build map of attendee_id → most recent conference name, filter to configured company type
-  const overlapCompanyType = (overlapTypeRes.rows[0]?.value as string) ?? 'Operator';
-  const overlapLabelRes = await db.execute({
-    sql: `SELECT value FROM config_options WHERE category='company_type' AND value=? LIMIT 1`,
-    args: [overlapCompanyType],
-  });
-  const priorOverlapTypeLabel = (overlapLabelRes.rows[0]?.value as string) ?? overlapCompanyType;
-
-  const prevConfMap = new Map<number, string>();
-  for (const row of prevConfsRes.rows) {
-    const aid = row.attendee_id as number;
-    if (!prevConfMap.has(aid)) prevConfMap.set(aid, String(row.conference_name || ''));
-  }
-  const priorOverlapAttendees = attendees.filter((a) => {
-    if (!prevConfMap.has(a.id as number)) return false;
-    const types = String(a.company_type || '').split(',').map((t: string) => t.trim());
-    return types.includes(overlapCompanyType);
-  });
 
   // --- Client companies ---
   const unitTypeLabel = unitTypeRes.rows[0]?.value ? String(unitTypeRes.rows[0].value) : 'Units';
@@ -464,16 +442,6 @@ export async function GET(
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
     companyTypeBreakdown: Object.entries(companyTypeCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     seniorityBreakdown: Object.entries(seniorityCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
-    priorOverlapTypeLabel,
-    priorOverlapCount: priorOverlapAttendees.length,
-    priorOverlapAttendees: priorOverlapAttendees.map((a) => ({
-      id: a.id, first_name: a.first_name, last_name: a.last_name,
-      title: a.title, company_name: a.company_name,
-      seniority: resolveSeniority(a.seniority, a.title),
-      company_id: a.company_id ? Number(a.company_id) : null,
-      prior_conference: prevConfMap.get(a.id as number) ?? '',
-      assigned_user_names: resolveUserIds(a.company_assigned_user),
-    })),
     clientCompanies,
     unitTypeLabel,
   };
@@ -696,5 +664,50 @@ export async function GET(
       companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
     }));
 
-  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp });
+  // --- Strategy Assessment ---
+  const budgetRow = budgetRes.rows[0];
+  const budgetTotal = budgetRow
+    ? (() => {
+        try {
+          const items = JSON.parse(String(budgetRow.line_items ?? '[]')) as Array<{ budget?: string }>;
+          return items.reduce((sum, item) => {
+            const n = Number(String(item?.budget ?? '').replace(/[^0-9.]/g, ''));
+            return sum + (Number.isFinite(n) ? n : 0);
+          }, 0);
+        } catch { return 0; }
+      })()
+    : 0;
+  const requiredPipeline = budgetRow?.required_pipeline_amount != null
+    ? Number(budgetRow.required_pipeline_amount)
+    : null;
+  const avgCostPerUnit = avgCostRes.rows[0]?.value != null
+    ? Number(avgCostRes.rows[0].value)
+    : 0;
+  const conferenceStrategyType = strategyTypeLabelRes.rows[0]?.value
+    ? String(strategyTypeLabelRes.rows[0].value)
+    : null;
+
+  const internalRelationshipCount = new Set(internalRels.map(r => r.company_id as number)).size;
+
+  const icpCompaniesForScoring = Array.from(icpCompanyMap.values()).map(c => ({
+    wse: companyDetailMap.get(c.id)?.wse ?? null,
+  }));
+
+  const strategyAssessment = computeStrategyAssessment({
+    totalAttendees,
+    totalCompanies,
+    icpCount,
+    clientCompanyCount: clientCompanies.length,
+    seniorityBreakdown: landscape.seniorityBreakdown,
+    internalRelationshipCount,
+    scheduledMeetingCount: meetingCount,
+    internalRepCount: reps.length,
+    conferenceStrategyType,
+    budgetTotal,
+    requiredPipeline,
+    avgCostPerUnit,
+    icpCompanies: icpCompaniesForScoring,
+  });
+
+  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment });
 }
