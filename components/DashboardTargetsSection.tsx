@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { DashboardConference } from './RecentSection';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 
 interface TargetEntry {
   attendeeId: number;
@@ -12,6 +13,7 @@ interface TargetEntry {
   seniority: string | null;
   companyName: string | null;
   companyId: number | null;
+  companyWse: number | null;
   assignedUserNames: string[];
   tier: string;
 }
@@ -21,43 +23,31 @@ const TIER_ORDER = ['1', '2', '3', 'unassigned'];
 const TIER_CONFIG = [
   {
     key: '1',
-    label: 'Tier 1',
+    label: 'Must Target',
     activeBg: 'bg-red-50',
     activeBorder: 'border-red-200',
     activeText: 'text-red-600',
-    pillBg: 'bg-red-100',
-    pillText: 'text-red-700',
-    pillBorder: 'border-red-200',
   },
   {
     key: '2',
-    label: 'Tier 2',
+    label: 'High Priority',
     activeBg: 'bg-brand-primary/10',
     activeBorder: 'border-brand-primary/40',
     activeText: 'text-brand-primary',
-    pillBg: 'bg-brand-primary/10',
-    pillText: 'text-brand-primary',
-    pillBorder: 'border-brand-primary/40',
   },
   {
     key: '3',
-    label: 'Tier 3',
+    label: 'Worth Engaging',
     activeBg: 'bg-brand-highlight/10',
     activeBorder: 'border-brand-highlight/40',
     activeText: 'text-brand-highlight',
-    pillBg: 'bg-brand-highlight/10',
-    pillText: 'text-brand-highlight',
-    pillBorder: 'border-brand-highlight/40',
   },
   {
     key: 'unassigned',
-    label: 'Unassigned',
+    label: 'Monitor',
     activeBg: 'bg-gray-50',
     activeBorder: 'border-gray-200',
     activeText: 'text-gray-500',
-    pillBg: 'bg-gray-100',
-    pillText: 'text-gray-600',
-    pillBorder: 'border-gray-300',
   },
 ];
 
@@ -69,14 +59,9 @@ const SENIORITY_COLORS: Record<string, string> = {
   'Other': '#6b7280',
 };
 
-function getSeniorityColor(s: string | null): string {
-  if (!s) return '#6b7280';
-  return SENIORITY_COLORS[s] ?? '#6b7280';
-}
-
 function SeniorityPill({ seniority }: { seniority: string | null }) {
   if (!seniority) return null;
-  const color = getSeniorityColor(seniority);
+  const color = SENIORITY_COLORS[seniority] ?? '#6b7280';
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
@@ -87,28 +72,36 @@ function SeniorityPill({ seniority }: { seniority: string | null }) {
   );
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.trim().substring(0, 2).toUpperCase();
+}
+
 function UserPill({ name }: { name: string }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap">
-      <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <span
+      title={name}
+      className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap"
+    >
+      <svg className="w-3 h-3 opacity-70 flex-shrink-0 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
-      {name}
+      {getInitials(name)}
     </span>
   );
 }
 
-function TierPill({ tier }: { tier: string }) {
-  const config = TIER_CONFIG.find(t => t.key === tier);
-  if (!config) return null;
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${config.pillBg} ${config.pillText} ${config.pillBorder}`}>
-      {config.label}
-    </span>
-  );
-}
-
-function DashboardTargetCard({ entry }: { entry: TargetEntry }) {
+function DashboardTargetCard({
+  entry,
+  hasMeeting,
+  avgCostPerUnit,
+}: {
+  entry: TargetEntry;
+  hasMeeting: boolean;
+  avgCostPerUnit: number;
+}) {
+  const valuePill = formatValuePill(entry.companyWse, avgCostPerUnit);
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3 hover:shadow-sm transition-all">
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -124,11 +117,20 @@ function DashboardTargetCard({ entry }: { entry: TargetEntry }) {
             <p className="text-xs text-gray-400 truncate mt-0.5">{entry.companyName}</p>
           )}
         </div>
-        <TierPill tier={entry.tier} />
       </div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap items-center gap-1 mt-1">
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
         {entry.assignedUserNames[0] && <UserPill name={entry.assignedUserNames[0]} />}
+        {hasMeeting && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            Meeting Scheduled
+          </span>
+        )}
+        {valuePill && (
+          <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+            {valuePill}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -149,18 +151,29 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const sortedConferences = sortConferencesForDropdown(allConferences);
   const defaultConf = sortedConferences[0] ?? null;
 
+  const avgCostPerUnit = useAvgCostPerUnit();
   const [selectedConfId, setSelectedConfId] = useState<number | null>(defaultConf?.id ?? null);
   const [targets, setTargets] = useState<TargetEntry[]>([]);
+  const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set(['1']));
 
   const fetchTargets = useCallback(async (confId: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/conferences/${confId}/targets`);
-      if (res.ok) {
-        const data = await res.json() as TargetEntry[];
+      const [targetsRes, meetingsRes] = await Promise.all([
+        fetch(`/api/conferences/${confId}/targets`),
+        fetch(`/api/meetings?conference_id=${confId}`),
+      ]);
+      if (targetsRes.ok) {
+        const data = await targetsRes.json() as TargetEntry[];
         setTargets(data);
+      }
+      if (meetingsRes.ok) {
+        const meetings = await meetingsRes.json() as { attendee_id: number }[];
+        setMeetingAttendeeIds(new Set(meetings.map(m => m.attendee_id)));
+      } else {
+        setMeetingAttendeeIds(new Set());
       }
     } catch { /* ignore */ } finally {
       setLoading(false);
@@ -198,7 +211,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header row: same 4-col grid as tier cards so dropdown aligns with Tier 2 */}
+      {/* Header row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
         <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
           Targets
@@ -301,7 +314,12 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filteredTargets.map(entry => (
-            <DashboardTargetCard key={entry.attendeeId} entry={entry} />
+            <DashboardTargetCard
+              key={entry.attendeeId}
+              entry={entry}
+              hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
+              avgCostPerUnit={avgCostPerUnit}
+            />
           ))}
         </div>
       )}
