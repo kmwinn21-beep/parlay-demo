@@ -60,6 +60,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
   const [allAttendees, setAllAttendees] = useState<AttendeeRaw[]>([]);
   const [seniorityMap, setSeniorityMap] = useState<Map<string, string>>(new Map());
   const [companyTierMap, setCompanyTierMap] = useState<Map<number, CompanyTierInfo>>(new Map());
+  const [prospectTypeId, setProspectTypeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingAttendees, setLoadingAttendees] = useState(true);
 
@@ -103,8 +104,14 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
           const data = (await res.json()) as {
             companies?: Array<{ company_id: number; target_priority_tier_key: string; target_priority_score: number }>;
             pagination?: { has_more: boolean; next_offset: number | null };
+            scoring_config?: { target_company_type_id?: number | null };
           };
           if (cancelled) break;
+          // Capture the prospect company type ID from the first batch so we
+          // can filter allAttendees to only that type in the dropdown.
+          if (offset === 0 && data.scoring_config?.target_company_type_id != null) {
+            setProspectTypeId(String(data.scoring_config.target_company_type_id));
+          }
           const batch = data.companies ?? [];
           setCompanyTierMap(prev => {
             const next = new Map(prev);
@@ -142,6 +149,9 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
 
     for (const a of allAttendees) {
       if (targetMap.has(a.id)) continue;
+      // Mirror the server-side filter: only show attendees from Prospect
+      // type companies (same company_type filter the targeting API applies).
+      if (prospectTypeId != null && a.company_type !== prospectTypeId) continue;
       const companyId = a.company_id ?? 0;
       const tierInfo = companyId > 0 ? companyTierMap.get(companyId) : undefined;
       const tierKey: string = tierInfo?.tierKey ?? 'unscored';
@@ -182,7 +192,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
     }
 
     return groups;
-  }, [allAttendees, targetMap, seniorityMap, companyTierMap, loadingAttendees]);
+  }, [allAttendees, targetMap, seniorityMap, companyTierMap, prospectTypeId, loadingAttendees]);
 
   const toggleTarget = useCallback(async (entry: Omit<TargetEntry, 'tier'>) => {
     const isTarget = targetMap.has(entry.attendeeId);
