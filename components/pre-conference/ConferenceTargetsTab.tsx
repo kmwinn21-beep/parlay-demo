@@ -80,13 +80,22 @@ function SeniorityPill({ seniority }: { seniority: string | null }) {
   );
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.trim().substring(0, 2).toUpperCase();
+}
+
 function UserPill({ name }: { name: string }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap">
-      <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <span
+      title={name}
+      className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap"
+    >
+      <svg className="w-3 h-3 opacity-70 flex-shrink-0 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
-      {name}
+      {getInitials(name)}
     </span>
   );
 }
@@ -166,7 +175,15 @@ function TargetCard({
   );
 }
 
+const TIER_BAR_COLORS: Record<string, string> = {
+  '1': '#dc2626',
+  '2': 'rgb(var(--brand-primary-rgb, 30 58 95))',
+  '3': 'rgb(var(--brand-highlight-rgb, 5 150 105))',
+  'unassigned': '#9ca3af',
+};
+
 export function ConferenceTargetsTab({
+  conferenceId,
   conferenceName,
   targetMap,
   meetingAttendeeIds,
@@ -176,6 +193,7 @@ export function ConferenceTargetsTab({
   onAddTargets,
   loadingAddAttendees,
 }: {
+  conferenceId: number;
   conferenceName: string;
   targetMap: Map<number, TargetEntry>;
   meetingAttendeeIds: Set<number>;
@@ -188,6 +206,18 @@ export function ConferenceTargetsTab({
   const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
+  const [conversionPct, setConversionPct] = useState(60);
+  const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/conferences/${conferenceId}/budget`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { required_pipeline_amount?: number | null } | null) => {
+        const val = data?.required_pipeline_amount;
+        if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
+      })
+      .catch(() => {});
+  }, [conferenceId]);
 
   // Add-target dropdown state
   const [showAdd, setShowAdd] = useState(false);
@@ -249,6 +279,12 @@ export function ConferenceTargetsTab({
   }
   const hasValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
 
+  // Pipeline coverage
+  const totalTargetValue = Object.values(tierValueSum).reduce((a, b) => a + b, 0);
+  const convertedValue = Math.round(totalTargetValue * conversionPct / 100);
+  const coverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedValue / requiredPipeline : null;
+  const maxTierValue = Math.max(1, ...Object.values(tierValueSum));
+
   // Seniority breakdown from targets
   const senCount: Record<string, number> = {};
   for (const t of targets) {
@@ -285,13 +321,95 @@ export function ConferenceTargetsTab({
 
   return (
     <div className="space-y-6">
-      {/* Header row: count card + seniority chart */}
-      <div className="flex flex-wrap gap-4 items-start">
-        <div className="rounded-xl border-2 border-brand-accent bg-white p-4 flex flex-col items-center min-w-[100px]">
+      {/* Header row: count card + pipeline value chart + seniority chart */}
+      <div className="flex flex-wrap gap-4 items-stretch">
+        {/* Targets count card */}
+        <div className="rounded-xl border-2 border-brand-accent bg-white p-4 flex flex-col items-center justify-center min-w-[100px]">
           <span className="text-3xl font-bold text-brand-primary leading-tight">{targets.length}</span>
           <span className="text-xs font-semibold text-gray-500 mt-0.5 text-center">Target{targets.length !== 1 ? 's' : ''}</span>
         </div>
 
+        {/* Pipeline value chart */}
+        <div className="flex-1 min-w-[220px] rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pipeline Value</p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Conversion:</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={conversionPct}
+                onChange={e => {
+                  const v = Math.max(0, Math.min(100, Number(e.target.value)));
+                  if (!isNaN(v)) setConversionPct(v);
+                }}
+                className="w-12 text-xs text-center border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-brand-primary"
+              />
+              <span className="text-xs text-gray-400">%</span>
+            </div>
+          </div>
+
+          {/* Required pipeline comparison bar */}
+          {requiredPipeline != null && (
+            <div className="mb-3 pb-3 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+              </div>
+              <div className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-3 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
+                    backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-xs text-gray-400">
+                  Projected at {conversionPct}%:{' '}
+                  <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+                </span>
+                {coverageRatio != null && (
+                  <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                    ({Math.round((coverageRatio ?? 0) * 100)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Per-tier value bars */}
+          {hasValues ? (
+            <div className="space-y-2">
+              {TIERS.map(tier => {
+                const val = tierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-600 w-28 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
+                          backgroundColor: TIER_BAR_COLORS[tier.key] ?? '#9ca3af',
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+          )}
+        </div>
+
+        {/* Seniority breakdown chart */}
         {senBreakdown.length > 0 && (
           <div className="flex-1 min-w-[200px] rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Seniority Breakdown</p>

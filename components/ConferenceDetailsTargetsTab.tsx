@@ -176,6 +176,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
 
   return (
     <ConferenceTargetsTab
+      conferenceId={conferenceId}
       conferenceName={conferenceName}
       targetMap={targetMap}
       meetingAttendeeIds={meetingAttendeeIds}
