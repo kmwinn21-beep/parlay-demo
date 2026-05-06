@@ -45,6 +45,20 @@ export async function POST(request: NextRequest) {
 
     const token = await signToken(sessionUser);
 
+    // Record login session and update last_seen_at (fire-and-forget, don't block login)
+    db.execute({
+      sql: 'INSERT INTO user_sessions (user_id, ip_address, user_agent) VALUES (?, ?, ?)',
+      args: [
+        sessionUser.id,
+        request.headers.get('x-forwarded-for') ?? null,
+        request.headers.get('user-agent') ?? null,
+      ],
+    }).catch(() => {});
+    db.execute({
+      sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
+      args: [sessionUser.id],
+    }).catch(() => {});
+
     const response = NextResponse.json({ message: 'Logged in.', user: { email: sessionUser.email, role: sessionUser.role } });
     response.cookies.set({ ...authCookieOptions(), value: token });
     return response;
