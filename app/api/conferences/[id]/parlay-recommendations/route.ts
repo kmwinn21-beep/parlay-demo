@@ -443,8 +443,12 @@ export async function POST(
   }
 
   // Build shared prompt sections
-  const icpPainPoints = tryParseJson<string[]>(icpSettings['icp_pain_points'], []);
-  const icpTriggerEvents = tryParseJson<string[]>(icpSettings['icp_trigger_events'], []);
+  const icpPainPointsUser = tryParseJson<string[]>(icpSettings['icp_pain_points'], []);
+  const icpAiPainPoints = tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_pain_points'], []);
+  const icpPainPoints = [...icpPainPointsUser, ...icpAiPainPoints.map(i => i.title)];
+  const icpTriggerEventsUser = tryParseJson<string[]>(icpSettings['icp_trigger_events'], []);
+  const icpAiTriggerEvents = tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_trigger_events'], []);
+  const icpTriggerEvents = [...icpTriggerEventsUser, ...icpAiTriggerEvents.map(i => i.title)];
   const icpTargetTitles = tryParseJson<string[]>(icpSettings['icp_target_titles'], []);
   const icpDecisionMakers = tryParseJson<string[]>(icpSettings['icp_decision_maker_titles'], []);
   const icpInfluencers = tryParseJson<string[]>(icpSettings['icp_influencer_titles'], []);
