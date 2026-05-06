@@ -67,7 +67,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1652,14 +1652,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : 'Integrations'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -2867,6 +2867,9 @@ export default function AdminPage() {
 
       {/* ── Effectiveness Defaults tab ── */}
       {tab === 'effectiveness' && <AdminEffectivenessTab />}
+
+      {/* ── Usage tab ── */}
+      {tab === 'usage' && <AdminUsageTab />}
 
       {/* ── User Management tab ── */}
       {tab === 'users' && (
@@ -4734,6 +4737,211 @@ function AdminEffectivenessTab() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AdminUsageTab ─────────────────────────────────────────────────────────────
+
+interface UsageUser {
+  id: number;
+  email: string;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  role: string;
+  active: number;
+  created_at: string;
+  last_seen_at: string | null;
+  total_logins: number;
+  logins_30d: number;
+  notes_written: number;
+  comments_written: number;
+  messages_sent: number;
+}
+
+interface SparklineDay { day: string; count: number; }
+
+interface UsageData {
+  summary: { total_users: number; active_last_30d: number; logins_last_30d: number };
+  sparkline: SparklineDay[];
+  users: UsageUser[];
+}
+
+type UsageSortKey = keyof UsageUser;
+
+function AdminUsageTab() {
+  const [data, setData] = useState<UsageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<UsageSortKey>('logins_30d');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  useEffect(() => {
+    fetch('/api/admin/usage')
+      .then(r => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
+      .then((d: UsageData) => setData(d))
+      .catch(e => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSort = (key: UsageSortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  const sortedUsers = data ? [...data.users].sort((a, b) => {
+    const av = a[sortKey] ?? 0;
+    const bv = b[sortKey] ?? 0;
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return sortDir === 'asc' ? cmp : -cmp;
+  }) : [];
+
+  const maxSparkCount = data ? Math.max(1, ...data.sparkline.map(d => d.count)) : 1;
+
+  const sparkDays = (() => {
+    const result: { day: string; count: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      result.push({ day: key, count: 0 });
+    }
+    if (data) {
+      for (const row of data.sparkline) {
+        const match = result.find(r => r.day === row.day);
+        if (match) match.count = row.count;
+      }
+    }
+    return result;
+  })();
+
+  function fmtDate(s: string | null) {
+    if (!s) return '—';
+    try { return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return s; }
+  }
+
+  function userName(u: UsageUser) {
+    if (u.display_name) return u.display_name;
+    if (u.first_name || u.last_name) return [u.first_name, u.last_name].filter(Boolean).join(' ');
+    return u.email;
+  }
+
+  function SortIcon({ k }: { k: UsageSortKey }) {
+    if (sortKey !== k) return <span className="ml-1 text-gray-300">↕</span>;
+    return <span className="ml-1 text-brand-secondary">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-16">
+      <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
+    </div>
+  );
+
+  if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>;
+  if (!data) return null;
+
+  const cols: { key: UsageSortKey; label: string }[] = [
+    { key: 'display_name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'role', label: 'Role' },
+    { key: 'active', label: 'Status' },
+    { key: 'created_at', label: 'Member Since' },
+    { key: 'last_seen_at', label: 'Last Login' },
+    { key: 'total_logins', label: 'Total Logins' },
+    { key: 'logins_30d', label: '30d Logins' },
+    { key: 'notes_written', label: 'Notes' },
+    { key: 'comments_written', label: 'Comments' },
+    { key: 'messages_sent', label: 'Messages' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Total Users', value: data.summary.total_users },
+          { label: 'Active Last 30d', value: data.summary.active_last_30d },
+          { label: 'Logins Last 30d', value: data.summary.logins_last_30d },
+        ].map(card => (
+          <div key={card.label} className="card p-4 text-center">
+            <p className="text-2xl font-bold text-brand-primary">{card.value}</p>
+            <p className="text-xs text-gray-400 mt-1">{card.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card p-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Daily Logins — Last 30 Days</p>
+        <div className="flex items-end gap-0.5 h-16">
+          {sparkDays.map(d => (
+            <div
+              key={d.day}
+              className="flex-1 rounded-sm min-h-[2px]"
+              style={{
+                height: `${Math.max(2, (d.count / maxSparkCount) * 100)}%`,
+                backgroundColor: d.count > 0 ? 'rgb(var(--brand-secondary-rgb, 27 118 188))' : '#e5e7eb',
+              }}
+              title={`${d.day}: ${d.count} login${d.count !== 1 ? 's' : ''}`}
+            />
+          ))}
+        </div>
+        <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+          <span>{sparkDays[0]?.day.slice(5)}</span>
+          <span>{sparkDays[sparkDays.length - 1]?.day.slice(5)}</span>
+        </div>
+      </div>
+
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                {cols.map(col => (
+                  <th
+                    key={col.key}
+                    className="px-3 py-2.5 text-left text-xs font-semibold text-gray-400 cursor-pointer hover:text-gray-600 whitespace-nowrap select-none"
+                    onClick={() => handleSort(col.key)}
+                  >
+                    {col.label}<SortIcon k={col.key} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {sortedUsers.map(u => (
+                <tr key={u.id} className={u.active === 0 ? 'opacity-40 italic' : 'hover:bg-gray-50'}>
+                  <td className="px-3 py-2.5 font-medium text-gray-800 whitespace-nowrap">{userName(u)}</td>
+                  <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{u.email}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 ${u.role === 'administrator' ? 'bg-brand-secondary/10 text-brand-secondary' : 'bg-gray-100 text-gray-500'}`}>
+                      {u.role === 'administrator' ? 'Admin' : 'User'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 ${u.active === 1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-500'}`}>
+                      {u.active === 1 ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">{fmtDate(u.created_at)}</td>
+                  <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
+                    {u.total_logins === 0 ? <span className="text-gray-300">Never</span> : fmtDate(u.last_seen_at)}
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{u.total_logins || <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{u.logins_30d || <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-center text-gray-500">{u.notes_written || <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-center text-gray-500">{u.comments_written || <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-center text-gray-500">{u.messages_sent || <span className="text-gray-300">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -686,25 +686,17 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE conferences ADD COLUMN cost_efficiency_modifier_reason TEXT`,
     `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('ces_benchmarks', '{"cost_per_company":{"elite_max":350,"strong_max":650,"healthy_max":1000,"weak_max":1600},"cost_per_meeting":{"elite_max":400,"strong_max":700,"healthy_max":1100,"weak_max":1800},"pipeline_per_1k":{"elite_min":10000,"strong_min":6000,"healthy_min":3500,"weak_min":1500}}')`,
     `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('ces_event_type_modifiers', '{"flagship_industry_event":5,"regional_operator_conference":0,"vendor_heavy_trade_show":-5,"other":0}')`,
-    `CREATE TABLE IF NOT EXISTS title_normalization_rules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id INTEGER,
-      raw_title TEXT NOT NULL,
-      raw_title_key TEXT NOT NULL,
-      normalized_title TEXT NOT NULL,
-      function_id INTEGER REFERENCES config_options(id),
-      seniority_id INTEGER REFERENCES config_options(id),
-      buyer_role TEXT NOT NULL CHECK (buyer_role IN ('decision_maker', 'influencer', 'target_title', 'ignore')),
-      source TEXT NOT NULL DEFAULT 'user_confirmed' CHECK (source IN ('user_confirmed', 'system_alias', 'fuzzy_match', 'imported')),
-      confidence TEXT NOT NULL DEFAULT 'high' CHECK (confidence IN ('high', 'medium', 'low')),
-      notes TEXT,
-      created_by INTEGER REFERENCES users(id),
-      updated_by INTEGER REFERENCES users(id),
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+    // Usage tracking
+    `ALTER TABLE users ADD COLUMN last_seen_at TEXT`,
+    `CREATE TABLE IF NOT EXISTS user_sessions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT    DEFAULT (datetime('now')),
+      ip_address TEXT,
+      user_agent TEXT
     )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)`,
-    `CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)`,
+    `CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_user_sessions_created  ON user_sessions(created_at)`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
