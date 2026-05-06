@@ -244,14 +244,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             WHERE ca.conference_id = ?`,
       args: [conferenceId],
     }),
-    // Companies (distinct, with owner resolution)
+    // Companies (distinct, with owner resolution via config_options → users)
     db.execute({
       sql: `SELECT DISTINCT c.id, c.name, c.website, c.company_type, c.notes as company_notes,
-                   u.email as owner_email, COALESCE(u.display_name, u.email) as owner_name
+                   COALESCE(u.email, co_user.value) as owner_email,
+                   COALESCE(u.display_name, u.email, co_user.value) as owner_name
             FROM conference_attendees ca
             JOIN attendees a ON a.id = ca.attendee_id
             JOIN companies c ON c.id = a.company_id
-            LEFT JOIN users u ON u.config_id = CAST(c.assigned_user AS INTEGER)
+            LEFT JOIN config_options co_user ON co_user.id = CAST(c.assigned_user AS INTEGER) AND co_user.category = 'user'
+            LEFT JOIN users u ON u.config_id = co_user.id
             WHERE ca.conference_id = ?`,
       args: [conferenceId],
     }),
