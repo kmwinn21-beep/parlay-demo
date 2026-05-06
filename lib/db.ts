@@ -698,6 +698,13 @@ export async function initDb(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_user_sessions_created  ON user_sessions(created_at)`,
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('role_capabilities', '{"sales_rep":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":false,"view_financials":false,"view_pre_post_conference":false,"manage_conference_data":false,"delete_merge":false,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"manager":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":false,"view_pre_post_conference":true,"manage_conference_data":false,"delete_merge":false,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"analyst":{"view_data":true,"create_activity":false,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":true,"view_pre_post_conference":true,"manage_conference_data":false,"delete_merge":false,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"conference_coordinator":{"view_data":true,"create_activity":false,"view_rep_metrics":false,"view_effectiveness":false,"view_financials":false,"view_pre_post_conference":false,"manage_conference_data":true,"delete_merge":true,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"user":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":true,"view_pre_post_conference":true,"manage_conference_data":true,"delete_merge":true,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"administrator":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":true,"view_pre_post_conference":true,"manage_conference_data":true,"delete_merge":true,"manage_system_config":true,"manage_users":true,"manage_role_scope":true}}')`,
+    `CREATE TABLE IF NOT EXISTS conference_crm_mappings (
+      conference_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      crm_campaign_name TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (conference_id, provider)
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

@@ -28,8 +28,10 @@ import { ConflictResolutionModal, type ConflictItem } from '@/components/Conflic
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
 import { useUser } from '@/components/UserContext';
+import { useCapabilities } from '@/lib/useCapabilities';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { BatchCardScanModal } from '@/components/BatchCardScanModal';
+import { CrmExportModal } from '@/components/CrmExportModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
@@ -252,6 +254,7 @@ export default function ConferenceDetailPage() {
   const { isVisible: isConfAttendeeColVisible, orderedColumns: confAttendeeColumns } = useTableColumnConfig('conference_attendees');
   const conferenceTabConfig = useSectionConfig('conference_details');
   const { user: currentUser } = useUser();
+  const capabilities = useCapabilities();
   const logoConfig = useLogoConfig();
   const isAdminUser = currentUser?.role === 'administrator';
 
@@ -334,6 +337,7 @@ export default function ConferenceDetailPage() {
 
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showCrmExport, setShowCrmExport] = useState(false);
 
   // Upload attendee list state
   const [isUploading, setIsUploading] = useState(false);
@@ -1165,6 +1169,18 @@ export default function ConferenceDetailPage() {
                     )}
                   </div>
                 </div>
+                {capabilities?.capabilities?.crm_export && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCrmExport(true)}
+                    className="btn-secondary flex items-center gap-2 text-sm flex-shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Create CRM Import Files
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
@@ -2035,6 +2051,16 @@ export default function ConferenceDetailPage() {
           conferenceId={conference.id}
           conferenceName={conference.name}
           onClose={() => setShowBudgetModal(false)}
+        />
+      )}
+
+      {showCrmExport && conference && (
+        <CrmExportModal
+          conferenceId={conference.id}
+          conferenceName={conference.name}
+          startDate={conference.start_date}
+          endDate={conference.end_date}
+          onClose={() => setShowCrmExport(false)}
         />
       )}
     </div>
