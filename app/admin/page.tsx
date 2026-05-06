@@ -18,6 +18,7 @@ import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 import { invalidateTagline } from '@/lib/useTagline';
 import { invalidateUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS, DEFAULT_RECOMMENDED_ACTIONS, DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS, DEFAULT_TARGET_PRIORITY_WEIGHTS, DEFAULT_TIER_THRESHOLDS, validateTargetPriorityWeights, type TargetPriorityWeights } from '@/lib/targeting/targetPriority';
+import { IcpAiAssistModal, type AiItem } from '@/components/IcpAiAssistModal';
 
 interface ConfigOption {
   id: number;
@@ -801,8 +802,13 @@ export default function AdminPage() {
   const [savingBuyerPersona, setSavingBuyerPersona] = useState(false);
   const [icpPainPoints, setIcpPainPoints] = useState<string[]>([]);
   const [icpTriggerEvents, setIcpTriggerEvents] = useState<string[]>([]);
+  const [icpAiPainPoints, setIcpAiPainPoints] = useState<AiItem[]>([]);
+  const [icpAiTriggerEvents, setIcpAiTriggerEvents] = useState<AiItem[]>([]);
   const [icpExclusionDescription, setIcpExclusionDescription] = useState('');
   const [savingPainPoints, setSavingPainPoints] = useState(false);
+  const [showAiAssistModal, setShowAiAssistModal] = useState(false);
+  const [showAiPainPointsDetail, setShowAiPainPointsDetail] = useState(false);
+  const [showAiTriggerEventsDetail, setShowAiTriggerEventsDetail] = useState(false);
   const [icpUseCaseDescription, setIcpUseCaseDescription] = useState('');
   const [savingUseCase, setSavingUseCase] = useState(false);
   const [icpPursuitScore, setIcpPursuitScore] = useState('50');
@@ -894,6 +900,8 @@ export default function AdminPage() {
         setIcpInfluencerTitles(tryParse(s['icp_influencer_titles'], []));
         setIcpPainPoints(tryParse(s['icp_pain_points'], []));
         setIcpTriggerEvents(tryParse(s['icp_trigger_events'], []));
+        setIcpAiPainPoints(tryParse(s['icp_ai_pain_points'], []));
+        setIcpAiTriggerEvents(tryParse(s['icp_ai_trigger_events'], []));
         setIcpExclusionDescription(s['icp_exclusion_description'] ?? '');
         setIcpUseCaseDescription(s['icp_use_case_description'] ?? '');
         setIcpPursuitScore(s['icp_pursuit_score'] ?? '50');
@@ -959,6 +967,8 @@ export default function AdminPage() {
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_pain_points', value: JSON.stringify(icpPainPoints) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_trigger_events', value: JSON.stringify(icpTriggerEvents) }) }),
         fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_exclusion_description', value: icpExclusionDescription }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_ai_pain_points', value: JSON.stringify(icpAiPainPoints) }) }),
+        fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_ai_trigger_events', value: JSON.stringify(icpAiTriggerEvents) }) }),
       ]);
       if (res.some(r => !r.ok)) throw new Error();
       toast.success('Pain points saved!');
@@ -2664,20 +2674,170 @@ export default function AdminPage() {
 
           {/* ── Card: Pain Points & Trigger Events ── */}
           <div className="card">
-            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Pain Points &amp; Trigger Events</h2>
-            <p className="text-sm text-gray-500 mb-4">Tell Parlay what problems your best customers are solving and what signals indicate buying readiness.</p>
+            <div className="flex items-start justify-between gap-4 mb-1">
+              <div>
+                <h2 className="text-base font-semibold text-brand-primary font-serif">Pain Points &amp; Trigger Events</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Tell Parlay what problems your best customers are solving and what signals indicate buying readiness.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiAssistModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 hover:border-emerald-300 transition-colors flex-shrink-0 mt-0.5"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 2L12.4 7.2L18 8.1L14 12L15 17.6L10 15L5 17.6L6 12L2 8.1L7.6 7.2L10 2Z" fill="#34D399" stroke="#059669" strokeWidth="1.2" strokeLinejoin="round" />
+                </svg>
+                Analyze with AI
+              </button>
+            </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Primary Pain Points</label>
-              <TagInput tags={icpPainPoints} onChange={setIcpPainPoints} placeholder="Add a pain point…" />
+            <div className="mt-4 mb-4">
+              <div className="flex items-center gap-1.5 mb-1">
+                <label className="block text-sm font-medium text-gray-700">Primary Pain Points</label>
+                {icpAiPainPoints.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAiPainPointsDetail(v => !v)}
+                    title="View AI-generated pain points"
+                    className="text-emerald-500 hover:text-emerald-600 transition-colors"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="none">
+                      <path d="M10 2L12.4 7.2L18 8.1L14 12L15 17.6L10 15L5 17.6L6 12L2 8.1L7.6 7.2L10 2Z" fill="#34D399" stroke="#059669" strokeWidth="1.2" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* AI detail popover — Pain Points */}
+              {showAiPainPointsDetail && icpAiPainPoints.length > 0 && (
+                <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">AI-Generated Pain Points</span>
+                    <button type="button" onClick={() => setShowAiPainPointsDetail(false)} className="text-emerald-400 hover:text-emerald-600">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {icpAiPainPoints.map((item, i) => (
+                    <div key={i} className="text-xs">
+                      <span className="font-semibold text-emerald-800">{item.title}:</span>{' '}
+                      <span className="text-emerald-700">{item.description}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tags container showing both user and AI pills */}
+              <div
+                className="flex flex-wrap gap-1.5 border border-gray-200 rounded-lg p-2 min-h-[42px] cursor-text"
+                onClick={e => (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus()}
+              >
+                {icpPainPoints.map(t => (
+                  <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {t}
+                    <button type="button" onClick={() => setIcpPainPoints(prev => prev.filter(x => x !== t))} className="text-gray-400 hover:text-gray-600 leading-none">×</button>
+                  </span>
+                ))}
+                {icpAiPainPoints.map((item, i) => (
+                  <span key={`ai-${i}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #059669' }}>
+                    {item.title}
+                    <button type="button" onClick={() => setIcpAiPainPoints(prev => prev.filter((_, idx) => idx !== i))} className="leading-none opacity-60 hover:opacity-100" style={{ color: '#059669' }}>×</button>
+                  </span>
+                ))}
+                <input
+                  value={''}
+                  onChange={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpPainPoints.includes(v)) setIcpPainPoints(prev => [...prev, v]); } }}
+                  onKeyDown={e => {
+                    if ((e.key === 'Enter' || e.key === ',') && (e.target as HTMLInputElement).value.trim()) {
+                      e.preventDefault();
+                      const v = (e.target as HTMLInputElement).value.replace(/,$/, '').trim();
+                      if (v && !icpPainPoints.includes(v)) setIcpPainPoints(prev => [...prev, v]);
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                    if (e.key === 'Backspace' && !(e.target as HTMLInputElement).value && icpPainPoints.length) setIcpPainPoints(prev => prev.slice(0, -1));
+                  }}
+                  onBlur={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpPainPoints.includes(v)) setIcpPainPoints(prev => [...prev, v]); e.target.value = ''; } }}
+                  className="flex-1 min-w-[120px] text-sm outline-none bg-transparent"
+                  placeholder={icpPainPoints.length === 0 && icpAiPainPoints.length === 0 ? 'Add a pain point…' : ''}
+                />
+              </div>
               <p className="text-xs text-gray-400 mt-1">What operational or strategic problems does your product solve?</p>
             </div>
 
             <div className="border-t border-gray-100 my-4" />
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Trigger Events</label>
-              <TagInput tags={icpTriggerEvents} onChange={setIcpTriggerEvents} placeholder="Add a trigger event…" />
+              <div className="flex items-center gap-1.5 mb-1">
+                <label className="block text-sm font-medium text-gray-700">Trigger Events</label>
+                {icpAiTriggerEvents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAiTriggerEventsDetail(v => !v)}
+                    title="View AI-generated trigger events"
+                    className="text-emerald-500 hover:text-emerald-600 transition-colors"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="none">
+                      <path d="M10 2L12.4 7.2L18 8.1L14 12L15 17.6L10 15L5 17.6L6 12L2 8.1L7.6 7.2L10 2Z" fill="#34D399" stroke="#059669" strokeWidth="1.2" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* AI detail popover — Trigger Events */}
+              {showAiTriggerEventsDetail && icpAiTriggerEvents.length > 0 && (
+                <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">AI-Generated Trigger Events</span>
+                    <button type="button" onClick={() => setShowAiTriggerEventsDetail(false)} className="text-emerald-400 hover:text-emerald-600">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {icpAiTriggerEvents.map((item, i) => (
+                    <div key={i} className="text-xs">
+                      <span className="font-semibold text-emerald-800">{item.title}:</span>{' '}
+                      <span className="text-emerald-700">{item.description}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tags container */}
+              <div
+                className="flex flex-wrap gap-1.5 border border-gray-200 rounded-lg p-2 min-h-[42px] cursor-text"
+                onClick={e => (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus()}
+              >
+                {icpTriggerEvents.map(t => (
+                  <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {t}
+                    <button type="button" onClick={() => setIcpTriggerEvents(prev => prev.filter(x => x !== t))} className="text-gray-400 hover:text-gray-600 leading-none">×</button>
+                  </span>
+                ))}
+                {icpAiTriggerEvents.map((item, i) => (
+                  <span key={`ai-${i}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #059669' }}>
+                    {item.title}
+                    <button type="button" onClick={() => setIcpAiTriggerEvents(prev => prev.filter((_, idx) => idx !== i))} className="leading-none opacity-60 hover:opacity-100" style={{ color: '#059669' }}>×</button>
+                  </span>
+                ))}
+                <input
+                  value={''}
+                  onChange={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpTriggerEvents.includes(v)) setIcpTriggerEvents(prev => [...prev, v]); } }}
+                  onKeyDown={e => {
+                    if ((e.key === 'Enter' || e.key === ',') && (e.target as HTMLInputElement).value.trim()) {
+                      e.preventDefault();
+                      const v = (e.target as HTMLInputElement).value.replace(/,$/, '').trim();
+                      if (v && !icpTriggerEvents.includes(v)) setIcpTriggerEvents(prev => [...prev, v]);
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                    if (e.key === 'Backspace' && !(e.target as HTMLInputElement).value && icpTriggerEvents.length) setIcpTriggerEvents(prev => prev.slice(0, -1));
+                  }}
+                  onBlur={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpTriggerEvents.includes(v)) setIcpTriggerEvents(prev => [...prev, v]); e.target.value = ''; } }}
+                  className="flex-1 min-w-[120px] text-sm outline-none bg-transparent"
+                  placeholder={icpTriggerEvents.length === 0 && icpAiTriggerEvents.length === 0 ? 'Add a trigger event…' : ''}
+                />
+              </div>
               <p className="text-xs text-gray-400 mt-1">What signals indicate a company might be ready to buy? Parlay looks for these in conference context and company research.</p>
             </div>
 
@@ -2701,6 +2861,17 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+
+          {/* AI Assist Modal */}
+          {showAiAssistModal && (
+            <IcpAiAssistModal
+              onClose={() => setShowAiAssistModal(false)}
+              onResult={(painPoints, triggerEvents) => {
+                setIcpAiPainPoints(painPoints);
+                setIcpAiTriggerEvents(triggerEvents);
+              }}
+            />
+          )}
 
           {/* ── Card: Ideal Use Case Description ── */}
           <div className="card">
