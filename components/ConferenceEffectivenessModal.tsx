@@ -83,6 +83,21 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function scoreColor(score: number | null | undefined): string {
+  if (score == null) return '#9ca3af';
+  return score >= 70 ? '#059669' : score >= 40 ? '#d97706' : '#dc2626';
+}
+
+function ScoreStatPill({ label, score }: { label: string; score: number | null | undefined }) {
+  const color = scoreColor(score);
+  return (
+    <div className="rounded-xl border-2 p-3 flex flex-col items-center gap-0.5 min-w-0 bg-white/60" style={{ borderColor: color }}>
+      <div className="text-xl font-bold leading-tight" style={{ color }}>{score ?? '—'}</div>
+      <div className="text-xs font-semibold text-center leading-tight" style={{ color: HEADER_TEXT }}>{label}</div>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -153,10 +168,9 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
   const conf = data.conference;
   const ces = data.ces;
   const pi = Number(data.pipeline.total_pipeline_influence ?? 0);
-  const icpCov = data.audience.icp_coverage;
-  const eng = data.engagement;
-
-  const cesColor = ces.score >= 70 ? '#059669' : ces.score >= 40 ? '#d97706' : '#dc2626';
+  const salesScore = data.sales_execution?.sales_effectiveness_score != null ? Number(data.sales_execution.sales_effectiveness_score) : null;
+  const audienceScore = data.marketing_audience?.marketing_audience_signal_score != null ? Number(data.marketing_audience.marketing_audience_signal_score) : null;
+  const costScore = data.operational.cost_efficiency.cost_efficiency_score != null ? Number(data.operational.cost_efficiency.cost_efficiency_score) : null;
 
   const startDate = conf.start_date ? fmtDate(String(conf.start_date)) : '';
   const endDate   = conf.end_date   ? fmtDate(String(conf.end_date)) : '';
@@ -201,16 +215,12 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
               </div>
             </div>
 
-            <div className={`grid grid-cols-2 sm:grid-cols-6 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
-              <div className="rounded-xl border-2 p-3 flex flex-col items-center gap-0.5 min-w-0 bg-white/60" style={{ borderColor: cesColor }}>
-                <div className="text-xl font-bold leading-tight" style={{ color: cesColor }}>{ces.score}</div>
-                <div className="text-xs font-semibold text-center" style={{ color: HEADER_TEXT }}>CES /100</div>
-              </div>
+            <div className={`grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
+              <ScoreStatPill label="Conference Effectiveness Score" score={ces.score} />
+              <ScoreStatPill label="Sales Execution Score" score={salesScore} />
+              <ScoreStatPill label="Audience & Messaging Score" score={audienceScore} />
+              <ScoreStatPill label="Cost Efficiency Score" score={costScore} />
               <StatPill label="Pipeline Influence" value={fmt$(pi)} />
-              <StatPill label="ICP Coverage" value={icpCov.icp_company_engagement_pct != null ? `${String(icpCov.icp_company_engagement_pct)}%` : '—'} />
-              <StatPill label="Meetings Held" value={String(eng.total_held ?? '—')} />
-              <StatPill label="FU Rate" value={eng.followup_completion_rate_pct != null ? `${String(eng.followup_completion_rate_pct)}%` : '—'} />
-              <StatPill label="Net-New Logos" value={String(data.audience.net_new_logos.net_new_logos ?? '—')} />
             </div>
           </div>
 

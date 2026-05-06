@@ -421,6 +421,86 @@ function CompanyRow({ company, onReviewTitle, avgCostPerUnit, targetMap, onAddTa
   );
 }
 
+function ActionRow({
+  action,
+  companies,
+  targetMap,
+  onAddTargetWithTier,
+}: {
+  action: { key: string; label: string; count: number };
+  companies: TargetingCompanyRecommendation[];
+  targetMap: Map<number, TargetEntry>;
+  onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-lg border border-gray-100 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+      >
+        <span className="text-sm text-gray-700 truncate">{action.label}</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Pill tone="blue">{action.count}</Pill>
+          <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-3 bg-gray-50/50">
+          {companies.length === 0 && (
+            <p className="text-xs text-gray-400">No companies in this action group.</p>
+          )}
+          {companies.map(company => {
+            const conferenceTier = companyTierToConferenceTier(company.target_priority_tier_key || company.target_priority_tier);
+            const attendees = (company.top_attendees ?? []).slice(0, 3);
+            return (
+              <div key={company.company_id}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-gray-800">{company.company_name}</span>
+                  <Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill>
+                </div>
+                <div className="space-y-1 pl-2 border-l border-gray-200">
+                  {attendees.map(attendee => {
+                    const isTarget = targetMap.has(attendee.attendee_id);
+                    const nameParts = attendee.attendee_name.split(' ');
+                    const entry: Omit<TargetEntry, 'tier'> = {
+                      attendeeId: attendee.attendee_id,
+                      firstName: nameParts[0] ?? '',
+                      lastName: nameParts.slice(1).join(' ') || '',
+                      title: attendee.title ?? null,
+                      seniority: attendee.seniority_label ?? null,
+                      companyName: company.company_name,
+                      companyId: company.company_id,
+                      companyWse: company.wse ?? null,
+                      assignedUserNames: [],
+                    };
+                    return (
+                      <div key={attendee.attendee_id} className="flex items-center gap-2 text-xs py-0.5">
+                        <span className="min-w-0 flex-1 truncate">
+                          <span className="font-medium text-gray-800">{attendee.attendee_name}</span>
+                          {attendee.title && <span className="text-gray-500"> — {attendee.title}</span>}
+                        </span>
+                        <AddTargetPill isTarget={isTarget} onClick={() => void onAddTargetWithTier(entry, conferenceTier)} />
+                      </div>
+                    );
+                  })}
+                  {attendees.length === 0 && (
+                    <p className="text-xs text-gray-400 py-0.5">No attendee details available.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), onAddTargetWithTier = async () => {} }: { conferenceId: number; targetMap?: Map<number, TargetEntry>; onAddTargetWithTier?: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
   const [snapshot, setSnapshot] = useState<CompilationSnapshot>(() => getCompilationSnapshot(conferenceId));
   const [filters, setFilters] = useState<FilterState>({ tier: 'all', action: 'all', confidence: 'all', hasBuyerAccess: false, hasRelationship: false, needsTitleReview: false });
@@ -540,6 +620,20 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
     [titleReviewItems, dismissedTitleReviewIds],
   );
   const actionCounts = useMemo(() => countRecommendedActions(companies, actionLabelMap), [companies, actionLabelMap]);
+
+  const companiesByAction = useMemo(() => {
+    const map = new Map<string, TargetingCompanyRecommendation[]>();
+    for (const company of companies) {
+      const key = company.recommended_action_key
+        ?? company.recommended_action?.recommended_action_key
+        ?? stableKey(company.recommended_action_label ?? company.recommended_action?.recommended_action_label ?? '');
+      if (!key) continue;
+      const list = map.get(key) ?? [];
+      list.push(company);
+      map.set(key, list);
+    }
+    return map;
+  }, [companies]);
 
   const tiers = useMemo(() => Array.from(new Map(companies.map(company => [stableKey(company.target_priority_tier_key || company.target_priority_tier), company.target_priority_tier])).entries()).filter(([key]) => key), [companies]);
   const actions = useMemo(() => actionCounts.map(action => ({ key: action.key, label: action.label })), [actionCounts]);
@@ -712,12 +806,15 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
           <h4 className="font-bold text-brand-primary">Recommended Actions</h4>
           <p className="text-xs text-gray-500 mt-0.5 mb-3">Workload summary for activating this target list.</p>
           {actionCounts.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {actionCounts.map(action => (
-                <div key={action.key} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2">
-                  <span className="text-sm text-gray-700 truncate">{action.label}</span>
-                  <Pill tone="blue">{action.count}</Pill>
-                </div>
+                <ActionRow
+                  key={action.key}
+                  action={action}
+                  companies={companiesByAction.get(action.key) ?? []}
+                  targetMap={targetMap}
+                  onAddTargetWithTier={onAddTargetWithTier}
+                />
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 py-6 text-center">No recommended actions available.</p>}
