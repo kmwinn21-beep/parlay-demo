@@ -697,6 +697,7 @@ export async function initDb(): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_user_sessions_created  ON user_sessions(created_at)`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('role_capabilities', '{"sales_rep":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":false,"view_financials":false,"view_pre_post_conference":false,"manage_conference_data":false,"delete_merge":false,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"manager":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":false,"view_pre_post_conference":true,"manage_conference_data":false,"delete_merge":false,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"analyst":{"view_data":true,"create_activity":false,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":true,"view_pre_post_conference":true,"manage_conference_data":false,"delete_merge":false,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"conference_coordinator":{"view_data":true,"create_activity":false,"view_rep_metrics":false,"view_effectiveness":false,"view_financials":false,"view_pre_post_conference":false,"manage_conference_data":true,"delete_merge":true,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"user":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":true,"view_pre_post_conference":true,"manage_conference_data":true,"delete_merge":true,"manage_system_config":false,"manage_users":false,"manage_role_scope":false},"administrator":{"view_data":true,"create_activity":true,"view_rep_metrics":true,"view_effectiveness":true,"view_financials":true,"view_pre_post_conference":true,"manage_conference_data":true,"delete_merge":true,"manage_system_config":true,"manage_users":true,"manage_role_scope":true}}')`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
@@ -704,6 +705,34 @@ export async function initDb(): Promise<void> {
   const dmlMigrations = migrations.filter(sql => /^\s*(UPDATE|INSERT|DELETE)/i.test(sql));
   await Promise.all(ddlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
   await Promise.all(dmlMigrations.map(sql => db.execute({ sql, args: [] }).catch(() => {})));
+
+  // Expand role CHECK constraint to include new roles (SQLite requires table recreation)
+  try {
+    const masterRow = await db.execute({
+      sql: `SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`,
+      args: [],
+    });
+    const currentSql = masterRow.rows.length > 0 ? String(masterRow.rows[0].sql ?? '') : '';
+    if (!currentSql.includes('sales_rep')) {
+      await db.execute({ sql: `CREATE TABLE IF NOT EXISTS users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator')),
+        email_verified INTEGER NOT NULL DEFAULT 0,
+        verification_token TEXT, reset_token TEXT, reset_token_expires INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        config_id INTEGER REFERENCES config_options(id),
+        display_name TEXT, email_pending TEXT, email_change_token TEXT, email_change_expires INTEGER,
+        active INTEGER NOT NULL DEFAULT 1,
+        invite_token TEXT, invite_expires INTEGER, first_name TEXT, last_name TEXT,
+        signature_html TEXT, last_seen_at TEXT
+      )`, args: [] });
+      await db.execute({ sql: `INSERT INTO users_new SELECT id,email,password_hash,role,email_verified,verification_token,reset_token,reset_token_expires,created_at,config_id,display_name,email_pending,email_change_token,email_change_expires,active,invite_token,invite_expires,first_name,last_name,signature_html,last_seen_at FROM users`, args: [] });
+      await db.execute({ sql: `DROP TABLE users`, args: [] });
+      await db.execute({ sql: `ALTER TABLE users_new RENAME TO users`, args: [] });
+    }
+  } catch (e) { console.error('Role constraint migration failed:', e); }
 
   // Belt-and-suspenders: explicitly verify critical columns exist and add them if missing.
   // This catches cases where ALTER TABLE silently failed or code was deployed without migrations.
