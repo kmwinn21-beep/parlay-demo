@@ -251,7 +251,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             FROM conference_attendees ca
             JOIN attendees a ON a.id = ca.attendee_id
             JOIN companies c ON c.id = a.company_id
-            LEFT JOIN users u ON CAST(u.config_id AS TEXT) = c.assigned_user
+            LEFT JOIN users u ON u.config_id = CAST(c.assigned_user AS INTEGER)
             WHERE ca.conference_id = ?`,
       args: [conferenceId],
     }),
