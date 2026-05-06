@@ -1407,7 +1407,7 @@ export async function GET(
       const functionExpr = colNames.has('function') ? `LOWER(TRIM(COALESCE(a."function",'')))` : `''`;
       engagedContacts = await runQuery(`${w}
         SELECT cc.company_id, COALESCE(c.name, c.company_name, 'Unknown Company') AS company_name, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
-        FROM conference_companies cc
+        FROM conf_companies cc
         LEFT JOIN companies c ON c.id = cc.company_id
         JOIN attendees a ON a.company_id = cc.company_id
         LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
