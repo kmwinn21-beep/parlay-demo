@@ -92,8 +92,9 @@ export async function POST(
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  const body = await request.json() as { attendee_id: number };
+  const body = await request.json() as { attendee_id: number; tier?: string };
   const attendeeId = body.attendee_id;
+  const tier = body.tier ?? 'unassigned';
   if (!attendeeId) return NextResponse.json({ error: 'attendee_id required' }, { status: 400 });
 
   await dbReady;
@@ -115,7 +116,7 @@ export async function POST(
     // Add target
     await db.execute({
       sql: 'INSERT INTO conference_targets (attendee_id, conference_id, tier) VALUES (?, ?, ?)',
-      args: [attendeeId, confId, 'unassigned'],
+      args: [attendeeId, confId, tier],
     });
     return NextResponse.json({ action: 'added' });
   }

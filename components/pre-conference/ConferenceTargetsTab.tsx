@@ -14,6 +14,7 @@ export interface AddableAttendee {
   seniority: string | null;
   companyName: string | null;
   companyId: number | null;
+  companyWse?: number | null;
 }
 
 export interface AddableGroup {
@@ -510,17 +511,21 @@ export function ConferenceTargetsTab({
               <button
                 type="button"
                 onClick={() => { setShowAdd(prev => !prev); setSelectedIds(new Set()); }}
-                disabled={loadingAddAttendees || addPending}
+                disabled={addPending}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-wait"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
+                {loadingAddAttendees ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
                 Target
               </button>
 
               {showAdd && (
-                <div className="absolute right-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-30 flex flex-col max-h-[480px]">
+                <div className="absolute right-0 top-full mt-1 w-[32rem] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-30 flex flex-col max-h-[480px]">
                   {/* Dropdown header */}
                   <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
                     <span className="text-sm font-semibold text-gray-800">Add Targets</span>
@@ -528,7 +533,12 @@ export function ConferenceTargetsTab({
                   </div>
 
                   {/* Attendee list */}
-                  {(addableGroups ?? []).length === 0 ? (
+                  {loadingAddAttendees ? (
+                    <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-xs">
+                      <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                      Loading recommendations…
+                    </div>
+                  ) : (addableGroups ?? []).length === 0 ? (
                     <p className="px-4 py-8 text-center text-xs text-gray-400">
                       All conference attendees are already targets.
                     </p>
@@ -539,27 +549,39 @@ export function ConferenceTargetsTab({
                           <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group.label}</span>
                           </div>
-                          {group.attendees.map(a => (
-                            <label key={a.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(a.id)}
-                                onChange={() => setSelectedIds(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
-                                  return next;
-                                })}
-                                className="mt-0.5 flex-shrink-0 accent-brand-primary"
-                              />
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-800 leading-tight">
-                                  {a.firstName} {a.lastName}
-                                  {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
-                                </p>
-                                {a.companyName && <p className="text-xs text-gray-400 truncate">{a.companyName}</p>}
-                              </div>
-                            </label>
-                          ))}
+                          {group.attendees.map(a => {
+                            const companyValue = (a.companyWse != null && avgCostPerUnit > 0)
+                              ? '$' + Math.round(a.companyWse * avgCostPerUnit).toLocaleString('en-US')
+                              : null;
+                            return (
+                              <label key={a.id} className="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.has(a.id)}
+                                  onChange={() => setSelectedIds(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                                    return next;
+                                  })}
+                                  className="mt-0.5 flex-shrink-0 accent-brand-primary"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium text-gray-800 leading-tight">
+                                    {a.firstName} {a.lastName}
+                                    {a.title && <span className="font-normal text-gray-500">, {a.title}</span>}
+                                  </p>
+                                  {a.companyName && (
+                                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                                      <p className="text-xs text-gray-400 truncate">{a.companyName}</p>
+                                      {companyValue && (
+                                        <span className="text-xs font-semibold text-green-700 flex-shrink-0">{companyValue}</span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
                         </div>
                       ))}
                     </div>

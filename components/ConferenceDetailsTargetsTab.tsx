@@ -15,7 +15,17 @@ interface AttendeeRaw {
   company_name: string | null;
   company_id: number | null;
   company_type: string | null;
+  company_wse: number | null;
 }
+
+const TARGETING_TIER_TO_CONF_TIER: Record<string, string> = {
+  must_target: '1',
+  high_priority: '2',
+  worth_engaging: '3',
+  monitor: 'unassigned',
+  low_priority: 'unassigned',
+  unscored: 'unassigned',
+};
 
 interface CompanyTierInfo {
   tierKey: string;
@@ -54,31 +64,36 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
   const [loadingAttendees, setLoadingAttendees] = useState(true);
 
   useEffect(() => {
+    // Phase 1: fast — load targets, attendees, seniority so the charts and
+    // kanban render immediately without waiting for the slower targeting API.
     Promise.all([
       fetch(`/api/conferences/${conferenceId}/targets`).then(r => r.ok ? r.json() : []),
       fetch(`/api/conferences/${conferenceId}`).then(r => r.ok ? r.json() : {}),
       fetch('/api/config?category=seniority').then(r => r.ok ? r.json() : []),
-      fetch(`/api/conferences/${conferenceId}/targeting`).then(r => r.ok ? r.json() : { companies: [] }),
     ])
-      .then(([targets, confData, senOptions, targetingData]) => {
-        // Targets
+      .then(([targets, confData, senOptions]) => {
         const tMap = new Map<number, TargetEntry>();
         for (const t of (targets as TargetEntry[])) tMap.set(t.attendeeId, t);
         setTargetMap(tMap);
 
-        // Conference attendees
         const attendees: AttendeeRaw[] = ((confData as { attendees?: AttendeeRaw[] }).attendees ?? []);
         setAllAttendees(attendees);
 
-        // Seniority ID → label map
         const sMap = new Map<string, string>();
         for (const o of (senOptions as { id: number; value: string }[])) {
           sMap.set(String(o.id), o.value);
         }
         setSeniorityMap(sMap);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
 
-        // Company tier map from targeting data
-        const companies = ((targetingData as { companies?: Array<{ company_id: number; target_priority_tier_key: string; target_priority_score: number }> }).companies ?? []);
+    // Phase 2: background — load targeting scores for the + Target dropdown.
+    // loadingAttendees stays true until this resolves.
+    fetch(`/api/conferences/${conferenceId}/targeting`)
+      .then(r => r.ok ? r.json() : { companies: [] })
+      .then((targetingData: { companies?: Array<{ company_id: number; target_priority_tier_key: string; target_priority_score: number }> }) => {
+        const companies = targetingData.companies ?? [];
         const ctMap = new Map<number, CompanyTierInfo>();
         for (const c of companies) {
           ctMap.set(c.company_id, {
@@ -89,7 +104,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
         setCompanyTierMap(ctMap);
       })
       .catch(() => {})
-      .finally(() => { setLoading(false); setLoadingAttendees(false); });
+      .finally(() => setLoadingAttendees(false));
   }, [conferenceId]);
 
   // Build grouped attendee list for the "+ Target" dropdown, excluding existing targets.
@@ -134,6 +149,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
             seniority: resolveAttSeniority(a.seniority, a.title, seniorityMap),
             companyName: a.company_name ?? null,
             companyId: a.company_id ?? null,
+            companyWse: a.company_wse ?? null,
           }))
       );
 
@@ -184,21 +200,27 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
   }, [conferenceId]);
 
   const addTargets = useCallback(async (entries: Array<Omit<TargetEntry, 'tier'>>) => {
+    // Resolve the conference tier for each entry from its company's targeting tier
+    const withTiers = entries.map(e => {
+      const tierInfo = companyTierMap.get(e.companyId ?? 0);
+      const tier = TARGETING_TIER_TO_CONF_TIER[tierInfo?.tierKey ?? 'unscored'] ?? 'unassigned';
+      return { ...e, tier };
+    });
     setTargetMap(prev => {
       const next = new Map(prev);
-      for (const e of entries) next.set(e.attendeeId, { ...e, tier: 'unassigned' });
+      for (const e of withTiers) next.set(e.attendeeId, e);
       return next;
     });
     await Promise.all(
-      entries.map(e =>
+      withTiers.map(e =>
         fetch(`/api/conferences/${conferenceId}/targets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendee_id: e.attendeeId }),
+          body: JSON.stringify({ attendee_id: e.attendeeId, tier: e.tier }),
         }).catch(() => {}),
       ),
     );
-  }, [conferenceId]);
+  }, [conferenceId, companyTierMap]);
 
   if (loading) {
     return (
