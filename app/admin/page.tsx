@@ -11,6 +11,8 @@ import { AVAILABLE_COLUMNS, DISPLAY_TYPE_LABELS, type DisplayType } from '@/lib/
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
+import { DEFAULT_ROLE_CAPABILITIES, CAPABILITY_LABELS, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities, type CapabilityKey } from '@/lib/auth';
+import { invalidateCapabilitiesCache } from '@/lib/useCapabilities';
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 import { invalidateTagline } from '@/lib/useTagline';
@@ -768,7 +770,9 @@ export default function AdminPage() {
   };
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersList, setUsersList] = useState<AdminUserRow[]>([]);
-  const [inviteForm, setInviteForm] = useState({ firstName: '', lastName: '', email: '', role: 'user' as 'user' | 'administrator' });
+  const [inviteForm, setInviteForm] = useState({ firstName: '', lastName: '', email: '', role: 'sales_rep' as UserRole });
+  const [roleCapabilities, setRoleCapabilities] = useState<RoleCapabilities>(DEFAULT_ROLE_CAPABILITIES);
+  const [savingCaps, setSavingCaps] = useState(false);
   const [inviteSending, setInviteSending] = useState(false);
   const [deleteModal, setDeleteModal] = useState<AdminUserRow | null>(null);
   const [reassignToId, setReassignToId] = useState<number | ''>('');
@@ -1524,8 +1528,29 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (tab === 'permissions') fetchSettings();
+    if (tab === 'permissions') {
+      fetchSettings();
+      fetch('/api/admin/role-capabilities')
+        .then(r => r.json())
+        .then((caps: RoleCapabilities) => setRoleCapabilities({ ...DEFAULT_ROLE_CAPABILITIES, ...caps }))
+        .catch(() => {});
+    }
   }, [tab]);
+
+  const saveRoleCapabilities = async () => {
+    setSavingCaps(true);
+    try {
+      const res = await fetch('/api/admin/role-capabilities', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roleCapabilities),
+      });
+      if (!res.ok) throw new Error();
+      invalidateCapabilitiesCache();
+      toast.success('Role capabilities saved.');
+    } catch { toast.error('Failed to save role capabilities.'); }
+    finally { setSavingCaps(false); }
+  };
 
   const handleUploadToggle = async (value: boolean) => {
     setAllowUpload(value);
@@ -1580,7 +1605,7 @@ export default function AdminPage() {
     finally { setInviteSending(false); }
   };
 
-  const handleRoleChange = async (userId: number, role: 'user' | 'administrator') => {
+  const handleRoleChange = async (userId: number, role: UserRole) => {
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
@@ -2916,9 +2941,13 @@ export default function AdminPage() {
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Role</label>
                 <select
                   value={inviteForm.role}
-                  onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as 'user' | 'administrator' }))}
+                  onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as UserRole }))}
                   className="input-field w-full text-sm"
                 >
+                  <option value="sales_rep">Sales Rep</option>
+                  <option value="manager">Manager</option>
+                  <option value="analyst">Analyst</option>
+                  <option value="conference_coordinator">Conference Coordinator</option>
                   <option value="user">User</option>
                   <option value="administrator">Administrator</option>
                 </select>
@@ -2966,9 +2995,13 @@ export default function AdminPage() {
                         <td className="py-3 pr-4">
                           <select
                             value={u.role}
-                            onChange={e => handleRoleChange(u.id, e.target.value as 'user' | 'administrator')}
+                            onChange={e => handleRoleChange(u.id, e.target.value as UserRole)}
                             className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-brand-secondary"
                           >
+                            <option value="sales_rep">Sales Rep</option>
+                            <option value="manager">Manager</option>
+                            <option value="analyst">Analyst</option>
+                            <option value="conference_coordinator">Conference Coordinator</option>
                             <option value="user">User</option>
                             <option value="administrator">Administrator</option>
                           </select>
@@ -3008,6 +3041,63 @@ export default function AdminPage() {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* Role Scope */}
+          <div className="card mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-brand-primary font-serif">Role Scope</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Configure which capabilities each role has access to. Administrator capabilities are locked.</p>
+              </div>
+              <button onClick={saveRoleCapabilities} disabled={savingCaps} className="btn-primary text-sm">
+                {savingCaps ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 pr-6 text-xs font-semibold text-gray-500 uppercase tracking-wide w-64">Capability</th>
+                    {(['sales_rep', 'manager', 'analyst', 'conference_coordinator', 'user', 'administrator'] as UserRole[]).map(role => (
+                      <th key={role} className="text-center py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                        {role === 'sales_rep' ? 'Sales Rep' : role === 'manager' ? 'Manager' : role === 'analyst' ? 'Analyst' : role === 'conference_coordinator' ? 'Coordinator' : role === 'user' ? 'User' : 'Admin'}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(Object.keys(CAPABILITY_LABELS) as CapabilityKey[]).map(cap => (
+                    <tr key={cap} className="border-b border-gray-100 hover:bg-gray-50/50">
+                      <td className="py-3 pr-6 text-xs text-gray-700">{CAPABILITY_LABELS[cap]}</td>
+                      {(['sales_rep', 'manager', 'analyst', 'conference_coordinator', 'user', 'administrator'] as UserRole[]).map(role => {
+                        const adminLocked = role === 'administrator';
+                        const capLocked = LOCKED_ADMIN_CAPS.includes(cap) && role !== 'administrator';
+                        const checked = adminLocked ? true : (roleCapabilities[role]?.[cap] ?? DEFAULT_ROLE_CAPABILITIES[role]?.[cap] ?? false);
+                        const disabled = adminLocked || capLocked;
+                        return (
+                          <td key={role} className="text-center py-3 px-3">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={e => {
+                                if (disabled) return;
+                                setRoleCapabilities(prev => ({
+                                  ...prev,
+                                  [role]: { ...(prev[role] ?? DEFAULT_ROLE_CAPABILITIES[role]), [cap]: e.target.checked },
+                                }));
+                              }}
+                              className={`w-4 h-4 accent-brand-primary ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -4920,7 +5010,7 @@ function AdminUsageTab() {
                   <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{u.email}</td>
                   <td className="px-3 py-2.5">
                     <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 ${u.role === 'administrator' ? 'bg-brand-secondary/10 text-brand-secondary' : 'bg-gray-100 text-gray-500'}`}>
-                      {u.role === 'administrator' ? 'Admin' : 'User'}
+                      {u.role === 'administrator' ? 'Admin' : u.role === 'sales_rep' ? 'Sales Rep' : u.role === 'manager' ? 'Manager' : u.role === 'analyst' ? 'Analyst' : u.role === 'conference_coordinator' ? 'Coordinator' : 'User'}
                     </span>
                   </td>
                   <td className="px-3 py-2.5">

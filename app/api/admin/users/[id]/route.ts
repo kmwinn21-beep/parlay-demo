@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdmin, VALID_ROLES, type UserRole } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { sendInviteEmail } from '@/lib/email';
 
@@ -15,7 +15,7 @@ export async function PATCH(
 
   await dbReady;
   const body = await request.json() as {
-    role?: 'user' | 'administrator';
+    role?: UserRole;
     active?: boolean;
     resendInvite?: boolean;
   };
@@ -50,7 +50,7 @@ export async function PATCH(
   const args: (string | number)[] = [];
 
   if (body.role !== undefined) {
-    if (!['user', 'administrator'].includes(body.role)) {
+    if (!VALID_ROLES.has(body.role)) {
       return NextResponse.json({ error: 'Invalid role.' }, { status: 400 });
     }
     updates.push('role = ?');

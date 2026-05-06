@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdmin, VALID_ROLES, type UserRole } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { sendInviteEmail } from '@/lib/email';
 
@@ -34,13 +34,13 @@ export async function POST(request: NextRequest) {
 
   await dbReady;
   const { firstName, lastName, email: rawEmail, role } = await request.json() as {
-    firstName: string; lastName: string; email: string; role: 'user' | 'administrator';
+    firstName: string; lastName: string; email: string; role: UserRole;
   };
 
   if (!firstName?.trim() || !lastName?.trim() || !rawEmail?.trim()) {
     return NextResponse.json({ error: 'First name, last name, and email are required.' }, { status: 400 });
   }
-  if (!['user', 'administrator'].includes(role)) {
+  if (!VALID_ROLES.has(role)) {
     return NextResponse.json({ error: 'Invalid role.' }, { status: 400 });
   }
 

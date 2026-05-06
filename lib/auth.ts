@@ -8,7 +8,71 @@ const JWT_SECRET = new TextEncoder().encode(
 export const COOKIE_NAME = 'auth_token';
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-export type UserRole = 'user' | 'administrator';
+export type UserRole = 'user' | 'administrator' | 'sales_rep' | 'manager' | 'analyst' | 'conference_coordinator';
+
+export const ALL_ROLES: UserRole[] = ['sales_rep', 'manager', 'analyst', 'conference_coordinator', 'user', 'administrator'];
+export const VALID_ROLES = new Set<string>(ALL_ROLES);
+
+export const ROLE_DISPLAY_LABELS: Record<string, string> = {
+  sales_rep: 'Sales Rep',
+  manager: 'Manager',
+  analyst: 'Analyst',
+  conference_coordinator: 'Coordinator',
+  user: 'User',
+  administrator: 'Administrator',
+};
+
+export type CapabilityKey =
+  | 'view_data'
+  | 'create_activity'
+  | 'view_rep_metrics'
+  | 'view_effectiveness'
+  | 'view_financials'
+  | 'view_pre_post_conference'
+  | 'manage_conference_data'
+  | 'delete_merge'
+  | 'manage_system_config'
+  | 'manage_users'
+  | 'manage_role_scope';
+
+export type RoleCapabilityMap = Record<CapabilityKey, boolean>;
+export type RoleCapabilities = Record<UserRole, RoleCapabilityMap>;
+
+export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
+  view_data: 'View conferences, companies & attendees',
+  create_activity: 'Create notes, meetings & follow-ups',
+  view_rep_metrics: 'View rep activity metrics',
+  view_effectiveness: 'Conference Effectiveness (non-financial tabs)',
+  view_financials: 'Budget, cost efficiency & ROI data',
+  view_pre_post_conference: 'Pre/Post-Conference Review',
+  manage_conference_data: 'Upload attendees, edit agendas & forms',
+  delete_merge: 'Delete or merge companies & attendees',
+  manage_system_config: 'ICP rules, scoring config & branding',
+  manage_users: 'User management & invitations',
+  manage_role_scope: 'Role Scope',
+};
+
+export const LOCKED_ADMIN_CAPS: CapabilityKey[] = [
+  'manage_system_config', 'manage_users', 'manage_role_scope',
+];
+
+export const DEFAULT_ROLE_CAPABILITIES: RoleCapabilities = {
+  sales_rep:              { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: false, view_financials: false, view_pre_post_conference: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false },
+  manager:                { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: false, view_pre_post_conference: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false },
+  analyst:                { view_data: true,  create_activity: false, view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false },
+  conference_coordinator: { view_data: true,  create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false },
+  user:                   { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false },
+  administrator:          { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: true,  manage_users: true,  manage_role_scope: true  },
+};
+
+export function resolveCapabilities(role: UserRole, stored: Partial<RoleCapabilities>): RoleCapabilityMap {
+  if (role === 'administrator') return DEFAULT_ROLE_CAPABILITIES['administrator'];
+  const defaults = DEFAULT_ROLE_CAPABILITIES[role] ?? DEFAULT_ROLE_CAPABILITIES['user'];
+  const overrides = (stored[role] ?? {}) as Partial<RoleCapabilityMap>;
+  const merged = { ...defaults, ...overrides };
+  LOCKED_ADMIN_CAPS.forEach(k => { merged[k] = false; });
+  return merged;
+}
 
 export interface SessionUser {
   id: number;
