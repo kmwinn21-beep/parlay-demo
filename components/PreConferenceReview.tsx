@@ -422,6 +422,7 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
               )}
               {activeTab === 'conference_targets' && (
                 <ConferenceTargetsTab
+                  conferenceId={conferenceId}
                   conferenceName={conferenceName}
                   targetMap={targetMap}
                   meetingAttendeeIds={meetingAttendeeIds}
