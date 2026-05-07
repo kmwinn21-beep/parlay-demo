@@ -848,13 +848,8 @@ export async function initDb(): Promise<void> {
     { category: 'company_type', value: 'Operator', sort_order: 8 },
     { category: 'entity_structure', value: 'Parent', sort_order: 1 },
     { category: 'entity_structure', value: 'Child', sort_order: 2 },
-    { category: 'services', value: 'IL', sort_order: 1 },
-    { category: 'services', value: 'AL', sort_order: 2 },
-    { category: 'services', value: 'MC', sort_order: 3 },
-    { category: 'services', value: 'SNF', sort_order: 4 },
-    { category: 'services', value: 'CCRC', sort_order: 5 },
-    { category: 'services', value: 'Other', sort_order: 6 },
-    { category: 'services', value: 'N/A', sort_order: 7 },
+    { category: 'services', value: 'Other', sort_order: 1 },
+    { category: 'services', value: 'N/A', sort_order: 2 },
     { category: 'event_type', value: 'Sponsored Event', sort_order: 1 },
     { category: 'event_type', value: 'Lunch', sort_order: 2 },
     { category: 'event_type', value: 'Dinner', sort_order: 3 },
@@ -967,11 +962,6 @@ export async function initDb(): Promise<void> {
     { category: 'profit_type', value: 'Non-Profit' },
     { category: 'entity_structure', value: 'Parent' },
     { category: 'entity_structure', value: 'Child' },
-    { category: 'services', value: 'IL' },
-    { category: 'services', value: 'AL' },
-    { category: 'services', value: 'MC' },
-    { category: 'services', value: 'SNF' },
-    { category: 'services', value: 'CCRC' },
     { category: 'services', value: 'Other' },
     { category: 'services', value: 'N/A' },
     { category: 'event_type', value: 'Sponsored Event' },
@@ -1055,6 +1045,15 @@ export async function initDb(): Promise<void> {
   try {
     await db.execute({
       sql: "DELETE FROM config_options WHERE category = 'icp' AND value IN ('True', 'False')",
+      args: [],
+    });
+  } catch { /* ignore */ }
+
+  // Unlock legacy healthcare-specific service options so they can be deleted in Admin Settings.
+  // These were previously seeded with is_system=1, but services are fully user-configurable.
+  try {
+    await db.execute({
+      sql: "UPDATE config_options SET is_system = 0 WHERE category = 'services' AND value IN ('IL', 'AL', 'MC', 'SNF', 'CCRC')",
       args: [],
     });
   } catch { /* ignore */ }
