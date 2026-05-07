@@ -47,6 +47,33 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/access-denied', request.url));
   }
 
+  // Demo mode: intercept all writes and return fake 200 responses
+  const bypassSecret = process.env.DEMO_BYPASS_SECRET;
+  const bypassCookie = request.cookies.get('demo_bypass')?.value;
+  const hasBypass = !!bypassSecret && bypassCookie === bypassSecret;
+
+  if (!hasBypass && process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    const method = request.method.toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && pathname.startsWith('/api/')) {
+      const DEMO_PASSTHROUGH = [
+        '/api/auth/',
+        '/api/upload-preview',
+        '/api/scan-card',
+        '/api/scan-notes',
+        '/api/card-scan/match',
+      ];
+      if (!DEMO_PASSTHROUGH.some(p => pathname.startsWith(p))) {
+        let body: Record<string, unknown> = {};
+        try { body = await request.json(); } catch { /* non-JSON or file upload body */ }
+        const now = new Date().toISOString();
+        const fake = method === 'DELETE'
+          ? {}
+          : { id: Date.now(), ...body, created_at: now, updated_at: now };
+        return NextResponse.json(fake, { status: 200 });
+      }
+    }
+  }
+
   return NextResponse.next();
 }
 

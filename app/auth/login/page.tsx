@@ -15,8 +15,8 @@ function LoginForm() {
   const tagline = useTagline();
   const appName = useAppName();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(process.env.NEXT_PUBLIC_DEMO_EMAIL ?? '');
+  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '');
   const [loading, setLoading] = useState(false);
 
   // Redirect to setup if no users exist yet
@@ -101,6 +101,11 @@ function LoginForm() {
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent"
               />
             </div>
+            {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && (
+              <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                Demo credentials are pre-filled — click Sign In to explore.
+              </p>
+            )}
             <button
               type="submit"
               disabled={loading}
