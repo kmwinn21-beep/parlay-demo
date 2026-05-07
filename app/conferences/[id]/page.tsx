@@ -51,6 +51,7 @@ interface Attendee {
   email?: string;
   status?: string;
   seniority?: string;
+  function?: string;
   conference_count?: number;
   conference_names?: string;
   entity_notes_count?: number;
@@ -251,6 +252,7 @@ export default function ConferenceDetailPage() {
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('conference_detail');
+  const allConfigOptions = useConfigOptions();
   const { isVisible: isConfAttendeeColVisible, orderedColumns: confAttendeeColumns } = useTableColumnConfig('conference_attendees');
   const conferenceTabConfig = useSectionConfig('conference_details');
   const { user: currentUser } = useUser();
@@ -300,6 +302,9 @@ export default function ConferenceDetailPage() {
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
+  const [showAttendeeEdit, setShowAttendeeEdit] = useState(false);
+  const [attendeeEditFields, setAttendeeEditFields] = useState<{ status?: string; seniority?: string; function?: string; company_id?: string }>({});
+  const [isApplyingAttendeeEdit, setIsApplyingAttendeeEdit] = useState(false);
   const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
   const [cellDraft, setCellDraft] = useState('');
   const [isSavingCell, setIsSavingCell] = useState(false);
@@ -713,6 +718,54 @@ export default function ConferenceDetailPage() {
     } catch {
       toast.error('Failed to decouple attendees.');
       setConference(prevConference);
+    }
+  };
+
+  const handleAttendeeEdit = async () => {
+    if (selectedAttendeeIds.size === 0 || !conference) return;
+    const ids = Array.from(selectedAttendeeIds);
+    const fields: Record<string, string | number | null> = {};
+    if (attendeeEditFields.status) fields.status = attendeeEditFields.status;
+    if (attendeeEditFields.seniority) fields.seniority = attendeeEditFields.seniority;
+    if (attendeeEditFields.function) fields.function = attendeeEditFields.function;
+    if (attendeeEditFields.company_id) fields.company_id = parseInt(attendeeEditFields.company_id);
+    if (Object.keys(fields).length === 0) return;
+
+    const snapshot = conference.attendees;
+    setConference(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        attendees: prev.attendees.map(a => {
+          if (!selectedAttendeeIds.has(a.id)) return a;
+          const updated = { ...a };
+          if (fields.status != null) updated.status = String(fields.status);
+          if (fields.seniority != null) updated.seniority = String(fields.seniority);
+          if ('function' in fields) updated.function = fields.function == null ? undefined : String(fields.function);
+          if (fields.company_id != null) {
+            updated.company_id = Number(fields.company_id);
+            updated.company_name = conferenceCompanies.find(c => c.id === Number(fields.company_id))?.name;
+          }
+          return updated;
+        }),
+      };
+    });
+    setShowAttendeeEdit(false);
+    setAttendeeEditFields({});
+    setIsApplyingAttendeeEdit(true);
+    try {
+      const res = await fetch('/api/attendees/bulk', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, fields }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${ids.length} attendee(s) updated.`);
+    } catch {
+      toast.error('Failed to update attendees.');
+      setConference(prev => prev ? { ...prev, attendees: snapshot } : prev);
+    } finally {
+      setIsApplyingAttendeeEdit(false);
     }
   };
 
@@ -1237,6 +1290,15 @@ export default function ConferenceDetailPage() {
               {selectedAttendeeIds.size >= 1 && (
                 <>
                   <button
+                    onClick={() => setShowAttendeeEdit(v => !v)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 transition-colors text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit Fields ({selectedAttendeeIds.size})
+                  </button>
+                  <button
                     onClick={handleDecoupleSelected}
                     disabled={isRemoving}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium disabled:opacity-50"
@@ -1334,6 +1396,55 @@ export default function ConferenceDetailPage() {
               </button>
             </div>
           </div>
+
+          {/* Bulk edit panel */}
+          {showAttendeeEdit && selectedAttendeeIds.size >= 1 && (
+            <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</p>
+                  <select value={attendeeEditFields.status || ''} onChange={e => setAttendeeEditFields(p => ({ ...p, status: e.target.value }))} className="input-field w-36 text-sm">
+                    <option value="">— no change —</option>
+                    {(allConfigOptions.status ?? []).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Seniority</p>
+                  <select value={attendeeEditFields.seniority || ''} onChange={e => setAttendeeEditFields(p => ({ ...p, seniority: e.target.value }))} className="input-field w-40 text-sm">
+                    <option value="">— no change —</option>
+                    {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Function</p>
+                  <select value={attendeeEditFields.function ?? ''} onChange={e => setAttendeeEditFields(p => ({ ...p, function: e.target.value }))} className="input-field w-40 text-sm">
+                    <option value="">— no change —</option>
+                    {(allConfigOptions.function ?? []).map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company</p>
+                  <select value={attendeeEditFields.company_id || ''} onChange={e => setAttendeeEditFields(p => ({ ...p, company_id: e.target.value }))} className="input-field w-48 text-sm">
+                    <option value="">— no change —</option>
+                    {conferenceCompanies.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                  </select>
+                </div>
+                <button
+                  onClick={handleAttendeeEdit}
+                  disabled={isApplyingAttendeeEdit || (!attendeeEditFields.status && !attendeeEditFields.seniority && !attendeeEditFields.function && !attendeeEditFields.company_id)}
+                  className="btn-primary text-sm disabled:opacity-50"
+                >
+                  {isApplyingAttendeeEdit ? 'Applying…' : 'Apply'}
+                </button>
+                <button
+                  onClick={() => { setShowAttendeeEdit(false); setAttendeeEditFields({}); }}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Collapsible attendee filters pane */}
           {attendeeFiltersOpen && (
