@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { classifySeniority } from '@/lib/parsers';
 
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -52,6 +53,50 @@ export async function PATCH(request: NextRequest) {
             sql: 'UPDATE companies SET status = ? WHERE id = ?',
             args: [fields.status, row.company_id],
           });
+        }
+      }
+    }
+
+    // Auto-assign products when function or seniority is bulk-changed
+    if ('function' in fields || 'seniority' in fields) {
+      const [priorityRow, mappingRow, attendeeRows] = await Promise.all([
+        db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'icp_seniority_priority'", args: [] }),
+        db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'icp_function_product_mapping'", args: [] }),
+        db.execute({ sql: `SELECT id, seniority, title, "function", products, company_id FROM attendees WHERE id IN (${placeholders})`, args: ids }),
+      ]);
+      const priorityMap: Record<string, string> = (() => { try { return JSON.parse(String(priorityRow.rows[0]?.value ?? '{}')); } catch { return {}; } })();
+      const fnProdMap: Record<string, string[]> = (() => { try { return JSON.parse(String(mappingRow.rows[0]?.value ?? '{}')); } catch { return {}; } })();
+
+      for (const att of attendeeRows.rows) {
+        const effectiveSen = String(fields.seniority ?? att.seniority ?? '');
+        const effectiveTitle = String(att.title ?? '');
+        const effectiveFn = String(fields.function ?? att.function ?? '');
+        const currentProducts = String(att.products ?? '');
+        if (!effectiveFn) continue;
+
+        const seniorityFromTitle = !effectiveSen ? classifySeniority(effectiveTitle) : effectiveSen;
+        const priority = priorityMap[seniorityFromTitle];
+        if (priority !== 'High' && priority !== 'Medium') continue;
+
+        const fns = effectiveFn.split(',').map(s => s.trim()).filter(Boolean);
+        const autoProds = new Set<string>();
+        for (const fn of fns) {
+          (fnProdMap[fn] ?? []).forEach(p => autoProds.add(p));
+        }
+        if (autoProds.size === 0) continue;
+
+        const existing = currentProducts.split(',').map(s => s.trim()).filter(Boolean);
+        const merged = new Set([...existing, ...Array.from(autoProds)]);
+        const mergedStr = Array.from(merged).join(',');
+        if (mergedStr === currentProducts) continue;
+
+        await db.execute({ sql: 'UPDATE attendees SET products = ? WHERE id = ?', args: [mergedStr, att.id] });
+
+        if (att.company_id) {
+          const coRow = await db.execute({ sql: 'SELECT products FROM companies WHERE id = ?', args: [att.company_id] });
+          const coProd = String(coRow.rows[0]?.products ?? '').split(',').map(s => s.trim()).filter(Boolean);
+          const coMerged = new Set([...coProd, ...Array.from(autoProds)]);
+          await db.execute({ sql: 'UPDATE companies SET products = ? WHERE id = ?', args: [Array.from(coMerged).join(','), att.company_id] });
         }
       }
     }
