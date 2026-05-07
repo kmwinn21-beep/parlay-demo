@@ -267,8 +267,11 @@ export function classifySeniority(title?: string): string {
 
   const t = title.toLowerCase();
 
-  // --- C-Suite (highest priority) ---
-  // Full phrases – checked first so "co-founder & chairman" → C-Suite
+  // --- VP / SVP — must come before C-Suite so "Vice President" isn't caught by "president" ---
+  if (/\b(vice\s+president|svp|evp|avp)\b/.test(t)) return 'VP/SVP';
+  if (/\bvp\b/.test(t)) return 'VP/SVP';
+
+  // --- C-Suite ---
   if (/\b(chief|president|founder|co-founder|cofounder|co founder|owner|co-owner|principal|principle|prinicipal)\b/.test(t)) return 'C-Suite';
   // Common C-Suite acronyms (word-boundary to avoid false positives)
   if (/\b(ceo|cfo|coo|cto|cpo|cmo|chro|cdo|cgo|cio|clo|cno|cro|cso|creo)\b/.test(t)) return 'C-Suite';
@@ -281,9 +284,7 @@ export function classifySeniority(title?: string): string {
   // --- Executive Director (before general Director check) ---
   if (/\bexecutive\s+director\b/.test(t)) return 'ED';
 
-  // --- VP / SVP ---
-  if (/\b(vice\s+president|svp|evp|avp)\b/.test(t)) return 'VP/SVP';
-  if (/\bvp\b/.test(t)) return 'VP/SVP';
+  // --- VP / SVP (remaining forms not caught above) ---
   if (/\bcontroller\b/.test(t)) return 'VP/SVP';
 
   // --- Director ---
