@@ -190,7 +190,7 @@ export async function DELETE(
   try {
     await dbReady;
     const check = await db.execute({
-      sql: 'SELECT is_system FROM config_options WHERE id = ?',
+      sql: 'SELECT is_system, category, value FROM config_options WHERE id = ?',
       args: [params.id],
     });
     if (check.rows.length === 0) {
@@ -199,10 +199,71 @@ export async function DELETE(
     if (Number(check.rows[0].is_system) === 1) {
       return NextResponse.json({ error: 'System options cannot be deleted.' }, { status: 403 });
     }
+
+    const deletedCategory = String(check.rows[0].category ?? '');
+    const deletedValue = String(check.rows[0].value ?? '');
+
     await db.execute({
       sql: 'DELETE FROM config_options WHERE id = ?',
       args: [params.id],
     });
+
+    // When a product type is deleted, strip it from all attendee and company product columns
+    // and clean it out of the icp_function_product_mapping setting
+    if (deletedCategory === 'products' && deletedValue) {
+      const stripValue = (csv: string) =>
+        csv.split(',').map(s => s.trim()).filter(s => s && s !== deletedValue).join(',');
+
+      // Attendees
+      const atRows = await db.execute({
+        sql: "SELECT id, products FROM attendees WHERE products IS NOT NULL AND products != '' AND products LIKE ?",
+        args: [`%${deletedValue}%`],
+      });
+      for (const row of atRows.rows) {
+        const cleaned = stripValue(String(row.products ?? ''));
+        await db.execute({
+          sql: 'UPDATE attendees SET products = ? WHERE id = ?',
+          args: [cleaned || null, row.id],
+        });
+      }
+
+      // Companies
+      const coRows = await db.execute({
+        sql: "SELECT id, products FROM companies WHERE products IS NOT NULL AND products != '' AND products LIKE ?",
+        args: [`%${deletedValue}%`],
+      });
+      for (const row of coRows.rows) {
+        const cleaned = stripValue(String(row.products ?? ''));
+        await db.execute({
+          sql: 'UPDATE companies SET products = ? WHERE id = ?',
+          args: [cleaned || null, row.id],
+        });
+      }
+
+      // icp_function_product_mapping site setting
+      const settingRow = await db.execute({
+        sql: "SELECT value FROM site_settings WHERE key = 'icp_function_product_mapping'",
+        args: [],
+      });
+      if (settingRow.rows.length > 0) {
+        try {
+          const mapping: Record<string, string[]> = JSON.parse(String(settingRow.rows[0].value ?? '{}'));
+          let changed = false;
+          for (const fn of Object.keys(mapping)) {
+            const before = mapping[fn].length;
+            mapping[fn] = mapping[fn].filter(p => p !== deletedValue);
+            if (mapping[fn].length !== before) changed = true;
+          }
+          if (changed) {
+            await db.execute({
+              sql: "UPDATE site_settings SET value = ? WHERE key = 'icp_function_product_mapping'",
+              args: [JSON.stringify(mapping)],
+            });
+          }
+        } catch { /* non-fatal */ }
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/config/[id] error:', error);

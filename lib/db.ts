@@ -1058,6 +1058,48 @@ export async function initDb(): Promise<void> {
     });
   } catch { /* ignore */ }
 
+  // Strip any stale product values from attendees/companies that no longer exist in config_options.
+  // Runs every startup so data stays clean after manual deletions.
+  try {
+    const validProductRows = await db.execute({
+      sql: "SELECT value FROM config_options WHERE category = 'products'",
+      args: [],
+    });
+    const validProducts = new Set(validProductRows.rows.map(r => String(r.value)));
+    const stripStale = (csv: string) =>
+      csv.split(',').map(s => s.trim()).filter(s => s && validProducts.has(s)).join(',');
+
+    const staleAttendees = await db.execute({
+      sql: "SELECT id, products FROM attendees WHERE products IS NOT NULL AND products != ''",
+      args: [],
+    });
+    for (const row of staleAttendees.rows) {
+      const cleaned = stripStale(String(row.products ?? ''));
+      const original = String(row.products ?? '');
+      if (cleaned !== original) {
+        await db.execute({
+          sql: 'UPDATE attendees SET products = ? WHERE id = ?',
+          args: [cleaned || null, row.id],
+        });
+      }
+    }
+
+    const staleCompanies = await db.execute({
+      sql: "SELECT id, products FROM companies WHERE products IS NOT NULL AND products != ''",
+      args: [],
+    });
+    for (const row of staleCompanies.rows) {
+      const cleaned = stripStale(String(row.products ?? ''));
+      const original = String(row.products ?? '');
+      if (cleaned !== original) {
+        await db.execute({
+          sql: 'UPDATE companies SET products = ? WHERE id = ?',
+          args: [cleaned || null, row.id],
+        });
+      }
+    }
+  } catch { /* non-fatal */ }
+
   // Always ensure action_key is set for meeting-related actions (runs every startup)
   // Uses LIKE pattern matching so renamed values (e.g. "No-Show" vs "Meeting No-Show") are still identified
   const actionKeySeeds: Array<{ key: string; pattern: string }> = [
