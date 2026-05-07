@@ -158,7 +158,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
 
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -960,7 +960,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     case 'attendees': return <th key="attendees" className={thCls} style={{ width: colWidths.attendees }} onClick={() => handleSort('attendee_count')}>Attendees <SortIcon col="attendee_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="attendees" /></th>;
                     case 'conferences': return <th key="conferences" className={thCls} style={{ width: colWidths.conferences }} onClick={() => handleSort('conference_count')}>Conferences <SortIcon col="conference_count" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="conferences" /></th>;
                     case 'wse': return <th key="wse" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ width: colWidths.actions }}>{unitTypeLabel}&apos;s</th>;
-                    case 'value': return <th key="value" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 100 }}>Value</th>;
+                    case 'value': return <th key="value" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.value }}>Value<ResizeHandle col="value" /></th>;
                     case 'updated_on': return <th key="updated_on" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative" style={{ width: colWidths.updated_on }}>Updated On<ResizeHandle col="updated_on" /></th>;
                     case 'relationships': return <th key="relationships" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Relationships</th>;
                     default: return null;
@@ -1098,7 +1098,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                         )}
                       </td>;
                       case 'value': return (
-                        <td key="value" className="px-3 py-3">
+                        <td key="value" className="px-3 py-3 overflow-hidden" style={{ maxWidth: colWidths.value }}>
                           {(() => {
                             const pill = formatValuePill(company.wse, avgCostPerUnit);
                             return pill ? (
