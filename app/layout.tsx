@@ -6,6 +6,7 @@ import './globals.css';
 export const dynamic = 'force-dynamic';
 import { AppShell } from '@/components/AppShell';
 import { ToastProvider } from '@/components/Toast';
+import { DemoBanner } from '@/components/DemoBanner';
 import { db, dbReady } from '@/lib/db';
 import { BRAND_COLOR_DEFAULTS, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 
@@ -112,6 +113,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <BrandStyles />
       </head>
       <body className="font-sans">
+        {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <DemoBanner />}
         <ToastProvider>
           <AppShell>{children}</AppShell>
         </ToastProvider>
