@@ -400,12 +400,21 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     if (massEditFields.assigned_user !== undefined) fields.assigned_user = massEditFields.assigned_user || null;
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
+    // Optimistic update — reflect changes immediately
+    const snapshot = localCompanies;
+    setLocalCompanies(prev => prev.map(c =>
+      selectedIds.has(c.id) ? { ...c, ...fields } : c
+    ));
+    setShowMassEdit(false); setMassEditFields({});
     try {
       const res = await fetch('/api/companies/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: Array.from(selectedIds), fields }) });
       if (!res.ok) throw new Error();
       toast.success(`Updated ${selectedIds.size} company/companies.`);
-      setShowMassEdit(false); setMassEditFields({}); onRefresh();
-    } catch { toast.error('Failed to apply changes.'); } finally { setIsApplying(false); }
+      onRefresh();
+    } catch {
+      toast.error('Failed to apply changes.');
+      setLocalCompanies(snapshot);
+    } finally { setIsApplying(false); }
   };
 
   const handleRepSave = async (companyId: number, ids: number[]) => {

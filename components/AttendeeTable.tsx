@@ -270,12 +270,30 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     if (massEditFields.company_id) fields.company_id = parseInt(massEditFields.company_id);
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
+    // Optimistic update — reflect changes immediately
+    const snapshot = localAttendees;
+    const newCompanyId = massEditFields.company_id ? parseInt(massEditFields.company_id) : undefined;
+    const newCompanyName = newCompanyId != null
+      ? companies.find(c => c.id === newCompanyId)?.name
+      : undefined;
+    setLocalAttendees(prev => prev.map(a => {
+      if (!selectedIds.has(a.id)) return a;
+      const updated = { ...a };
+      if (massEditFields.status) updated.status = massEditFields.status;
+      if (massEditFields.seniority) updated.seniority = massEditFields.seniority;
+      if (newCompanyId != null) { updated.company_id = newCompanyId; updated.company_name = newCompanyName; }
+      return updated;
+    }));
+    setShowMassEdit(false); setMassEditFields({});
     try {
       const res = await fetch('/api/attendees/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: Array.from(selectedIds), fields }) });
       if (!res.ok) throw new Error();
       toast.success(`Updated ${selectedIds.size} attendee(s).`);
-      setShowMassEdit(false); setMassEditFields({}); onRefresh();
-    } catch { toast.error('Failed to apply changes.'); } finally { setIsApplying(false); }
+      onRefresh();
+    } catch {
+      toast.error('Failed to apply changes.');
+      setLocalAttendees(snapshot);
+    } finally { setIsApplying(false); }
   };
 
   const startInlineEdit = (attendee: Attendee, field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse') => {
