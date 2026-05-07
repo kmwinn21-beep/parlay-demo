@@ -126,7 +126,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-brand-primary font-serif">Quick Note</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">Floor Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -151,6 +151,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [allAttendees, setAllAttendees] = useState<Attendee[]>([]);
+  const [conferenceAttendees, setConferenceAttendees] = useState<Attendee[]>([]);
   const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([]);
   const [filteredAttendees, setFilteredAttendees] = useState<Attendee[]>([]);
   const [filteredConferences, setFilteredConferences] = useState<Conference[]>([]);
@@ -159,7 +160,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [selAttendee, setSelAttendee] = useState<Attendee | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const confAttendeesRef = useRef<Map<number, Set<number>>>(new Map());
+  const [loadingConf, setLoadingConf] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -175,58 +176,72 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
         const atts: Attendee[] = Array.isArray(attRes)
           ? attRes.map((a: { id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }) => ({
               id: a.id, first_name: a.first_name, last_name: a.last_name,
-              company_id: a.company_id ?? null, company_name: a.company_name ?? null,
+              company_id: a.company_id != null ? Number(a.company_id) : null,
+              company_name: a.company_name ?? null,
             }))
           : [];
         setConferences(confs); setAllCompanies(comps); setAllAttendees(atts);
         setFilteredConferences(confs); setFilteredCompanies(comps); setFilteredAttendees(atts);
-        const caRes = await fetch('/api/conference-attendees?all=1').then(r => r.ok ? r.json() : []).catch(() => []);
-        if (Array.isArray(caRes)) {
-          const map = new Map<number, Set<number>>();
-          for (const row of caRes as { conference_id: number; attendee_id: number }[]) {
-            if (!map.has(row.conference_id)) map.set(row.conference_id, new Set());
-            map.get(row.conference_id)!.add(row.attendee_id);
-          }
-          confAttendeesRef.current = map;
-        }
       } catch { toast.error('Failed to load options.'); }
       setLoading(false);
     };
     load();
   }, []);
 
-  const handleConferenceChange = useCallback((conf: Conference | null) => {
+  const handleConferenceChange = useCallback(async (conf: Conference | null) => {
     setSelConference(conf); setSelAttendee(null);
     if (!conf) {
-      if (selCompany) { setFilteredAttendees(allAttendees.filter(a => a.company_id === selCompany.id)); }
-      else { setFilteredAttendees(allAttendees); setFilteredCompanies(allCompanies); }
+      setConferenceAttendees([]);
+      if (selCompany) {
+        setFilteredAttendees(allAttendees.filter(a => a.company_id === selCompany.id));
+      } else {
+        setFilteredAttendees(allAttendees);
+        setFilteredCompanies(allCompanies);
+      }
       return;
     }
-    const attIds = confAttendeesRef.current.get(conf.id) ?? new Set<number>();
-    const confAtts = allAttendees.filter(a => attIds.has(a.id));
-    setFilteredAttendees(confAtts);
-    if (!selCompany) setFilteredCompanies(allCompanies.filter(c => new Set(confAtts.map(a => a.company_id).filter(Boolean)).has(c.id)));
+    // Fetch attendees for this conference directly — same source NewNoteModal uses
+    setLoadingConf(true);
+    setFilteredAttendees([]);
+    try {
+      const data = await fetch(`/api/conferences/${conf.id}`).then(r => r.ok ? r.json() : { attendees: [] });
+      const confAtts: Attendee[] = (data.attendees ?? []).map((a: { id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }) => ({
+        id: a.id, first_name: a.first_name, last_name: a.last_name,
+        company_id: a.company_id != null ? Number(a.company_id) : null,
+        company_name: a.company_name ?? null,
+      }));
+      setConferenceAttendees(confAtts);
+      const filtered = selCompany ? confAtts.filter(a => a.company_id === selCompany.id) : confAtts;
+      setFilteredAttendees(filtered);
+      if (!selCompany) {
+        const confCompanyIds = new Set(confAtts.map(a => a.company_id).filter(Boolean));
+        setFilteredCompanies(allCompanies.filter(c => confCompanyIds.has(c.id)));
+      }
+    } catch { toast.error('Failed to load conference attendees.'); }
+    setLoadingConf(false);
   }, [selCompany, allAttendees, allCompanies]);
 
   const handleCompanyChange = useCallback((comp: Company | null) => {
     setSelCompany(comp); setSelAttendee(null);
+    const sourceAtts = selConference ? conferenceAttendees : allAttendees;
     if (!comp) {
-      if (selConference) {
-        const attIds = confAttendeesRef.current.get(selConference.id) ?? new Set<number>();
-        const confAtts = allAttendees.filter(a => attIds.has(a.id));
-        setFilteredAttendees(confAtts);
-        setFilteredCompanies(allCompanies.filter(c => new Set(confAtts.map(a => a.company_id).filter(Boolean)).has(c.id)));
-      } else { setFilteredAttendees(allAttendees); setFilteredCompanies(allCompanies); }
+      setFilteredAttendees(sourceAtts);
+      if (!selConference) setFilteredCompanies(allCompanies);
+      else {
+        const confCompanyIds = new Set(sourceAtts.map(a => a.company_id).filter(Boolean));
+        setFilteredCompanies(allCompanies.filter(c => confCompanyIds.has(c.id)));
+      }
       return;
     }
-    const compAtts = allAttendees.filter(a => a.company_id === comp.id);
-    setFilteredAttendees(selConference ? compAtts.filter(a => (confAttendeesRef.current.get(selConference.id) ?? new Set()).has(a.id)) : compAtts);
-    if (!selConference && confAttendeesRef.current.size > 0) {
-      const confIds = new Set<number>();
-      confAttendeesRef.current.forEach((attIds, confId) => { if (compAtts.some(a => attIds.has(a.id))) confIds.add(confId); });
-      setFilteredConferences(conferences.filter(c => confIds.has(c.id)));
+    setFilteredAttendees(sourceAtts.filter(a => a.company_id === comp.id));
+    if (!selConference) {
+      // Narrow conferences to those that have any of this company's attendees
+      const compAttIds = new Set(allAttendees.filter(a => a.company_id === comp.id).map(a => a.id));
+      if (compAttIds.size > 0) {
+        fetch('/api/attendees?limit=1&company_id=' + comp.id).catch(() => {});
+      }
     }
-  }, [selConference, allAttendees, allCompanies, conferences]);
+  }, [selConference, conferenceAttendees, allAttendees, allCompanies]);
 
   const handleAttendeeChange = useCallback((att: Attendee | null) => {
     setSelAttendee(att);
@@ -235,12 +250,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       const comp = allCompanies.find(c => c.id === att.company_id) ?? null;
       if (comp) { setSelCompany(comp); setFilteredCompanies([comp]); }
     }
-    if (!selConference && confAttendeesRef.current.size > 0) {
-      const confIds = new Set<number>();
-      confAttendeesRef.current.forEach((attIds, confId) => { if (attIds.has(att.id)) confIds.add(confId); });
-      setFilteredConferences(conferences.filter(c => confIds.has(c.id)));
-    }
-  }, [selCompany, selConference, allCompanies, conferences]);
+  }, [selCompany, allCompanies]);
 
   const canSave = selConference || selCompany || selAttendee;
 
@@ -291,10 +301,17 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Attendee</label>
-                <SearchableSelect options={filteredAttendees} value={selAttendee} onChange={handleAttendeeChange} getLabel={a => `${a.first_name} ${a.last_name}`} placeholder="Select an attendee…" />
+                {loadingConf ? (
+                  <div className="flex items-center gap-2 py-2 px-3 text-xs text-gray-400">
+                    <div className="animate-spin w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full" />
+                    Loading attendees…
+                  </div>
+                ) : (
+                  <SearchableSelect options={filteredAttendees} value={selAttendee} onChange={handleAttendeeChange} getLabel={a => `${a.first_name} ${a.last_name}`} placeholder="Select an attendee…" />
+                )}
               </div>
               {canSave
-                ? <p className="text-xs text-gray-400">Note will be saved to the selected record(s) and removed from Quick Notes.</p>
+                ? <p className="text-xs text-gray-400">Note will be saved to the selected record(s) and removed from Floor Notes.</p>
                 : <p className="text-xs text-amber-600">Select at least one conference, company, or attendee.</p>}
             </div>
           )}
@@ -528,7 +545,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   }, []);
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this quick note? This cannot be undone.')) return;
+    if (!confirm('Delete this floor note? This cannot be undone.')) return;
     const res = await fetch(`/api/quick-notes/${id}`, { method: 'DELETE' });
     if (res.ok) setNotes(prev => prev.filter(n => n.id !== id));
     else toast.error('Failed to delete note.');
@@ -653,7 +670,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
           <svg className="w-5 h-5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
-          <span className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Quick Notes</span>
+          <span className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Floor Notes</span>
           {notes.length > 0 && (
             <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-secondary text-white text-[10px] font-bold leading-none">{notes.length}</span>
           )}
@@ -688,7 +705,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
             )}
           </div>
           <button type="button" onClick={() => setShowAddModal(true)}
-            className="border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-brand-secondary transition-colors" title="Add quick note">
+            className="border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-brand-secondary transition-colors" title="Add floor note">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           </button>
         </div>
@@ -697,7 +714,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         <button type="button" onClick={() => setShowAddModal(true)}
           className="hidden lg:flex items-center gap-1.5 text-sm font-medium text-brand-secondary hover:text-brand-primary border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Quick Note
+          Floor Note
         </button>
       </div>
 
@@ -715,7 +732,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
               <svg className="w-10 h-10 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
-              <p className="text-sm text-gray-400">Add a note now and assign it later. Quick Notes can only be seen by you until you assign it to an Attendee, Company, and/or Conference record.</p>
+              <p className="text-sm text-gray-400">Add a note now and assign it later. Floor Notes can only be seen by you until you assign it to an Attendee, Company, and/or Conference record.</p>
               <button type="button" onClick={() => setShowAddModal(true)} className="text-brand-secondary text-sm hover:underline mt-1">Add note →</button>
             </div>
           ) : (
@@ -780,12 +797,12 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-brand-primary font-serif">Quick Note</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">Floor Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <textarea autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="Write a quick note…" rows={4}
+        <textarea autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="Write a floor note…" rows={4}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
         <div className="flex justify-end gap-2 mt-3">
