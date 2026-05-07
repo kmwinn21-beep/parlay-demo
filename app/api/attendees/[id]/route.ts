@@ -99,6 +99,53 @@ export async function PUT(
       });
     }
 
+    // Auto-assign products when function or seniority is included in the PUT body
+    {
+      const row = updatedResult.rows[0];
+      const effectiveSen = String(row.seniority ?? '');
+      const effectiveTitle = String(row.title ?? '');
+      const effectiveFn = String(row.function ?? '');
+      const currentProducts = String(row.products ?? '');
+      const seniorityFromTitle = !effectiveSen ? classifySeniority(effectiveTitle) : effectiveSen;
+
+      if (effectiveFn) {
+        const [priorityRow, mappingRow] = await Promise.all([
+          db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'icp_seniority_priority'", args: [] }),
+          db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'icp_function_product_mapping'", args: [] }),
+        ]);
+        const priorityMap: Record<string, string> = (() => { try { return JSON.parse(String(priorityRow.rows[0]?.value ?? '{}')); } catch { return {}; } })();
+        const fnProdMap: Record<string, string[]> = (() => { try { return JSON.parse(String(mappingRow.rows[0]?.value ?? '{}')); } catch { return {}; } })();
+
+        const priority = priorityMap[seniorityFromTitle];
+        if (priority === 'High' || priority === 'Medium') {
+          const fns = effectiveFn.split(',').map(s => s.trim()).filter(Boolean);
+          const autoProds = new Set<string>();
+          for (const fn of fns) {
+            (fnProdMap[fn] ?? []).forEach(p => autoProds.add(p));
+          }
+          if (autoProds.size > 0) {
+            const existing = currentProducts.split(',').map(s => s.trim()).filter(Boolean);
+            const merged = new Set([...existing, ...Array.from(autoProds)]);
+            const mergedStr = Array.from(merged).join(',');
+            if (mergedStr !== currentProducts) {
+              await db.execute({
+                sql: 'UPDATE attendees SET products = ? WHERE id = ?',
+                args: [mergedStr, params.id],
+              });
+              updatedResult.rows[0] = { ...updatedResult.rows[0], products: mergedStr };
+              const effectiveCompanyId = company_id ?? existingResult.rows[0].company_id;
+              if (effectiveCompanyId) {
+                const coRow = await db.execute({ sql: 'SELECT products FROM companies WHERE id = ?', args: [effectiveCompanyId] });
+                const coProd = String(coRow.rows[0]?.products ?? '').split(',').map(s => s.trim()).filter(Boolean);
+                const coMerged = new Set([...coProd, ...Array.from(autoProds)]);
+                await db.execute({ sql: 'UPDATE companies SET products = ? WHERE id = ?', args: [Array.from(coMerged).join(','), effectiveCompanyId] });
+              }
+            }
+          }
+        }
+      }
+    }
+
     return NextResponse.json(updatedResult.rows[0]);
   } catch (error) {
     console.error('PUT /api/attendees/[id] error:', error);

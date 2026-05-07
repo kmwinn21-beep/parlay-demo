@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady, getConfigOptionValues } from '@/lib/db';
-import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
+import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, classifyFunction, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
   buildCompanyMatcher,
@@ -538,7 +538,7 @@ export async function POST(
         const companyId = p.company?.trim()
           ? resolveCompanyId(p.company.trim())
           : null;
-        const functionVal = p.function?.trim() || undefined;
+        const functionVal = p.function?.trim() || classifyFunction(p.title?.trim(), functionOptions) || undefined;
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         existingAttendeeUpdates.push({
@@ -554,7 +554,7 @@ export async function POST(
         const companyId = p.company?.trim()
           ? resolveCompanyId(p.company.trim())
           : null;
-        const functionVal = p.function?.trim() || undefined;
+        const functionVal = p.function?.trim() || classifyFunction(p.title?.trim(), functionOptions) || undefined;
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         newAttendees.push({
@@ -588,7 +588,7 @@ export async function POST(
         const companyId = p.company?.trim()
           ? resolveCompanyId(p.company.trim())
           : null;
-        const functionVal = p.function?.trim() || undefined;
+        const functionVal = p.function?.trim() || classifyFunction(p.title?.trim(), functionOptions) || undefined;
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         existingAttendeeUpdates.push({
