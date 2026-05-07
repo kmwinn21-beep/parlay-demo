@@ -102,7 +102,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     }
     if (mapping.services && row[mapping.services]) {
       const raw = String(row[mapping.services]).trim();
-      if (raw) attendee.services = parseServicesValue(raw);
+      if (raw) attendee.services = raw; // stored raw; upload route normalizes against config options
     }
     if (mapping.icp && row[mapping.icp]) attendee.icp = String(row[mapping.icp]).trim();
     if (mapping.function && row[mapping.function]) attendee.function = String(row[mapping.function]).trim();
@@ -216,9 +216,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
     }
     if (servicesCol && row[servicesCol]) {
       const rawServices = String(row[servicesCol]).trim();
-      if (rawServices) {
-        attendee.services = parseServicesValue(rawServices);
-      }
+      if (rawServices) attendee.services = rawServices; // stored raw; upload route normalizes
     }
     if (icpCol && row[icpCol]) {
       const rawIcp = String(row[icpCol]).trim();
@@ -552,34 +550,3 @@ export function parseServicesValue(raw: string, validValues?: string[]): string 
   return Array.from(matched).join(',');
 }
 
-/**
- * Determine if a company meets the Ideal Customer Profile (ICP) criteria.
- * Requirements:
- *   - WSE between 250 and 6,000 (inclusive)
- *   - Company Type matches one of the operator-type values
- *   - Services include at least one of: AL, MC, SNF, CCRC
- *
- * @param icpOptions  Live ICP option values from admin panel (index 0 = "true" value, index 1 = "false" value).
- *                    Defaults to ['Yes', 'No'] when no options are configured.
- * @param operatorTypeValues  Set of company_type values that represent operators.
- *                            Defaults to a Set containing 'Operator'.
- */
-export function classifyICP(
-  wse: number | null | undefined,
-  companyType: string | null | undefined,
-  services: string | null | undefined,
-  icpOptions: string[] = ['Yes', 'No'],
-  operatorTypeValues: Set<string> = new Set(['Operator'])
-): string {
-  const trueValue = icpOptions[0] ?? 'Yes';
-  const falseValue = icpOptions[1] ?? 'No';
-
-  if (!wse || wse < 250 || wse > 6000) return falseValue;
-  if (!companyType || !operatorTypeValues.has(companyType)) return falseValue;
-  if (!services) return falseValue;
-
-  const serviceList = services.split(',').map((s) => s.trim());
-  const icpServices = ['AL', 'MC', 'SNF', 'CCRC'];
-  const hasIcpService = serviceList.some((s) => icpServices.includes(s));
-  return hasIcpService ? trueValue : falseValue;
-}

@@ -158,7 +158,7 @@ export async function POST(
     if (servicesOptions.length > 0) {
       for (const p of valid) {
         if (p.services) {
-          const matched = p.services.split(',').map(s => s.trim()).filter(Boolean)
+          const matched = p.services.split(/[;,:\\/|]+|\s+-\s+/).map(s => s.trim()).filter(Boolean)
             .map(s => matchConfigOption(s, servicesOptions)).filter((v): v is string => v !== null);
           p.services = matched.length > 0 ? matched.join(',') : undefined;
         }
