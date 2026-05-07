@@ -2616,8 +2616,10 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {(optionsByCategory['function'] ?? []).map(f => {
-                      const selected = icpFunctionProductMapping[f.value] ?? [];
                       const productOpts = optionsByCategory['products'] ?? [];
+                      const validProductValues = new Set(productOpts.map(p => p.value));
+                      // Filter out any saved selections whose product type was since deleted
+                      const selected = (icpFunctionProductMapping[f.value] ?? []).filter(v => validProductValues.has(v));
                       return (
                         <tr key={f.value} className="border-b border-gray-50">
                           <td className="py-1.5 pr-4">{f.value}</td>
@@ -2631,12 +2633,26 @@ export default function AdminPage() {
                             </select>
                           </td>
                           <td className="py-1.5">
-                            <MultiSelectDropdown
-                              options={productOpts.map(p => p.value)}
-                              selected={selected}
-                              onChange={vals => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }))}
-                              placeholder="None"
-                            />
+                            <div className="flex items-center gap-1">
+                              <MultiSelectDropdown
+                                options={productOpts.map(p => p.value)}
+                                selected={selected}
+                                onChange={vals => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }))}
+                                placeholder="None"
+                              />
+                              {selected.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: [] }))}
+                                  className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors p-0.5 rounded"
+                                  title="Clear product selections"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
