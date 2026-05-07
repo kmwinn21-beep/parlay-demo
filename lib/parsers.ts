@@ -307,6 +307,63 @@ export function effectiveSeniority(storedSeniority?: string, title?: string): st
   return storedSeniority || classifySeniority(title);
 }
 
+// Words stripped from titles before trying to match a function
+const FUNCTION_NOISE_WORDS = new Set([
+  'chief', 'president', 'owner', 'founder', 'co', 'officer',
+  'vice', 'svp', 'evp', 'avp', 'executive', 'director', 'vp',
+  'manager', 'associate', 'controller', 'coordinator', 'administrator',
+  'admin', 'staff', 'lead', 'head', 'specialist', 'analyst',
+  'consultant', 'advisor', 'representative', 'rep', 'general',
+  'senior', 'junior', 'global', 'regional', 'national', 'corporate',
+  'principal', 'partner', 'fellow', 'intern', 'the', 'of', 'and', 'for', 'at',
+]);
+
+// Regex aliases for function keywords that don't fuzzy-match directly to short option names
+const FUNCTION_ALIASES: [RegExp, string][] = [
+  [/\b(human\s+resources?|people\s+ops?|talent|recruiting|hris)\b/i, 'HR'],
+  [/\b(information\s+technology|info\s+tech|technology|digital|systems|infrastructure|software|engineering|devops|data\s+eng)\b/i, 'IT'],
+  [/\b(account(ing|s)?|bookkeeping|treasury)\b/i, 'Accounting'],
+  [/\b(financ(e|ial|ing)|fiscal|budget|cfo)\b/i, 'Finance'],
+  [/\b(operations?|operational|supply\s+chain|logistics)\b/i, 'Operations'],
+  [/\b(sales?|revenue|commercial|business\s+dev|account\s+exec|bdr|sdr)\b/i, 'Sales'],
+  [/\b(marketing|brand(ing)?|communications?|comms?|demand\s+gen)\b/i, 'Marketing'],
+  [/\b(legal|compliance|regulatory|counsel|governance)\b/i, 'Legal'],
+  [/\b(clinical|nursing|medical|patient|resident|care\s+management)\b/i, 'Clinical'],
+];
+
+/**
+ * Infer the functional area from a job title when no function column is present.
+ * Tries semantic alias patterns first, then strips seniority/noise words and fuzzy-matches
+ * remaining tokens against the admin-configured function options.
+ */
+export function classifyFunction(title: string | undefined, functionOptions: string[]): string | null {
+  if (!title || functionOptions.length === 0) return null;
+
+  // Step 1: regex alias → find nearest option
+  for (const [pattern, canonical] of FUNCTION_ALIASES) {
+    if (pattern.test(title)) {
+      const match = matchConfigOption(canonical, functionOptions);
+      if (match) return match;
+    }
+  }
+
+  // Step 2: strip noise words, try each remaining word and adjacent 2-word pairs
+  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const content = words.filter(w => !FUNCTION_NOISE_WORDS.has(w));
+
+  for (const word of content) {
+    const match = matchConfigOption(word, functionOptions);
+    if (match) return match;
+  }
+
+  for (let i = 0; i < content.length - 1; i++) {
+    const match = matchConfigOption(`${content[i]} ${content[i + 1]}`, functionOptions);
+    if (match) return match;
+  }
+
+  return null;
+}
+
 /**
  * Auto-detect company type based on company name.
  * Uses a known-company lookup (from training data) first, then falls back to keyword heuristics.
