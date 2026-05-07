@@ -703,7 +703,7 @@ export function DashboardActionCard() {
     if (res.ok) {
       const note = await res.json();
       window.dispatchEvent(new CustomEvent('quicknote:saved', { detail: note }));
-      toast.success('Saved to Quick Notes!');
+      toast.success('Saved to Floor Notes!');
     } else { toast.error('Failed to save note.'); }
     setScanSavingId(null);
     setBadgeScanCards(prev => {
@@ -787,7 +787,7 @@ export function DashboardActionCard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </div>
-          <p className="text-xs text-gray-500 leading-tight">Quick Note</p>
+          <p className="text-xs text-gray-500 leading-tight">Floor Note</p>
         </button>
 
         {/* Right — Touchpoints */}
