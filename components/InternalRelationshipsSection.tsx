@@ -28,6 +28,8 @@ interface AttendeeOption {
   first_name: string;
   last_name: string;
   title?: string;
+  company_id?: number;
+  company_name?: string;
 }
 
 /** Name/title display for contacts on relationship cards */
@@ -197,7 +199,14 @@ function AttendeeMultiSelect({
                   <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                     {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </span>
-                  {att.first_name} {att.last_name}
+                  <span className="min-w-0">
+                    <span className="block font-medium text-gray-800">{att.first_name} {att.last_name}</span>
+                    {(att.title || att.company_name) && (
+                      <span className="block text-xs text-gray-500 truncate">
+                        {[att.title, att.company_name].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </span>
                 </button>
               );
             })}
@@ -211,7 +220,7 @@ function AttendeeMultiSelect({
             if (!att) return null;
             return (
               <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200">
-                {att.first_name} {att.last_name}
+                <span>{att.first_name} {att.last_name}{att.company_name ? ` · ${att.company_name}` : ''}</span>
                 <button type="button" onClick={() => onChange(values.filter(val => val !== v))} className="hover:text-red-500">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -587,8 +596,11 @@ export function InternalRelationshipModal({
         const byCompany = new Map<number, AttendeeOption[]>();
         for (const data of entityData) {
           if (data?.id && data?.attendees) {
-            byCompany.set(data.id, data.attendees.map((a: { id: number; first_name: string; last_name: string }) => ({
+            byCompany.set(data.id, data.attendees.map((a: { id: number; first_name: string; last_name: string; title?: string }) => ({
               id: a.id, first_name: a.first_name, last_name: a.last_name,
+              title: a.title ?? undefined,
+              company_id: data.id,
+              company_name: data.name ?? undefined,
             })));
           }
         }
@@ -631,19 +643,41 @@ export function InternalRelationshipModal({
     setIsSaving(true);
     try {
       if (entityType === 'company') {
-        // Create one relationship per selected company
-        for (const companyId of entityIds) {
-          await fetch('/api/internal-relationships', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              company_id: companyId,
-              rep_ids: formRepIds.length > 0 ? formRepIds.join(',') : null,
-              contact_ids: formContactIds.length > 0 ? formContactIds.join(',') : null,
-              relationship_status: formRelStatus.join(','),
-              description: formDescription.trim(),
-            }),
-          });
+        if (formContactIds.length > 0) {
+          // One record per selected attendee, scoped to that attendee's own company
+          const allAtts: AttendeeOption[] = [];
+          attendeesByCompany.forEach(atts => atts.forEach(a => allAtts.push(a)));
+          for (const attendeeId of formContactIds) {
+            const att = allAtts.find(a => a.id === attendeeId);
+            const companyId = att?.company_id;
+            if (!companyId) continue;
+            await fetch('/api/internal-relationships', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company_id: companyId,
+                rep_ids: formRepIds.length > 0 ? formRepIds.join(',') : null,
+                contact_ids: String(attendeeId),
+                relationship_status: formRelStatus.join(','),
+                description: formDescription.trim(),
+              }),
+            });
+          }
+        } else {
+          // No contacts selected — create one record per company (original behaviour)
+          for (const companyId of entityIds) {
+            await fetch('/api/internal-relationships', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company_id: companyId,
+                rep_ids: formRepIds.length > 0 ? formRepIds.join(',') : null,
+                contact_ids: null,
+                relationship_status: formRelStatus.join(','),
+                description: formDescription.trim(),
+              }),
+            });
+          }
         }
       } else {
         // Attendee context - create relationship for each attendee's company
@@ -676,9 +710,14 @@ export function InternalRelationshipModal({
 
   if (!isOpen) return null;
 
-  // Merge all attendees from all selected companies for the Contact dropdown
+  // Merge all attendees from all selected companies, sorted by company name then first name
   const allAttendees: AttendeeOption[] = [];
   attendeesByCompany.forEach(atts => atts.forEach(a => allAttendees.push(a)));
+  allAttendees.sort((a, b) => {
+    const co = (a.company_name ?? '').localeCompare(b.company_name ?? '');
+    if (co !== 0) return co;
+    return a.first_name.localeCompare(b.first_name);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
