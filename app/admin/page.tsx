@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { buildDefaultTierConfig } from '@/lib/strategyAssessment';
 import toast from 'react-hot-toast';
 import { BackButton } from '@/components/BackButton';
 import { COLOR_PRESETS, getPreset } from '@/lib/colors';
@@ -849,6 +850,29 @@ export default function AdminPage() {
   const [basicIcpOpen, setBasicIcpOpen] = useState(true);
   const [advancedIcpOpen, setAdvancedIcpOpen] = useState(false);
 
+  // ── Target Classification tiers ───────────────────────────────────────────
+  const [tierMustOp, setTierMustOp] = useState<IcpUnitTypeOperator | ''>('');
+  const [tierMustV1, setTierMustV1] = useState('');
+  const [tierMustV2, setTierMustV2] = useState('');
+  const [tierMustConversion, setTierMustConversion] = useState('');
+  const [tierMustSaving, setTierMustSaving] = useState(false);
+  const [tierHighOp, setTierHighOp] = useState<IcpUnitTypeOperator | ''>('');
+  const [tierHighV1, setTierHighV1] = useState('');
+  const [tierHighV2, setTierHighV2] = useState('');
+  const [tierHighConversion, setTierHighConversion] = useState('');
+  const [tierHighSaving, setTierHighSaving] = useState(false);
+  const [tierWorthOp, setTierWorthOp] = useState<IcpUnitTypeOperator | ''>('');
+  const [tierWorthV1, setTierWorthV1] = useState('');
+  const [tierWorthV2, setTierWorthV2] = useState('');
+  const [tierWorthConversion, setTierWorthConversion] = useState('');
+  const [tierWorthSaving, setTierWorthSaving] = useState(false);
+  const [tierDefaultsAvgDeal, setTierDefaultsAvgDeal] = useState(25000);
+  const [tierDefaultsAvgCpu, setTierDefaultsAvgCpu] = useState(100);
+  const computedTierDefaults = useMemo(
+    () => buildDefaultTierConfig(tierDefaultsAvgDeal, tierDefaultsAvgCpu),
+    [tierDefaultsAvgDeal, tierDefaultsAvgCpu],
+  );
+
   // ── Types tab ────────────────────────────────────────────────────────────────
 
   const fetchAll = async () => {
@@ -906,9 +930,10 @@ export default function AdminPage() {
   const fetchIcpConfig = async () => {
     setIcpLoading(true);
     try {
-      const [icpRes, settingsRes] = await Promise.all([
+      const [icpRes, settingsRes, effectivenessRes] = await Promise.all([
         fetch('/api/admin/icp-rules', { cache: 'no-store' }),
         fetch('/api/admin/settings'),
+        fetch('/api/admin/effectiveness'),
       ]);
       if (!icpRes.ok) throw new Error();
       const data = await icpRes.json() as { rules: { id: number; category: string; conditions: { option_value: string; operator: 'AND' | 'OR' }[] }[]; unitTypeReq: { operator: IcpUnitTypeOperator | null; value1: number | null; value2: number | null; connector?: 'AND' | 'OR' } };
@@ -937,6 +962,24 @@ export default function AdminPage() {
         setIcpMinTouchpoints(s['icp_min_touchpoints'] ?? '1');
         setIcpIncludeNewCompanies(s['icp_include_new_companies'] !== 'false');
         setTargetPriorityWeights(tryParse(s['icp_target_priority_weights'], DEFAULT_TARGET_PRIORITY_WEIGHTS));
+        // Tier Classification
+        setTierMustOp((s['tier_must_target_op'] ?? '') as IcpUnitTypeOperator | '');
+        setTierMustV1(s['tier_must_target_v1'] ?? '');
+        setTierMustV2(s['tier_must_target_v2'] ?? '');
+        setTierMustConversion(s['tier_must_target_conversion'] ?? '');
+        setTierHighOp((s['tier_high_priority_op'] ?? '') as IcpUnitTypeOperator | '');
+        setTierHighV1(s['tier_high_priority_v1'] ?? '');
+        setTierHighV2(s['tier_high_priority_v2'] ?? '');
+        setTierHighConversion(s['tier_high_priority_conversion'] ?? '');
+        setTierWorthOp((s['tier_worth_engaging_op'] ?? '') as IcpUnitTypeOperator | '');
+        setTierWorthV1(s['tier_worth_engaging_v1'] ?? '');
+        setTierWorthV2(s['tier_worth_engaging_v2'] ?? '');
+        setTierWorthConversion(s['tier_worth_engaging_conversion'] ?? '');
+      }
+      if (effectivenessRes.ok) {
+        const eff = await effectivenessRes.json() as Record<string, string>;
+        setTierDefaultsAvgDeal(Number(eff['avg_annual_deal_size'] ?? 25000) || 25000);
+        setTierDefaultsAvgCpu(Number(eff['avg_cost_per_unit'] ?? 100) || 100);
       }
     } catch { toast.error('Failed to load ICP configuration.'); }
     finally { setIcpLoading(false); }
@@ -1052,6 +1095,75 @@ export default function AdminPage() {
       fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'icp_unit_type_value2', value: '' }) }),
     ]);
     toast.success('Unit type requirement cleared.');
+  };
+
+  const putSetting = (key: string, value: string) =>
+    fetch('/api/admin/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
+
+  const handleSaveTierMust = async () => {
+    setTierMustSaving(true);
+    try {
+      await Promise.all([
+        putSetting('tier_must_target_op', tierMustOp),
+        putSetting('tier_must_target_v1', tierMustV1),
+        putSetting('tier_must_target_v2', tierMustV2),
+        putSetting('tier_must_target_conversion', tierMustConversion),
+      ]);
+      toast.success('Must Target saved!');
+    } catch { toast.error('Failed to save Must Target.'); }
+    finally { setTierMustSaving(false); }
+  };
+  const handleClearTierMust = async () => {
+    setTierMustOp(''); setTierMustV1(''); setTierMustV2(''); setTierMustConversion('');
+    await Promise.all([
+      putSetting('tier_must_target_op', ''), putSetting('tier_must_target_v1', ''),
+      putSetting('tier_must_target_v2', ''), putSetting('tier_must_target_conversion', ''),
+    ]);
+    toast.success('Must Target cleared.');
+  };
+
+  const handleSaveTierHigh = async () => {
+    setTierHighSaving(true);
+    try {
+      await Promise.all([
+        putSetting('tier_high_priority_op', tierHighOp),
+        putSetting('tier_high_priority_v1', tierHighV1),
+        putSetting('tier_high_priority_v2', tierHighV2),
+        putSetting('tier_high_priority_conversion', tierHighConversion),
+      ]);
+      toast.success('High Priority saved!');
+    } catch { toast.error('Failed to save High Priority.'); }
+    finally { setTierHighSaving(false); }
+  };
+  const handleClearTierHigh = async () => {
+    setTierHighOp(''); setTierHighV1(''); setTierHighV2(''); setTierHighConversion('');
+    await Promise.all([
+      putSetting('tier_high_priority_op', ''), putSetting('tier_high_priority_v1', ''),
+      putSetting('tier_high_priority_v2', ''), putSetting('tier_high_priority_conversion', ''),
+    ]);
+    toast.success('High Priority cleared.');
+  };
+
+  const handleSaveTierWorth = async () => {
+    setTierWorthSaving(true);
+    try {
+      await Promise.all([
+        putSetting('tier_worth_engaging_op', tierWorthOp),
+        putSetting('tier_worth_engaging_v1', tierWorthV1),
+        putSetting('tier_worth_engaging_v2', tierWorthV2),
+        putSetting('tier_worth_engaging_conversion', tierWorthConversion),
+      ]);
+      toast.success('Worth Engaging saved!');
+    } catch { toast.error('Failed to save Worth Engaging.'); }
+    finally { setTierWorthSaving(false); }
+  };
+  const handleClearTierWorth = async () => {
+    setTierWorthOp(''); setTierWorthV1(''); setTierWorthV2(''); setTierWorthConversion('');
+    await Promise.all([
+      putSetting('tier_worth_engaging_op', ''), putSetting('tier_worth_engaging_v1', ''),
+      putSetting('tier_worth_engaging_v2', ''), putSetting('tier_worth_engaging_conversion', ''),
+    ]);
+    toast.success('Worth Engaging cleared.');
   };
 
   const handleToggleConnector = async (val: 'AND' | 'OR') => {
@@ -2592,6 +2704,231 @@ export default function AdminPage() {
                 + ICP Parameter
               </button>
             </div>
+
+          {/* ── Card: Target Classification ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Target Classification</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Define the {unitTypeLabel || 'unit'} thresholds and win probabilities used to classify ICP companies into tiers for pipeline forecasting. Defaults are computed from your Average Annual Deal Size and Average Cost per {unitTypeLabel || 'Unit'}.
+            </p>
+
+            {/* Must Target */}
+            <div className="mb-5">
+              <h3 className="text-sm font-semibold text-red-600 mb-2">Must Target</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 flex-shrink-0">{unitTypeLabel || 'Units'}</span>
+                <select
+                  value={tierMustOp}
+                  onChange={e => setTierMustOp(e.target.value as IcpUnitTypeOperator | '')}
+                  className="input-field text-sm w-36"
+                >
+                  <option value="">— no requirement —</option>
+                  {(Object.entries(ICP_OPERATOR_LABELS) as [IcpUnitTypeOperator, string][]).map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                {tierMustOp && tierMustOp !== 'between' && (
+                  <input
+                    type="number"
+                    value={tierMustV1}
+                    onChange={e => setTierMustV1(e.target.value)}
+                    placeholder={`e.g. ${computedTierDefaults.mustTargetMin}`}
+                    className="input-field text-sm w-28"
+                    min={0}
+                  />
+                )}
+                {tierMustOp === 'between' && (
+                  <>
+                    <input
+                      type="number"
+                      value={tierMustV1}
+                      onChange={e => setTierMustV1(e.target.value)}
+                      placeholder="min"
+                      className="input-field text-sm w-28"
+                      min={0}
+                    />
+                    <span className="text-sm text-gray-500">and</span>
+                    <input
+                      type="number"
+                      value={tierMustV2}
+                      onChange={e => setTierMustV2(e.target.value)}
+                      placeholder="max"
+                      className="input-field text-sm w-28"
+                      min={0}
+                    />
+                  </>
+                )}
+                {tierMustOp && (
+                  <>
+                    <span className="text-sm text-gray-500 flex-shrink-0">Win %</span>
+                    <input
+                      type="number"
+                      value={tierMustConversion}
+                      onChange={e => setTierMustConversion(e.target.value)}
+                      placeholder="e.g. 25"
+                      step="0.1"
+                      className="input-field text-sm w-20"
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-sm text-gray-500">%</span>
+                  </>
+                )}
+                <button onClick={handleSaveTierMust} disabled={tierMustSaving} className="btn-primary text-sm flex-shrink-0">
+                  {tierMustSaving ? 'Saving…' : 'Save'}
+                </button>
+                {tierMustOp && (
+                  <button onClick={handleClearTierMust} disabled={tierMustSaving} className="btn-secondary text-sm flex-shrink-0">Clear</button>
+                )}
+              </div>
+            </div>
+
+            <div className="h-px bg-gray-100 mb-5" />
+
+            {/* High Priority */}
+            <div className="mb-5">
+              <h3 className="text-sm font-semibold text-brand-primary mb-2">High Priority</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 flex-shrink-0">{unitTypeLabel || 'Units'}</span>
+                <select
+                  value={tierHighOp}
+                  onChange={e => setTierHighOp(e.target.value as IcpUnitTypeOperator | '')}
+                  className="input-field text-sm w-36"
+                >
+                  <option value="">— no requirement —</option>
+                  {(Object.entries(ICP_OPERATOR_LABELS) as [IcpUnitTypeOperator, string][]).map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                {tierHighOp && tierHighOp !== 'between' && (
+                  <input
+                    type="number"
+                    value={tierHighV1}
+                    onChange={e => setTierHighV1(e.target.value)}
+                    placeholder={`e.g. ${computedTierDefaults.highPriorityMin}`}
+                    className="input-field text-sm w-28"
+                    min={0}
+                  />
+                )}
+                {tierHighOp === 'between' && (
+                  <>
+                    <input
+                      type="number"
+                      value={tierHighV1}
+                      onChange={e => setTierHighV1(e.target.value)}
+                      placeholder={`e.g. ${computedTierDefaults.highPriorityMin}`}
+                      className="input-field text-sm w-28"
+                      min={0}
+                    />
+                    <span className="text-sm text-gray-500">and</span>
+                    <input
+                      type="number"
+                      value={tierHighV2}
+                      onChange={e => setTierHighV2(e.target.value)}
+                      placeholder={`e.g. ${computedTierDefaults.highPriorityMax}`}
+                      className="input-field text-sm w-28"
+                      min={0}
+                    />
+                  </>
+                )}
+                {tierHighOp && (
+                  <>
+                    <span className="text-sm text-gray-500 flex-shrink-0">Win %</span>
+                    <input
+                      type="number"
+                      value={tierHighConversion}
+                      onChange={e => setTierHighConversion(e.target.value)}
+                      placeholder="e.g. 15"
+                      step="0.1"
+                      className="input-field text-sm w-20"
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-sm text-gray-500">%</span>
+                  </>
+                )}
+                <button onClick={handleSaveTierHigh} disabled={tierHighSaving} className="btn-primary text-sm flex-shrink-0">
+                  {tierHighSaving ? 'Saving…' : 'Save'}
+                </button>
+                {tierHighOp && (
+                  <button onClick={handleClearTierHigh} disabled={tierHighSaving} className="btn-secondary text-sm flex-shrink-0">Clear</button>
+                )}
+              </div>
+            </div>
+
+            <div className="h-px bg-gray-100 mb-5" />
+
+            {/* Worth Engaging */}
+            <div className="mb-1">
+              <h3 className="text-sm font-semibold text-brand-highlight mb-2">Worth Engaging</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 flex-shrink-0">{unitTypeLabel || 'Units'}</span>
+                <select
+                  value={tierWorthOp}
+                  onChange={e => setTierWorthOp(e.target.value as IcpUnitTypeOperator | '')}
+                  className="input-field text-sm w-36"
+                >
+                  <option value="">— no requirement —</option>
+                  {(Object.entries(ICP_OPERATOR_LABELS) as [IcpUnitTypeOperator, string][]).map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                {tierWorthOp && tierWorthOp !== 'between' && (
+                  <input
+                    type="number"
+                    value={tierWorthV1}
+                    onChange={e => setTierWorthV1(e.target.value)}
+                    placeholder={`e.g. ${computedTierDefaults.worthEngagingMin}`}
+                    className="input-field text-sm w-28"
+                    min={0}
+                  />
+                )}
+                {tierWorthOp === 'between' && (
+                  <>
+                    <input
+                      type="number"
+                      value={tierWorthV1}
+                      onChange={e => setTierWorthV1(e.target.value)}
+                      placeholder={`e.g. ${computedTierDefaults.worthEngagingMin}`}
+                      className="input-field text-sm w-28"
+                      min={0}
+                    />
+                    <span className="text-sm text-gray-500">and</span>
+                    <input
+                      type="number"
+                      value={tierWorthV2}
+                      onChange={e => setTierWorthV2(e.target.value)}
+                      placeholder={`e.g. ${computedTierDefaults.worthEngagingMax}`}
+                      className="input-field text-sm w-28"
+                      min={0}
+                    />
+                  </>
+                )}
+                {tierWorthOp && (
+                  <>
+                    <span className="text-sm text-gray-500 flex-shrink-0">Win %</span>
+                    <input
+                      type="number"
+                      value={tierWorthConversion}
+                      onChange={e => setTierWorthConversion(e.target.value)}
+                      placeholder="e.g. 7.5"
+                      step="0.1"
+                      className="input-field text-sm w-20"
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-sm text-gray-500">%</span>
+                  </>
+                )}
+                <button onClick={handleSaveTierWorth} disabled={tierWorthSaving} className="btn-primary text-sm flex-shrink-0">
+                  {tierWorthSaving ? 'Saving…' : 'Save'}
+                </button>
+                {tierWorthOp && (
+                  <button onClick={handleClearTierWorth} disabled={tierWorthSaving} className="btn-secondary text-sm flex-shrink-0">Clear</button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* ── Card: Ideal Buyer Persona ── */}
           <div className="card">

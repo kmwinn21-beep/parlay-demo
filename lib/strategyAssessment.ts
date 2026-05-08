@@ -1,3 +1,52 @@
+export type TierOperator = 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'between' | '';
+
+export interface TierThresholdConfig {
+  mustTargetOp: TierOperator;
+  mustTargetMin: number;
+  mustTargetMax: number;
+  highPriorityOp: TierOperator;
+  highPriorityMin: number;
+  highPriorityMax: number;
+  worthEngagingOp: TierOperator;
+  worthEngagingMin: number;
+  worthEngagingMax: number;
+  mustTargetConversion: number;
+  highPriorityConversion: number;
+  worthEngagingConversion: number;
+}
+
+export function buildDefaultTierConfig(avgAnnualDealSize = 25000, avgCostPerUnit = 100): TierThresholdConfig {
+  const avgUnitCount = avgCostPerUnit > 0 ? avgAnnualDealSize / avgCostPerUnit : 250;
+  const highPriorityMin = Math.round(avgUnitCount * 0.8);
+  const highPriorityMax = Math.round(avgUnitCount * 2);
+  return {
+    mustTargetOp: 'gte',
+    mustTargetMin: highPriorityMax + 1,
+    mustTargetMax: 0,
+    highPriorityOp: 'between',
+    highPriorityMin,
+    highPriorityMax,
+    worthEngagingOp: 'between',
+    worthEngagingMin: Math.round(highPriorityMin * 0.5),
+    worthEngagingMax: highPriorityMin - 1,
+    mustTargetConversion: 0.25,
+    highPriorityConversion: 0.15,
+    worthEngagingConversion: 0.075,
+  };
+}
+
+function matchesOp(w: number, op: TierOperator, v1: number, v2: number): boolean {
+  switch (op) {
+    case 'eq':      return w === v1;
+    case 'gt':      return w > v1;
+    case 'lt':      return w < v1;
+    case 'gte':     return w >= v1;
+    case 'lte':     return w <= v1;
+    case 'between': return w >= v1 && w <= v2;
+    default:        return false;
+  }
+}
+
 export interface StrategyAssessmentInput {
   totalAttendees: number;
   totalCompanies: number;
@@ -11,7 +60,9 @@ export interface StrategyAssessmentInput {
   budgetTotal: number;
   requiredPipeline: number | null;
   avgCostPerUnit: number;
+  avgAnnualDealSize?: number;
   icpCompanies: { wse: number | null }[];
+  tierConfig?: TierThresholdConfig;
 }
 
 export interface StrategyAssessment {
@@ -85,20 +136,23 @@ function componentTier(score: number): string {
   return 'Weak';
 }
 
-// Classify ICP companies into tier proxies based on WSE size
-function classifyTiers(icpCompanies: { wse: number | null }[]): {
-  mustProxy: number;
-  highProxy: number;
-  worthProxy: number;
-} {
+// Classify ICP companies into tier proxies based on configured WSE thresholds + operators
+function classifyTiers(
+  icpCompanies: { wse: number | null }[],
+  cfg: TierThresholdConfig,
+): { mustProxy: number; highProxy: number; worthProxy: number } {
   let mustProxy = 0;
   let highProxy = 0;
   let worthProxy = 0;
+  const mustOp  = cfg.mustTargetOp  || 'gte';
+  const highOp  = cfg.highPriorityOp  || 'between';
+  const worthOp = cfg.worthEngagingOp || 'between';
   for (const c of icpCompanies) {
     const w = c.wse ?? 0;
-    if (w >= 2000) mustProxy++;
-    else if (w >= 400) highProxy++;
-    else worthProxy++;
+    if (mustOp  && matchesOp(w, mustOp,  cfg.mustTargetMin,    cfg.mustTargetMax))    mustProxy++;
+    else if (highOp  && matchesOp(w, highOp,  cfg.highPriorityMin,  cfg.highPriorityMax))  highProxy++;
+    else if (worthOp && matchesOp(w, worthOp, cfg.worthEngagingMin, cfg.worthEngagingMax)) worthProxy++;
+    // else: falls through to 2.5% fallback probability in pipeline calc
   }
   return { mustProxy, highProxy, worthProxy };
 }
@@ -111,6 +165,7 @@ function computeRealisticPipeline(
   avgCostPerUnit: number,
   buyerAccess: number,
   relLeverage: number,
+  cfg: TierThresholdConfig,
 ): number {
   if (avgCostPerUnit <= 0) return 0;
   const sorted = [...icpCompanies].sort((a, b) => (b.wse ?? 0) - (a.wse ?? 0));
@@ -121,9 +176,9 @@ function computeRealisticPipeline(
   for (const c of sorted) {
     const wse = c.wse ?? 0;
     let prob: number;
-    if (mustRemaining > 0) { prob = 0.25; mustRemaining--; }
-    else if (highRemaining > 0) { prob = 0.15; highRemaining--; }
-    else if (worthRemaining > 0) { prob = 0.075; worthRemaining--; }
+    if (mustRemaining > 0) { prob = cfg.mustTargetConversion; mustRemaining--; }
+    else if (highRemaining > 0) { prob = cfg.highPriorityConversion; highRemaining--; }
+    else if (worthRemaining > 0) { prob = cfg.worthEngagingConversion; worthRemaining--; }
     else { prob = 0.025; }
     goal += wse * avgCostPerUnit * prob;
   }
@@ -277,8 +332,10 @@ export function computeStrategyAssessment(input: StrategyAssessmentInput): Strat
   const safeTotalAtt = Math.max(totalAttendees, 1);
   const safeIcp = Math.max(icpCount, 1);
 
+  const cfg = input.tierConfig ?? buildDefaultTierConfig(input.avgAnnualDealSize ?? 25000, input.avgCostPerUnit);
+
   // Tier proxies
-  const { mustProxy, highProxy, worthProxy } = classifyTiers(input.icpCompanies);
+  const { mustProxy, highProxy, worthProxy } = classifyTiers(input.icpCompanies, cfg);
 
   // A. ICP Opportunity Score
   const icpRate = icpCount / safeTotal;
@@ -318,7 +375,7 @@ export function computeStrategyAssessment(input: StrategyAssessmentInput): Strat
   // F. Pipeline Potential Score
   const realisticPipelineGoal = computeRealisticPipeline(
     input.icpCompanies, mustProxy, highProxy, worthProxy,
-    input.avgCostPerUnit, buyerAccessScore, relLeverageScore,
+    input.avgCostPerUnit, buyerAccessScore, relLeverageScore, cfg,
   );
   const pipelinePotentialScore = input.requiredPipeline && input.requiredPipeline > 0
     ? clamp((realisticPipelineGoal / input.requiredPipeline) * 100)

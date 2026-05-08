@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
-import { computeStrategyAssessment } from '@/lib/strategyAssessment';
+import { computeStrategyAssessment, buildDefaultTierConfig } from '@/lib/strategyAssessment';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -39,7 +39,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -89,6 +89,11 @@ export async function GET(
     conference.conference_strategy_type_id
       ? db.execute({ sql: `SELECT value FROM config_options WHERE id = ?`, args: [conference.conference_strategy_type_id] }).catch(() => ({ rows: [] }))
       : Promise.resolve({ rows: [] }),
+    db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_annual_deal_size'`, args: [] }).catch(() => ({ rows: [] })),
+    db.execute({
+      sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_op','tier_must_target_v1','tier_must_target_v2','tier_must_target_conversion','tier_high_priority_op','tier_high_priority_v1','tier_high_priority_v2','tier_high_priority_conversion','tier_worth_engaging_op','tier_worth_engaging_v1','tier_worth_engaging_v2','tier_worth_engaging_conversion')`,
+      args: [],
+    }).catch(() => ({ rows: [] })),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -683,6 +688,9 @@ export async function GET(
   const avgCostPerUnit = avgCostRes.rows[0]?.value != null
     ? Number(avgCostRes.rows[0].value)
     : 0;
+  const avgAnnualDealSize = avgDealRes.rows[0]?.value != null
+    ? Number(avgDealRes.rows[0].value) || 25000
+    : 25000;
   const conferenceStrategyType = strategyTypeLabelRes.rows[0]?.value
     ? String(strategyTypeLabelRes.rows[0].value)
     : null;
@@ -692,6 +700,26 @@ export async function GET(
   const icpCompaniesForScoring = Array.from(icpCompanyMap.values()).map(c => ({
     wse: companyDetailMap.get(c.id)?.wse ?? null,
   }));
+
+  // Build tier config from saved settings (fall back to formula-derived defaults)
+  const tierSMap = Object.fromEntries(
+    (tierSettingsRes.rows as Array<{ key: string; value: string }>).map(r => [r.key, r.value])
+  );
+  const defaultCfg = buildDefaultTierConfig(avgAnnualDealSize, avgCostPerUnit || 100);
+  const tierConfig = {
+    mustTargetOp:            (tierSMap['tier_must_target_op']  || defaultCfg.mustTargetOp) as typeof defaultCfg.mustTargetOp,
+    mustTargetMin:           tierSMap['tier_must_target_v1']           ? Number(tierSMap['tier_must_target_v1'])           : defaultCfg.mustTargetMin,
+    mustTargetMax:           tierSMap['tier_must_target_v2']           ? Number(tierSMap['tier_must_target_v2'])           : defaultCfg.mustTargetMax,
+    highPriorityOp:          (tierSMap['tier_high_priority_op'] || defaultCfg.highPriorityOp) as typeof defaultCfg.highPriorityOp,
+    highPriorityMin:         tierSMap['tier_high_priority_v1']         ? Number(tierSMap['tier_high_priority_v1'])         : defaultCfg.highPriorityMin,
+    highPriorityMax:         tierSMap['tier_high_priority_v2']         ? Number(tierSMap['tier_high_priority_v2'])         : defaultCfg.highPriorityMax,
+    worthEngagingOp:         (tierSMap['tier_worth_engaging_op'] || defaultCfg.worthEngagingOp) as typeof defaultCfg.worthEngagingOp,
+    worthEngagingMin:        tierSMap['tier_worth_engaging_v1']        ? Number(tierSMap['tier_worth_engaging_v1'])        : defaultCfg.worthEngagingMin,
+    worthEngagingMax:        tierSMap['tier_worth_engaging_v2']        ? Number(tierSMap['tier_worth_engaging_v2'])        : defaultCfg.worthEngagingMax,
+    mustTargetConversion:    tierSMap['tier_must_target_conversion']    ? Number(tierSMap['tier_must_target_conversion'])    / 100 : defaultCfg.mustTargetConversion,
+    highPriorityConversion:  tierSMap['tier_high_priority_conversion']  ? Number(tierSMap['tier_high_priority_conversion'])  / 100 : defaultCfg.highPriorityConversion,
+    worthEngagingConversion: tierSMap['tier_worth_engaging_conversion'] ? Number(tierSMap['tier_worth_engaging_conversion']) / 100 : defaultCfg.worthEngagingConversion,
+  };
 
   const strategyAssessment = computeStrategyAssessment({
     totalAttendees,
@@ -706,6 +734,8 @@ export async function GET(
     budgetTotal,
     requiredPipeline,
     avgCostPerUnit,
+    avgAnnualDealSize,
+    tierConfig,
     icpCompanies: icpCompaniesForScoring,
   });
 
