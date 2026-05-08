@@ -250,7 +250,7 @@ export function NewMeetingModal({
           location: location || null,
           scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
           additional_attendees: additionalAttendees || null,
-          outcome: created.outcome || 'Meeting Scheduled',
+          outcome: created.outcome || 'Scheduled',
           created_at: created.created_at || new Date().toISOString(),
           first_name: contact?.first_name || '',
           last_name: contact?.last_name || '',

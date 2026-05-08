@@ -66,12 +66,13 @@ function meetingTitle(meetingType: unknown, conferenceName: string): string {
   return `${t || 'Meeting'}${EM_DASH}${conferenceName}`;
 }
 
-const HS_OUTCOME: Record<string, string> = {
-  'Meeting Held': 'COMPLETED',
-  'Meeting Scheduled': 'SCHEDULED',
-  'Rescheduled': 'RESCHEDULED',
-  'Cancelled': 'CANCELED',
-  'Meeting No-Show': 'NO_SHOW',
+// Map action_key → HubSpot outcome enum (stable regardless of display name)
+const ACTION_KEY_TO_HS: Record<string, string> = {
+  meeting_held: 'COMPLETED',
+  meeting_scheduled: 'SCHEDULED',
+  rescheduled: 'RESCHEDULED',
+  cancelled: 'CANCELED',
+  no_show: 'NO_SHOW',
 };
 
 function slugify(name: string): string {
@@ -231,6 +232,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!confRow.rows[0]) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
   const conferenceName = String(confRow.rows[0].name ?? '');
 
+  // Build outcome display name → action_key lookup (so HS mapping is display-name-agnostic)
+  const actionConfigRows = await db.execute({
+    sql: `SELECT value, action_key FROM config_options WHERE category = 'action' AND action_key IS NOT NULL`,
+    args: [],
+  });
+  const outcomeToActionKey: Record<string, string> = {};
+  for (const row of actionConfigRows.rows) {
+    if (row.value && row.action_key) outcomeToActionKey[String(row.value)] = String(row.action_key);
+  }
+
   // Fetch all data in parallel
   const [contactRows, companyRows, meetingRows, followUpRows, noteRows] = await Promise.all([
     // Contacts (includes company_type for filtering)
@@ -345,11 +356,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const startISO = toISO(r.meeting_date, r.meeting_time);
         const endISO = addMinutesToISO(startISO, 60);
         const outcome = String(r.outcome ?? '');
+        const outcomeKey = outcomeToActionKey[outcome] ?? '';
         return [
           r.attendee_email ?? '', r.first_name ?? '', r.last_name ?? '',
           meetingTitle(r.meeting_type, conferenceName),
           startISO, endISO, r.location ?? '',
-          HS_OUTCOME[outcome] ?? 'SCHEDULED',
+          ACTION_KEY_TO_HS[outcomeKey] ?? 'SCHEDULED',
           outcome, campaignName,
         ];
       })

@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     });
     const meetingScheduledName = meetingScheduledConfig.rows.length > 0
       ? String(meetingScheduledConfig.rows[0].value)
-      : 'Meeting Scheduled';
+      : 'Scheduled';
 
     const result = await db.execute({
       sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome, meeting_type)
