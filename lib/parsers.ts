@@ -274,7 +274,7 @@ export function classifySeniority(title?: string): string {
   // --- C-Suite ---
   if (/\b(chief|president|founder|co-founder|cofounder|co founder|owner|co-owner|principal|principle|prinicipal)\b/.test(t)) return 'C-Suite';
   // Common C-Suite acronyms (word-boundary to avoid false positives)
-  if (/\b(ceo|cfo|coo|cto|cpo|cmo|chro|cdo|cgo|cio|clo|cno|cro|cso|creo)\b/.test(t)) return 'C-Suite';
+  if (/\b(ceo|cfo|coo|cto|cpo|cmo|chro|cdo|cgo|cio|clo|cno|cro|cso|creo|cao|ciso)\b/.test(t)) return 'C-Suite';
 
   // --- BOD (Board of Directors) ---
   if (/\b(board|chairman|chairwoman|executive\s+chairman)\b/.test(t)) return 'BOD';

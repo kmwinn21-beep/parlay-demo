@@ -1,12 +1,40 @@
 import { db, dbReady } from '@/lib/db';
 import { buildTitleMetadata, conservativeTitleSimilarity, normalizeTitleKey, type BuyerRoleKey, type TitleMatchConfidence, type TitleMatchMetadata, type TitleNormalizationRuleLike } from '@/lib/titleNormalization';
 
+// Ordering matters — findSystemAlias uses .find() so more specific entries must come first.
+// VP+function entries must precede generic C-Suite so "VP of Finance" ≠ CFO.
+// Director+function entries must precede the generic Director fallback.
 const SYSTEM_ALIASES: Array<{ aliases: string[]; normalized_title: string; function_value: string; seniority_value: string; buyer_role: BuyerRoleKey }> = [
-  { aliases: ['chief people officer', 'cpo', 'chief human resources officer', 'chro'], normalized_title: 'CHRO', function_value: 'HR', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
-  { aliases: ['chief executive officer', 'ceo', 'president'], normalized_title: 'CEO', function_value: 'Operations', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
-  { aliases: ['chief financial officer', 'cfo', 'vp finance', 'vice president finance'], normalized_title: 'CFO', function_value: 'Finance', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
-  { aliases: ['chief operating officer', 'coo', 'vp operations', 'vice president operations'], normalized_title: 'COO', function_value: 'Operations', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
-  { aliases: ['director', 'executive director'], normalized_title: 'Director', function_value: 'Operations', seniority_value: 'Director', buyer_role: 'influencer' },
+  // ── C-Suite ──────────────────────────────────────────────────────────────
+  { aliases: ['ceo', 'chief executive officer'], normalized_title: 'CEO', function_value: 'Operations', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['cfo', 'chief financial officer'], normalized_title: 'CFO', function_value: 'Finance', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['coo', 'chief operating officer', 'chief operations officer'], normalized_title: 'COO', function_value: 'Operations', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['chro', 'chief human resources officer', 'chief hr officer', 'chief people officer', 'cpo'], normalized_title: 'CHRO', function_value: 'HR', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['cto', 'chief technology officer', 'chief tech officer'], normalized_title: 'CTO', function_value: 'IT', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['cio', 'chief information officer'], normalized_title: 'CIO', function_value: 'IT', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['cao', 'chief accounting officer'], normalized_title: 'CAO', function_value: 'Accounting', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+  { aliases: ['clo', 'chief legal officer', 'general counsel'], normalized_title: 'CLO', function_value: 'Legal', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
+
+  // ── VP / SVP + function ──────────────────────────────────────────────────
+  { aliases: ['vp operations', 'vice president operations', 'svp operations'], normalized_title: 'VP of Operations', function_value: 'Operations', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+  { aliases: ['vp finance', 'vice president finance', 'svp finance'], normalized_title: 'VP of Finance', function_value: 'Finance', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+  { aliases: ['vp sales', 'vice president sales', 'svp sales', 'vp business development', 'vice president business development'], normalized_title: 'VP of Sales', function_value: 'Sales', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+  { aliases: ['vp marketing', 'vice president marketing', 'svp marketing'], normalized_title: 'VP of Marketing', function_value: 'Marketing', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+  { aliases: ['vp hr', 'vice president hr', 'svp hr', 'vp human resources', 'vice president human resources', 'svp human resources'], normalized_title: 'VP of HR', function_value: 'HR', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+  { aliases: ['vp it', 'vice president it', 'svp it', 'vp information technology', 'vice president information technology'], normalized_title: 'VP of IT', function_value: 'IT', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+  { aliases: ['vp accounting', 'vice president accounting', 'svp accounting'], normalized_title: 'VP of Accounting', function_value: 'Accounting', seniority_value: 'VP/SVP', buyer_role: 'decision_maker' },
+
+  // ── Director + function (before generic Director fallback) ───────────────
+  { aliases: ['director operations', 'dir operations'], normalized_title: 'Director of Operations', function_value: 'Operations', seniority_value: 'Director', buyer_role: 'influencer' },
+  { aliases: ['director finance', 'dir finance'], normalized_title: 'Director of Finance', function_value: 'Finance', seniority_value: 'Director', buyer_role: 'influencer' },
+  { aliases: ['director sales', 'dir sales', 'director business development', 'dir business development'], normalized_title: 'Director of Sales', function_value: 'Sales', seniority_value: 'Director', buyer_role: 'influencer' },
+  { aliases: ['director marketing', 'dir marketing'], normalized_title: 'Director of Marketing', function_value: 'Marketing', seniority_value: 'Director', buyer_role: 'influencer' },
+  { aliases: ['director hr', 'dir hr', 'director human resources', 'dir human resources'], normalized_title: 'Director of HR', function_value: 'HR', seniority_value: 'Director', buyer_role: 'influencer' },
+  { aliases: ['director it', 'dir it', 'director information technology', 'dir information technology'], normalized_title: 'Director of IT', function_value: 'IT', seniority_value: 'Director', buyer_role: 'influencer' },
+  { aliases: ['director accounting', 'dir accounting'], normalized_title: 'Director of Accounting', function_value: 'Accounting', seniority_value: 'Director', buyer_role: 'influencer' },
+
+  // ── Generic Director fallback (no function — seniority only) ────────────
+  { aliases: ['executive director'], normalized_title: 'Executive Director', function_value: 'Operations', seniority_value: 'ED', buyer_role: 'decision_maker' },
 ];
 
 interface ConfigLookup {
