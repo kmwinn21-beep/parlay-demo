@@ -30,6 +30,7 @@ interface ConfigOption {
   scope?: string; // 'global' | 'user' — only meaningful for status category
   auto_follow_up?: number; // 1 = yes, 0 = no — only meaningful for touchpoints category
   is_system?: number; // 1 = seeded system value, cannot be deleted
+  is_primary?: number; // 1 = primary designation for this category
 }
 
 const CATEGORIES = [
@@ -258,6 +259,15 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     } catch { toast.error('Failed to delete.'); }
   };
 
+  const handleMakePrimary = async (id: number) => {
+    try {
+      const res = await fetch(`/api/config/${id}/set-primary`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      setLocalOptions(prev => prev.map(opt => ({ ...opt, is_primary: opt.id === id ? 1 : 0 })));
+      toast.success('Primary type set.');
+    } catch { toast.error('Failed to set primary.'); }
+  };
+
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -340,6 +350,14 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
                         )}
                       </span>
+                      {category === 'company_type' && (
+                        opt.is_primary
+                          ? <span className="flex items-center gap-1 text-xs font-medium text-amber-600 px-2 py-1">
+                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                              Primary
+                            </span>
+                          : <button type="button" onClick={() => handleMakePrimary(opt.id)} className="text-gray-400 hover:text-amber-600 text-xs font-medium px-2 py-1 transition-colors">Make Primary</button>
+                      )}
                       <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
                       {!opt.is_system && (
                         <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
