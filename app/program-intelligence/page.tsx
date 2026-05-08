@@ -797,10 +797,10 @@ export default function ProgramIntelligencePage() {
                         CES by component · bar height = composite score
                       </p>
                     </div>
-                    <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                    <div className="flex flex-col rounded-lg border border-gray-200 overflow-hidden text-xs flex-shrink-0">
                       <button
                         onClick={() => setSortMode('date')}
-                        className={`px-3 py-1.5 transition-colors ${
+                        className={`px-3 py-2 transition-colors border-b border-gray-200 ${
                           sortMode === 'date'
                             ? 'bg-brand-secondary text-white font-medium'
                             : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -810,7 +810,7 @@ export default function ProgramIntelligencePage() {
                       </button>
                       <button
                         onClick={() => setSortMode('score')}
-                        className={`px-3 py-1.5 transition-colors ${
+                        className={`px-3 py-2 transition-colors ${
                           sortMode === 'score'
                             ? 'bg-brand-secondary text-white font-medium'
                             : 'bg-white text-gray-600 hover:bg-gray-50'
