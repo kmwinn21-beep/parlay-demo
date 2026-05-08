@@ -210,6 +210,15 @@ export async function GET(request: NextRequest) {
       exp_return: edMap['expected_return_on_event_cost'] ?? 3,
     };
 
+    // Check whether the companies table has an icp column
+    let hasIcpCol = false;
+    try {
+      const pragma = await db.execute({ sql: `PRAGMA table_info(companies)`, args: [] });
+      hasIcpCol = pragma.rows.some((r) => String(r.name ?? '').toLowerCase() === 'icp');
+    } catch { /* ignore */ }
+
+    const icpExpr = hasIcpCol ? `COALESCE(co.icp, 0)` : `0`;
+
     // Main multi-conference metrics query
     const result = await db.execute({
       sql: `
@@ -222,7 +231,7 @@ export async function GET(request: NextRequest) {
         cc AS (
           SELECT ca.conference_id,
             COUNT(DISTINCT a.company_id) AS total,
-            COUNT(DISTINCT CASE WHEN COALESCE(co.icp, 0) = 1 THEN a.company_id END) AS icp_total
+            COUNT(DISTINCT CASE WHEN ${icpExpr} = 1 THEN a.company_id END) AS icp_total
           FROM conference_attendees ca
           JOIN attendees a ON ca.attendee_id = a.id
           LEFT JOIN companies co ON co.id = a.company_id
@@ -234,17 +243,17 @@ export async function GET(request: NextRequest) {
             COUNT(DISTINCT t.coid) AS engaged,
             COUNT(DISTINCT CASE WHEN t.is_icp = 1 THEN t.coid END) AS icp_engaged
           FROM (
-            SELECT m.conference_id AS cid, a.company_id AS coid, COALESCE(co.icp, 0) AS is_icp
+            SELECT m.conference_id AS cid, a.company_id AS coid, ${icpExpr} AS is_icp
             FROM meetings m JOIN attendees a ON m.attendee_id = a.id
             LEFT JOIN companies co ON co.id = a.company_id
             WHERE m.conference_id IN (SELECT id FROM tc) AND a.company_id IS NOT NULL
             UNION
-            SELECT atp.conference_id, a.company_id, COALESCE(co.icp, 0)
+            SELECT atp.conference_id, a.company_id, ${icpExpr}
             FROM attendee_touchpoints atp JOIN attendees a ON atp.attendee_id = a.id
             LEFT JOIN companies co ON co.id = a.company_id
             WHERE atp.conference_id IN (SELECT id FROM tc) AND a.company_id IS NOT NULL
             UNION
-            SELECT se.conference_id, a.company_id, COALESCE(co.icp, 0)
+            SELECT se.conference_id, a.company_id, ${icpExpr}
             FROM social_event_rsvps r JOIN social_events se ON r.social_event_id = se.id
             JOIN attendees a ON r.attendee_id = a.id
             LEFT JOIN companies co ON co.id = a.company_id
@@ -313,6 +322,9 @@ export async function GET(request: NextRequest) {
             )) AS spend
           FROM conference_budget cb, json_each(cb.line_items) li
           WHERE cb.conference_id IN (SELECT id FROM tc)
+            AND cb.line_items IS NOT NULL
+            AND cb.line_items NOT IN ('', '[]', 'null')
+            AND json_valid(cb.line_items) = 1
           GROUP BY cb.conference_id
         ),
         crp AS (

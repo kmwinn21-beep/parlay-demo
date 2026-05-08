@@ -262,7 +262,10 @@ export default function ProgramIntelligencePage() {
         `/api/program-intelligence/performance?startDate=${startDate}&endDate=${endDate}`,
         { cache: 'no-store' },
       );
-      if (!res.ok) throw new Error('Failed to load data');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
       const data = await res.json() as { conferences: ConferenceSummary[] };
       setConferences(data.conferences ?? []);
     } catch (e) {
