@@ -43,6 +43,7 @@ interface ConferenceSummary {
   cost_efficiency_score: number | null;
   pipeline_influenced: number;
   total_spend: number | null;
+  total_activities: number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -278,18 +279,28 @@ export default function ProgramIntelligencePage() {
   useEffect(() => { void fetchData(); }, [fetchData]);
 
   // All derived state computed before any conditional returns (rules of hooks)
+
+  // All conferences with a valid CES (used for chart — show everything)
   const scoredConferences = useMemo(
     () => conferences.filter((c) => c.ces_score != null),
     [conferences],
   );
 
+  // "Active" conferences: CES > 0 AND at least one activity recorded.
+  // Conferences with 0 activities indicate the team didn't attend or the
+  // conference is only used as a list container — exclude from summary stats.
+  const activeConferences = useMemo(
+    () => scoredConferences.filter((c) => (c.ces_score ?? 0) > 0 && c.total_activities > 0),
+    [scoredConferences],
+  );
+
   const sortedConferences = useMemo(() => {
-    const list = [...scoredConferences];
+    const list = [...activeConferences];
     if (sortMode === 'score') {
       list.sort((a, b) => (b.ces_score ?? 0) - (a.ces_score ?? 0));
     }
     return list;
-  }, [scoredConferences, sortMode]);
+  }, [activeConferences, sortMode]);
 
   const chartData = useMemo(() =>
     sortedConferences.map((c) => {
@@ -316,32 +327,33 @@ export default function ProgramIntelligencePage() {
     }),
   [sortedConferences]);
 
-  // Summary card values
-  const avgCES = scoredConferences.length
-    ? Math.round(scoredConferences.reduce((s, c) => s + (c.ces_score ?? 0), 0) / scoredConferences.length)
+  // Summary card values — use activeConferences (CES > 0, activities > 0) to
+  // exclude placeholder / not-attended conferences from aggregate stats.
+  const avgCES = activeConferences.length
+    ? Math.round(activeConferences.reduce((s, c) => s + (c.ces_score ?? 0), 0) / activeConferences.length)
     : null;
 
-  const totalPipeline = conferences.reduce((s, c) => s + c.pipeline_influenced, 0);
+  const totalPipeline = activeConferences.reduce((s, c) => s + c.pipeline_influenced, 0);
 
-  const topPerformer = scoredConferences.length
-    ? scoredConferences.reduce((best, c) =>
+  const topPerformer = activeConferences.length
+    ? activeConferences.reduce((best, c) =>
         (c.ces_score ?? 0) > (best.ces_score ?? 0) ? c : best,
       )
     : null;
 
   // Interpretation panel values
   const highestConf = topPerformer;
-  const lowestConf = scoredConferences.length
-    ? scoredConferences.reduce((worst, c) =>
+  const lowestConf = activeConferences.length
+    ? activeConferences.reduce((worst, c) =>
         (c.ces_score ?? 101) < (worst.ces_score ?? 101) ? c : worst,
       )
     : null;
 
-  const costLaggerConf = scoredConferences.find(
+  const costLaggerConf = activeConferences.find(
     (c) => (c.ces_score ?? 0) > 75 && (c.ces_components.dim7_cost_efficiency ?? 100) < 60,
   ) ?? null;
 
-  const interpretationReady = scoredConferences.length >= 2;
+  const interpretationReady = activeConferences.length >= 2;
 
   // Permission gate — after all hooks
   if (!capabilities) {
@@ -370,7 +382,10 @@ export default function ProgramIntelligencePage() {
       {/* Page header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-xl font-bold text-brand-primary font-serif">Program Intelligence</h1>
+          <h1 className="text-xl font-bold text-brand-primary font-serif">
+            Program Intelligence{' '}
+            <span className="text-sm font-normal text-gray-400">(In Active Development)</span>
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Aggregate performance across all conferences in your program
           </p>
@@ -454,9 +469,9 @@ export default function ProgramIntelligencePage() {
 
               {!loading && (
                 <span className="text-xs text-gray-400 ml-auto">
-                  {conferences.length} conference{conferences.length !== 1 ? 's' : ''} in range
-                  {scoredConferences.length < conferences.length &&
-                    ` · ${scoredConferences.length} scored`}
+                  {activeConferences.length} active conference{activeConferences.length !== 1 ? 's' : ''} in range
+                  {conferences.length > activeConferences.length &&
+                    ` · ${conferences.length} total`}
                 </span>
               )}
             </div>
@@ -479,7 +494,7 @@ export default function ProgramIntelligencePage() {
             )}
 
             {/* Empty state */}
-            {!loading && !error && scoredConferences.length === 0 && (
+            {!loading && !error && activeConferences.length === 0 && (
               <div className="card flex flex-col items-center justify-center py-16 gap-4 text-center">
                 <svg className="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -500,7 +515,7 @@ export default function ProgramIntelligencePage() {
             )}
 
             {/* Data view */}
-            {!loading && !error && scoredConferences.length > 0 && (
+            {!loading && !error && activeConferences.length > 0 && (
               <>
                 {/* Summary cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -508,10 +523,10 @@ export default function ProgramIntelligencePage() {
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                       Conferences Tracked
                     </p>
-                    <p className="text-3xl font-bold text-brand-primary">{scoredConferences.length}</p>
-                    {conferences.length > scoredConferences.length && (
+                    <p className="text-3xl font-bold text-brand-primary">{activeConferences.length}</p>
+                    {conferences.length > activeConferences.length && (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {conferences.length - scoredConferences.length} pending data
+                        {conferences.length - activeConferences.length} without activity data
                       </p>
                     )}
                   </div>
@@ -548,9 +563,9 @@ export default function ProgramIntelligencePage() {
                     <p className="text-3xl font-bold text-brand-primary">
                       {totalPipeline > 0 ? formatCurrency(totalPipeline) : '—'}
                     </p>
-                    {scoredConferences.length > 1 && totalPipeline > 0 && (
+                    {activeConferences.length > 1 && totalPipeline > 0 && (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {formatCurrency(totalPipeline / scoredConferences.length)} avg per event
+                        {formatCurrency(totalPipeline / activeConferences.length)} avg per event
                       </p>
                     )}
                   </div>
@@ -612,10 +627,10 @@ export default function ProgramIntelligencePage() {
                     </div>
                   </div>
 
-                  <ResponsiveContainer width="100%" height={340}>
+                  <ResponsiveContainer width="100%" height={480}>
                     <BarChart
                       data={chartData}
-                      margin={{ top: 10, right: 16, left: 0, bottom: manyConferences ? 60 : 20 }}
+                      margin={{ top: 10, right: 16, left: 0, bottom: manyConferences ? 70 : 30 }}
                       onClick={(data) => {
                         if (data?.activePayload?.[0]?.payload?.conference_id) {
                           router.push(

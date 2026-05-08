@@ -417,6 +417,7 @@ export async function GET(request: NextRequest) {
         conference_name: r.name,
         conference_date: r.conf_date,
         conference_strategy: r.strategy_label,
+        total_activities: r.meetings_held + r.followups_created + r.companies_engaged,
         ...scores,
       };
     });
