@@ -6,6 +6,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import type { UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
+import { useUser } from '@/components/UserContext';
 
 interface CompanyOption {
   id: number;
@@ -202,6 +203,7 @@ function MultiSelectDropdownById({
 
 export function NewRelationshipModal({ isOpen, onClose }: NewRelationshipModalProps) {
   useHideBottomNav(isOpen);
+  const { user } = useUser();
 
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [relTypeOptions, setRelTypeOptions] = useState<RelTypeOption[]>([]);
@@ -419,7 +421,7 @@ export function NewRelationshipModal({ isOpen, onClose }: NewRelationshipModalPr
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={isSaving}
+                disabled={isSaving || !!user?.demoVisitor}
                 className="btn-primary flex-1"
               >
                 {isSaving ? 'Saving…' : 'Save Relationship'}

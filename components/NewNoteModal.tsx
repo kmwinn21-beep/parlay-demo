@@ -380,7 +380,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
           <button
             type="submit"
             onClick={handleSubmit}
-            disabled={!canSubmit}
+            disabled={!canSubmit || !!user?.demoVisitor}
             className="px-4 py-2 text-sm font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving...' : 'Submit'}

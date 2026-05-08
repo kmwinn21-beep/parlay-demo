@@ -11,6 +11,7 @@ export interface AuthUser {
   displayName: string | null;
   repName: string | null;
   createdAt: string | null;
+  demoVisitor?: boolean;
 }
 
 interface UserContextValue {

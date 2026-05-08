@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { QuickNoteInlineModal } from './QuickNotesSection';
@@ -277,6 +278,7 @@ function BadgeScanResultsModal({
   onAssignLater: (card: BadgeScanCard) => Promise<void>;
   savingId: string | null;
 }) {
+  const { user } = useUser();
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -322,7 +324,7 @@ function BadgeScanResultsModal({
                   <button
                     type="button"
                     onClick={() => onAssignNow(card)}
-                    disabled={isSaving}
+                    disabled={isSaving || !!user?.demoVisitor}
                     className="flex-1 btn-primary text-xs py-1.5 disabled:opacity-50"
                   >
                     Assign Now
@@ -330,7 +332,7 @@ function BadgeScanResultsModal({
                   <button
                     type="button"
                     onClick={() => void onAssignLater(card)}
-                    disabled={isSaving}
+                    disabled={isSaving || !!user?.demoVisitor}
                     className="flex-1 btn-secondary text-xs py-1.5 disabled:opacity-50"
                   >
                     {isSaving ? 'Saving…' : 'Assign Later'}
@@ -348,6 +350,7 @@ function BadgeScanResultsModal({
 // ── TouchpointQuickModal ──────────────────────────────────────────────────────
 
 export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
+  const { user } = useUser();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [touchpointOptions, setTouchpointOptions] = useState<TouchpointOption[]>([]);
@@ -584,7 +587,7 @@ export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={!canSubmit}
+            disabled={!canSubmit || !!user?.demoVisitor}
             className="btn-primary text-sm"
           >
             {submitting ? 'Saving…' : 'Log Touchpoint'}
@@ -598,6 +601,7 @@ export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
 // ── DashboardActionCard ───────────────────────────────────────────────────────
 
 export function DashboardActionCard() {
+  const { user } = useUser();
   const [showCameraMenu, setShowCameraMenu] = useState(false);
   const [scanningBadge, setScanningBadge] = useState(false);
   const [scanningNotes, setScanningNotes] = useState(false);
