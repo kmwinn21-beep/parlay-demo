@@ -10,6 +10,7 @@ import {
   buildTargetBuckets,
   collectTitleReviewItems,
   countRecommendedActions,
+  getTierKey,
   scoreOrNull,
   sortCompaniesByPriority,
   stableKey,
@@ -263,11 +264,26 @@ function confidenceTone(confidence: string | null | undefined): 'green' | 'amber
 type ConfigOptionRecord = { id: number; category: string; value: string };
 type TitleRuleForm = { normalized_title: string; function_id: string; seniority_id: string; buyer_role: BuyerRoleKey; confidence: string; notes: string; apply_all_exact: boolean };
 
-function KpiCard({ label, value }: { label: string; value: number | string | null }) {
+function formatPipelineCompact(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
+  return `$${value.toLocaleString('en-US')}`;
+}
+
+type KpiPill = { text: string; className: string };
+
+function KpiCard({ label, value, pill }: { label: string; value: number | string | null; pill?: KpiPill }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 min-w-0">
-      <div className="text-2xl font-bold text-brand-primary leading-tight">{value ?? '—'}</div>
-      <div className="text-xs font-semibold text-gray-500 mt-1 truncate">{label}</div>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div className="text-2xl font-bold text-brand-primary leading-tight">{value ?? '—'}</div>
+        {pill && (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap flex-shrink-0 mt-0.5 ${pill.className}`}>
+            {pill.text}
+          </span>
+        )}
+      </div>
+      <div className="text-xs font-semibold text-gray-500 truncate">{label}</div>
     </div>
   );
 }
@@ -613,6 +629,17 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
   const companies = useMemo(() => sortCompaniesByPriority(data?.companies ?? []), [data]);
   const actionLabelMap = useMemo(() => buildActionLabelMap(data?.scoring_config?.recommended_actions), [data]);
   const summary = useMemo(() => summarizeTargetRecommendations(companies), [companies]);
+
+  const pipelineSums = useMemo(() => {
+    const sumWse = (filter: (c: TargetingCompanyRecommendation) => boolean) =>
+      companies.filter(filter).reduce((acc, c) => acc + (c.wse ?? 0), 0);
+    return {
+      mustTarget: sumWse(c => getTierKey(c) === 'must_target') * avgCostPerUnit,
+      highPriority: sumWse(c => getTierKey(c) === 'high_priority') * avgCostPerUnit,
+      worthEngaging: sumWse(c => getTierKey(c) === 'worth_engaging') * avgCostPerUnit,
+    };
+  }, [companies, avgCostPerUnit]);
+
   const buckets = useMemo(() => buildTargetBuckets(companies), [companies]);
   const titleReviewItems = useMemo(() => collectTitleReviewItems(companies).slice(0, 12), [companies]);
   const visibleTitleReviewItems = useMemo(
@@ -688,9 +715,15 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiCard label="Must Target" value={summary.mustTarget} />
-        <KpiCard label="High Priority" value={summary.highPriority} />
-        <KpiCard label="Worth Engaging" value={summary.worthEngaging} />
+        <KpiCard label="Must Target" value={summary.mustTarget}
+          pill={avgCostPerUnit > 0 && pipelineSums.mustTarget > 0 ? { text: `Pipeline: ${formatPipelineCompact(pipelineSums.mustTarget)}`, className: 'bg-red-50 text-red-600 border-red-200' } : undefined}
+        />
+        <KpiCard label="High Priority" value={summary.highPriority}
+          pill={avgCostPerUnit > 0 && pipelineSums.highPriority > 0 ? { text: `Pipeline: ${formatPipelineCompact(pipelineSums.highPriority)}`, className: 'bg-brand-primary/10 text-brand-primary border-brand-primary/30' } : undefined}
+        />
+        <KpiCard label="Worth Engaging" value={summary.worthEngaging}
+          pill={avgCostPerUnit > 0 && pipelineSums.worthEngaging > 0 ? { text: `Pipeline: ${formatPipelineCompact(pipelineSums.worthEngaging)}`, className: 'bg-brand-highlight/10 text-brand-highlight border-brand-highlight/30' } : undefined}
+        />
         <KpiCard label="Needs Title Review" value={summary.needsTitleReview} />
         <KpiCard label="Avg Target Priority" value={summary.avgTargetPriority} />
       </div>
