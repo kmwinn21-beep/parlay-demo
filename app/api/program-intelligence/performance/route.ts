@@ -354,7 +354,7 @@ export async function GET(request: NextRequest) {
         )
         SELECT
           tc.id, tc.name, tc.conf_date,
-          col.label AS strategy_label,
+          col.value AS strategy_label,
           COALESCE(cc.total, 0)                    AS total_companies,
           COALESCE(cc.icp_total, 0)                AS icp_total,
           COALESCE(ce.engaged, 0)                  AS companies_engaged,
