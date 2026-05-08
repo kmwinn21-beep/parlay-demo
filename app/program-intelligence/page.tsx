@@ -158,6 +158,18 @@ function cesTierLabel(score: number): string {
   return 'Inefficient';
 }
 
+function cesTierShort(score: number): string {
+  if (score >= 90) return 'Excl.';
+  if (score >= 75) return 'Strong';
+  if (score >= 60) return 'Accept.';
+  if (score >= 50) return 'Weak';
+  return 'Ineff.';
+}
+
+function formatCurrencyFull(value: number): string {
+  return '$' + Math.round(value).toLocaleString();
+}
+
 function avgNonNull(vals: (number | null)[]): number | null {
   const valid = vals.filter((v): v is number => v != null);
   return valid.length ? Math.round(valid.reduce((s, v) => s + v, 0) / valid.length) : null;
@@ -266,10 +278,12 @@ function ScoreCard({
   title,
   score,
   components,
+  showTier = false,
 }: {
   title: string;
   score: number | null;
   components: { label: string; value: number | null }[];
+  showTier?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const color = score != null ? cesScoreColor(score) : '#9ca3af';
@@ -306,18 +320,23 @@ function ScoreCard({
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-0 space-y-1.5 border-t" style={{ borderColor: color + '30' }}>
-          {components.map((c) => (
-            <div key={c.label} className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">{c.label}</span>
-              <span
-                className="font-semibold tabular-nums"
-                style={{ color: c.value != null ? cesScoreColor(c.value) : '#9ca3af' }}
-              >
-                {c.value ?? '—'}
-              </span>
-            </div>
-          ))}
+        <div className="px-4 pb-4 pt-3 space-y-1.5 border-t" style={{ borderColor: color + '30' }}>
+          {components.map((c) => {
+            const compColor = c.value != null ? cesScoreColor(c.value) : '#9ca3af';
+            return (
+              <div key={c.label} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-gray-500 min-w-0 truncate">{c.label}</span>
+                <span className="flex items-center gap-1.5 flex-shrink-0 font-semibold tabular-nums" style={{ color: compColor }}>
+                  {c.value ?? '—'}
+                  {showTier && c.value != null && (
+                    <span className="font-normal text-[10px]" style={{ color: compColor }}>
+                      · {cesTierShort(c.value)}
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -618,6 +637,7 @@ export default function ProgramIntelligencePage() {
                       <ScoreCard
                         title="Conference Effectiveness Score"
                         score={avgCES}
+                        showTier
                         components={[
                           { label: 'ICP & Target Quality (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim1_icp_target)) },
                           { label: 'Meeting Execution (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim2_meeting_exec)) },
@@ -630,6 +650,7 @@ export default function ProgramIntelligencePage() {
                       <ScoreCard
                         title="Sales Effectiveness Score"
                         score={avgSales}
+                        showTier
                         components={[
                           { label: 'Meeting Execution', value: avgNonNull(activeConferences.map((c) => c.sales_execution_components.meeting_execution)) },
                           { label: 'Follow-up Execution', value: avgNonNull(activeConferences.map((c) => c.sales_execution_components.followup_execution)) },
@@ -640,6 +661,7 @@ export default function ProgramIntelligencePage() {
                       <ScoreCard
                         title="Audience & Messaging Score"
                         score={avgAudience}
+                        showTier
                         components={[
                           { label: 'ICP Engagement Rate', value: avgNonNull(activeConferences.map((c) => c.audience_components.icp_engagement)) },
                           { label: 'Target Account Rate', value: avgNonNull(activeConferences.map((c) => c.audience_components.target_account_rate)) },
@@ -658,32 +680,54 @@ export default function ProgramIntelligencePage() {
                   );
                 })()}
 
-                {/* Summary cards — Conferences Tracked | Pipeline (2-col) | Top Performer */}
+                {/* Summary row — Top Performer + Tracked (1-col combined) | Pipeline (3-col) */}
                 {(() => {
                   const totalRequired = activeConferences.reduce((s, c) => s + (c.required_pipeline ?? 0), 0);
                   const pipelinePct = totalRequired > 0 ? Math.min((totalPipeline / totalRequired) * 100, 100) : null;
+                  const barColor = pipelinePct != null && pipelinePct >= 100 ? '#059669' : '#d97706';
                   return (
                     <div className="grid grid-cols-4 gap-4">
-                      {/* Conferences Tracked */}
-                      <div className="card py-4 col-span-1">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                          Conferences Tracked
-                        </p>
-                        <p className="text-3xl font-bold text-brand-primary">{activeConferences.length}</p>
-                        {conferences.length > activeConferences.length && (
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {conferences.length - activeConferences.length} without activity data
+
+                      {/* Combined Top Performer + Conferences Tracked — 1 col */}
+                      <div className="card col-span-1 py-4 flex flex-col gap-0">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                            Top Performer
                           </p>
-                        )}
+                          {topPerformer ? (
+                            <>
+                              <p className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+                                {topPerformer.conference_name}
+                              </p>
+                              <p className="text-xs font-medium mt-1" style={{ color: cesScoreColor(topPerformer.ces_score ?? 0) }}>
+                                {topPerformer.ces_score}/100 · {cesTierLabel(topPerformer.ces_score ?? 0)}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-2xl font-bold text-gray-300">—</p>
+                          )}
+                        </div>
+
+                        <div className="border-t border-gray-100 mt-4 pt-4">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                            Conferences Tracked
+                          </p>
+                          <p className="text-3xl font-bold text-brand-primary">{activeConferences.length}</p>
+                          {conferences.length > activeConferences.length && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {conferences.length - activeConferences.length} without activity data
+                            </p>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Total Pipeline Influenced — spans 2 cols */}
-                      <div className="card py-4 col-span-2">
+                      {/* Total Pipeline Influenced — spans 3 cols */}
+                      <div className="card py-4 col-span-3">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                           Total Pipeline Influenced
                         </p>
                         <p className="text-3xl font-bold text-brand-primary">
-                          {totalPipeline > 0 ? formatCurrency(totalPipeline) : '—'}
+                          {totalPipeline > 0 ? formatCurrencyFull(totalPipeline) : '—'}
                         </p>
                         {activeConferences.length > 1 && totalPipeline > 0 && (
                           <p className="text-xs text-gray-400 mt-0.5">
@@ -694,44 +738,19 @@ export default function ProgramIntelligencePage() {
                           <div className="mt-3 pt-3 border-t border-gray-100">
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
                               <span>Required Pipeline</span>
-                              <span className="tabular-nums font-medium">{formatCurrency(totalRequired)}</span>
+                              <span className="tabular-nums font-medium">{formatCurrencyFull(totalRequired)}</span>
                             </div>
-                            <div className="w-full h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="w-full h-3 rounded-full bg-gray-100 overflow-hidden">
                               <div
                                 className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${pipelinePct ?? 0}%`,
-                                  backgroundColor: pipelinePct != null && pipelinePct >= 100 ? '#059669' : '#d97706',
-                                }}
+                                style={{ width: `${pipelinePct ?? 0}%`, backgroundColor: barColor }}
                               />
                             </div>
-                            <p className="text-xs mt-1" style={{ color: pipelinePct != null && pipelinePct >= 100 ? '#059669' : '#d97706' }}>
-                              {totalPipeline > 0 ? formatCurrency(totalPipeline) : '$0'}{' '}
+                            <p className="text-xs mt-1.5" style={{ color: barColor }}>
+                              {totalPipeline > 0 ? formatCurrencyFull(totalPipeline) : '$0'}{' '}
                               <span className="font-semibold">({Math.round(pipelinePct ?? 0)}%)</span>
                             </p>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Top Performer */}
-                      <div className="card py-4 col-span-1">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                          Top Performer
-                        </p>
-                        {topPerformer ? (
-                          <>
-                            <p className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
-                              {topPerformer.conference_name}
-                            </p>
-                            <p
-                              className="text-xs font-medium mt-1"
-                              style={{ color: cesScoreColor(topPerformer.ces_score ?? 0) }}
-                            >
-                              {topPerformer.ces_score}/100 · {cesTierLabel(topPerformer.ces_score ?? 0)}
-                            </p>
-                          </>
-                        ) : (
-                          <p className="text-2xl font-bold text-gray-300">—</p>
                         )}
                       </div>
                     </div>
