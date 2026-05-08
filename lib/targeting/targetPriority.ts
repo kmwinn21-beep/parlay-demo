@@ -390,13 +390,13 @@ function scoreRelationship(company: TargetingCompanyInput, signals: TargetingCom
   const w = config.relationship_signal_weights;
   const internal = signals.internal_relationship_count ? 100 : 0;
   const prior = (signals.prior_meeting_count ?? 0) + (signals.prior_touchpoint_count ?? 0) + (signals.prior_conference_overlap_count ?? 0) > 0 ? 100 : 0;
-  const owner = company.assigned_user || (signals.associated_reps?.length ?? 0) > 0 ? 100 : 0;
+  const owner = (signals.associated_reps?.length ?? 0) > 0 ? 100 : 0;
   const known = signals.is_known_prospect || signals.has_existing_status || internal > 0 ? 100 : 0;
   const recent = signals.recent_note_count ? 100 : 0;
   const reasons: string[] = [];
   if (internal) reasons.push('Internal relationship exists.');
   if (prior) reasons.push('Prior engagement exists.');
-  if (owner) reasons.push('Assigned owner or familiar rep exists.');
+  if (owner) reasons.push('Rep with existing relationship is assigned.');
   if (known) reasons.push('Company has known prospect or relationship history.');
   if (recent) reasons.push('Recent notes are available.');
   return { score: weighted([[internal, w.internal_relationship ?? 35], [prior, w.prior_engagement ?? 25], [owner, w.assigned_owner ?? 15], [known, w.known_prospect ?? 15], [recent, w.recent_interaction ?? 10]]), reasons };
