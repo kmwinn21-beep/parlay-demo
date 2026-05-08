@@ -31,14 +31,14 @@ export async function GET(request: NextRequest) {
       const hasRelationships = request.nextUrl.searchParams.get('has_relationships') === '1';
       const result = await db.execute({
         sql: hasRelationships
-          ? `SELECT DISTINCT co.id, co.name
+          ? `SELECT DISTINCT co.id, co.name, co.company_type
              FROM companies co
              INNER JOIN internal_relationships ir ON co.id = ir.company_id
              ORDER BY co.name`
-          : 'SELECT id, name FROM companies ORDER BY name',
+          : 'SELECT id, name, company_type FROM companies ORDER BY name',
         args: [],
       });
-      return NextResponse.json(result.rows.map(r => ({ id: r.id, name: r.name })), {
+      return NextResponse.json(result.rows.map(r => ({ id: r.id, name: r.name, company_type: r.company_type ?? null })), {
         headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
       });
     }

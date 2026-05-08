@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useHideBottomNav } from './BottomNavContext';
 import { useUser } from '@/components/UserContext';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { MentionTextarea } from '@/components/MentionTextarea';
 import { useUserOptions } from '@/lib/useUserOptions';
+import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 
 interface ConferenceOption {
   id: number;
@@ -16,6 +17,7 @@ interface ConferenceOption {
 interface CompanyOption {
   id: number;
   name: string;
+  company_type?: string | null;
 }
 
 interface AttendeeOption {
@@ -48,11 +50,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   const [noteText, setNoteText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pinOnSubmit, setPinOnSubmit] = useState(false);
-  const [companySearch, setCompanySearch] = useState('');
   const { user } = useUser();
-  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
-
-  const companyDropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch conferences, all companies, all attendees on open
   useEffect(() => {
@@ -91,7 +89,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
           );
           if (!conferenceCompanyIds.has(Number(selectedCompanyId))) {
             setSelectedCompanyId('');
-            setCompanySearch('');
           }
         }
       })
@@ -100,17 +97,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConferenceId]);
 
-  // Close company dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target as Node)) {
-        setShowCompanyDropdown(false);
-      }
-    }
-    if (showCompanyDropdown) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showCompanyDropdown]);
-
   const companies = useMemo(() => {
     if (!selectedConferenceId || conferenceAttendees.length === 0) return allCompanies;
     const conferenceCompanyIds = new Set(
@@ -118,14 +104,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     );
     return allCompanies.filter(c => conferenceCompanyIds.has(c.id));
   }, [selectedConferenceId, conferenceAttendees, allCompanies]);
-
-  const filteredCompanies = useMemo(() => {
-    if (!companySearch.trim()) return companies;
-    const q = companySearch.toLowerCase();
-    return companies.filter(c => c.name.toLowerCase().includes(q));
-  }, [companies, companySearch]);
-
-  const selectedCompanyName = allCompanies.find(c => c.id === Number(selectedCompanyId))?.name || '';
 
   const currentAttendees = selectedConferenceId ? conferenceAttendees : allAttendees;
 
@@ -144,8 +122,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
     setSelectedAttendeeId('');
     setNoteText('');
     setPinOnSubmit(false);
-    setCompanySearch('');
-    setShowCompanyDropdown(false);
   }
 
   function handleClose() {
@@ -334,62 +310,15 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
           {/* Company (searchable dropdown) */}
           <div>
             <label className={labelClass}>Company</label>
-            <div className="relative" ref={companyDropdownRef}>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder={
-                  selectedConferenceId
-                    ? (loadingConference ? 'Loading companies...' : 'Search companies...')
-                    : 'Search companies...'
-                }
-                value={selectedCompanyId ? selectedCompanyName : companySearch}
-                onChange={e => {
-                  setCompanySearch(e.target.value);
-                  setSelectedCompanyId('');
-                  setSelectedAttendeeId('');
-                  setShowCompanyDropdown(true);
-                }}
-                onFocus={() => {
-                  if (!loadingConference) setShowCompanyDropdown(true);
-                }}
-                disabled={loadingConference}
-              />
-              {selectedCompanyId && (
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  onClick={() => { setSelectedCompanyId(''); setCompanySearch(''); setSelectedAttendeeId(''); }}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-              {showCompanyDropdown && !selectedCompanyId && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredCompanies.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-3">No companies found</p>
-                  ) : (
-                    filteredCompanies.map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                        onClick={() => {
-                          setSelectedCompanyId(String(c.id));
-                          setCompanySearch('');
-                          setShowCompanyDropdown(false);
-                          setSelectedAttendeeId('');
-                        }}
-                      >
-                        {c.name}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+            <GroupedCompanyDropdown
+              companies={companies}
+              value={selectedCompanyId ? Number(selectedCompanyId) : null}
+              onChange={(id, _name) => { setSelectedCompanyId(String(id)); setSelectedAttendeeId(''); }}
+              onClear={() => { setSelectedCompanyId(''); setSelectedAttendeeId(''); }}
+              placeholder={loadingConference ? 'Loading companies...' : 'Search companies...'}
+              disabled={loadingConference}
+              inputClassName={inputClass}
+            />
           </div>
 
           {/* Attendee */}
