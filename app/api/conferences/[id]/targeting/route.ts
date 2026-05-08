@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getIcpConfig } from '@/lib/icpRules';
+import { buildDefaultTierConfig, type TierThresholdConfig } from '@/lib/strategyAssessment';
 import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
 import {
   DEFAULT_RECOMMENDED_ACTIONS,
@@ -70,7 +71,7 @@ export async function GET(
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
     if (conferenceRes.rows.length === 0) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 
-    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes] = await Promise.all([
+    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes] = await Promise.all([
       db.execute({ sql: 'SELECT key, value FROM site_settings', args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'seniority'", args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'function'", args: [] }),
@@ -79,6 +80,7 @@ export async function GET(
         sql: "SELECT id, value FROM config_options WHERE category = 'company_type' AND action_key = 'prospect' ORDER BY id LIMIT 1",
         args: [],
       }).catch(() => ({ rows: [] as Row[] })),
+      db.execute({ sql: `SELECT key, value FROM effectiveness_defaults WHERE key IN ('avg_annual_deal_size','avg_cost_per_unit')`, args: [] }).catch(() => ({ rows: [] as Row[] })),
     ]);
 
     const settings: Record<string, string> = {};
@@ -98,6 +100,29 @@ export async function GET(
 
     const icpConfig = await getIcpConfig();
     const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
+
+    // Build tier config from saved settings; only use it when at least one operator is explicitly saved
+    const effMap: Record<string, string> = {};
+    for (const r of (effectivenessRes.rows as Row[])) effMap[String(r.key)] = String(r.value);
+    const avgAnnualDealSize = Number(effMap['avg_annual_deal_size'] ?? 25000) || 25000;
+    const avgCostPerUnit = Number(effMap['avg_cost_per_unit'] ?? 100) || 100;
+    const defaultCfg = buildDefaultTierConfig(avgAnnualDealSize, avgCostPerUnit);
+    const hasSavedTierConfig = !!(settings['tier_must_target_op'] || settings['tier_high_priority_op'] || settings['tier_worth_engaging_op']);
+    const tierConfig: TierThresholdConfig = {
+      mustTargetOp:            (settings['tier_must_target_op']    || defaultCfg.mustTargetOp)    as TierThresholdConfig['mustTargetOp'],
+      mustTargetMin:           settings['tier_must_target_v1']    ? Number(settings['tier_must_target_v1'])    : defaultCfg.mustTargetMin,
+      mustTargetMax:           settings['tier_must_target_v2']    ? Number(settings['tier_must_target_v2'])    : defaultCfg.mustTargetMax,
+      highPriorityOp:          (settings['tier_high_priority_op']  || defaultCfg.highPriorityOp)  as TierThresholdConfig['highPriorityOp'],
+      highPriorityMin:         settings['tier_high_priority_v1']  ? Number(settings['tier_high_priority_v1'])  : defaultCfg.highPriorityMin,
+      highPriorityMax:         settings['tier_high_priority_v2']  ? Number(settings['tier_high_priority_v2'])  : defaultCfg.highPriorityMax,
+      worthEngagingOp:         (settings['tier_worth_engaging_op'] || defaultCfg.worthEngagingOp) as TierThresholdConfig['worthEngagingOp'],
+      worthEngagingMin:        settings['tier_worth_engaging_v1'] ? Number(settings['tier_worth_engaging_v1']) : defaultCfg.worthEngagingMin,
+      worthEngagingMax:        settings['tier_worth_engaging_v2'] ? Number(settings['tier_worth_engaging_v2']) : defaultCfg.worthEngagingMax,
+      mustTargetConversion:    settings['tier_must_target_conversion']    ? Number(settings['tier_must_target_conversion'])    / 100 : defaultCfg.mustTargetConversion,
+      highPriorityConversion:  settings['tier_high_priority_conversion']  ? Number(settings['tier_high_priority_conversion'])  / 100 : defaultCfg.highPriorityConversion,
+      worthEngagingConversion: settings['tier_worth_engaging_conversion'] ? Number(settings['tier_worth_engaging_conversion']) / 100 : defaultCfg.worthEngagingConversion,
+    };
+
     const config = buildTargetingScoringConfig({
       target_priority_weights: weights,
       recommended_actions: recommendedActions,
@@ -110,6 +135,7 @@ export async function GET(
       exclusion_description: settings.icp_exclusion_description ?? '',
       include_new_companies: settings.icp_include_new_companies !== 'false',
       icp_config: icpConfig,
+      tierConfig: hasSavedTierConfig ? tierConfig : null,
     });
 
     const requestedOffset = Math.max(0, Number(request.nextUrl.searchParams.get('offset') ?? 0) || 0);
