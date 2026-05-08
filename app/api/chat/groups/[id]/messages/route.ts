@@ -24,7 +24,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const [messages] = await Promise.all([
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const bypassSecret = process.env.DEMO_BYPASS_SECRET;
+  const bypassCookie = request.cookies.get('demo_bypass')?.value;
+  const skipReadMark = isDemoMode && !!bypassSecret && bypassCookie !== bypassSecret;
+
+  const fetches: Promise<unknown>[] = [
     db.execute({
       sql: `
         SELECT
@@ -43,11 +48,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       `,
       args: [groupId],
     }),
-    db.execute({
+  ];
+  if (!skipReadMark) {
+    fetches.push(db.execute({
       sql: `UPDATE group_conversation_members SET last_read_at = datetime('now') WHERE group_id = ? AND user_id = ?`,
       args: [groupId, user.id],
-    }),
-  ]);
+    }));
+  }
+  const [messages] = await Promise.all(fetches) as [Awaited<ReturnType<typeof db.execute>>, ...unknown[]];
 
   return NextResponse.json(messages.rows.map(r => {
     const displayName = r.sender_display_name ? String(r.sender_display_name) : String(r.sender_email).split('@')[0];
