@@ -324,7 +324,7 @@ function ScoreCard({
           {components.map((c) => {
             const compColor = c.value != null ? cesScoreColor(c.value) : '#9ca3af';
             return (
-              <div key={c.label} className="flex items-center justify-between gap-2 text-xs">
+              <div key={c.label} className="grid text-xs" style={{ gridTemplateColumns: 'minmax(0,1fr) 6rem' }}>
                 <span className="text-gray-500 min-w-0 truncate">{c.label}</span>
                 <span className="flex items-center gap-1.5 flex-shrink-0 font-semibold tabular-nums" style={{ color: compColor }}>
                   {c.value ?? '—'}
@@ -633,7 +633,7 @@ export default function ProgramIntelligencePage() {
                   const avgAudience = avgNonNull(activeConferences.map((c) => c.audience_messaging_score));
                   const avgCostEff = avgNonNull(activeConferences.map((c) => c.cost_efficiency_score));
                   return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
                       <ScoreCard
                         title="Conference Effectiveness Score"
                         score={avgCES}
