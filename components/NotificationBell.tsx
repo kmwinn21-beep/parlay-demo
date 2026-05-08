@@ -126,7 +126,10 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+
   const markRead = useCallback(async (id: number) => {
+    if (isDemo) return;
     try {
       await fetch('/api/notifications', {
         method: 'PATCH',
@@ -136,9 +139,10 @@ export function NotificationBell() {
       setNotifications(prev => prev.filter(n => n.id !== id));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch { /* non-fatal */ }
-  }, []);
+  }, [isDemo]);
 
   const markAllRead = useCallback(async () => {
+    if (isDemo) return;
     try {
       await fetch('/api/notifications', {
         method: 'PATCH',
@@ -148,7 +152,7 @@ export function NotificationBell() {
       setNotifications([]);
       setUnreadCount(0);
     } catch { /* non-fatal */ }
-  }, []);
+  }, [isDemo]);
 
 
   return (

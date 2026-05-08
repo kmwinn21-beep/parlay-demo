@@ -14,7 +14,13 @@ export async function GET(request: NextRequest) {
 
   await dbReady;
 
-  const [messages] = await Promise.all([
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const bypassSecret = process.env.DEMO_BYPASS_SECRET;
+  const bypassCookie = request.cookies.get('demo_bypass')?.value;
+  const hasBypass = !!bypassSecret && bypassCookie === bypassSecret;
+  const skipReadMark = isDemoMode && !hasBypass;
+
+  const fetches: Promise<unknown>[] = [
     db.execute({
       sql: `SELECT id, sender_id, receiver_id, content, created_at, read_at
             FROM direct_messages
@@ -23,13 +29,15 @@ export async function GET(request: NextRequest) {
             LIMIT 200`,
       args: [user.id, otherId, otherId, user.id],
     }),
-    // Mark messages from other user as read
-    db.execute({
+  ];
+  if (!skipReadMark) {
+    fetches.push(db.execute({
       sql: `UPDATE direct_messages SET read_at = datetime('now')
             WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL`,
       args: [otherId, user.id],
-    }),
-  ]);
+    }));
+  }
+  const [messages] = await Promise.all(fetches) as [Awaited<ReturnType<typeof db.execute>>, ...unknown[]];
 
   return NextResponse.json(messages.rows.map(r => ({
     id: Number(r.id),

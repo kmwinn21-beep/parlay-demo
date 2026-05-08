@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 
 interface QuickNote {
@@ -113,6 +114,7 @@ function SearchableSelect<T extends { id: number }>({
 
 // ── Add Note Modal ────────────────────────────────────────────────────────────
 function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (content: string) => Promise<void> }) {
+  const { user } = useUser();
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -138,7 +140,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
         <p className="text-xs text-gray-400 mt-1 mb-4">⌘+Enter to save</p>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
-          <button type="button" onClick={handleSave} disabled={!text.trim() || saving} className="btn-primary text-sm">
+          <button type="button" onClick={handleSave} disabled={!text.trim() || saving || !!user?.demoVisitor} className="btn-primary text-sm">
             {saving ? 'Saving…' : 'Save Note'}
           </button>
         </div>
@@ -149,6 +151,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
 
 // ── Assign Note Modal ─────────────────────────────────────────────────────────
 function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClose: () => void; onAssigned: (id: number) => void }) {
+  const { user } = useUser();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [allAttendees, setAllAttendees] = useState<Attendee[]>([]);
@@ -329,7 +332,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
         </div>
         <div className="flex justify-end gap-2 px-6 pb-5">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
-          <button type="button" onClick={handleSave} disabled={!canSave || saving || loading} className="btn-primary text-sm">
+          <button type="button" onClick={handleSave} disabled={!canSave || saving || loading || !!user?.demoVisitor} className="btn-primary text-sm">
             {saving ? 'Assigning…' : 'Assign Note'}
           </button>
         </div>
@@ -785,6 +788,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
 
 // Exported for use in FloatingNav
 export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
+  const { user } = useUser();
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -818,7 +822,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
         <div className="flex justify-end gap-2 mt-3">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
-          <button type="button" onClick={handleSave} disabled={!text.trim() || saving} className="btn-primary text-sm">
+          <button type="button" onClick={handleSave} disabled={!text.trim() || saving || !!user?.demoVisitor} className="btn-primary text-sm">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>

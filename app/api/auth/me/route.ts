@@ -30,7 +30,12 @@ export async function GET(request: NextRequest) {
     try { stored = capsRow.rows[0]?.value ? JSON.parse(String(capsRow.rows[0].value)) : {}; } catch { /* ignore */ }
     const capabilities = resolveCapabilities(user.role, stored);
 
-    return NextResponse.json({ user: { ...user, configId, displayName, repName, createdAt, capabilities } });
+    const bypassSecret = process.env.DEMO_BYPASS_SECRET;
+    const bypassCookie = request.cookies.get('demo_bypass')?.value;
+    const hasBypass = !!bypassSecret && bypassCookie === bypassSecret;
+    const demoVisitor = process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && !hasBypass;
+
+    return NextResponse.json({ user: { ...user, configId, displayName, repName, createdAt, capabilities, demoVisitor } });
   } catch {
     const capabilities = DEFAULT_ROLE_CAPABILITIES[user.role] ?? DEFAULT_ROLE_CAPABILITIES['user'];
     return NextResponse.json({ user: { ...user, capabilities } });

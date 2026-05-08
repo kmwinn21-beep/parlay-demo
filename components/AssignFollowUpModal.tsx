@@ -536,7 +536,7 @@ export function AssignFollowUpModal({
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !!user?.demoVisitor}
               className="btn-primary flex-1"
             >
               {isSubmitting ? 'Assigning…' : 'Assign Follow Up'}
