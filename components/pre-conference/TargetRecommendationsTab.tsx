@@ -278,7 +278,7 @@ function KpiCard({ label, value, pill }: { label: string; value: number | string
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="text-2xl font-bold text-brand-primary leading-tight">{value ?? '—'}</div>
         {pill && (
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap flex-shrink-0 mt-0.5 ${pill.className}`}>
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap flex-shrink-0 mt-0.5 ${pill.className}`}>
             {pill.text}
           </span>
         )}
@@ -716,13 +716,13 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard label="Must Target" value={summary.mustTarget}
-          pill={avgCostPerUnit > 0 && pipelineSums.mustTarget > 0 ? { text: `Pipeline: ${formatPipelineCompact(pipelineSums.mustTarget)}`, className: 'bg-red-50 text-red-600 border-red-200' } : undefined}
+          pill={avgCostPerUnit > 0 && pipelineSums.mustTarget > 0 ? { text: `Pipeline Opp: ${formatPipelineCompact(pipelineSums.mustTarget)}`, className: 'bg-red-50 text-red-600 border-red-200' } : undefined}
         />
         <KpiCard label="High Priority" value={summary.highPriority}
-          pill={avgCostPerUnit > 0 && pipelineSums.highPriority > 0 ? { text: `Pipeline: ${formatPipelineCompact(pipelineSums.highPriority)}`, className: 'bg-brand-primary/10 text-brand-primary border-brand-primary/30' } : undefined}
+          pill={avgCostPerUnit > 0 && pipelineSums.highPriority > 0 ? { text: `Pipeline Opp: ${formatPipelineCompact(pipelineSums.highPriority)}`, className: 'bg-brand-primary/10 text-brand-primary border-brand-primary/30' } : undefined}
         />
         <KpiCard label="Worth Engaging" value={summary.worthEngaging}
-          pill={avgCostPerUnit > 0 && pipelineSums.worthEngaging > 0 ? { text: `Pipeline: ${formatPipelineCompact(pipelineSums.worthEngaging)}`, className: 'bg-brand-highlight/10 text-brand-highlight border-brand-highlight/30' } : undefined}
+          pill={avgCostPerUnit > 0 && pipelineSums.worthEngaging > 0 ? { text: `Pipeline Opp: ${formatPipelineCompact(pipelineSums.worthEngaging)}`, className: 'bg-brand-highlight/10 text-brand-highlight border-brand-highlight/30' } : undefined}
         />
         <KpiCard label="Needs Title Review" value={summary.needsTitleReview} />
         <KpiCard label="Avg Target Priority" value={summary.avgTargetPriority} />
