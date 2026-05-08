@@ -159,6 +159,18 @@ function computeScores(r: RawRow, ed: EffDefs) {
   // ── Cost Efficiency Score ─────────────────────────────────────────────────
   const cost_efficiency_score = dim7;
 
+  let cpcScore: number | null = null;
+  let cpmScore: number | null = null;
+  let p1kScore: number | null = null;
+  if (r.total_spend > 0 && r.companies_engaged > 0) {
+    const costPerCompany = r.total_spend / r.companies_engaged;
+    const costPerMeeting = r.meetings_held > 0 ? r.total_spend / r.meetings_held : null;
+    const pipelinePer1k = r.total_spend > 0 ? (r.pipeline_influenced / r.total_spend) * 1000 : null;
+    cpcScore = scoreLowerIsBetter(costPerCompany, 350, 650, 1000, 1600);
+    cpmScore = costPerMeeting != null ? scoreLowerIsBetter(costPerMeeting, 400, 700, 1100, 1800) : null;
+    p1kScore = pipelinePer1k != null ? scoreHigherIsBetter(pipelinePer1k, 10000, 6000, 3500, 1500) : null;
+  }
+
   // ── Audience Signal (ICP quality only — partial) ──────────────────────────
   const audience_messaging_score = dim1 != null ? Math.round(dim1) : null;
 
@@ -174,9 +186,25 @@ function computeScores(r: RawRow, ed: EffDefs) {
       dim7_cost_efficiency: dim7,
     },
     sales_execution_score: salesWeighted.score != null ? Math.round(salesWeighted.score) : null,
+    sales_execution_components: {
+      meeting_execution: dim2 != null ? Math.round(dim2) : null,
+      followup_execution: dim5 != null ? Math.round(dim5) : null,
+      pipeline_influence: Math.round(dim3),
+      target_account: targetRate != null ? Math.round(targetRate) : null,
+    },
     audience_messaging_score,
+    audience_components: {
+      icp_engagement: icpRate != null ? Math.round(icpRate) : null,
+      target_account_rate: targetRate != null ? Math.round(targetRate) : null,
+    },
     cost_efficiency_score,
+    cost_efficiency_components: {
+      pipeline_per_1k: p1kScore,
+      cost_per_company: cpcScore,
+      cost_per_meeting: cpmScore,
+    },
     pipeline_influenced: r.pipeline_influenced,
+    required_pipeline: r.req_pipeline,
     total_spend: r.total_spend > 0 ? r.total_spend : null,
   };
 }

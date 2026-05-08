@@ -31,6 +31,24 @@ interface CESComponents {
   dim7_cost_efficiency: number | null;
 }
 
+interface SalesExecComponents {
+  meeting_execution: number | null;
+  followup_execution: number | null;
+  pipeline_influence: number | null;
+  target_account: number | null;
+}
+
+interface AudienceComponents {
+  icp_engagement: number | null;
+  target_account_rate: number | null;
+}
+
+interface CostEffComponents {
+  pipeline_per_1k: number | null;
+  cost_per_company: number | null;
+  cost_per_meeting: number | null;
+}
+
 interface ConferenceSummary {
   conference_id: number;
   conference_name: string;
@@ -39,9 +57,13 @@ interface ConferenceSummary {
   ces_score: number | null;
   ces_components: CESComponents;
   sales_execution_score: number | null;
+  sales_execution_components: SalesExecComponents;
   audience_messaging_score: number | null;
+  audience_components: AudienceComponents;
   cost_efficiency_score: number | null;
+  cost_efficiency_components: CostEffComponents;
   pipeline_influenced: number;
+  required_pipeline: number | null;
   total_spend: number | null;
   total_activities: number;
 }
@@ -134,6 +156,11 @@ function cesTierLabel(score: number): string {
   if (score >= 60) return 'Acceptable';
   if (score >= 50) return 'Weak';
   return 'Inefficient';
+}
+
+function avgNonNull(vals: (number | null)[]): number | null {
+  const valid = vals.filter((v): v is number => v != null);
+  return valid.length ? Math.round(valid.reduce((s, v) => s + v, 0) / valid.length) : null;
 }
 
 function cesScoreColor(score: number): string {
@@ -229,6 +256,70 @@ function CESTooltip({ active, payload, label }: {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── Collapsible score card ────────────────────────────────────────────────────
+
+function ScoreCard({
+  title,
+  score,
+  components,
+}: {
+  title: string;
+  score: number | null;
+  components: { label: string; value: number | null }[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const color = score != null ? cesScoreColor(score) : '#9ca3af';
+  const tier = score != null ? cesTierLabel(score) : '—';
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden transition-all"
+      style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
+    >
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full text-left p-4 flex items-start justify-between gap-2"
+      >
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">{title}</p>
+          <div className="flex items-end gap-1">
+            <span className="text-4xl font-bold leading-tight" style={{ color }}>
+              {score ?? '—'}
+            </span>
+            {score != null && (
+              <span className="text-sm font-normal text-gray-400 mb-0.5">/100</span>
+            )}
+          </div>
+          <p className="text-xs font-semibold mt-0.5" style={{ color }}>{tier}</p>
+        </div>
+        <svg
+          className="w-4 h-4 flex-shrink-0 mt-1 transition-transform text-gray-400"
+          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-0 space-y-1.5 border-t" style={{ borderColor: color + '30' }}>
+          {components.map((c) => (
+            <div key={c.label} className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">{c.label}</span>
+              <span
+                className="font-semibold tabular-nums"
+                style={{ color: c.value != null ? cesScoreColor(c.value) : '#9ca3af' }}
+              >
+                {c.value ?? '—'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -517,80 +608,135 @@ export default function ProgramIntelligencePage() {
             {/* Data view */}
             {!loading && !error && activeConferences.length > 0 && (
               <>
-                {/* Summary cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="card py-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                      Conferences Tracked
-                    </p>
-                    <p className="text-3xl font-bold text-brand-primary">{activeConferences.length}</p>
-                    {conferences.length > activeConferences.length && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {conferences.length - activeConferences.length} without activity data
-                      </p>
-                    )}
-                  </div>
+                {/* Score breakdown cards row */}
+                {(() => {
+                  const avgSales = avgNonNull(activeConferences.map((c) => c.sales_execution_score));
+                  const avgAudience = avgNonNull(activeConferences.map((c) => c.audience_messaging_score));
+                  const avgCostEff = avgNonNull(activeConferences.map((c) => c.cost_efficiency_score));
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <ScoreCard
+                        title="Conference Effectiveness Score"
+                        score={avgCES}
+                        components={[
+                          { label: 'ICP & Target Quality (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim1_icp_target)) },
+                          { label: 'Meeting Execution (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim2_meeting_exec)) },
+                          { label: 'Pipeline Influence (30%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim3_pipeline_index)) },
+                          { label: 'Engagement Breadth (5%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim4_breadth)) },
+                          { label: 'Cost Efficiency (10%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim7_cost_efficiency)) },
+                          { label: 'Follow-up Execution (10%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim5_followup)) },
+                        ]}
+                      />
+                      <ScoreCard
+                        title="Sales Effectiveness Score"
+                        score={avgSales}
+                        components={[
+                          { label: 'Meeting Execution', value: avgNonNull(activeConferences.map((c) => c.sales_execution_components.meeting_execution)) },
+                          { label: 'Follow-up Execution', value: avgNonNull(activeConferences.map((c) => c.sales_execution_components.followup_execution)) },
+                          { label: 'Pipeline Influence', value: avgNonNull(activeConferences.map((c) => c.sales_execution_components.pipeline_influence)) },
+                          { label: 'Target Account', value: avgNonNull(activeConferences.map((c) => c.sales_execution_components.target_account)) },
+                        ]}
+                      />
+                      <ScoreCard
+                        title="Audience & Messaging Score"
+                        score={avgAudience}
+                        components={[
+                          { label: 'ICP Engagement Rate', value: avgNonNull(activeConferences.map((c) => c.audience_components.icp_engagement)) },
+                          { label: 'Target Account Rate', value: avgNonNull(activeConferences.map((c) => c.audience_components.target_account_rate)) },
+                        ]}
+                      />
+                      <ScoreCard
+                        title="Cost Efficiency Score"
+                        score={avgCostEff}
+                        components={[
+                          { label: 'Pipeline per $1K Spend', value: avgNonNull(activeConferences.map((c) => c.cost_efficiency_components.pipeline_per_1k)) },
+                          { label: 'Cost per Company', value: avgNonNull(activeConferences.map((c) => c.cost_efficiency_components.cost_per_company)) },
+                          { label: 'Cost per Meeting', value: avgNonNull(activeConferences.map((c) => c.cost_efficiency_components.cost_per_meeting)) },
+                        ]}
+                      />
+                    </div>
+                  );
+                })()}
 
-                  <div className="card py-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                      Average CES
-                    </p>
-                    {avgCES != null ? (
-                      <>
-                        <p
-                          className="text-3xl font-bold tabular-nums"
-                          style={{ color: cesScoreColor(avgCES) }}
-                        >
-                          {avgCES}
-                          <span className="text-base font-normal text-gray-400 ml-1">/100</span>
+                {/* Summary cards — Conferences Tracked | Pipeline (2-col) | Top Performer */}
+                {(() => {
+                  const totalRequired = activeConferences.reduce((s, c) => s + (c.required_pipeline ?? 0), 0);
+                  const pipelinePct = totalRequired > 0 ? Math.min((totalPipeline / totalRequired) * 100, 100) : null;
+                  return (
+                    <div className="grid grid-cols-4 gap-4">
+                      {/* Conferences Tracked */}
+                      <div className="card py-4 col-span-1">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                          Conferences Tracked
                         </p>
-                        <p
-                          className="text-xs font-medium mt-0.5"
-                          style={{ color: cesScoreColor(avgCES) }}
-                        >
-                          {cesTierLabel(avgCES)}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-2xl font-bold text-gray-300">—</p>
-                    )}
-                  </div>
+                        <p className="text-3xl font-bold text-brand-primary">{activeConferences.length}</p>
+                        {conferences.length > activeConferences.length && (
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {conferences.length - activeConferences.length} without activity data
+                          </p>
+                        )}
+                      </div>
 
-                  <div className="card py-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                      Total Pipeline Influenced
-                    </p>
-                    <p className="text-3xl font-bold text-brand-primary">
-                      {totalPipeline > 0 ? formatCurrency(totalPipeline) : '—'}
-                    </p>
-                    {activeConferences.length > 1 && totalPipeline > 0 && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {formatCurrency(totalPipeline / activeConferences.length)} avg per event
-                      </p>
-                    )}
-                  </div>
+                      {/* Total Pipeline Influenced — spans 2 cols */}
+                      <div className="card py-4 col-span-2">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                          Total Pipeline Influenced
+                        </p>
+                        <p className="text-3xl font-bold text-brand-primary">
+                          {totalPipeline > 0 ? formatCurrency(totalPipeline) : '—'}
+                        </p>
+                        {activeConferences.length > 1 && totalPipeline > 0 && (
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {formatCurrency(totalPipeline / activeConferences.length)} avg per event
+                          </p>
+                        )}
+                        {totalRequired > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                              <span>Required Pipeline</span>
+                              <span className="tabular-nums font-medium">{formatCurrency(totalRequired)}</span>
+                            </div>
+                            <div className="w-full h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${pipelinePct ?? 0}%`,
+                                  backgroundColor: pipelinePct != null && pipelinePct >= 100 ? '#059669' : '#d97706',
+                                }}
+                              />
+                            </div>
+                            <p className="text-xs mt-1" style={{ color: pipelinePct != null && pipelinePct >= 100 ? '#059669' : '#d97706' }}>
+                              {totalPipeline > 0 ? formatCurrency(totalPipeline) : '$0'}{' '}
+                              <span className="font-semibold">({Math.round(pipelinePct ?? 0)}%)</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
 
-                  <div className="card py-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                      Top Performer
-                    </p>
-                    {topPerformer ? (
-                      <>
-                        <p className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
-                          {topPerformer.conference_name}
+                      {/* Top Performer */}
+                      <div className="card py-4 col-span-1">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                          Top Performer
                         </p>
-                        <p
-                          className="text-xs font-medium mt-1"
-                          style={{ color: cesScoreColor(topPerformer.ces_score ?? 0) }}
-                        >
-                          {topPerformer.ces_score}/100 · {cesTierLabel(topPerformer.ces_score ?? 0)}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-2xl font-bold text-gray-300">—</p>
-                    )}
-                  </div>
-                </div>
+                        {topPerformer ? (
+                          <>
+                            <p className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+                              {topPerformer.conference_name}
+                            </p>
+                            <p
+                              className="text-xs font-medium mt-1"
+                              style={{ color: cesScoreColor(topPerformer.ces_score ?? 0) }}
+                            >
+                              {topPerformer.ces_score}/100 · {cesTierLabel(topPerformer.ces_score ?? 0)}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-2xl font-bold text-gray-300">—</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Chart */}
                 <div className="card">
