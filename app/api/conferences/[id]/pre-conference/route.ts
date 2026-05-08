@@ -91,7 +91,7 @@ export async function GET(
       : Promise.resolve({ rows: [] }),
     db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_annual_deal_size'`, args: [] }).catch(() => ({ rows: [] })),
     db.execute({
-      sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_v1','tier_must_target_conversion','tier_high_priority_v1','tier_high_priority_v2','tier_high_priority_conversion','tier_worth_engaging_v1','tier_worth_engaging_v2','tier_worth_engaging_conversion')`,
+      sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_op','tier_must_target_v1','tier_must_target_v2','tier_must_target_conversion','tier_high_priority_op','tier_high_priority_v1','tier_high_priority_v2','tier_high_priority_conversion','tier_worth_engaging_op','tier_worth_engaging_v1','tier_worth_engaging_v2','tier_worth_engaging_conversion')`,
       args: [],
     }).catch(() => ({ rows: [] })),
   ]);
@@ -707,9 +707,13 @@ export async function GET(
   );
   const defaultCfg = buildDefaultTierConfig(avgAnnualDealSize, avgCostPerUnit || 100);
   const tierConfig = {
+    mustTargetOp:            (tierSMap['tier_must_target_op']  || defaultCfg.mustTargetOp) as typeof defaultCfg.mustTargetOp,
     mustTargetMin:           tierSMap['tier_must_target_v1']           ? Number(tierSMap['tier_must_target_v1'])           : defaultCfg.mustTargetMin,
+    mustTargetMax:           tierSMap['tier_must_target_v2']           ? Number(tierSMap['tier_must_target_v2'])           : defaultCfg.mustTargetMax,
+    highPriorityOp:          (tierSMap['tier_high_priority_op'] || defaultCfg.highPriorityOp) as typeof defaultCfg.highPriorityOp,
     highPriorityMin:         tierSMap['tier_high_priority_v1']         ? Number(tierSMap['tier_high_priority_v1'])         : defaultCfg.highPriorityMin,
     highPriorityMax:         tierSMap['tier_high_priority_v2']         ? Number(tierSMap['tier_high_priority_v2'])         : defaultCfg.highPriorityMax,
+    worthEngagingOp:         (tierSMap['tier_worth_engaging_op'] || defaultCfg.worthEngagingOp) as typeof defaultCfg.worthEngagingOp,
     worthEngagingMin:        tierSMap['tier_worth_engaging_v1']        ? Number(tierSMap['tier_worth_engaging_v1'])        : defaultCfg.worthEngagingMin,
     worthEngagingMax:        tierSMap['tier_worth_engaging_v2']        ? Number(tierSMap['tier_worth_engaging_v2'])        : defaultCfg.worthEngagingMax,
     mustTargetConversion:    tierSMap['tier_must_target_conversion']    ? Number(tierSMap['tier_must_target_conversion'])    / 100 : defaultCfg.mustTargetConversion,

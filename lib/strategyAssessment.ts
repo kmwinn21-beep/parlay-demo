@@ -1,7 +1,13 @@
+export type TierOperator = 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'between' | '';
+
 export interface TierThresholdConfig {
+  mustTargetOp: TierOperator;
   mustTargetMin: number;
+  mustTargetMax: number;
+  highPriorityOp: TierOperator;
   highPriorityMin: number;
   highPriorityMax: number;
+  worthEngagingOp: TierOperator;
   worthEngagingMin: number;
   worthEngagingMax: number;
   mustTargetConversion: number;
@@ -14,15 +20,31 @@ export function buildDefaultTierConfig(avgAnnualDealSize = 25000, avgCostPerUnit
   const highPriorityMin = Math.round(avgUnitCount * 0.8);
   const highPriorityMax = Math.round(avgUnitCount * 2);
   return {
+    mustTargetOp: 'gte',
     mustTargetMin: highPriorityMax + 1,
+    mustTargetMax: 0,
+    highPriorityOp: 'between',
     highPriorityMin,
     highPriorityMax,
+    worthEngagingOp: 'between',
     worthEngagingMin: Math.round(highPriorityMin * 0.5),
     worthEngagingMax: highPriorityMin - 1,
     mustTargetConversion: 0.25,
     highPriorityConversion: 0.15,
     worthEngagingConversion: 0.075,
   };
+}
+
+function matchesOp(w: number, op: TierOperator, v1: number, v2: number): boolean {
+  switch (op) {
+    case 'eq':      return w === v1;
+    case 'gt':      return w > v1;
+    case 'lt':      return w < v1;
+    case 'gte':     return w >= v1;
+    case 'lte':     return w <= v1;
+    case 'between': return w >= v1 && w <= v2;
+    default:        return false;
+  }
 }
 
 export interface StrategyAssessmentInput {
@@ -114,7 +136,7 @@ function componentTier(score: number): string {
   return 'Weak';
 }
 
-// Classify ICP companies into tier proxies based on configured WSE thresholds
+// Classify ICP companies into tier proxies based on configured WSE thresholds + operators
 function classifyTiers(
   icpCompanies: { wse: number | null }[],
   cfg: TierThresholdConfig,
@@ -122,11 +144,14 @@ function classifyTiers(
   let mustProxy = 0;
   let highProxy = 0;
   let worthProxy = 0;
+  const mustOp  = cfg.mustTargetOp  || 'gte';
+  const highOp  = cfg.highPriorityOp  || 'between';
+  const worthOp = cfg.worthEngagingOp || 'between';
   for (const c of icpCompanies) {
     const w = c.wse ?? 0;
-    if (w >= cfg.mustTargetMin) mustProxy++;
-    else if (w >= cfg.highPriorityMin && w <= cfg.highPriorityMax) highProxy++;
-    else if (w >= cfg.worthEngagingMin && w <= cfg.worthEngagingMax) worthProxy++;
+    if (mustOp  && matchesOp(w, mustOp,  cfg.mustTargetMin,    cfg.mustTargetMax))    mustProxy++;
+    else if (highOp  && matchesOp(w, highOp,  cfg.highPriorityMin,  cfg.highPriorityMax))  highProxy++;
+    else if (worthOp && matchesOp(w, worthOp, cfg.worthEngagingMin, cfg.worthEngagingMax)) worthProxy++;
     // else: falls through to 2.5% fallback probability in pipeline calc
   }
   return { mustProxy, highProxy, worthProxy };
