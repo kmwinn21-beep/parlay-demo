@@ -705,6 +705,7 @@ export async function initDb(): Promise<void> {
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (conference_id, provider)
     )`,
+    `ALTER TABLE config_options ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
