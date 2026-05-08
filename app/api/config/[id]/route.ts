@@ -27,7 +27,7 @@ export async function PUT(
 
     // Fetch old value and category before updating so we can cascade rename
     const existing = await db.execute({
-      sql: 'SELECT category, value FROM config_options WHERE id = ?',
+      sql: 'SELECT category, value, is_system FROM config_options WHERE id = ?',
       args: [params.id],
     });
 
@@ -37,6 +37,12 @@ export async function PUT(
 
     const oldValue = String(existing.rows[0].value);
     const category = String(existing.rows[0].category);
+    const isSystem = Number(existing.rows[0].is_system) === 1;
+
+    // Prevent renaming system-seeded options (value is locked; other fields like color are still editable)
+    if (isSystem && value !== oldValue) {
+      return NextResponse.json({ error: 'System options cannot be renamed.' }, { status: 403 });
+    }
 
     const scopeValue = scope === 'user' ? 'user' : 'global';
     const autoFollowUpVal = auto_follow_up === undefined ? 1 : (auto_follow_up ? 1 : 0);

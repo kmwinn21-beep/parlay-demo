@@ -358,7 +358,10 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                             </span>
                           : <button type="button" onClick={() => handleMakePrimary(opt.id)} className="text-gray-400 hover:text-amber-600 text-xs font-medium px-2 py-1 transition-colors">Make Primary</button>
                       )}
-                      <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
+                      {opt.is_system
+                        ? <span className="text-xs text-gray-400 px-2 py-1 italic">System</span>
+                        : <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
+                      }
                       {!opt.is_system && (
                         <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
                       )}
@@ -367,13 +370,20 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
-                          <input
-                            value={isEditing ? editValue : opt.value}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="input-field w-full text-sm"
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
-                            autoFocus={isEditing}
-                          />
+                          {opt.is_system ? (
+                            <div className="input-field w-full text-sm bg-gray-50 text-gray-500 flex items-center justify-between">
+                              <span>{opt.value}</span>
+                              <span className="text-[10px] text-gray-400 italic ml-2">locked</span>
+                            </div>
+                          ) : (
+                            <input
+                              value={isEditing ? editValue : opt.value}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="input-field w-full text-sm"
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
+                              autoFocus={isEditing}
+                            />
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Visible In Forms</label>
@@ -454,7 +464,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                          {!opt.is_system && <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>}
                           <button
                             type="button"
                             onClick={() => {
