@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 
 interface QuickNote {
   id: number;
@@ -13,7 +14,7 @@ interface QuickNote {
 }
 
 interface Conference { id: number; name: string; }
-interface Company { id: number; name: string; }
+interface Company { id: number; name: string; company_type?: string | null; }
 interface Attendee { id: number; first_name: string; last_name: string; company_id?: number | null; company_name?: string | null; }
 
 interface BadgeScanCard {
@@ -297,7 +298,17 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Company</label>
-                <SearchableSelect options={filteredCompanies} value={selCompany} onChange={handleCompanyChange} getLabel={c => c.name} placeholder="Select a company…" />
+                <GroupedCompanyDropdown
+                  companies={filteredCompanies}
+                  value={selCompany?.id ?? null}
+                  onChange={(id, _name) => {
+                    const comp = filteredCompanies.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
+                    handleCompanyChange(comp);
+                  }}
+                  onClear={() => handleCompanyChange(null)}
+                  placeholder="Select a company…"
+                  inputClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Attendee</label>

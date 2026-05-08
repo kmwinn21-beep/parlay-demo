@@ -7,6 +7,7 @@ import { type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
+import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 
 interface ConferenceOption {
   id: number;
@@ -26,6 +27,7 @@ interface AttendeeOption {
 interface CompanyOption {
   id: number;
   name: string;
+  company_type?: string | null;
 }
 
 interface NewMeetingModalProps {
@@ -69,11 +71,9 @@ export function NewMeetingModal({
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [additionalAttendees, setAdditionalAttendees] = useState('');
-  const [companySearch, setCompanySearch] = useState('');
-  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
 
-  const companyDropdownRef = useRef<HTMLDivElement>(null);
   // Used to skip the "reset attendee on company change" effect when we set
   // the company programmatically from the prefill logic.
   const isPrefilling = useRef(false);
@@ -105,6 +105,12 @@ export function NewMeetingModal({
     if (defaultConferenceId) {
       setSelectedConferenceId(String(defaultConferenceId));
     }
+    fetch('/api/companies?minimal=1')
+      .then(r => r.json())
+      .then((data: Array<{ id: number; company_type?: string | null }>) => {
+        setCompanyTypeLookup(new Map(data.map(c => [Number(c.id), c.company_type ?? null])));
+      })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -113,13 +119,11 @@ export function NewMeetingModal({
     if (!selectedConferenceId) {
       setAttendees([]);
       setSelectedCompanyId('');
-      setCompanySearch('');
       setSelectedAttendeeId('');
       return;
     }
     setLoadingConference(true);
     setSelectedCompanyId('');
-    setCompanySearch('');
     setSelectedAttendeeId('');
     fetch(`/api/conferences/${selectedConferenceId}`)
       .then(r => r.json())
@@ -159,36 +163,21 @@ export function NewMeetingModal({
     setSelectedAttendeeId('');
   }, [selectedCompanyId]);
 
-  // Close company dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target as Node)) {
-        setShowCompanyDropdown(false);
-      }
-    }
-    if (showCompanyDropdown) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showCompanyDropdown]);
-
-  // Derive companies from attendees
+  // Derive companies from attendees, enriched with company_type from lookup
   const companies = useMemo<CompanyOption[]>(() => {
-    const map = new Map<number, string>();
+    const map = new Map<number, { name: string; company_type: string | null }>();
     for (const a of attendees) {
       if (a.company_id && a.company_name) {
-        map.set(a.company_id, a.company_name);
+        map.set(a.company_id, {
+          name: a.company_name,
+          company_type: companyTypeLookup.get(a.company_id) ?? null,
+        });
       }
     }
     return Array.from(map.entries())
-      .map(([id, name]) => ({ id, name }))
+      .map(([id, { name, company_type }]) => ({ id, name, company_type }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [attendees]);
-
-  // Filter companies by search
-  const filteredCompanies = useMemo(() => {
-    if (!companySearch.trim()) return companies;
-    const q = companySearch.toLowerCase();
-    return companies.filter(c => c.name.toLowerCase().includes(q));
-  }, [companies, companySearch]);
+  }, [attendees, companyTypeLookup]);
 
   // Contacts for selected company at selected conference
   const contacts = useMemo(() => {
@@ -198,8 +187,6 @@ export function NewMeetingModal({
       .filter(a => a.company_id === cid)
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
   }, [attendees, selectedCompanyId]);
-
-  const selectedCompanyName = companies.find(c => c.id === Number(selectedCompanyId))?.name || '';
 
   function resetForm() {
     setSelectedRepIds([]);
@@ -211,8 +198,6 @@ export function NewMeetingModal({
     setMeetingType('');
     setLocation('');
     setAdditionalAttendees('');
-    setCompanySearch('');
-    setShowCompanyDropdown(false);
     isPrefilling.current = false;
   }
 
@@ -328,57 +313,18 @@ export function NewMeetingModal({
             </select>
           </div>
 
-          {/* Company (searchable dropdown) */}
+          {/* Company (searchable grouped dropdown) */}
           <div>
             <label className={labelClass}>Company *</label>
-            <div className="relative" ref={companyDropdownRef}>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder={selectedConferenceId ? (loadingConference ? 'Loading companies...' : 'Search companies...') : 'Select a conference first'}
-                value={selectedCompanyId ? selectedCompanyName : companySearch}
-                onChange={e => {
-                  setCompanySearch(e.target.value);
-                  setSelectedCompanyId('');
-                  setShowCompanyDropdown(true);
-                }}
-                onFocus={() => { if (selectedConferenceId && !loadingConference) setShowCompanyDropdown(true); }}
-                disabled={!selectedConferenceId || loadingConference}
-              />
-              {selectedCompanyId && (
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  onClick={() => { setSelectedCompanyId(''); setCompanySearch(''); }}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-              {showCompanyDropdown && !selectedCompanyId && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredCompanies.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-3">No companies found</p>
-                  ) : (
-                    filteredCompanies.map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                        onClick={() => {
-                          setSelectedCompanyId(String(c.id));
-                          setCompanySearch('');
-                          setShowCompanyDropdown(false);
-                        }}
-                      >
-                        {c.name}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+            <GroupedCompanyDropdown
+              companies={companies}
+              value={selectedCompanyId ? Number(selectedCompanyId) : null}
+              onChange={(id, _name) => setSelectedCompanyId(String(id))}
+              onClear={() => setSelectedCompanyId('')}
+              placeholder={!selectedConferenceId ? 'Select a conference first' : loadingConference ? 'Loading companies...' : 'Search companies...'}
+              disabled={!selectedConferenceId || loadingConference}
+              inputClassName={inputClass}
+            />
           </div>
 
           {/* Contact */}

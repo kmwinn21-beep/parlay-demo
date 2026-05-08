@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { getPreset } from '@/lib/colors';
@@ -27,6 +28,7 @@ interface Conference {
 interface Company {
   id: number;
   name: string;
+  company_type?: string | null;
 }
 
 interface Attendee {
@@ -509,13 +511,17 @@ export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
                   Loading companies…
                 </div>
               ) : (
-                <SearchableSelect
-                  options={confCompanies}
-                  value={selectedCompany}
-                  onChange={handleCompanyChange}
-                  getLabel={c => c.name}
+                <GroupedCompanyDropdown
+                  companies={confCompanies}
+                  value={selectedCompany?.id ?? null}
+                  onChange={(id, _name) => {
+                    const comp = confCompanies.find(c => c.id === id) ?? null;
+                    handleCompanyChange(comp);
+                  }}
+                  onClear={() => handleCompanyChange(null)}
                   placeholder={selectedConference ? 'Filter by company…' : 'Select a conference first'}
                   disabled={!selectedConference}
+                  inputClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left bg-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-brand-secondary"
                 />
               )}
             </div>
