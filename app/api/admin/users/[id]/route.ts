@@ -83,74 +83,83 @@ export async function DELETE(
   if (userId === adminUser.id) return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 });
 
   await dbReady;
-  const { reassignToUserId } = await request.json() as { reassignToUserId: number };
+
+  let body: { reassignToUserId?: number } = {};
+  try { body = await request.json(); } catch { /* no body */ }
+  const { reassignToUserId } = body;
   if (!reassignToUserId) return NextResponse.json({ error: 'reassignToUserId is required.' }, { status: 400 });
 
-  // Fetch deleted user's rep name (config_options value) and email
-  const deletedUser = await db.execute({
-    sql: 'SELECT email, display_name, config_id FROM users WHERE id = ?',
-    args: [userId],
-  });
-  if (deletedUser.rows.length === 0) return NextResponse.json({ error: 'User not found.' }, { status: 404 });
-  const du = deletedUser.rows[0];
+  try {
+    // Fetch deleted user's rep name (config_options value) and email
+    const deletedUser = await db.execute({
+      sql: 'SELECT email, display_name, config_id FROM users WHERE id = ?',
+      args: [userId],
+    });
+    if (deletedUser.rows.length === 0) return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    const du = deletedUser.rows[0];
 
-  // Fetch reassign target's rep name and email
-  const targetUser = await db.execute({
-    sql: 'SELECT email, display_name, config_id FROM users WHERE id = ?',
-    args: [reassignToUserId],
-  });
-  if (targetUser.rows.length === 0) return NextResponse.json({ error: 'Reassign target user not found.' }, { status: 404 });
-  const tu = targetUser.rows[0];
+    // Fetch reassign target's rep name and email
+    const targetUser = await db.execute({
+      sql: 'SELECT email, display_name, config_id FROM users WHERE id = ?',
+      args: [reassignToUserId],
+    });
+    if (targetUser.rows.length === 0) return NextResponse.json({ error: 'Reassign target user not found.' }, { status: 404 });
+    const tu = targetUser.rows[0];
 
-  const oldRepName = du.display_name ? String(du.display_name) : String(du.email);
-  const newRepName = tu.display_name ? String(tu.display_name) : String(tu.email);
-  const oldEmail = String(du.email);
-  const newEmail = String(tu.email);
+    const oldRepName = du.display_name ? String(du.display_name) : String(du.email);
+    const newRepName = tu.display_name ? String(tu.display_name) : String(tu.email);
+    const oldEmail = String(du.email);
+    const newEmail = String(tu.email);
 
-  // Also check config_options for the old user's rep name
-  let oldConfigValue: string | null = null;
-  if (du.config_id) {
-    const cfg = await db.execute({ sql: 'SELECT value FROM config_options WHERE id = ?', args: [Number(du.config_id)] });
-    if (cfg.rows.length > 0) oldConfigValue = String(cfg.rows[0].value);
-  }
-  let newConfigValue: string | null = null;
-  if (tu.config_id) {
-    const cfg = await db.execute({ sql: 'SELECT value FROM config_options WHERE id = ?', args: [Number(tu.config_id)] });
-    if (cfg.rows.length > 0) newConfigValue = String(cfg.rows[0].value);
-  }
+    // Also check config_options for the old user's rep name
+    let oldConfigValue: string | null = null;
+    if (du.config_id) {
+      const cfg = await db.execute({ sql: 'SELECT value FROM config_options WHERE id = ?', args: [Number(du.config_id)] });
+      if (cfg.rows.length > 0) oldConfigValue = String(cfg.rows[0].value);
+    }
+    let newConfigValue: string | null = null;
+    if (tu.config_id) {
+      const cfg = await db.execute({ sql: 'SELECT value FROM config_options WHERE id = ?', args: [Number(tu.config_id)] });
+      if (cfg.rows.length > 0) newConfigValue = String(cfg.rows[0].value);
+    }
 
-  // Reassign incomplete follow-ups
-  if (oldConfigValue && newConfigValue) {
+    // Reassign incomplete follow-ups
+    if (oldConfigValue && newConfigValue) {
+      await db.execute({
+        sql: `UPDATE follow_ups SET assigned_rep = ? WHERE assigned_rep = ? AND completed = 0`,
+        args: [newConfigValue, oldConfigValue],
+      });
+    }
+    // Also try by email/display_name fallback
     await db.execute({
       sql: `UPDATE follow_ups SET assigned_rep = ? WHERE assigned_rep = ? AND completed = 0`,
-      args: [newConfigValue, oldConfigValue],
+      args: [newRepName, oldRepName],
     });
-  }
-  // Also try by email/display_name fallback
-  await db.execute({
-    sql: `UPDATE follow_ups SET assigned_rep = ? WHERE assigned_rep = ? AND completed = 0`,
-    args: [newRepName, oldRepName],
-  });
 
-  // Reassign companies
-  await db.execute({
-    sql: `UPDATE companies SET assigned_user = ? WHERE assigned_user = ?`,
-    args: [newEmail, oldEmail],
-  });
-  if (oldConfigValue && newConfigValue) {
+    // Reassign companies
     await db.execute({
       sql: `UPDATE companies SET assigned_user = ? WHERE assigned_user = ?`,
-      args: [newConfigValue, oldConfigValue],
+      args: [newEmail, oldEmail],
     });
+    if (oldConfigValue && newConfigValue) {
+      await db.execute({
+        sql: `UPDATE companies SET assigned_user = ? WHERE assigned_user = ?`,
+        args: [newConfigValue, oldConfigValue],
+      });
+    }
+
+    // Null out config_id on the user before deleting the config_options row to avoid FK issues
+    if (du.config_id) {
+      await db.execute({ sql: 'UPDATE users SET config_id = NULL WHERE id = ?', args: [userId] });
+      await db.execute({ sql: 'DELETE FROM config_options WHERE id = ?', args: [Number(du.config_id)] });
+    }
+
+    // Delete the user (cascades: notifications, sessions, messages, reactions, comments)
+    await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [userId] });
+
+    return NextResponse.json({ message: 'User deleted and records reassigned.' });
+  } catch (err) {
+    console.error('User delete error:', err);
+    return NextResponse.json({ error: 'Failed to delete user. Please try again.' }, { status: 500 });
   }
-
-  // Remove from config_options (user type entry)
-  if (du.config_id) {
-    await db.execute({ sql: 'DELETE FROM config_options WHERE id = ?', args: [Number(du.config_id)] });
-  }
-
-  // Delete the user
-  await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [userId] });
-
-  return NextResponse.json({ message: 'User deleted and records reassigned.' });
 }
