@@ -35,7 +35,7 @@ export function buildDefaultTierConfig(avgAnnualDealSize = 25000, avgCostPerUnit
   };
 }
 
-function matchesOp(w: number, op: TierOperator, v1: number, v2: number): boolean {
+export function matchesOp(w: number, op: TierOperator, v1: number, v2: number): boolean {
   switch (op) {
     case 'eq':      return w === v1;
     case 'gt':      return w > v1;

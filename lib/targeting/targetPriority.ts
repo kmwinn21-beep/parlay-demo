@@ -1,5 +1,6 @@
 import { normalizeTitleKey, type BuyerRoleKey, type TitleMatchConfidence, type TitleMatchMetadata, type TitleMatchType } from '@/lib/titleNormalization';
 import type { IcpConfig } from '@/lib/icpRulesEval';
+import { type TierThresholdConfig, matchesOp } from '@/lib/strategyAssessment';
 
 export type ConfidenceLevel = 'High' | 'Medium' | 'Low';
 export type PriorityValue = 'High' | 'Medium' | 'Low' | 'Ignore';
@@ -39,6 +40,7 @@ export interface TargetingScoringConfig {
   exclusion_description?: string;
   include_new_companies?: boolean;
   icp_config?: IcpConfig;
+  tierConfig?: TierThresholdConfig | null;
 }
 
 export interface TargetingCompanyInput {
@@ -307,6 +309,14 @@ export function scoreAttendeeBuyerFit(input: {
   };
 }
 
+function wseTierScore(wse: number | null | undefined, cfg: TierThresholdConfig): number {
+  if (wse == null) return 0;
+  if (cfg.mustTargetOp  && matchesOp(wse, cfg.mustTargetOp,  cfg.mustTargetMin,    cfg.mustTargetMax))    return 100;
+  if (cfg.highPriorityOp  && matchesOp(wse, cfg.highPriorityOp,  cfg.highPriorityMin,  cfg.highPriorityMax))  return 75;
+  if (cfg.worthEngagingOp && matchesOp(wse, cfg.worthEngagingOp, cfg.worthEngagingMin, cfg.worthEngagingMax)) return 50;
+  return 20;
+}
+
 function scoreIcpFit(company: TargetingCompanyInput, config: TargetingScoringConfig) {
   const matched: string[] = [];
   const failed: string[] = [];
@@ -315,7 +325,13 @@ function scoreIcpFit(company: TargetingCompanyInput, config: TargetingScoringCon
   const unitReq = config.icp_config?.unitTypeReq;
 
   let firmographic = 50;
-  if (unitReq?.operator) {
+  const tc = config.tierConfig;
+  const hasTierConfig = !!(tc?.mustTargetOp || tc?.highPriorityOp || tc?.worthEngagingOp);
+  if (hasTierConfig && tc) {
+    firmographic = wseTierScore(company.wse, tc);
+    const tierLabel = firmographic === 100 ? 'Must Target range' : firmographic === 75 ? 'High Priority range' : firmographic === 50 ? 'Worth Engaging range' : 'below configured tier ranges';
+    (firmographic > 20 ? matched : failed).push(`Unit count falls in ${tierLabel}.`);
+  } else if (unitReq?.operator) {
     const wse = company.wse;
     const v1 = unitReq.value1;
     const v2 = unitReq.value2;
