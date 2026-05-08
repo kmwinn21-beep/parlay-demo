@@ -272,6 +272,25 @@ function CESTooltip({ active, payload, label }: {
   );
 }
 
+// ── Custom chart legend (2-per-row on portrait) ───────────────────────────────
+
+function ChartLegend({ payload, isPortrait }: {
+  payload?: Array<{ value: string; color: string }>;
+  isPortrait: boolean;
+}) {
+  if (!payload?.length) return null;
+  return (
+    <div className={`mt-2 ${isPortrait ? 'grid grid-cols-2 gap-x-3 gap-y-1' : 'flex flex-wrap justify-center gap-x-4 gap-y-1'}`}>
+      {payload.map((entry) => (
+        <span key={entry.value} className="flex items-center gap-1 text-[11px] text-gray-600 min-w-0">
+          <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: entry.color }} />
+          <span className="truncate">{DIM_LABELS[entry.value] ?? entry.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ── Collapsible score card ────────────────────────────────────────────────────
 
 function ScoreCard({
@@ -357,6 +376,15 @@ export default function ProgramIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isPortrait, setIsPortrait] = useState(true);
+
+  useEffect(() => {
+    const mql = window.matchMedia('(orientation: portrait)');
+    setIsPortrait(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsPortrait(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
 
   const { startDate, endDate } = useMemo(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -670,6 +698,7 @@ export default function ProgramIntelligencePage() {
                       <ScoreCard
                         title="Cost Efficiency Score"
                         score={avgCostEff}
+                        showTier
                         components={[
                           { label: 'Pipeline per $1K Spend', value: avgNonNull(activeConferences.map((c) => c.cost_efficiency_components.pipeline_per_1k)) },
                           { label: 'Cost per Company', value: avgNonNull(activeConferences.map((c) => c.cost_efficiency_components.cost_per_company)) },
@@ -686,10 +715,10 @@ export default function ProgramIntelligencePage() {
                   const pipelinePct = totalRequired > 0 ? Math.min((totalPipeline / totalRequired) * 100, 100) : null;
                   const barColor = pipelinePct != null && pipelinePct >= 100 ? '#059669' : '#d97706';
                   return (
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
-                      {/* Combined Top Performer + Conferences Tracked — 1 col */}
-                      <div className="card col-span-1 py-4 flex flex-col gap-0">
+                      {/* Combined Top Performer + Conferences Tracked — 1 col on md+ */}
+                      <div className="card md:col-span-1 py-4 flex flex-col gap-0">
                         <div>
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                             Top Performer
@@ -721,8 +750,8 @@ export default function ProgramIntelligencePage() {
                         </div>
                       </div>
 
-                      {/* Total Pipeline Influenced — spans 3 cols */}
-                      <div className="card py-4 col-span-3">
+                      {/* Total Pipeline Influenced — spans 3 cols on md+ */}
+                      <div className="card py-4 md:col-span-3">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                           Total Pipeline Influenced
                         </p>
@@ -795,7 +824,12 @@ export default function ProgramIntelligencePage() {
                   <ResponsiveContainer width="100%" height={480}>
                     <BarChart
                       data={chartData}
-                      margin={{ top: 10, right: 16, left: 0, bottom: manyConferences ? 70 : 30 }}
+                      margin={{
+                        top: 10, right: 16, left: 0,
+                        bottom: isPortrait
+                          ? (manyConferences ? 10 : 8)
+                          : (manyConferences ? 70 : 30),
+                      }}
                       onClick={(data) => {
                         if (data?.activePayload?.[0]?.payload?.conference_id) {
                           router.push(
@@ -806,12 +840,13 @@ export default function ProgramIntelligencePage() {
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 11, fill: '#6b7280' }}
-                        angle={manyConferences ? -40 : 0}
-                        textAnchor={manyConferences ? 'end' : 'middle'}
+                        dataKey={isPortrait ? 'conference_id' : 'name'}
+                        tick={{ fontSize: isPortrait ? 10 : 11, fill: '#6b7280' }}
+                        tickFormatter={isPortrait ? (v: number) => `#${v}` : undefined}
+                        angle={(!isPortrait && manyConferences) ? -40 : 0}
+                        textAnchor={(!isPortrait && manyConferences) ? 'end' : 'middle'}
                         interval={0}
-                        height={manyConferences ? 70 : 30}
+                        height={isPortrait ? 20 : (manyConferences ? 70 : 30)}
                       />
                       <YAxis
                         domain={[0, 100]}
@@ -819,10 +854,12 @@ export default function ProgramIntelligencePage() {
                         width={30}
                       />
                       <Tooltip content={<CESTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
-                      <Legend
-                        wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                        formatter={(value: string) => DIM_LABELS[value] ?? value}
-                      />
+                      <Legend content={(props) => (
+                        <ChartLegend
+                          payload={props.payload as Array<{ value: string; color: string }> | undefined}
+                          isPortrait={isPortrait}
+                        />
+                      )} />
                       <ReferenceLine
                         y={75}
                         stroke="#10b981"
