@@ -274,7 +274,73 @@ export default function ProgramIntelligencePage() {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  // Permission gate — wait for capabilities to load
+  // All derived state computed before any conditional returns (rules of hooks)
+  const scoredConferences = useMemo(
+    () => conferences.filter((c) => c.ces_score != null),
+    [conferences],
+  );
+
+  const sortedConferences = useMemo(() => {
+    const list = [...scoredConferences];
+    if (sortMode === 'score') {
+      list.sort((a, b) => (b.ces_score ?? 0) - (a.ces_score ?? 0));
+    }
+    return list;
+  }, [scoredConferences, sortMode]);
+
+  const chartData = useMemo(() =>
+    sortedConferences.map((c) => {
+      const comps = c.ces_components;
+      const available = DIM_KEYS.filter((k) => comps[k as keyof CESComponents] != null);
+      const totalW = available.reduce((s, k) => s + DIM_WEIGHTS[k], 0);
+      const row: Record<string, unknown> = {
+        name: truncate(c.conference_name, 18),
+        fullName: c.conference_name,
+        strategy: c.conference_strategy,
+        conference_id: c.conference_id,
+        ces_total: c.ces_score ?? 0,
+      };
+      for (const key of DIM_KEYS) {
+        const dimScore = comps[key as keyof CESComponents];
+        if (dimScore == null) {
+          row[key] = null;
+        } else {
+          const effectiveW = DIM_WEIGHTS[key] / (totalW || 1);
+          row[key] = Math.round(dimScore * effectiveW * 10) / 10;
+        }
+      }
+      return row;
+    }),
+  [sortedConferences]);
+
+  // Summary card values
+  const avgCES = scoredConferences.length
+    ? Math.round(scoredConferences.reduce((s, c) => s + (c.ces_score ?? 0), 0) / scoredConferences.length)
+    : null;
+
+  const totalPipeline = conferences.reduce((s, c) => s + c.pipeline_influenced, 0);
+
+  const topPerformer = scoredConferences.length
+    ? scoredConferences.reduce((best, c) =>
+        (c.ces_score ?? 0) > (best.ces_score ?? 0) ? c : best,
+      )
+    : null;
+
+  // Interpretation panel values
+  const highestConf = topPerformer;
+  const lowestConf = scoredConferences.length
+    ? scoredConferences.reduce((worst, c) =>
+        (c.ces_score ?? 101) < (worst.ces_score ?? 101) ? c : worst,
+      )
+    : null;
+
+  const costLaggerConf = scoredConferences.find(
+    (c) => (c.ces_score ?? 0) > 75 && (c.ces_components.dim7_cost_efficiency ?? 100) < 60,
+  ) ?? null;
+
+  const interpretationReady = scoredConferences.length >= 2;
+
+  // Permission gate — after all hooks
   if (!capabilities) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -293,74 +359,6 @@ export default function ProgramIntelligencePage() {
       </div>
     );
   }
-
-  // Conferences with at least one meaningful score
-  const scoredConferences = conferences.filter((c) => c.ces_score != null);
-
-  const sortedConferences = useMemo(() => {
-    const list = [...scoredConferences];
-    if (sortMode === 'score') {
-      list.sort((a, b) => (b.ces_score ?? 0) - (a.ces_score ?? 0));
-    }
-    return list;
-  }, [scoredConferences, sortMode]);
-
-  // Summary card values
-  const avgCES = scoredConferences.length
-    ? Math.round(scoredConferences.reduce((s, c) => s + (c.ces_score ?? 0), 0) / scoredConferences.length)
-    : null;
-
-  const totalPipeline = conferences.reduce((s, c) => s + c.pipeline_influenced, 0);
-
-  const topPerformer = scoredConferences.length
-    ? scoredConferences.reduce((best, c) =>
-        (c.ces_score ?? 0) > (best.ces_score ?? 0) ? c : best,
-      )
-    : null;
-
-  // Chart data — each bar is one conference, segments = component contributions
-  const chartData = useMemo(() =>
-    sortedConferences.map((c) => {
-      const comps = c.ces_components;
-      // contribution = dimScore × dimWeight (proportional slice of CES bar)
-      const available = DIM_KEYS.filter((k) => comps[k as keyof CESComponents] != null);
-      const totalW = available.reduce((s, k) => s + DIM_WEIGHTS[k], 0);
-
-      const row: Record<string, unknown> = {
-        name: truncate(c.conference_name, 18),
-        fullName: c.conference_name,
-        strategy: c.conference_strategy,
-        conference_id: c.conference_id,
-        ces_total: c.ces_score ?? 0,
-      };
-
-      for (const key of DIM_KEYS) {
-        const dimScore = comps[key as keyof CESComponents];
-        if (dimScore == null) {
-          row[key] = null;
-        } else {
-          // Scale contribution so the bar totals to CES
-          const effectiveW = DIM_WEIGHTS[key] / (totalW || 1);
-          row[key] = Math.round(dimScore * effectiveW * 10) / 10;
-        }
-      }
-      return row;
-    }),
-  [sortedConferences]);
-
-  // Interpretation panel
-  const interpretationReady = scoredConferences.length >= 2;
-
-  const highestConf = topPerformer;
-  const lowestConf = scoredConferences.length
-    ? scoredConferences.reduce((worst, c) =>
-        (c.ces_score ?? 101) < (worst.ces_score ?? 101) ? c : worst,
-      )
-    : null;
-
-  const costLaggerConf = scoredConferences.find(
-    (c) => (c.ces_score ?? 0) > 75 && (c.ces_components.dim7_cost_efficiency ?? 100) < 60,
-  ) ?? null;
 
   const manyConferences = sortedConferences.length > 6;
 
