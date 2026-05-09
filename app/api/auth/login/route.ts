@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions } from '@/lib/auth';
+import { resolvePlanState } from '@/lib/trialState';
+import { sendTrialReminderEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,7 +61,38 @@ export async function POST(request: NextRequest) {
       args: [sessionUser.id],
     }).catch(() => {});
 
-    const response = NextResponse.json({ message: 'Logged in.', user: { email: sessionUser.email, role: sessionUser.role } });
+    // Fire-and-forget: send trial reminder emails if nearing expiry
+    let redirectTo: string | undefined;
+    resolvePlanState().then(async (planState) => {
+      if (planState.trialState === 'active' && planState.daysRemaining != null && planState.daysRemaining <= 3) {
+        const keyMap: Record<number, string> = { 3: 'trial_reminder_12_sent', 2: 'trial_reminder_13_sent', 1: 'trial_reminder_14_sent' };
+        const sentKey = keyMap[planState.daysRemaining];
+        if (sentKey) {
+          const sentRes = await db.execute({
+            sql: `SELECT value FROM site_settings WHERE key = ?`,
+            args: [sentKey],
+          }).catch(() => ({ rows: [] }));
+          const alreadySent = String(sentRes.rows[0]?.value ?? 'false') === 'true';
+          if (!alreadySent) {
+            const upgradeUrl = process.env.NEXT_PUBLIC_PRICING_URL ?? `${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/pricing`;
+            sendTrialReminderEmail(email, String(user.first_name ?? email.split('@')[0]), planState.daysRemaining, upgradeUrl).catch(() => {});
+            db.execute({ sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, 'true')`, args: [sentKey] }).catch(() => {});
+          }
+        }
+      }
+    }).catch(() => {});
+
+    // Check if onboarding is pending to include redirectTo in response
+    const onboardingCheck = await db.execute({
+      sql: `SELECT key, value FROM site_settings WHERE key IN ('onboarding_completed', 'onboarding_track')`,
+      args: [],
+    }).catch(() => ({ rows: [] }));
+    const onboardingMap = Object.fromEntries(onboardingCheck.rows.map(r => [String(r.key), String(r.value ?? '')]));
+    if (onboardingMap['onboarding_completed'] === 'false' && onboardingMap['onboarding_track']) {
+      redirectTo = onboardingMap['onboarding_track'] === 'track_a' ? '/onboarding/track-a' : '/onboarding/track-b';
+    }
+
+    const response = NextResponse.json({ message: 'Logged in.', user: { email: sessionUser.email, role: sessionUser.role }, redirectTo });
     response.cookies.set({ ...authCookieOptions(), value: token });
     return response;
   } catch (err) {

@@ -9,6 +9,7 @@ import { ChatPanelProvider } from './ChatPanelContext';
 import { BottomNavProvider } from './BottomNavContext';
 import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
 import { UserProvider } from './UserContext';
+import { TrialBanner } from './TrialBanner';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -32,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Main content */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            <TrialBanner />
             <Header />
             <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
               {children}

@@ -47,7 +47,8 @@ function LoginForm() {
       // Full page navigation ensures clean server state with the new auth cookie.
       // Using router.push() + router.refresh() together can cause client-side
       // navigation race conditions that surface as "Application error".
-      window.location.href = next;
+      // Prefer server-provided redirectTo (e.g. onboarding) over the 'next' param.
+      window.location.href = (data as { redirectTo?: string }).redirectTo ?? next;
     } catch {
       toast.error('Network error. Please try again.');
       setLoading(false);
