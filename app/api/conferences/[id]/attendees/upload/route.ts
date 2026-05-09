@@ -314,20 +314,52 @@ export async function POST(
 
     // Collect unique company names with associated email/website/company_type/assigned_user for domain matching
     const companyIdCache = new Map<string, number>();
-    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string; wse?: number; services?: string; icp?: string };
+    type CompanyEntry = {
+      name: string;
+      email?: string;
+      website?: string;
+      company_type?: string;
+      assigned_user?: string;
+      assigned_user_supplied?: boolean;
+      has_unresolved_assigned_user?: boolean;
+      wse?: number;
+      services?: string;
+      icp?: string;
+    };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of valid) {
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: resolveUserId(p.assigned_user) ?? undefined, wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined, services: p.services?.trim() || undefined, icp: p.icp?.trim() || undefined });
+          const rawAssigned = p.assigned_user?.trim();
+          const resolvedAssigned = resolveUserId(rawAssigned);
+          companyEntries.set(coName, {
+            name: coName,
+            email: p.email?.trim(),
+            website: p.website?.trim(),
+            company_type: p.company_type?.trim(),
+            assigned_user: resolvedAssigned ?? undefined,
+            assigned_user_supplied: Boolean(rawAssigned),
+            has_unresolved_assigned_user: Boolean(rawAssigned) && !resolvedAssigned,
+            wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined,
+            services: p.services?.trim() || undefined,
+            icp: p.icp?.trim() || undefined,
+          });
         } else {
           // If we don't have an email/website/company_type/assigned_user/services yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
-          if (!existing.assigned_user) { const uid = resolveUserId(p.assigned_user); if (uid) existing.assigned_user = uid; }
+          if (!existing.assigned_user) {
+            const rawAssigned = p.assigned_user?.trim();
+            const uid = resolveUserId(rawAssigned);
+            if (uid) existing.assigned_user = uid;
+            if (rawAssigned) {
+              existing.assigned_user_supplied = true;
+              if (!uid) existing.has_unresolved_assigned_user = true;
+            }
+          }
           if (!existing.icp && p.icp?.trim()) existing.icp = p.icp.trim();
           if (!existing.wse && p.wse?.trim()) {
             const wseVal = parseInt(p.wse.trim(), 10);
@@ -432,10 +464,21 @@ export async function POST(
         const existingValidUserIds = existingCompany?.assigned_user
           ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
           : [];
-        const assignedUserArg = existingValidUserIds.length >= 1 ? null : (entry.assigned_user || null);
-        if (assignedUserArg) {
-          setClauses.push('assigned_user = COALESCE(?, assigned_user)');
-          setArgs.push(assignedUserArg);
+        if (entry.assigned_user) {
+          const assignedUserArg = existingValidUserIds.length >= 1 ? null : entry.assigned_user;
+          if (assignedUserArg) {
+            setClauses.push('assigned_user = COALESCE(?, assigned_user)');
+            setArgs.push(assignedUserArg);
+          }
+        } else if (entry.assigned_user_supplied && entry.has_unresolved_assigned_user) {
+          // Uploaded owner value could not be resolved: clear invalid/non-ID stored values
+          // so tables behave as blank and users can manually reassign via inline edit.
+          const existingIsInvalid = existingCompany?.assigned_user
+            ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).length === 0
+            : false;
+          if (!existingCompany?.assigned_user || existingIsInvalid) {
+            setClauses.push('assigned_user = NULL');
+          }
         }
 
         // services: always merge (additive, no conflict)
