@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 
@@ -14,6 +15,13 @@ export async function POST(request: NextRequest) {
       password?: string;
       companyName?: string;
       conferenceTimingAnswer?: 'upcoming' | 'planning';
+      // Optional survey fields
+      signupRole?: string;
+      signupIndustry?: string;
+      signupTeamSize?: string;
+      signupConferencesPerYear?: string;
+      signupPrimaryGoal?: string;
+      signupCurrentTool?: string;
     };
 
     const firstName = body.firstName?.trim() ?? '';
@@ -22,6 +30,12 @@ export async function POST(request: NextRequest) {
     const password = body.password ?? '';
     const companyName = body.companyName?.trim() ?? '';
     const conferenceTimingAnswer = body.conferenceTimingAnswer ?? 'upcoming';
+    const signupRole = body.signupRole?.trim() ?? '';
+    const signupIndustry = body.signupIndustry?.trim() ?? '';
+    const signupTeamSize = body.signupTeamSize?.trim() ?? '';
+    const signupConferencesPerYear = body.signupConferencesPerYear?.trim() ?? '';
+    const signupPrimaryGoal = body.signupPrimaryGoal?.trim() ?? '';
+    const signupCurrentTool = body.signupCurrentTool?.trim() ?? '';
 
     if (!firstName || !lastName || !email || !password || !companyName) {
       return NextResponse.json({ error: 'All fields are required.' }, { status: 400 });
@@ -85,6 +99,38 @@ export async function POST(request: NextRequest) {
         }).catch(() => {})
       )
     );
+
+    // Also store survey fields in site_settings
+    const surveySettings: Array<[string, string]> = [
+      ['signup_role', signupRole],
+      ['signup_industry', signupIndustry],
+      ['signup_team_size', signupTeamSize],
+      ['signup_conferences_per_year', signupConferencesPerYear],
+      ['signup_primary_goal', signupPrimaryGoal],
+      ['signup_current_tool', signupCurrentTool],
+    ];
+    await Promise.all(
+      surveySettings.filter(([, v]) => v).map(([key, value]) =>
+        db.execute({ sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)`, args: [key, value] }).catch(() => {})
+      )
+    );
+
+    // Register in central accounts table
+    const accountId = randomUUID();
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO accounts (
+        id, company_name, admin_email, admin_first_name, admin_last_name,
+        plan_id, trial_expires_at, grace_period_ends_at, onboarding_track,
+        signup_role, signup_industry, signup_team_size,
+        signup_conferences_per_year, signup_primary_goal, signup_current_tool
+      ) VALUES (?, ?, ?, ?, ?, 'trial', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        accountId, companyName, email, firstName, lastName,
+        trialExpires.toISOString(), graceEnds.toISOString(), onboardingTrack,
+        signupRole || null, signupIndustry || null, signupTeamSize || null,
+        signupConferencesPerYear || null, signupPrimaryGoal || null, signupCurrentTool || null,
+      ],
+    }).catch(() => {});
 
     const sessionUser = {
       id: userId,
