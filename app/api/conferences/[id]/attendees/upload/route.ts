@@ -109,22 +109,85 @@ export async function POST(
       }
     }
 
-    // Resolve a name/ID string from the file to the stored numeric ID string.
-    // Returns null if the value is blank or doesn't match any known user.
+    const normalizeOwnerName = (value: string): string =>
+      value
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[,.'’`-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const normalizeNameKey = (value: string): string => {
+      const tokens = normalizeOwnerName(value).split(' ').filter(Boolean);
+      if (tokens.length === 0) return '';
+      if (tokens.length === 1) return tokens[0];
+      return `${tokens[0]} ${tokens[tokens.length - 1]}`;
+    };
+    const normalizeReversedNameKey = (value: string): string => {
+      const v = value.trim();
+      if (!v.includes(',')) return '';
+      const parts = v.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length < 2) return '';
+      const rejoined = `${parts.slice(1).join(' ')} ${parts[0]}`;
+      return normalizeNameKey(rejoined);
+    };
+    const splitOwnerTokens = (raw: string): string[] => (
+      raw
+        .split(/\s*(?:;|\||\/|&|\band\b)\s*/i)
+        .map(s => s.trim())
+        .filter(Boolean)
+    );
+    const userNameIndex = new Map<string, Set<number>>();
+    for (const r of usersWithConfig.rows) {
+      const id = Number(r.config_id);
+      const display = String(r.display_name ?? '').trim();
+      if (!id || !display) continue;
+      const keys = [normalizeNameKey(display)];
+      for (const key of keys.filter(Boolean)) {
+        const set = userNameIndex.get(key) ?? new Set<number>();
+        set.add(id);
+        userNameIndex.set(key, set);
+      }
+    }
+    const unmatchedAssignedUsers = new Set<string>();
+    const ambiguousAssignedUsers = new Set<string>();
+    // Resolve file values to stored user ID strings (comma-separated for multi-owner cells).
     const resolveUserId = (raw: string | undefined): string | null => {
       if (!raw?.trim()) return null;
-      const trimmed = raw.trim();
-      // Already a numeric ID that exists in the user list → keep as-is
-      const num = parseInt(trimmed, 10);
-      if (!isNaN(num) && userOptions.some(u => u.id === num)) return String(num);
-      const lower = trimmed.toLowerCase();
-      // Case-insensitive match against config_options.value (stores email addresses)
-      const match = userOptions.find(u => u.value.toLowerCase() === lower);
-      if (match) return String(match.id);
-      // Fall back to matching against users.display_name or users.email
-      const displayId = userDisplayNameMap.get(lower);
-      if (displayId != null) return String(displayId);
-      return null;
+      const ids = new Set<number>();
+      const parts = splitOwnerTokens(raw);
+      for (const part of parts) {
+        // Already a numeric ID that exists in the user list → keep as-is
+        const num = parseInt(part, 10);
+        if (!isNaN(num) && userOptions.some(u => u.id === num)) {
+          ids.add(num);
+          continue;
+        }
+        const lower = part.toLowerCase();
+        // Match config_options.value (usually email), then users.display_name/users.email
+        const match = userOptions.find(u => u.value.toLowerCase() === lower);
+        if (match) { ids.add(match.id); continue; }
+        const displayId = userDisplayNameMap.get(lower);
+        if (displayId != null) { ids.add(displayId); continue; }
+        // Name-first matching for customer uploads (First Last / Last, First)
+        const directKey = normalizeNameKey(part);
+        const reversedKey = normalizeReversedNameKey(part);
+        const directMatches = directKey ? userNameIndex.get(directKey) : null;
+        const reversedMatches = reversedKey ? userNameIndex.get(reversedKey) : null;
+        const merged = new Set<number>([
+          ...(directMatches ? Array.from(directMatches) : []),
+          ...(reversedMatches ? Array.from(reversedMatches) : []),
+        ]);
+        if (merged.size === 1) {
+          ids.add(Array.from(merged)[0]);
+        } else if (merged.size > 1) {
+          ambiguousAssignedUsers.add(part);
+        } else {
+          unmatchedAssignedUsers.add(part);
+        }
+      }
+      if (ids.size === 0) return null;
+      return Array.from(ids).join(',');
     };
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -251,20 +314,52 @@ export async function POST(
 
     // Collect unique company names with associated email/website/company_type/assigned_user for domain matching
     const companyIdCache = new Map<string, number>();
-    type CompanyEntry = { name: string; email?: string; website?: string; company_type?: string; assigned_user?: string; wse?: number; services?: string; icp?: string };
+    type CompanyEntry = {
+      name: string;
+      email?: string;
+      website?: string;
+      company_type?: string;
+      assigned_user?: string;
+      assigned_user_supplied?: boolean;
+      has_unresolved_assigned_user?: boolean;
+      wse?: number;
+      services?: string;
+      icp?: string;
+    };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of valid) {
       if (p.company?.trim()) {
         const coName = p.company.trim();
         if (!companyEntries.has(coName)) {
-          companyEntries.set(coName, { name: coName, email: p.email?.trim(), website: p.website?.trim(), company_type: p.company_type?.trim(), assigned_user: resolveUserId(p.assigned_user) ?? undefined, wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined, services: p.services?.trim() || undefined, icp: p.icp?.trim() || undefined });
+          const rawAssigned = p.assigned_user?.trim();
+          const resolvedAssigned = resolveUserId(rawAssigned);
+          companyEntries.set(coName, {
+            name: coName,
+            email: p.email?.trim(),
+            website: p.website?.trim(),
+            company_type: p.company_type?.trim(),
+            assigned_user: resolvedAssigned ?? undefined,
+            assigned_user_supplied: Boolean(rawAssigned),
+            has_unresolved_assigned_user: Boolean(rawAssigned) && !resolvedAssigned,
+            wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined,
+            services: p.services?.trim() || undefined,
+            icp: p.icp?.trim() || undefined,
+          });
         } else {
           // If we don't have an email/website/company_type/assigned_user/services yet for this company, pick it up
           const existing = companyEntries.get(coName)!;
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
-          if (!existing.assigned_user) { const uid = resolveUserId(p.assigned_user); if (uid) existing.assigned_user = uid; }
+          if (!existing.assigned_user) {
+            const rawAssigned = p.assigned_user?.trim();
+            const uid = resolveUserId(rawAssigned);
+            if (uid) existing.assigned_user = uid;
+            if (rawAssigned) {
+              existing.assigned_user_supplied = true;
+              if (!uid) existing.has_unresolved_assigned_user = true;
+            }
+          }
           if (!existing.icp && p.icp?.trim()) existing.icp = p.icp.trim();
           if (!existing.wse && p.wse?.trim()) {
             const wseVal = parseInt(p.wse.trim(), 10);
@@ -369,10 +464,21 @@ export async function POST(
         const existingValidUserIds = existingCompany?.assigned_user
           ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
           : [];
-        const assignedUserArg = existingValidUserIds.length >= 1 ? null : (entry.assigned_user || null);
-        if (assignedUserArg) {
-          setClauses.push('assigned_user = COALESCE(?, assigned_user)');
-          setArgs.push(assignedUserArg);
+        if (entry.assigned_user) {
+          const assignedUserArg = existingValidUserIds.length >= 1 ? null : entry.assigned_user;
+          if (assignedUserArg) {
+            setClauses.push('assigned_user = COALESCE(?, assigned_user)');
+            setArgs.push(assignedUserArg);
+          }
+        } else if (entry.assigned_user_supplied && entry.has_unresolved_assigned_user) {
+          // Uploaded owner value could not be resolved: clear invalid/non-ID stored values
+          // so tables behave as blank and users can manually reassign via inline edit.
+          const existingIsInvalid = existingCompany?.assigned_user
+            ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).length === 0
+            : false;
+          if (!existingCompany?.assigned_user || existingIsInvalid) {
+            setClauses.push('assigned_user = NULL');
+          }
         }
 
         // services: always merge (additive, no conflict)
@@ -717,6 +823,12 @@ export async function POST(
       new_count: attendeeIdsToLink.length,
       updated_count: updatedCount,
       skipped_count: skippedCount - updatedCount,
+      assigned_user_match_report: {
+        unmatched_count: unmatchedAssignedUsers.size,
+        ambiguous_count: ambiguousAssignedUsers.size,
+        unmatched_values: Array.from(unmatchedAssignedUsers).slice(0, 25),
+        ambiguous_values: Array.from(ambiguousAssignedUsers).slice(0, 25),
+      },
     });
   } catch (error) {
     console.error('POST /api/conferences/[id]/attendees/upload error:', error);
