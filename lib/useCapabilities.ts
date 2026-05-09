@@ -11,6 +11,9 @@ export interface CapabilitiesState {
   trialState: TrialState;
   daysRemaining: number | null;
   planCapabilities: PlanCapabilities;
+  isImpersonating: boolean;
+  impersonatedAccountId?: string;
+  impersonatedCompanyName?: string;
 }
 
 let _cache: CapabilitiesState | null = null;
@@ -34,6 +37,9 @@ async function fetchCapabilities(): Promise<CapabilitiesState | null> {
       trialState: (user.trialState ?? 'activated') as TrialState,
       daysRemaining: user.daysRemaining ?? null,
       planCapabilities: (user.planCapabilities ?? PLAN_CAPABILITIES['trial']) as PlanCapabilities,
+      isImpersonating: user.isImpersonating === true,
+      impersonatedAccountId: user.impersonatedAccountId as string | undefined,
+      impersonatedCompanyName: user.impersonatedCompanyName as string | undefined,
     };
   } catch {
     return null;
@@ -67,5 +73,6 @@ export function useCapabilities(): CapabilitiesState {
     trialState: 'activated' as TrialState,
     daysRemaining: null,
     planCapabilities: PLAN_CAPABILITIES['trial'],
+    isImpersonating: false,
   };
 }

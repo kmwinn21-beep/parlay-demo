@@ -727,6 +727,49 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('trial_reminder_13_sent', 'false')`,
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('trial_reminder_14_sent', 'false')`,
     `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('activated_plan_at', '')`,
+    `ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`,
+    `CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      company_name TEXT NOT NULL,
+      admin_email TEXT NOT NULL,
+      admin_first_name TEXT,
+      admin_last_name TEXT,
+      plan_id TEXT NOT NULL DEFAULT 'trial',
+      trial_expires_at TEXT,
+      grace_period_ends_at TEXT,
+      activated_plan_at TEXT,
+      onboarding_track TEXT,
+      onboarding_completed INTEGER DEFAULT 0,
+      turso_db_url TEXT,
+      turso_auth_token TEXT,
+      deployment_url TEXT,
+      signup_role TEXT,
+      signup_industry TEXT,
+      signup_team_size TEXT,
+      signup_conferences_per_year TEXT,
+      signup_primary_goal TEXT,
+      signup_current_tool TEXT,
+      last_active_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_user_id INTEGER NOT NULL,
+      account_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      previous_value TEXT,
+      new_value TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS impersonation_sessions (
+      id TEXT PRIMARY KEY,
+      admin_user_id INTEGER NOT NULL,
+      account_id TEXT NOT NULL,
+      started_at TEXT DEFAULT (datetime('now')),
+      ended_at TEXT,
+      last_active_at TEXT DEFAULT (datetime('now'))
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

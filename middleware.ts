@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { verifyToken, COOKIE_NAME } from '@/lib/auth';
 
 // Paths that don't require a session
-const PUBLIC_PREFIXES = ['/auth/', '/api/auth/', '/api/logo-config', '/api/tagline', '/api/app-name'];
+const PUBLIC_PREFIXES = ['/auth/', '/api/auth/', '/api/logo-config', '/api/tagline', '/api/app-name', '/signup'];
 
 // Paths that require administrator role
 const ADMIN_PREFIXES = ['/admin'];
@@ -26,6 +26,21 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const user = token ? await verifyToken(token) : null;
 
+  // /ops routes: redirect unauthenticated to /auth/login (no error, no params)
+  // is_admin check happens per-route-handler (requires DB, unavailable in Edge Runtime)
+  if (pathname.startsWith('/ops') || pathname.startsWith('/api/ops')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/auth/login', request.url));
+    }
+    // Pass impersonation cookie as request header for downstream handlers
+    const impersonationId = request.cookies.get('ops_impersonation')?.value;
+    const requestHeaders = new Headers(request.headers);
+    if (impersonationId) {
+      requestHeaders.set('x-ops-impersonation-id', impersonationId);
+    }
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
   if (!user) {
     // API routes → 401 JSON; page routes → redirect to login
     if (pathname.startsWith('/api/')) {
@@ -45,6 +60,26 @@ export async function middleware(request: NextRequest) {
       );
     }
     return NextResponse.redirect(new URL('/auth/access-denied', request.url));
+  }
+
+  // Impersonation write-blocking: block all writes while impersonating
+  // (allow /api/ops/impersonate/end so the admin can exit)
+  const impersonationId = request.cookies.get('ops_impersonation')?.value;
+  if (impersonationId && pathname.startsWith('/api/') && !pathname.startsWith('/api/ops/')) {
+    const method = request.method.toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      return NextResponse.json(
+        { error: 'Write actions are disabled in admin view.' },
+        { status: 403 }
+      );
+    }
+  }
+
+  // Forward impersonation ID to downstream handlers for main app API routes
+  if (impersonationId) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-ops-impersonation-id', impersonationId);
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   // Demo mode: intercept all writes and return fake 200 responses

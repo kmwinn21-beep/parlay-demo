@@ -16,6 +16,13 @@ export default function SignupPage() {
   const [companyName, setCompanyName] = useState('');
   const [conferenceTimingAnswer, setConferenceTimingAnswer] = useState<'upcoming' | 'planning' | ''>('');
   const [loading, setLoading] = useState(false);
+  const [showSurvey, setShowSurvey] = useState(false);
+  const [signupRole, setSignupRole] = useState('');
+  const [signupIndustry, setSignupIndustry] = useState('');
+  const [signupTeamSize, setSignupTeamSize] = useState('');
+  const [signupConferencesPerYear, setSignupConferencesPerYear] = useState('');
+  const [signupPrimaryGoal, setSignupPrimaryGoal] = useState('');
+  const [signupCurrentTool, setSignupCurrentTool] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +35,15 @@ export default function SignupPage() {
       const res = await fetch('/api/auth/trial-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, lastName, email, password, companyName, conferenceTimingAnswer }),
+        body: JSON.stringify({
+          firstName, lastName, email, password, companyName, conferenceTimingAnswer,
+          signupRole: signupRole || undefined,
+          signupIndustry: signupIndustry || undefined,
+          signupTeamSize: signupTeamSize || undefined,
+          signupConferencesPerYear: signupConferencesPerYear || undefined,
+          signupPrimaryGoal: signupPrimaryGoal || undefined,
+          signupCurrentTool: signupCurrentTool || undefined,
+        }),
       });
       const data = await res.json() as { success?: boolean; redirectTo?: string; error?: string };
       if (!res.ok) {
@@ -149,6 +164,78 @@ export default function SignupPage() {
                   Not yet
                 </button>
               </div>
+            </div>
+
+            {/* Optional survey */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowSurvey(s => !s)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100"
+              >
+                <span>Tell us about your team <span className="text-gray-400 font-normal">(optional)</span></span>
+                <span className="text-gray-400">{showSurvey ? '▲' : '▼'}</span>
+              </button>
+              {showSurvey && (
+                <div className="px-4 py-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <select value={signupRole} onChange={e => setSignupRole(e.target.value)} className="input-field w-full">
+                      <option value="">Select…</option>
+                      {['Sales', 'Marketing', 'Events', 'Revenue Operations', 'Executive', 'Other'].map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+                    <input
+                      type="text"
+                      value={signupIndustry}
+                      onChange={e => setSignupIndustry(e.target.value)}
+                      className="input-field w-full"
+                      placeholder="e.g. SaaS, Financial Services"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Revenue team size</label>
+                    <select value={signupTeamSize} onChange={e => setSignupTeamSize(e.target.value)} className="input-field w-full">
+                      <option value="">Select…</option>
+                      {['1-5', '6-15', '16-50', '50+'].map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Annual conferences attended</label>
+                    <select value={signupConferencesPerYear} onChange={e => setSignupConferencesPerYear(e.target.value)} className="input-field w-full">
+                      <option value="">Select…</option>
+                      {['1-3', '4-10', '11-25', '25+'].map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Primary conference goal</label>
+                    <select value={signupPrimaryGoal} onChange={e => setSignupPrimaryGoal(e.target.value)} className="input-field w-full">
+                      <option value="">Select…</option>
+                      {['Pipeline generation', 'Customer retention', 'Brand awareness', 'Recruiting', 'Other'].map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current conference management tool</label>
+                    <input
+                      type="text"
+                      value={signupCurrentTool}
+                      onChange={e => setSignupCurrentTool(e.target.value)}
+                      className="input-field w-full"
+                      placeholder="Spreadsheets, Salesforce, HubSpot, etc."
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
