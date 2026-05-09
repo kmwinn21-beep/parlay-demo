@@ -156,3 +156,38 @@ export async function sendEmailChangeNotification(
     </div>`
   ).catch(() => {}); // best-effort — don't fail the flow if old-email notification fails
 }
+
+export async function sendTrialReminderEmail(
+  to: string,
+  firstName: string,
+  daysRemaining: number,
+  upgradeUrl: string
+): Promise<void> {
+  const dayWord = daysRemaining === 1 ? 'day' : 'days';
+  const urgency = daysRemaining === 1 ? 'Last chance' : daysRemaining === 2 ? '2 days left' : '3 days left';
+  const subject =
+    daysRemaining === 1
+      ? `Last day of your ${APP_NAME} trial`
+      : daysRemaining === 2
+      ? `2 days left — your ${APP_NAME} trial ends tomorrow`
+      : `3 days left in your ${APP_NAME} trial`;
+
+  await sendEmail(
+    to,
+    subject,
+    `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">${urgency}, ${firstName}</h2>
+      <p>Your free trial of ${APP_NAME} ends in <strong>${daysRemaining} ${dayWord}</strong>. Upgrade now to keep access to everything you've set up.</p>
+      <p style="margin:24px 0"><a href="${upgradeUrl}" style="${btnStyle}">Upgrade Now</a></p>
+      <h3 style="color:#0B3C62;margin-top:32px">Features you'll keep with a paid plan</h3>
+      <ul style="padding-left:20px;line-height:1.8">
+        <li>ICP scoring and target recommendations</li>
+        <li>Pre &amp; post-conference review</li>
+        <li>Revenue intelligence and effectiveness analytics</li>
+        <li>AI card scanning and floor capture</li>
+        <li>CRM export and email integrations</li>
+      </ul>
+      <p style="${footerStyle}">Questions? Reply to this email or visit ${upgradeUrl}</p>
+    </div>`
+  );
+}

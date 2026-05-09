@@ -717,6 +717,16 @@ export async function initDb(): Promise<void> {
     `UPDATE conference_attendee_details SET action = TRIM(REPLACE(',' || COALESCE(action,'') || ',', ',Meeting Scheduled,', ',Scheduled,'), ',') WHERE ',' || COALESCE(action,'') || ',' LIKE '%,Meeting Scheduled,%'`,
     `UPDATE conference_attendee_details SET action = TRIM(REPLACE(',' || COALESCE(action,'') || ',', ',Meeting Held,', ',Held,'), ',') WHERE ',' || COALESCE(action,'') || ',' LIKE '%,Meeting Held,%'`,
     `UPDATE conference_attendee_details SET action = TRIM(REPLACE(',' || COALESCE(action,'') || ',', ',Meeting No-Show,', ',No-Show,'), ',') WHERE ',' || COALESCE(action,'') || ',' LIKE '%,Meeting No-Show,%'`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('plan_id', 'trial')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('trial_expires_at', '')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('grace_period_ends_at', '')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('plan_capabilities', '')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('onboarding_track', '')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('onboarding_completed', 'false')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('trial_reminder_12_sent', 'false')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('trial_reminder_13_sent', 'false')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('trial_reminder_14_sent', 'false')`,
+    `INSERT OR IGNORE INTO site_settings (key, value) VALUES ('activated_plan_at', '')`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

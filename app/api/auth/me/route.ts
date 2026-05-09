@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser, resolveCapabilities, DEFAULT_ROLE_CAPABILITIES } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { resolvePlanState } from '@/lib/trialState';
 
 export async function GET(request: NextRequest) {
   const user = await getSessionUser(request);
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
   }
   try {
-    const [r, capsRow] = await Promise.all([
+    const [r, capsRow, planState] = await Promise.all([
       db.execute({
         sql: `SELECT u.config_id, u.display_name, co.value as rep_name, u.created_at
               FROM users u
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
         sql: `SELECT value FROM site_settings WHERE key = 'role_capabilities'`,
         args: [],
       }),
+      resolvePlanState(),
     ]);
     const configId = r.rows[0]?.config_id != null ? Number(r.rows[0].config_id) : null;
     const displayName = r.rows[0]?.display_name != null ? String(r.rows[0].display_name) : null;
@@ -35,7 +37,17 @@ export async function GET(request: NextRequest) {
     const hasBypass = !!bypassSecret && bypassCookie === bypassSecret;
     const demoVisitor = process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && !hasBypass;
 
-    return NextResponse.json({ user: { ...user, configId, displayName, repName, createdAt, capabilities, demoVisitor } });
+    return NextResponse.json({
+      user: {
+        ...user,
+        configId, displayName, repName, createdAt,
+        capabilities, demoVisitor,
+        planId: planState.planId,
+        trialState: planState.trialState,
+        daysRemaining: planState.daysRemaining,
+        planCapabilities: planState.planCapabilities,
+      },
+    });
   } catch {
     const capabilities = DEFAULT_ROLE_CAPABILITIES[user.role] ?? DEFAULT_ROLE_CAPABILITIES['user'];
     return NextResponse.json({ user: { ...user, capabilities } });
