@@ -6,8 +6,8 @@ import { enforceBundleDependencies, type PlanCapabilities, type PlanId } from '@
 const VALID_PLAN_IDS: PlanId[] = ['essentials', 'professional', 'enterprise', 'custom'];
 
 export async function POST(request: NextRequest) {
-  const authError = await requireAdmin(request);
-  if (authError) return authError;
+  const authResult = await requireAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   let body: { planId?: string; planCapabilities?: PlanCapabilities };
   try {
