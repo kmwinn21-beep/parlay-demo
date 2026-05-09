@@ -109,22 +109,85 @@ export async function POST(
       }
     }
 
-    // Resolve a name/ID string from the file to the stored numeric ID string.
-    // Returns null if the value is blank or doesn't match any known user.
+    const normalizeOwnerName = (value: string): string =>
+      value
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[,.'’`-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const normalizeNameKey = (value: string): string => {
+      const tokens = normalizeOwnerName(value).split(' ').filter(Boolean);
+      if (tokens.length === 0) return '';
+      if (tokens.length === 1) return tokens[0];
+      return `${tokens[0]} ${tokens[tokens.length - 1]}`;
+    };
+    const normalizeReversedNameKey = (value: string): string => {
+      const v = value.trim();
+      if (!v.includes(',')) return '';
+      const parts = v.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length < 2) return '';
+      const rejoined = `${parts.slice(1).join(' ')} ${parts[0]}`;
+      return normalizeNameKey(rejoined);
+    };
+    const splitOwnerTokens = (raw: string): string[] => (
+      raw
+        .split(/\s*(?:;|\||\/|&|\band\b)\s*/i)
+        .map(s => s.trim())
+        .filter(Boolean)
+    );
+    const userNameIndex = new Map<string, Set<number>>();
+    for (const r of usersWithConfig.rows) {
+      const id = Number(r.config_id);
+      const display = String(r.display_name ?? '').trim();
+      if (!id || !display) continue;
+      const keys = [normalizeNameKey(display)];
+      for (const key of keys.filter(Boolean)) {
+        const set = userNameIndex.get(key) ?? new Set<number>();
+        set.add(id);
+        userNameIndex.set(key, set);
+      }
+    }
+    const unmatchedAssignedUsers = new Set<string>();
+    const ambiguousAssignedUsers = new Set<string>();
+    // Resolve file values to stored user ID strings (comma-separated for multi-owner cells).
     const resolveUserId = (raw: string | undefined): string | null => {
       if (!raw?.trim()) return null;
-      const trimmed = raw.trim();
-      // Already a numeric ID that exists in the user list → keep as-is
-      const num = parseInt(trimmed, 10);
-      if (!isNaN(num) && userOptions.some(u => u.id === num)) return String(num);
-      const lower = trimmed.toLowerCase();
-      // Case-insensitive match against config_options.value (stores email addresses)
-      const match = userOptions.find(u => u.value.toLowerCase() === lower);
-      if (match) return String(match.id);
-      // Fall back to matching against users.display_name or users.email
-      const displayId = userDisplayNameMap.get(lower);
-      if (displayId != null) return String(displayId);
-      return null;
+      const ids = new Set<number>();
+      const parts = splitOwnerTokens(raw);
+      for (const part of parts) {
+        // Already a numeric ID that exists in the user list → keep as-is
+        const num = parseInt(part, 10);
+        if (!isNaN(num) && userOptions.some(u => u.id === num)) {
+          ids.add(num);
+          continue;
+        }
+        const lower = part.toLowerCase();
+        // Match config_options.value (usually email), then users.display_name/users.email
+        const match = userOptions.find(u => u.value.toLowerCase() === lower);
+        if (match) { ids.add(match.id); continue; }
+        const displayId = userDisplayNameMap.get(lower);
+        if (displayId != null) { ids.add(displayId); continue; }
+        // Name-first matching for customer uploads (First Last / Last, First)
+        const directKey = normalizeNameKey(part);
+        const reversedKey = normalizeReversedNameKey(part);
+        const directMatches = directKey ? userNameIndex.get(directKey) : null;
+        const reversedMatches = reversedKey ? userNameIndex.get(reversedKey) : null;
+        const merged = new Set<number>([
+          ...(directMatches ? Array.from(directMatches) : []),
+          ...(reversedMatches ? Array.from(reversedMatches) : []),
+        ]);
+        if (merged.size === 1) {
+          ids.add(Array.from(merged)[0]);
+        } else if (merged.size > 1) {
+          ambiguousAssignedUsers.add(part);
+        } else {
+          unmatchedAssignedUsers.add(part);
+        }
+      }
+      if (ids.size === 0) return null;
+      return Array.from(ids).join(',');
     };
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -717,6 +780,12 @@ export async function POST(
       new_count: attendeeIdsToLink.length,
       updated_count: updatedCount,
       skipped_count: skippedCount - updatedCount,
+      assigned_user_match_report: {
+        unmatched_count: unmatchedAssignedUsers.size,
+        ambiguous_count: ambiguousAssignedUsers.size,
+        unmatched_values: Array.from(unmatchedAssignedUsers).slice(0, 25),
+        ambiguous_values: Array.from(ambiguousAssignedUsers).slice(0, 25),
+      },
     });
   } catch (error) {
     console.error('POST /api/conferences/[id]/attendees/upload error:', error);
