@@ -397,62 +397,9 @@ export function classifyCompanyType(companyName?: string, validOptions?: string[
     if (normalized === lookupNorm && lookupNorm.length > 2) return lookupType;
   }
 
-  // --- Phase 3: Keyword-based heuristics ---
-  const n = ` ${key} `;
-
-  // Capital indicators (banks, REITs, investment firms, lenders)
-  const capitalPatterns = [
-    /\bbank\b/, /\bbanking\b/, /\bcapital\b/, /\breit\b/, /\binvestment[s]?\b/,
-    /\binvestor[s]?\b/, /\bfinancial\b/, /\bfunding\b/, /\blending\b/, /\blender[s]?\b/,
-    /\bmortgage\b/, /\bcredit\s+union\b/, /\basset\s+management\b/, /\bprivate\s+equity\b/,
-    /\bventure\b/, /\bequity\b/, /\bfund\b/, /\bfunds\b/, /\bwealth\b/,
-    /\brealty\b/, /\breal\s+estate\s+(partners|capital|investment|advisors)\b/,
-  ];
-
-  // Operator indicators (senior living operators, care providers)
-  const operatorPatterns = [
-    /\bsenior\s+living\b/, /\bassisted\s+living\b/, /\bmemory\s+care\b/,
-    /\bretirement\b/, /\bcommunities\b/, /\bresidences\b/,
-    /\bcontinuing\s+care\b/, /\bccrc\b/, /\bnursing\b/,
-    /\bhealthcare\s+(management|partners|group)\b/, /\bcare\s+(community|communities|home|center)\b/,
-    /\bsenior\s+(community|communities|residence|residences|services|housing)\b/,
-    /\b(aged|elder)\s+care\b/, /\blife\s*plan\b/,
-    /\bliving\s+(community|communities|group|services)\b/,
-  ];
-
-  // Vendor indicators (technology, consulting, construction, associations, staffing)
-  const vendorPatterns = [
-    /\bsoftware\b/, /\btechnology\b/, /\btech\b/, /\bsolutions\b/,
-    /\bconstruction\b/, /\barchitects?\b/, /\bdesign\b/,
-    /\buniversity\b/, /\bcollege\b/, /\bschool\b/,
-    /\bassociation\b/, /\bleadingage\b/, /\bargentum\b/,
-    /\bstaffing\b/, /\brecruiting\b/, /\bhireology\b/,
-    /\btherapies\b/, /\bpharmac/,
-    /\binsurance\s+services\b/,
-  ];
-
-  const capitalScore = capitalPatterns.reduce((s, p) => s + (p.test(n) ? 1 : 0), 0);
-  const operatorScore = operatorPatterns.reduce((s, p) => s + (p.test(n) ? 1 : 0), 0);
-  const vendorScore = vendorPatterns.reduce((s, p) => s + (p.test(n) ? 1 : 0), 0);
-
-  const maxScore = Math.max(capitalScore, operatorScore, vendorScore);
-  if (maxScore === 0) return null;
-
-  // If there's a clear winner, return it
-  let classified: string | null = null;
-  if (capitalScore > operatorScore && capitalScore > vendorScore) classified = 'Capital';
-  else if (operatorScore > capitalScore && operatorScore > vendorScore) classified = 'Operator';
-  else if (vendorScore > capitalScore && vendorScore > operatorScore) classified = 'Vendor';
-  // Tie-breaking: prioritize Operator > Capital > Vendor
-  else if (operatorScore === maxScore) classified = 'Operator';
-  else if (capitalScore === maxScore) classified = 'Capital';
-  else classified = 'Vendor';
-
-  // Validate against live admin options if provided — prevents writing stale values
-  if (validOptions && validOptions.length > 0 && classified && !validOptions.includes(classified)) {
-    return null;
-  }
-  return classified;
+  // Legacy keyword-based heuristic classification was removed.
+  // If no exact/normalized lookup match exists, do not infer a company type.
+  return null;
 }
 
 /**
