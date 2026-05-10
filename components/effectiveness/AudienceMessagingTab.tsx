@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
@@ -12,32 +12,8 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const m = data.marketing_audience as any;
   const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   const [showRankings, setShowRankings] = useState(false);
-  const [cardRank, setCardRank] = useState<number | null>(m?.audience_quality_rank ?? null);
-  const [cardTotal, setCardTotal] = useState<number | null>(m?.audience_quality_rank_total ?? null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const currentId = Number((data as any)?.conference?.id ?? 0);
-    fetch('/api/conferences?nav=1')
-      .then(r => r.ok ? r.json() : [])
-      .then(async (confs: Array<{ id: number }>) => {
-        const scored = await Promise.all((confs ?? []).map(async c => {
-          const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
-          if (!res.ok) return null;
-          const eff = await res.json() as any;
-          const score = Number(eff?.marketing_audience?.marketing_audience_signal_score ?? 0);
-          return score > 0 ? { id: c.id, score } : null;
-        }));
-        const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
-        const idx = ranked.findIndex((r: any) => r.id === currentId);
-        if (!cancelled) {
-          setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
-          setCardRank(idx >= 0 ? idx + 1 : cardRank);
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [data, cardRank, cardTotal]);
+  const cardRank = m?.audience_quality_rank ?? null;
+  const cardTotal = m?.audience_quality_rank_total ?? null;
   if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
