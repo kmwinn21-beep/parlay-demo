@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
@@ -12,8 +12,44 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const m = data.marketing_audience as any;
   const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   const [showRankings, setShowRankings] = useState(false);
-  const cardRank = m?.audience_quality_rank ?? null;
-  const cardTotal = m?.audience_quality_rank_total ?? null;
+  const [cardRank, setCardRank] = useState<number | null>(m?.audience_quality_rank ?? null);
+  const [cardTotal, setCardTotal] = useState<number | null>(m?.audience_quality_rank_total ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const currentConferenceId = Number((data as any)?.conference?.id ?? 0);
+
+    fetch('/api/conferences?nav=1')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(async (conferences: Array<{ id: number }>) => {
+        const scored = await Promise.all((conferences ?? []).map(async (c) => {
+          const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
+          if (!res.ok) return null;
+          const eff = await res.json() as any;
+          const score = Number(eff?.marketing_audience?.marketing_audience_signal_score ?? 0);
+          if (score <= 0) return null;
+          return { id: c.id, score };
+        }));
+
+        const ranked = scored
+          .filter((row): row is { id: number; score: number } => row !== null)
+          .sort((a, b) => b.score - a.score);
+
+        const idx = ranked.findIndex((row) => row.id === currentConferenceId);
+        if (!cancelled) {
+          setCardRank(idx >= 0 ? idx + 1 : null);
+          setCardTotal(idx >= 0 ? ranked.length : null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCardRank(m?.audience_quality_rank ?? null);
+          setCardTotal(m?.audience_quality_rank_total ?? null);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [data, m?.audience_quality_rank, m?.audience_quality_rank_total]);
   if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
