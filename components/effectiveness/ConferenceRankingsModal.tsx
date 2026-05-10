@@ -11,6 +11,16 @@ interface RankedConference {
   rank: number | null;
 }
 
+interface ProgramPerformanceResponse {
+  conferences: Array<{
+    conference_id: number;
+    conference_name: string;
+    conference_date: string;
+    ces_score: number | null;
+    total_activities: number;
+  }>;
+}
+
 function scoreColor(score: number) {
   if (score >= 90) return '#059669';
   if (score >= 75) return '#1B76BC';
@@ -39,9 +49,24 @@ export function ConferenceRankingsModal({ title, currentConferenceId, onClose }:
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/conferences/rankings')
+    fetch('/api/program-intelligence/performance?startDate=2000-01-01&endDate=2100-12-31')
       .then(r => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
-      .then((data: RankedConference[]) => setRows(data))
+      .then((data: ProgramPerformanceResponse) => {
+        const ranked = (data.conferences ?? [])
+          .filter(c => (c.ces_score ?? 0) > 0 && (c.total_activities ?? 0) > 0)
+          .sort((a, b) => (b.ces_score ?? 0) - (a.ces_score ?? 0));
+
+        const mapped: RankedConference[] = ranked.map((c, idx) => ({
+          id: c.conference_id,
+          name: c.conference_name,
+          start_date: c.conference_date,
+          end_date: c.conference_date,
+          score: Number(c.ces_score ?? 0),
+          rank: idx + 1,
+        }));
+
+        setRows(mapped);
+      })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
