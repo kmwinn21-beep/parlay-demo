@@ -66,8 +66,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
   const [showScoreByRepInfo, setShowScoreByRepInfo] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
-  const [cardRank, setCardRank] = useState<number | null>(sx.sales_execution_rank ?? null);
-  const [cardTotal, setCardTotal] = useState<number | null>(sx.sales_execution_rank_total ?? null);
+  const [cardRank, setCardRank] = useState<number | null>(sx?.sales_execution_rank ?? null);
+  const [cardTotal, setCardTotal] = useState<number | null>(sx?.sales_execution_rank_total ?? null);
 
   useEffect(() => {
     let cancelled = false;
