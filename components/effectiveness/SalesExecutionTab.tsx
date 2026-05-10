@@ -66,8 +66,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
   const [showScoreByRepInfo, setShowScoreByRepInfo] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
-  const [cardRank, setCardRank] = useState<number | null>(sx.sales_execution_rank ?? null);
-  const [cardTotal, setCardTotal] = useState<number | null>(sx.sales_execution_rank_total ?? null);
+  const [cardRank, setCardRank] = useState<number | null>(sx?.sales_execution_rank ?? null);
+  const [cardTotal, setCardTotal] = useState<number | null>(sx?.sales_execution_rank_total ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +85,13 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
         const idx = ranked.findIndex((r: any) => r.id === currentId);
         if (!cancelled) {
-          setCardTotal(ranked.length || null);
-          setCardRank(idx >= 0 ? idx + 1 : null);
+          setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
+          setCardRank(idx >= 0 ? idx + 1 : cardRank);
         }
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [data]);
+  }, [data, cardRank, cardTotal]);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
