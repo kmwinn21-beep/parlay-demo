@@ -252,13 +252,18 @@ export async function GET(
   ]);
 
   const prospectsTypeId = prospectsTypeRes.rows[0]?.id ? Number(prospectsTypeRes.rows[0].id) : null;
+  const prospectsTypeValue = prospectsTypeRes.rows[0]?.value ? String(prospectsTypeRes.rows[0].value).trim() : null;
 
-  // Filter to attendees whose company type includes the configured "Prospects" company_type option id.
-  // This avoids coupling analytics to mutable display labels.
+  // Filter by the configured "Prospects" company_type option id.
+  // Some legacy datasets still persist display values in company_type, so we also
+  // accept the resolved config value for backwards compatibility while keeping the
+  // lookup anchored to config_options.
   const attendees = attendeesRes.rows.filter(a => {
-    if (prospectsTypeId == null || !a.company_type) return false;
+    if ((prospectsTypeId == null && !prospectsTypeValue) || !a.company_type) return false;
     const types = String(a.company_type).split(',').map(s => s.trim()).filter(Boolean);
-    return types.includes(String(prospectsTypeId));
+    const hasId = prospectsTypeId != null && types.includes(String(prospectsTypeId));
+    const hasValue = prospectsTypeValue != null && types.some(t => t.toLowerCase() === prospectsTypeValue.toLowerCase());
+    return hasId || hasValue;
   });
 
   const actionKeyMap = new Map<string, string>();
@@ -466,9 +471,12 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE (',' || COALESCE(c.company_type, '') || ',') LIKE ? AND ca.conference_id IN (${ph})
+              WHERE (
+                (',' || COALESCE(c.company_type, '') || ',') LIKE ?
+                OR LOWER(',' || COALESCE(c.company_type, '') || ',') LIKE LOWER(?)
+              ) AND ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%,${prospectsTypeId ?? -1},%`, ...priorIdList],
+        args: [`%,${prospectsTypeId ?? -1},%`, `%,${prospectsTypeValue ?? '__no_match__'},%`, ...priorIdList],
       }),
       db.execute({
         sql: `SELECT m.conference_id, COUNT(*) as meetings
@@ -505,10 +513,13 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE (',' || COALESCE(c.company_type, '') || ',') LIKE ? AND LOWER(c.icp) = 'yes'
+              WHERE (
+                (',' || COALESCE(c.company_type, '') || ',') LIKE ?
+                OR LOWER(',' || COALESCE(c.company_type, '') || ',') LIKE LOWER(?)
+              ) AND LOWER(c.icp) = 'yes'
               AND ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%,${prospectsTypeId ?? -1},%`, ...priorIdList],
+        args: [`%,${prospectsTypeId ?? -1},%`, `%,${prospectsTypeValue ?? '__no_match__'},%`, ...priorIdList],
       }),
       db.execute({
         sql: `SELECT id, internal_attendees FROM conferences WHERE id IN (${ph})`,
