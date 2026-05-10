@@ -66,7 +66,15 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
   const [showScoreByRepInfo, setShowScoreByRepInfo] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
-  const [cardRank, setCardRank] = useState<number | null>(sx?.sales_execution_rank ?? null);
+  const normalizeRank = (value: unknown): number | null => {
+    if (value == null) return null;
+    const rank = Number(value);
+    if (!Number.isFinite(rank)) return null;
+    if (rank === 0) return 1;
+    if (rank < 0) return null;
+    return Math.round(rank);
+  };
+  const [cardRank, setCardRank] = useState<number | null>(normalizeRank(sx?.sales_execution_rank));
   const [cardTotal, setCardTotal] = useState<number | null>(sx?.sales_execution_rank_total ?? null);
 
   useEffect(() => {
@@ -86,7 +94,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         const idx = ranked.findIndex((r: any) => r.id === currentId);
         if (!cancelled) {
           setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
-          setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setCardRank(idx >= 0 ? idx + 1 : normalizeRank(cardRank));
         }
       })
       .catch(() => {});
@@ -274,7 +282,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       </div>
       <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group">
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
-        {cardRank ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
+        {cardRank != null ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal ?? '—'} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
       <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4 overflow-x-auto flex flex-col">
         <div className="flex items-center justify-between gap-2">

@@ -12,7 +12,15 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const m = data.marketing_audience as any;
   const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   const [showRankings, setShowRankings] = useState(false);
-  const [cardRank, setCardRank] = useState<number | null>(m?.audience_quality_rank ?? null);
+  const normalizeRank = (value: unknown): number | null => {
+    if (value == null) return null;
+    const rank = Number(value);
+    if (!Number.isFinite(rank)) return null;
+    if (rank === 0) return 1;
+    if (rank < 0) return null;
+    return Math.round(rank);
+  };
+  const [cardRank, setCardRank] = useState<number | null>(normalizeRank(m?.audience_quality_rank));
   const [cardTotal, setCardTotal] = useState<number | null>(m?.audience_quality_rank_total ?? null);
 
   useEffect(() => {
@@ -32,7 +40,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         const idx = ranked.findIndex((r: any) => r.id === currentId);
         if (!cancelled) {
           setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
-          setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setCardRank(idx >= 0 ? idx + 1 : normalizeRank(cardRank));
         }
       })
       .catch(() => {});
@@ -55,7 +63,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         ].map(([key,label])=>{ const comp=(m.components??{})[String(key)] as any; return <div key={String(key)} className="flex justify-between text-xs"><span className="text-gray-600">{label} <span className="text-gray-400">({Math.round(Number(comp?.weight ?? 0)*100)}%)</span></span><span className="font-semibold" style={{color:scoreColor(comp?.score)}}>{comp?.score!=null?Math.round(comp.score):'—'} <span className="text-gray-400">· {comp?.tier ?? '—'}</span></span></div>;})}
         </div>
       </div>
-      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group"><div className="text-xs text-gray-500">Audience Quality Rank</div>{cardRank ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}<div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
+      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group"><div className="text-xs text-gray-500">Audience Quality Rank</div>{cardRank != null ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal ?? '—'} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}<div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">{[
