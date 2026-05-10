@@ -187,7 +187,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, operatorTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -214,7 +214,20 @@ export async function GET(
             WHERE f.conference_id = ? AND f.next_steps IS NOT NULL AND f.next_steps != ''`,
       args: [confId],
     }),
-    db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'prior_overlap_company_type' LIMIT 1`, args: [] }),
+    db.execute({
+      sql: `SELECT id, value, action_key
+            FROM config_options
+            WHERE category = 'company_type'
+              AND (LOWER(value) = 'prospects' OR LOWER(value) = 'prospect' OR LOWER(action_key) = 'prospect')
+            ORDER BY CASE
+              WHEN LOWER(value) = 'prospects' THEN 0
+              WHEN LOWER(value) = 'prospect' THEN 1
+              WHEN LOWER(action_key) = 'prospect' THEN 2
+              ELSE 3
+            END, id ASC
+            LIMIT 1`,
+      args: [],
+    }),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
             JOIN social_events se ON r.social_event_id = se.id
@@ -238,13 +251,14 @@ export async function GET(
     }),
   ]);
 
-  const operatorType = operatorTypeRes.rows[0]?.value ? String(operatorTypeRes.rows[0].value) : 'Operator';
+  const prospectsTypeId = prospectsTypeRes.rows[0]?.id ? Number(prospectsTypeRes.rows[0].id) : null;
 
-  // Filter to operator-type attendees only
+  // Filter to attendees whose company type includes the configured "Prospects" company_type option id.
+  // This avoids coupling analytics to mutable display labels.
   const attendees = attendeesRes.rows.filter(a => {
-    if (!a.company_type) return false;
-    const types = String(a.company_type).split(',').map(s => s.trim().toLowerCase());
-    return types.includes(operatorType.toLowerCase());
+    if (prospectsTypeId == null || !a.company_type) return false;
+    const types = String(a.company_type).split(',').map(s => s.trim()).filter(Boolean);
+    return types.includes(String(prospectsTypeId));
   });
 
   const actionKeyMap = new Map<string, string>();
@@ -452,9 +466,9 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE LOWER(c.company_type) LIKE ? AND ca.conference_id IN (${ph})
+              WHERE (',' || COALESCE(c.company_type, '') || ',') LIKE ? AND ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%${operatorType.toLowerCase()}%`, ...priorIdList],
+        args: [`%,${prospectsTypeId ?? -1},%`, ...priorIdList],
       }),
       db.execute({
         sql: `SELECT m.conference_id, COUNT(*) as meetings
@@ -491,10 +505,10 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE LOWER(c.company_type) LIKE ? AND LOWER(c.icp) = 'yes'
+              WHERE (',' || COALESCE(c.company_type, '') || ',') LIKE ? AND LOWER(c.icp) = 'yes'
               AND ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%${operatorType.toLowerCase()}%`, ...priorIdList],
+        args: [`%,${prospectsTypeId ?? -1},%`, ...priorIdList],
       }),
       db.execute({
         sql: `SELECT id, internal_attendees FROM conferences WHERE id IN (${ph})`,
