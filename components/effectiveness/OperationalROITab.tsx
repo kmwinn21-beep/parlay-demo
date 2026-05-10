@@ -285,6 +285,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
         <ConferenceRankingsModal
           title="Cost Efficiency Rankings"
           currentConferenceId={currentConferenceId}
+          metric="cost_efficiency"
           onClose={() => setShowRankings(false)}
         />
       )}

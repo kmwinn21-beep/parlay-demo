@@ -393,6 +393,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
         <ConferenceRankingsModal
           title="Conference Efficiency Rankings"
           currentConferenceId={conferenceId}
+          metric="ces"
           onClose={() => setShowRankings(false)}
         />
       )}
