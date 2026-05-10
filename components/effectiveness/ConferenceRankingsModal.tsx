@@ -11,14 +11,17 @@ interface RankedConference {
   rank: number | null;
 }
 
-interface ProgramPerformanceResponse {
-  conferences: Array<{
-    conference_id: number;
-    conference_name: string;
-    conference_date: string;
-    ces_score: number | null;
-    total_activities: number;
-  }>;
+interface ConferenceNavRow {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
+interface ConferenceEffectivenessResponse {
+  ces?: {
+    score?: number | null;
+  };
 }
 
 function scoreColor(score: number) {
@@ -49,23 +52,34 @@ export function ConferenceRankingsModal({ title, currentConferenceId, onClose }:
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/program-intelligence/performance?startDate=2000-01-01&endDate=2100-12-31')
-      .then(r => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
-      .then((data: ProgramPerformanceResponse) => {
-        const ranked = (data.conferences ?? [])
-          .filter(c => (c.ces_score ?? 0) > 0 && (c.total_activities ?? 0) > 0)
-          .sort((a, b) => (b.ces_score ?? 0) - (a.ces_score ?? 0));
-
-        const mapped: RankedConference[] = ranked.map((c, idx) => ({
-          id: c.conference_id,
-          name: c.conference_name,
-          start_date: c.conference_date,
-          end_date: c.conference_date,
-          score: Number(c.ces_score ?? 0),
-          rank: idx + 1,
+    fetch('/api/conferences?nav=1')
+      .then(r => { if (!r.ok) throw new Error('Failed to load conferences'); return r.json(); })
+      .then(async (conferences: ConferenceNavRow[]) => {
+        const scored = await Promise.all((conferences ?? []).map(async (c) => {
+          try {
+            const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
+            if (!res.ok) return null;
+            const eff = await res.json() as ConferenceEffectivenessResponse;
+            const score = Number(eff?.ces?.score ?? 0);
+            if (score <= 0) return null;
+            return {
+              id: c.id,
+              name: c.name,
+              start_date: c.start_date,
+              end_date: c.end_date,
+              score,
+            };
+          } catch {
+            return null;
+          }
         }));
 
-        setRows(mapped);
+        const ranked = scored
+          .filter((c): c is NonNullable<typeof c> => c !== null)
+          .sort((a, b) => b.score - a.score)
+          .map((c, idx) => ({ ...c, rank: idx + 1 }));
+
+        setRows(ranked);
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
