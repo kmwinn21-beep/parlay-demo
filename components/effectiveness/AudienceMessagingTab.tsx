@@ -1,6 +1,8 @@
 'use client';
+import { useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 import { StrategyWeightNotice } from './StrategyWeightNotice';
+import { ConferenceRankingsModal } from './ConferenceRankingsModal';
 
 const scoreColor = (score: number | null | undefined) => { const s=Number(score??0); if(s>=90)return '#059669'; if(s>=75)return '#1B76BC'; if(s>=60)return '#d97706'; if(s>=50)return '#f97316'; return '#dc2626'; };
 const fmtPct=(n:number|null|undefined)=>n==null?'—':`${Math.round(n)}%`;
@@ -9,6 +11,7 @@ const fmtNum=(n:number|null|undefined)=>n==null?'—':Math.round(n).toLocaleStri
 export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const m = data.marketing_audience as any;
   const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
+  const [showRankings, setShowRankings] = useState(false);
   if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -26,7 +29,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         ].map(([key,label])=>{ const comp=(m.components??{})[String(key)] as any; return <div key={String(key)} className="flex justify-between text-xs"><span className="text-gray-600">{label} <span className="text-gray-400">({Math.round(Number(comp?.weight ?? 0)*100)}%)</span></span><span className="font-semibold" style={{color:scoreColor(comp?.score)}}>{comp?.score!=null?Math.round(comp.score):'—'} <span className="text-gray-400">· {comp?.tier ?? '—'}</span></span></div>;})}
         </div>
       </div>
-      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center"><div className="text-xs text-gray-500">Audience Quality Rank</div>{m.audience_quality_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{m.audience_quality_rank}</div><div className="text-xs text-gray-400">of {m.audience_quality_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}</div>
+      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group"><div className="text-xs text-gray-500">Audience Quality Rank</div>{m.audience_quality_rank ? <><div className="text-3xl font-bold text-brand-secondary">#{m.audience_quality_rank}</div><div className="text-xs text-gray-400">of {m.audience_quality_rank_total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}<div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">{[
@@ -61,5 +64,13 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         {(m.account_level_table ?? []).slice(0, 25).map((r: any, idx: number) => <tr key={idx} className="border-b border-gray-100"><td className="py-2 pr-3">{r.company ?? '—'}</td><td className="py-2 pr-3">{r.decision_maker_engaged ? 'Yes' : 'No'}</td><td className="py-2 pr-3">{r.influencer_engaged ? 'Yes' : 'No'}</td><td className="py-2 pr-3">{fmtNum(r.highest_seniority_match)}</td><td className="py-2 pr-3">{fmtNum(r.highest_function_match)}</td></tr>)}
       </tbody></table></div>
     </div>
+  {showRankings && (
+    <ConferenceRankingsModal
+      title="Audience Quality Rankings"
+      currentConferenceId={Number((data as any)?.conference?.id ?? 0)}
+      metric="audience"
+      onClose={() => setShowRankings(false)}
+    />
+  )}
   </div>;
 }
