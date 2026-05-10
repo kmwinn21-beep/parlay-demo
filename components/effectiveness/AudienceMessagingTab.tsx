@@ -31,13 +31,13 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
         const idx = ranked.findIndex((r: any) => r.id === currentId);
         if (!cancelled) {
-          setCardTotal(ranked.length || null);
-          setCardRank(idx >= 0 ? idx + 1 : null);
+          setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
+          setCardRank(idx >= 0 ? idx + 1 : cardRank);
         }
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [data]);
+  }, [data, cardRank, cardTotal]);
   if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
