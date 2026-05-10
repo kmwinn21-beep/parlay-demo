@@ -80,6 +80,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   useEffect(() => {
     let cancelled = false;
     const currentId = Number((data as any)?.conference?.id ?? 0);
+    const currentScore = Number((data as any)?.sales_execution?.sales_effectiveness_score ?? 0);
     fetch('/api/conferences?nav=1')
       .then(r => r.ok ? r.json() : [])
       .then(async (confs: Array<{ id: number }>) => {
@@ -90,16 +91,20 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           const score = Number(eff?.sales_execution?.sales_effectiveness_score ?? 0);
           return score > 0 ? { id: c.id, score } : null;
         }));
-        const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
-        const idx = ranked.findIndex((r: any) => r.id === currentId);
+        const ranked = scored.filter(Boolean).map((r: any) => ({ id: Number(r.id), score: Number(r.score) }));
+        if (currentId > 0 && currentScore > 0 && !ranked.some((r) => r.id === currentId)) {
+          ranked.push({ id: currentId, score: currentScore });
+        }
+        ranked.sort((a, b) => b.score - a.score);
+        const idx = ranked.findIndex((r) => r.id === currentId);
         if (!cancelled) {
-          setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
-          setCardRank(idx >= 0 ? idx + 1 : normalizeRank(cardRank));
+          setCardTotal(idx >= 0 ? ranked.length : null);
+          setCardRank(idx >= 0 ? idx + 1 : normalizeRank(sx?.sales_execution_rank));
         }
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [data, cardRank, cardTotal]);
+  }, [data, sx?.sales_execution_rank]);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
