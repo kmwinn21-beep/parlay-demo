@@ -119,10 +119,17 @@ export async function GET(request: NextRequest) {
           c.start_date,
           c.end_date,
           COALESCE(cc.ces_score, 0) AS score,
-          RANK() OVER (ORDER BY COALESCE(cc.ces_score, 0) DESC) AS rank
+          CASE
+            WHEN COALESCE(cc.ces_score, 0) > 0
+              THEN DENSE_RANK() OVER (ORDER BY COALESCE(cc.ces_score, 0) DESC)
+            ELSE NULL
+          END AS rank
         FROM conferences c
         LEFT JOIN conf_ces cc ON c.id = cc.conference_id
-        ORDER BY rank ASC, c.start_date DESC
+        ORDER BY
+          CASE WHEN COALESCE(cc.ces_score, 0) > 0 THEN 0 ELSE 1 END,
+          rank ASC,
+          c.start_date DESC
       `,
       args: [],
     });
@@ -134,7 +141,7 @@ export async function GET(request: NextRequest) {
         start_date: String(r.start_date),
         end_date:   String(r.end_date),
         score:      Number(r.score),
-        rank:       Number(r.rank),
+        rank:       r.rank == null ? null : Number(r.rank),
       }))
     );
   } catch (error) {

@@ -8,7 +8,7 @@ interface RankedConference {
   start_date: string;
   end_date: string;
   score: number;
-  rank: number;
+  rank: number | null;
 }
 
 function scoreColor(score: number) {
@@ -103,7 +103,7 @@ export function ConferenceRankingsModal({ title, currentConferenceId, onClose }:
                     >
                       <td className="px-4 py-3 text-center">
                         <span className={`text-sm font-bold ${isCurrent ? 'text-brand-secondary' : 'text-gray-400'}`}>
-                          {conf.rank}
+                          {conf.rank ?? '—'}
                         </span>
                       </td>
                       <td className="px-3 py-3">
