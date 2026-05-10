@@ -468,13 +468,3 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   )}
   </div>;
 }
-
-
-{showRankings && (
-    <ConferenceRankingsModal
-      title="Sales Execution Rankings"
-      currentConferenceId={Number((data as any)?.conference?.id ?? 0)}
-      metric="sales_execution"
-      onClose={() => setShowRankings(false)}
-    />
-  )}
