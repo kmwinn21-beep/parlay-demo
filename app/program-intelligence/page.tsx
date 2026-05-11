@@ -247,6 +247,37 @@ function calendarScoreColor(score: number | null): string {
   return '#dc2626';
 }
 
+const CALENDAR_TIER_INFO: Record<string, { label: string; classes: string }> = {
+  attend_invest_more:      { label: 'Attend & Invest',         classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  attend_maintain:         { label: 'Attend & Maintain',       classes: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+  attend_reconsider_format:{ label: 'Reconsider Format',       classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  evaluate_before_committing:{ label: 'Evaluate First',        classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  remove_from_calendar:    { label: 'Remove from Calendar',    classes: 'bg-red-50 text-red-700 border-red-200' },
+  do_not_prioritize:       { label: 'Do Not Prioritize',       classes: 'bg-red-50 text-red-600 border-red-100' },
+};
+
+function calendarTierInfo(tier: string): { label: string; classes: string } {
+  return CALENDAR_TIER_INFO[tier] ?? { label: tierLabel(tier), classes: 'bg-gray-50 text-gray-600 border-gray-200' };
+}
+
+function confidencePillClasses(level: string): string {
+  if (level === 'high') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (level === 'medium') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function formatDataAge(dataAge: number): string {
+  if (dataAge < 1) return '< 1 year';
+  const years = Math.round(dataAge);
+  return years === 1 ? '1 year' : `${years} years`;
+}
+
+function dataAgeColorClass(dataAge: number): string {
+  if (dataAge > 4) return 'text-red-600';
+  if (dataAge > 2) return 'text-amber-600';
+  return '';
+}
+
 function tierLabel(tier: string): string {
   return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 }
@@ -727,7 +758,7 @@ export default function ProgramIntelligencePage() {
             ) : (
             <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-              <div className="card py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.calendarRecommendationScore != null).length}</p></div>
+              <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
               <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
               <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
               <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
@@ -768,14 +799,14 @@ export default function ProgramIntelligencePage() {
                   {/* Mobile card list */}
                   <div className="md:hidden divide-y divide-gray-100">
                     {calendarRowsFiltered.map((r) => (
-                      <button key={r.conferenceId} className="w-full text-left py-3 px-1 flex items-center justify-between gap-3 active:bg-gray-50" onClick={() => setSelectedCalendarRow(r)}>
+                      <button key={r.conferenceId} className={`w-full text-left py-3 px-1 flex items-center justify-between gap-3 transition-colors ${selectedCalendarRow?.conferenceId === r.conferenceId ? 'bg-blue-50' : 'active:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                         <div className="min-w-0">
                           <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
                           <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpCompanies}/{r.totalCompanies} ICP ({r.icpDensityPct.toFixed(0)}%)</p>
                         </div>
                         <div className="flex-shrink-0 text-right">
                           <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
-                          <p className="text-xs text-gray-500 capitalize">{r.recommendationTier.replaceAll('_', ' ')}</p>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border mt-0.5 ${calendarTierInfo(r.recommendationTier).classes}`}>{calendarTierInfo(r.recommendationTier).label}</span>
                         </div>
                       </button>
                     ))}
@@ -793,19 +824,23 @@ export default function ProgramIntelligencePage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {calendarRowsFiltered.map((r) => (
-                          <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}>
+                        {calendarRowsFiltered.map((r) => {
+                          const tierInfo = calendarTierInfo(r.recommendationTier);
+                          const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                          return (
+                          <tr key={r.conferenceId} className={`border-t cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                             <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
-                            <td className="p-2">{r.conferenceYear}</td>
-                            <td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
-                            <td className="p-2">{r.attendeeCount}</td>
-                            <td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
-                            <td className="p-2">{r.calendarRecommendationScore ?? '—'}</td>
-                            <td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td>
-                            <td className="p-2">{r.confidenceLevel}</td>
-                            <td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td>
+                            <td className="p-2 text-gray-600">{r.conferenceYear}</td>
+                            <td className="p-2 text-gray-600">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
+                            <td className="p-2 text-gray-600">{r.attendeeCount}</td>
+                            <td className="p-2 text-gray-600">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
+                            <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
+                            <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
+                            <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
+                            <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
