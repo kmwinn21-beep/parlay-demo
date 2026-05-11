@@ -17,6 +17,8 @@ interface ConferenceFormData {
   conference_strategy_type_id: string;
 }
 
+type ConferenceMode = 'new' | 'historical';
+
 export function ConferenceForm() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -37,6 +39,7 @@ export function ConferenceForm() {
   const configOptions = useConfigOptions('conference_form');
   const userOptions = configOptions.user ?? [];
   const [conferenceStrategyOptions, setConferenceStrategyOptions] = useState<{ id: number; value: string }[]>([]);
+  const [conferenceMode, setConferenceMode] = useState<ConferenceMode>('new');
   useEffect(() => {
     fetch('/api/config?category=conference_strategy_type&form=conference_form')
       .then((r) => r.json())
@@ -102,7 +105,8 @@ export function ConferenceForm() {
       formData.append('location', data.location);
       formData.append('notes', data.notes || '');
       formData.append('internal_attendees', selectedInternalAttendees.join(','));
-      formData.append('conference_strategy_type_id', data.conference_strategy_type_id);
+      if (conferenceMode === 'new') formData.append('conference_strategy_type_id', data.conference_strategy_type_id);
+      formData.append('is_historical', conferenceMode === 'historical' ? '1' : '0');
 
       if (file) {
         formData.append('file', file);
@@ -150,7 +154,13 @@ export function ConferenceForm() {
         <h2 className="text-lg font-semibold text-brand-primary mb-5 font-serif">Conference Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="md:col-span-2">
-            <label className="label">Conference Name *</label>
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <label className="label !mb-0">Conference Name *</label>
+              <div className="inline-flex rounded-lg border border-gray-300 p-0.5 bg-white">
+                <button type="button" onClick={() => setConferenceMode('new')} className={`px-3 py-1 text-xs sm:text-sm rounded-md ${conferenceMode === 'new' ? 'bg-brand-secondary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>New Conference</button>
+                <button type="button" onClick={() => setConferenceMode('historical')} className={`px-3 py-1 text-xs sm:text-sm rounded-md ${conferenceMode === 'historical' ? 'bg-brand-secondary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>Historical Conference</button>
+              </div>
+            </div>
             <input
               {...register('name', { required: 'Conference name is required' })}
               className="input-field"
@@ -189,9 +199,10 @@ export function ConferenceForm() {
             {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location.message}</p>}
           </div>
 
+          {conferenceMode === 'new' && (
           <div className="md:col-span-2">
             <label className="label">Conference Strategy *</label>
-            <select {...register('conference_strategy_type_id', { required: 'Conference strategy is required' })} className="input-field">
+            <select {...register('conference_strategy_type_id', { required: conferenceMode === 'new' ? 'Conference strategy is required' : false })} className="input-field">
               <option value="">Select conference strategy...</option>
               {conferenceStrategyOptions.map((opt) => <option key={opt.id} value={String(opt.id)}>{opt.value}</option>)}
             </select>
@@ -199,6 +210,7 @@ export function ConferenceForm() {
             {conferenceStrategyOptions.length === 0 && <p className="text-xs text-amber-600 mt-1">No Conference Strategy options configured. Configure in Admin Settings → Types.</p>}
             {errors.conference_strategy_type_id && <p className="text-red-500 text-xs mt-1">{errors.conference_strategy_type_id.message}</p>}
           </div>
+          )}
 
           <div className="md:col-span-2">
             <label className="label">Notes</label>
