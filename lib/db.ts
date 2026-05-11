@@ -685,6 +685,16 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE conferences ADD COLUMN cost_efficiency_modifier REAL`,
     `ALTER TABLE conferences ADD COLUMN cost_efficiency_modifier_reason TEXT`,
     `ALTER TABLE conferences ADD COLUMN is_historical INTEGER NOT NULL DEFAULT 0`,
+
+    `ALTER TABLE config_options ADD COLUMN is_actionable INTEGER NOT NULL DEFAULT 0`,
+    `UPDATE config_options SET is_actionable = 1 WHERE category = 'target_recommended_action' AND action_key IN ('book_meeting','route_to_account_owner','invite_to_hosted_event','rep_floor_outreach')`,
+    `UPDATE config_options SET is_actionable = COALESCE(is_actionable, 0) WHERE category = 'target_recommended_action'`,
+    `ALTER TABLE conferences ADD COLUMN calendar_score_invalidated_at TEXT`,
+    `CREATE TABLE IF NOT EXISTS calendar_intelligence_scores (
+      conference_id INTEGER PRIMARY KEY REFERENCES conferences(id) ON DELETE CASCADE,
+      score_payload TEXT NOT NULL,
+      calculated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
     `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('ces_benchmarks', '{"cost_per_company":{"elite_max":350,"strong_max":650,"healthy_max":1000,"weak_max":1600},"cost_per_meeting":{"elite_max":400,"strong_max":700,"healthy_max":1100,"weak_max":1800},"pipeline_per_1k":{"elite_min":10000,"strong_min":6000,"healthy_min":3500,"weak_min":1500}}')`,
     `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('ces_event_type_modifiers', '{"flagship_industry_event":5,"regional_operator_conference":0,"vendor_heavy_trade_show":-5,"other":0}')`,
     // Usage tracking
