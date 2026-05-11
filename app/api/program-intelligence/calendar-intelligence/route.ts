@@ -79,19 +79,51 @@ export async function GET(request: NextRequest) {
     const actionableCount = actions.filter(a => Number(a.is_actionable ?? 0) === 1).length;
     const conferenceId = Number(r.id);
 
-    // Target Opportunity: use conference_targets table directly.
-    // Tier values in the DB are tier keys ('must_target', 'high_priority', etc.), not display labels.
-    // There is no target_recommendations table or target_priority_score column.
+    // Target Opportunity: tiers are stored as '1' (Must Target), '2' (High Priority),
+    // '3' (Worth Engaging), 'unassigned' (Monitor). The previous assumption of key-strings was wrong.
     const targetRows = await runLoggedQuery('target-opportunity', `SELECT COUNT(*) AS total_targets,
-      SUM(CASE WHEN ct.tier = 'must_target' THEN 1 ELSE 0 END) AS must_target_count,
-      SUM(CASE WHEN ct.tier = 'high_priority' THEN 1 ELSE 0 END) AS high_priority_count,
-      SUM(CASE WHEN ct.tier = 'worth_engaging' THEN 1 ELSE 0 END) AS worth_engaging_count
+      SUM(CASE WHEN ct.tier = '1' THEN 1 ELSE 0 END) AS must_target_count,
+      SUM(CASE WHEN ct.tier = '2' THEN 1 ELSE 0 END) AS high_priority_count,
+      SUM(CASE WHEN ct.tier = '3' THEN 1 ELSE 0 END) AS worth_engaging_count,
+      SUM(CASE WHEN ct.tier = 'unassigned' THEN 1 ELSE 0 END) AS monitor_count
       FROM conference_targets ct
       WHERE ct.conference_id = ?`, [conferenceId]).catch(() => []);
 
     // Engagement Capture: meeting and follow-up counts from actual tables.
     const meetingsRows = await runLoggedQuery('engagement-meetings', `SELECT COUNT(*) AS total_meetings FROM meetings WHERE conference_id = ?`, [conferenceId]).catch(() => []);
     const followUpRows = await runLoggedQuery('engagement-followups', `SELECT COUNT(*) AS total_followups, SUM(CASE WHEN COALESCE(completed,0)=1 THEN 1 ELSE 0 END) AS completed_followups FROM follow_ups WHERE conference_id = ?`, [conferenceId]).catch(() => []);
+
+    // Commercial Potential: projected pipeline from target WSE values * avg_cost_per_unit.
+    // Deduplicate by company — use highest tier per company (same logic as pre-conference tab).
+    const avgCostRows = await db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] as Row[] }));
+    const avgCostPerUnit = Number((avgCostRows as { rows: Row[] }).rows[0]?.value ?? 0) || 0;
+    const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
+    const companyBestTier = new Map<number, { tier: string; wse: number }>();
+    const commercialByCompany = await runLoggedQuery('commercial-by-company', `
+      SELECT ct.tier, a.company_id, MAX(CAST(c.wse AS REAL)) AS wse
+      FROM conference_targets ct
+      JOIN attendees a ON a.id = ct.attendee_id
+      JOIN companies c ON c.id = a.company_id
+      WHERE ct.conference_id = ? AND c.wse IS NOT NULL AND c.wse > 0
+      GROUP BY a.company_id, ct.tier`, [conferenceId]).catch(() => []);
+    for (const row of commercialByCompany as Row[]) {
+      const compId = Number(row.company_id);
+      const tier = String(row.tier ?? 'unassigned');
+      const wse = Number(row.wse ?? 0);
+      const existing = companyBestTier.get(compId);
+      if (!existing || (TIER_PRIORITY[tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+        companyBestTier.set(compId, { tier, wse });
+      }
+    }
+    let mustWse = 0, highWse = 0, worthWse = 0;
+    for (const { tier, wse } of Array.from(companyBestTier.values())) {
+      if (tier === '1') mustWse += wse;
+      else if (tier === '2') highWse += wse;
+      else if (tier === '3') worthWse += wse;
+    }
+    const projectedPipeline = avgCostPerUnit > 0
+      ? Math.round((mustWse * mustConv + highWse * highConv + worthWse * worthConv) * avgCostPerUnit)
+      : null;
 
     // Cost Justification: budget is in conference_budget (not conference_budgets).
     const budgetTable = await tableExists('conference_budget') ? 'conference_budget' : (await tableExists('conference_budgets') ? 'conference_budgets' : null);
@@ -129,6 +161,7 @@ export async function GET(request: NextRequest) {
         engagementMeetings: meetingsRows[0] ?? null,
         engagementFollowUps: followUpRows[0] ?? null,
         budget: budgetRows[0] ?? null,
+        commercialPotential: projectedPipeline != null ? { projected_pipeline: projectedPipeline, must_wse: mustWse, high_wse: highWse, worth_wse: worthWse, avg_cost_per_unit: avgCostPerUnit } : null,
       },
     };
   }));

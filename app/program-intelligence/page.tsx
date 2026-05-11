@@ -67,10 +67,11 @@ interface CalendarConferenceRow {
   confidenceFactors?: string[];
   tierProbabilityFactors?: { must: number; high: number; worth: number };
   diagnostics?: {
-    targetOpportunity?: { total_targets?: number; must_target_count?: number; high_priority_count?: number; worth_engaging_count?: number } | null;
+    targetOpportunity?: { total_targets?: number; must_target_count?: number; high_priority_count?: number; worth_engaging_count?: number; monitor_count?: number } | null;
     engagementMeetings?: { total_meetings?: number } | null;
     engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
     budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
+    commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
   };
 }
 
@@ -1172,16 +1173,22 @@ export default function ProgramIntelligencePage() {
                 const d = selectedCalendarRow.diagnostics ?? {};
                 const tpf = selectedCalendarRow.tierProbabilityFactors ?? { must: 0.25, high: 0.15, worth: 0.075 };
 
-                // Target Opportunity
+                // Target Opportunity — tiers stored as '1'/'2'/'3'/'unassigned' in DB
                 const to = d.targetOpportunity;
                 const totalTargets = Number(to?.total_targets ?? 0);
                 const mustCount = Number(to?.must_target_count ?? 0);
                 const highCount = Number(to?.high_priority_count ?? 0);
                 const worthCount = Number(to?.worth_engaging_count ?? 0);
+                const monitorCount = Number(to?.monitor_count ?? 0);
                 const actionableCount = mustCount + highCount + worthCount;
                 const actionableRate = totalTargets > 0 ? actionableCount / totalTargets : null;
+                // Score = weighted conversion likelihood vs benchmark of 15% blended conversion
+                const weightedLikelihood = totalTargets > 0
+                  ? (mustCount * tpf.must + highCount * tpf.high + worthCount * tpf.worth) / totalTargets
+                  : 0;
+                const BENCHMARK_CONVERSION = 0.15;
                 const targetScore = to != null && totalTargets > 0
-                  ? Math.min(Math.round(((mustCount * tpf.must + highCount * tpf.high + worthCount * tpf.worth) / (totalTargets * tpf.must)) * 100), 100)
+                  ? Math.min(Math.round((weightedLikelihood / BENCHMARK_CONVERSION) * 100), 100)
                   : null;
 
                 // Engagement Capture
@@ -1196,18 +1203,28 @@ export default function ProgramIntelligencePage() {
                   ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 15)), 100)
                   : null;
 
-                // Cost Justification
+                // Commercial Potential: projected pipeline vs required pipeline
+                const cp = d.commercialPotential;
+                const projectedPipeline = Number(cp?.projected_pipeline ?? 0);
                 const bud = d.budget;
                 const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
                 const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
-                const costScore = bud != null && reqPipeline > 0 ? Math.min(Math.round((1 / reqMultiple) * 100 * 5), 100) : (bud != null ? 50 : null);
+                const commercialScore = cp != null && reqPipeline > 0
+                  ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
+                  : (cp != null ? null : null);
+
+                // Cost Justification: score based on projected pipeline / (required pipeline / multiple)
+                // i.e. how well does projected pipeline justify the spend at the required ROI multiple
+                const costScore = bud != null && reqPipeline > 0
+                  ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
+                  : (bud != null ? 50 : null);
 
                 // Compute weights for null components
                 const weights = { audienceFit: 0.25, targetOpportunity: 0.20, engagementCapture: 0.15, commercialPotential: 0.15, costJustification: 0.15, strategicValue: 0.10 };
                 const nulls = [
                   ...(targetScore == null ? ['targetOpportunity'] : []),
                   ...(engagementScore == null ? ['engagementCapture'] : []),
-                  ...(['commercialPotential']),
+                  ...(commercialScore == null ? ['commercialPotential'] : []),
                   ...(costScore == null ? ['costJustification'] : []),
                   ...(['strategicValue']),
                 ] as (keyof typeof weights)[];
@@ -1226,7 +1243,8 @@ export default function ProgramIntelligencePage() {
                       `Must Target: ${mustCount}`,
                       `High Priority: ${highCount}`,
                       `Worth Engaging: ${worthCount}`,
-                      `Actionable rate: ${actionableRate != null ? (actionableRate * 100).toFixed(0) + '%' : 'N/A'} of ${totalTargets} targets`,
+                      `Monitor: ${monitorCount}`,
+                      `Actionable rate: ${actionableRate != null ? (actionableRate * 100).toFixed(0) + '%' : 'N/A'} of ${totalTargets} total targets`,
                     ] : ['No targets assigned for this conference.', 'Assign targets in the conference to enable this score.'],
                     unavailable: to == null ? 'No target data for this conference.' : undefined,
                   },
@@ -1240,14 +1258,18 @@ export default function ProgramIntelligencePage() {
                     ],
                     unavailable: em == null ? 'No engagement data available.' : undefined,
                   },
-                  { key: 'Commercial Potential', score: null, weight: Math.round(aw.commercialPotential * 100),
-                    bullets: ['Pipeline attribution data not yet available.', 'Weight redistributed to remaining components.'],
-                    unavailable: 'Pipeline data unavailable.',
+                  { key: 'Commercial Potential', score: commercialScore, weight: Math.round(aw.commercialPotential * 100),
+                    bullets: cp != null ? [
+                      `Projected pipeline: $${projectedPipeline.toLocaleString()}`,
+                      ...(reqPipeline > 0 ? [`Required pipeline: $${reqPipeline.toLocaleString()} (${reqMultiple}x multiple)`, `Coverage: ${reqPipeline > 0 ? ((projectedPipeline / reqPipeline) * 100).toFixed(0) : '—'}%`] : ['No budget entered — coverage cannot be computed.']),
+                    ] : ['No target WSE or avg cost data available.', 'Ensure targets are assigned and avg cost per unit is set.'],
+                    unavailable: cp == null ? 'Commercial inputs unavailable.' : undefined,
                   },
                   { key: 'Cost Justification', score: costScore, weight: Math.round(aw.costJustification * 100),
                     bullets: bud != null ? [
                       `Required pipeline: $${reqPipeline.toLocaleString()}`,
-                      `Required multiple: ${reqMultiple}x`,
+                      `Required ROI multiple: ${reqMultiple}x`,
+                      ...(cp != null && reqPipeline > 0 ? [`Projected at conversion rates: $${projectedPipeline.toLocaleString()} (${((projectedPipeline / reqPipeline) * 100).toFixed(0)}% of goal)`] : []),
                     ] : ['No budget entered for this conference.', 'Add budget in conference settings to enable scoring.'],
                     unavailable: bud == null ? 'No budget data available.' : undefined,
                   },
