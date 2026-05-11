@@ -79,7 +79,20 @@ interface CalendarConferenceRow {
   confidenceFactors?: string[];
   tierProbabilityFactors?: { must: number; high: number; worth: number };
   diagnostics?: {
-    targetOpportunity?: { total_targets?: number; must_target_count?: number; high_priority_count?: number; worth_engaging_count?: number; monitor_count?: number } | null;
+    targetingEngine?: {
+      mustTargetCount: number;
+      highPriorityCount: number;
+      worthEngagingCount: number;
+      monitorCount: number;
+      lowPriorityCount: number;
+      needsTitleReviewCount: number;
+      totalScoredCompanies: number;
+      avgTargetPriorityScore: number;
+      avgBuyerAccessScore: number;
+      avgRelationshipLeverageScore: number;
+      actionableCount: number;
+      isLargeConference: boolean;
+    } | null;
     engagementMeetings?: { total_meetings?: number } | null;
     engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
     budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
@@ -1188,15 +1201,7 @@ export default function ProgramIntelligencePage() {
                 const cs = selectedCalendarRow.componentScores;
 
                 // Bullet detail data from diagnostics (scores come pre-computed from the API)
-                const to = d.targetOpportunity;
-                const totalTargets = Number(to?.total_targets ?? 0);
-                const mustCount = Number(to?.must_target_count ?? 0);
-                const highCount = Number(to?.high_priority_count ?? 0);
-                const worthCount = Number(to?.worth_engaging_count ?? 0);
-                const monitorCount = Number(to?.monitor_count ?? 0);
-                const actionableCount = mustCount + highCount + worthCount;
-                const actionableRate = totalTargets > 0 ? actionableCount / totalTargets : null;
-
+                const te = d.targetingEngine;
                 const em = d.engagementMeetings;
                 const ef = d.engagementFollowUps;
                 const totalMeetings = Number(em?.total_meetings ?? 0);
@@ -1213,22 +1218,33 @@ export default function ProgramIntelligencePage() {
                 // Fixed default weights — never change regardless of null components
                 const W = { audienceFit: 25, targetOpportunity: 20, engagementCapture: 15, commercialPotential: 15, costJustification: 15, strategicValue: 10 };
 
+                const teBenchmarks = te != null ? (te.isLargeConference
+                  ? { must: '15%', high: '30%', worth: '25%' }
+                  : { must: '10%', high: '20%', worth: '20%' }) : null;
+                const teActionableRate = te != null && te.totalScoredCompanies > 0
+                  ? (te.actionableCount / te.totalScoredCompanies * 100).toFixed(0) + '%'
+                  : null;
+
                 return [
                   { key: 'Audience Fit', score: cs?.audienceFit ?? null, weight: W.audienceFit, bullets: [
                     `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
+                    ...(te != null ? [`Avg buyer access score: ${te.avgBuyerAccessScore.toFixed(0)}/100 across ${te.totalScoredCompanies} scored companies`] : []),
                   ]},
                   { key: 'Target Opportunity', score: cs?.targetOpportunity ?? null, weight: W.targetOpportunity,
-                    bullets: totalTargets > 0 ? [
-                      `Must Target: ${mustCount}`,
-                      `High Priority: ${highCount}`,
-                      `Worth Engaging: ${worthCount}`,
-                      `Monitor: ${monitorCount}`,
-                      `Actionable rate: ${actionableRate != null ? (actionableRate * 100).toFixed(0) + '%' : 'N/A'} of ${totalTargets} total targets`,
+                    bullets: te != null ? [
+                      `Based on Target Recommendations engine — all ${te.totalScoredCompanies} scored companies`,
+                      `Must Target: ${te.mustTargetCount} (benchmark ${teBenchmarks!.must})`,
+                      `High Priority: ${te.highPriorityCount} (benchmark ${teBenchmarks!.high})`,
+                      `Worth Engaging: ${te.worthEngagingCount} (benchmark ${teBenchmarks!.worth})`,
+                      `Monitor / Low Priority: ${te.monitorCount + te.lowPriorityCount}`,
+                      ...(te.needsTitleReviewCount > 0 ? [`Needs Title Review: ${te.needsTitleReviewCount} (low confidence — review attendee titles)`] : []),
+                      `Avg priority score: ${te.avgTargetPriorityScore.toFixed(0)}/100 (benchmark 60+)`,
+                      `Actionable rate: ${teActionableRate} — ${te.actionableCount} companies have a high-confidence recommended action`,
                     ] : [
                       'Target scoring has not been run for this conference.',
-                      'Run target recommendations to enable this component. This would add up to 20 points to your score.',
+                      'Ensure the prospect company type is configured to enable this component. This would add up to 20 points to your score.',
                     ],
-                    unavailable: totalTargets === 0 ? 'No targets assigned for this conference.' : undefined,
+                    unavailable: te == null ? 'Prospect company type not configured or no attendees found.' : undefined,
                   },
                   { key: 'Engagement Capture', score: cs?.engagementCapture ?? null, weight: W.engagementCapture,
                     bullets: em != null ? [
@@ -1264,8 +1280,14 @@ export default function ProgramIntelligencePage() {
                     unavailable: bud == null ? 'No budget data available.' : undefined,
                   },
                   { key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue,
-                    bullets: ['Client/prospect overlap not yet computed. This would add up to 10 points to your score.'],
-                    unavailable: 'Strategic-value subcomponents unavailable.',
+                    bullets: te != null ? [
+                      `Avg relationship leverage score: ${te.avgRelationshipLeverageScore.toFixed(0)}/100 across ${te.totalScoredCompanies} companies`,
+                      `Based on internal relationships, prior engagement, and assigned rep coverage.`,
+                    ] : [
+                      'Prospect company type not configured — relationship leverage unavailable.',
+                      'This would add up to 10 points to your score.',
+                    ],
+                    unavailable: te == null ? 'Prospect company type not configured.' : undefined,
                   },
                 ];
               })().map((c) => (
