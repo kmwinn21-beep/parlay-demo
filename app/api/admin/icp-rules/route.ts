@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now')", args: [] }).catch(() => {});
     return NextResponse.json({ id: ruleId, category, sort_order, conditions: conditions ?? [] });
   } catch (e) {
     console.error('POST /api/admin/icp-rules error:', e);

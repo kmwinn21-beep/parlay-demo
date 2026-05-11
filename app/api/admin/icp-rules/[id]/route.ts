@@ -26,6 +26,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       });
     }
 
+    await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now')", args: [] }).catch(() => {});
     return NextResponse.json({ id: ruleId, category, conditions: conditions ?? [] });
   } catch (e) {
     console.error('PUT /api/admin/icp-rules/[id] error:', e);
@@ -41,6 +42,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     await dbReady;
     const ruleId = Number(params.id);
     await db.execute({ sql: 'DELETE FROM icp_rules WHERE id = ?', args: [ruleId] });
+    await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now')", args: [] }).catch(() => {});
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error('DELETE /api/admin/icp-rules/[id] error:', e);
