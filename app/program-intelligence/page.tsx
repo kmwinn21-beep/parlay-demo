@@ -65,6 +65,14 @@ interface CalendarConferenceRow {
   dataAge: number;
   recommendationReason?: string[];
   confidenceFactors?: string[];
+  tierProbabilityFactors?: { must: number; high: number; worth: number };
+  diagnostics?: {
+    targetOpportunity?: { total_targets?: number; must_target_count?: number; high_priority_count?: number; worth_engaging_count?: number; monitor_count?: number } | null;
+    engagementMeetings?: { total_meetings?: number } | null;
+    engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
+    budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
+    commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
+  };
 }
 
 interface ConferenceSummary {
@@ -600,14 +608,14 @@ export default function ProgramIntelligencePage() {
       </div>
 
       {/* Tab nav */}
-      <div className="bg-white border-b border-gray-200 px-6">
+      <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto">
-          <nav className="flex gap-1 -mb-px">
+          <nav className="flex gap-1 -mb-px overflow-x-auto hide-scrollbar px-6">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-brand-secondary text-brand-secondary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -644,7 +652,63 @@ export default function ProgramIntelligencePage() {
                 <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as any)}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
                 <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as any)}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
               </div>
-              {calendarRowsFiltered.length === 0 ? <div className="text-center py-10"><p className="font-medium text-gray-700">No conferences to score yet</p><p className="text-sm text-gray-400 mt-1">Upload historical conference lists or complete an active conference to generate calendar recommendations.</p><div className="mt-3 flex justify-center gap-2"><button className="btn-secondary text-sm" onClick={() => router.push('/conferences/new?mode=historical')}>Upload historical conference →</button><button className="btn-secondary text-sm" onClick={() => router.push('/conferences')}>View conferences →</button></div></div> : <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="text-left text-gray-500">{['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'].map((k) => <th key={k} className="p-2 cursor-pointer" onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>{k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}</th>)}</tr></thead><tbody>{calendarRowsFiltered.map((r) => <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}><td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td><td className="p-2">{r.conferenceYear}</td><td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td><td className="p-2">{r.attendeeCount}</td><td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td><td className="p-2">{r.calendarRecommendationScore ?? '—'}</td><td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td><td className="p-2">{r.confidenceLevel}</td><td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td></tr>)}</tbody></table></div>}
+              {calendarRowsFiltered.length === 0 ? (
+                <div className="text-center py-10">
+                  <p className="font-medium text-gray-700">No conferences to score yet</p>
+                  <p className="text-sm text-gray-400 mt-1">Upload historical conference lists or complete an active conference to generate calendar recommendations.</p>
+                  <div className="mt-3 flex justify-center gap-2">
+                    <button className="btn-secondary text-sm" onClick={() => router.push('/conferences/new?mode=historical')}>Upload historical conference →</button>
+                    <button className="btn-secondary text-sm" onClick={() => router.push('/conferences')}>View conferences →</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Mobile card list */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {calendarRowsFiltered.map((r) => (
+                      <button key={r.conferenceId} className="w-full text-left py-3 px-1 flex items-center justify-between gap-3 active:bg-gray-50" onClick={() => setSelectedCalendarRow(r)}>
+                        <div className="min-w-0">
+                          <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpCompanies}/{r.totalCompanies} ICP ({r.icpDensityPct.toFixed(0)}%)</p>
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
+                          <p className="text-xs text-gray-500 capitalize">{r.recommendationTier.replaceAll('_', ' ')}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500">
+                          {(['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'] as const).map((k) => (
+                            <th key={k} className="p-2 cursor-pointer" onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>
+                              {k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {calendarRowsFiltered.map((r) => (
+                          <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}>
+                            <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
+                            <td className="p-2">{r.conferenceYear}</td>
+                            <td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
+                            <td className="p-2">{r.attendeeCount}</td>
+                            <td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
+                            <td className="p-2">{r.calendarRecommendationScore ?? '—'}</td>
+                            <td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td>
+                            <td className="p-2">{r.confidenceLevel}</td>
+                            <td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1105,38 +1169,116 @@ export default function ProgramIntelligencePage() {
 
             <div className="mt-6">
               <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Score Breakdown</h4>
-              {[
-                { key: 'Audience Fit', score: selectedCalendarRow.calendarRecommendationScore, weight: 25, bullets: [
-                  `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
-                  `Average ICP Fit Score: Not available`,
-                  `Buyer Access Score: Not available`,
-                  `Title confidence: Not available`,
-                ]},
-                { key: 'Target Opportunity', score: null, weight: 20, bullets: [
-                  'Must Target count: Not available',
-                  'High Priority count: Not available',
-                  'Worth Engaging count: Not available',
-                  'Actionable target rate: Not available',
-                ], unavailable: 'Target scoring details unavailable in this dataset.'},
-                { key: 'Engagement Capture', score: null, weight: 15, bullets: [
-                  selectedCalendarRow.conferenceType === 'historical' ? 'Engagement data not available — this is a Historical conference with no activity logging.' : 'Engagement detail metrics unavailable in current payload.',
-                  'Weight redistributed to remaining components.',
-                ], unavailable: 'No engagement sub-metrics available'},
-                { key: 'Commercial Potential', score: null, weight: 15, bullets: [
-                  'Realistic pipeline goal: Not available',
-                  'Required pipeline: Not available',
-                  'Coverage: Not available',
-                ], unavailable: 'Commercial inputs unavailable'},
-                { key: 'Cost Justification', score: null, weight: 15, bullets: [
-                  'No budget data entered for this conference.',
-                  'Add budget in the conference settings to enable Cost Justification scoring.',
-                ], unavailable: 'No budget data available'},
-                { key: 'Strategic Value', score: null, weight: 10, bullets: [
-                  'Client company count: Not available',
-                  'Relationship leverage score: Not available',
-                  'Year-over-year trend: Not available',
-                ], unavailable: 'Strategic-value subcomponents unavailable'},
-              ].map((c, idx) => (
+              {(() => {
+                const d = selectedCalendarRow.diagnostics ?? {};
+                const tpf = selectedCalendarRow.tierProbabilityFactors ?? { must: 0.25, high: 0.15, worth: 0.075 };
+
+                // Target Opportunity — tiers stored as '1'/'2'/'3'/'unassigned' in DB
+                const to = d.targetOpportunity;
+                const totalTargets = Number(to?.total_targets ?? 0);
+                const mustCount = Number(to?.must_target_count ?? 0);
+                const highCount = Number(to?.high_priority_count ?? 0);
+                const worthCount = Number(to?.worth_engaging_count ?? 0);
+                const monitorCount = Number(to?.monitor_count ?? 0);
+                const actionableCount = mustCount + highCount + worthCount;
+                const actionableRate = totalTargets > 0 ? actionableCount / totalTargets : null;
+                // Score = weighted conversion likelihood vs benchmark of 15% blended conversion
+                const weightedLikelihood = totalTargets > 0
+                  ? (mustCount * tpf.must + highCount * tpf.high + worthCount * tpf.worth) / totalTargets
+                  : 0;
+                const BENCHMARK_CONVERSION = 0.15;
+                const targetScore = to != null && totalTargets > 0
+                  ? Math.min(Math.round((weightedLikelihood / BENCHMARK_CONVERSION) * 100), 100)
+                  : null;
+
+                // Engagement Capture
+                const em = d.engagementMeetings;
+                const ef = d.engagementFollowUps;
+                const totalMeetings = Number(em?.total_meetings ?? 0);
+                const totalFollowups = Number(ef?.total_followups ?? 0);
+                const completedFollowups = Number(ef?.completed_followups ?? 0);
+                const meetingRate = selectedCalendarRow.attendeeCount > 0 ? totalMeetings / selectedCalendarRow.attendeeCount : 0;
+                const followupRate = totalFollowups > 0 ? completedFollowups / totalFollowups : null;
+                const engagementScore = em != null
+                  ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 15)), 100)
+                  : null;
+
+                // Commercial Potential: projected pipeline vs required pipeline
+                const cp = d.commercialPotential;
+                const projectedPipeline = Number(cp?.projected_pipeline ?? 0);
+                const bud = d.budget;
+                const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
+                const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
+                const commercialScore = cp != null && reqPipeline > 0
+                  ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
+                  : (cp != null ? null : null);
+
+                // Cost Justification: score based on projected pipeline / (required pipeline / multiple)
+                // i.e. how well does projected pipeline justify the spend at the required ROI multiple
+                const costScore = bud != null && reqPipeline > 0
+                  ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
+                  : (bud != null ? 50 : null);
+
+                // Compute weights for null components
+                const weights = { audienceFit: 0.25, targetOpportunity: 0.20, engagementCapture: 0.15, commercialPotential: 0.15, costJustification: 0.15, strategicValue: 0.10 };
+                const nulls = [
+                  ...(targetScore == null ? ['targetOpportunity'] : []),
+                  ...(engagementScore == null ? ['engagementCapture'] : []),
+                  ...(commercialScore == null ? ['commercialPotential'] : []),
+                  ...(costScore == null ? ['costJustification'] : []),
+                  ...(['strategicValue']),
+                ] as (keyof typeof weights)[];
+                const totalNullW = nulls.reduce((s, k) => s + weights[k], 0);
+                const available = (Object.keys(weights) as (keyof typeof weights)[]).filter(k => !nulls.includes(k));
+                const totalAvailW = available.reduce((s, k) => s + weights[k], 0);
+                const aw: Record<string, number> = { ...weights };
+                for (const n of nulls) aw[n] = 0;
+                for (const k of available) aw[k] = weights[k] + (weights[k] / totalAvailW) * totalNullW;
+                return [
+                  { key: 'Audience Fit', score: selectedCalendarRow.calendarRecommendationScore, weight: Math.round(aw.audienceFit * 100), bullets: [
+                    `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
+                  ]},
+                  { key: 'Target Opportunity', score: targetScore, weight: Math.round(aw.targetOpportunity * 100),
+                    bullets: to != null ? [
+                      `Must Target: ${mustCount}`,
+                      `High Priority: ${highCount}`,
+                      `Worth Engaging: ${worthCount}`,
+                      `Monitor: ${monitorCount}`,
+                      `Actionable rate: ${actionableRate != null ? (actionableRate * 100).toFixed(0) + '%' : 'N/A'} of ${totalTargets} total targets`,
+                    ] : ['No targets assigned for this conference.', 'Assign targets in the conference to enable this score.'],
+                    unavailable: to == null ? 'No target data for this conference.' : undefined,
+                  },
+                  { key: 'Engagement Capture', score: engagementScore, weight: Math.round(aw.engagementCapture * 100),
+                    bullets: em != null ? [
+                      `Meetings: ${totalMeetings} (${(meetingRate * 100).toFixed(0)}% of attendees)`,
+                      ...(ef != null ? [`Follow-ups: ${completedFollowups} of ${totalFollowups} completed`] : []),
+                    ] : [
+                      selectedCalendarRow.conferenceType === 'historical' ? 'No activity logged — historical conference.' : 'No meetings recorded for this conference.',
+                      'Weight redistributed to remaining components.',
+                    ],
+                    unavailable: em == null ? 'No engagement data available.' : undefined,
+                  },
+                  { key: 'Commercial Potential', score: commercialScore, weight: Math.round(aw.commercialPotential * 100),
+                    bullets: cp != null ? [
+                      `Projected pipeline: $${projectedPipeline.toLocaleString()}`,
+                      ...(reqPipeline > 0 ? [`Required pipeline: $${reqPipeline.toLocaleString()} (${reqMultiple}x multiple)`, `Coverage: ${reqPipeline > 0 ? ((projectedPipeline / reqPipeline) * 100).toFixed(0) : '—'}%`] : ['No budget entered — coverage cannot be computed.']),
+                    ] : ['No target WSE or avg cost data available.', 'Ensure targets are assigned and avg cost per unit is set.'],
+                    unavailable: cp == null ? 'Commercial inputs unavailable.' : undefined,
+                  },
+                  { key: 'Cost Justification', score: costScore, weight: Math.round(aw.costJustification * 100),
+                    bullets: bud != null ? [
+                      `Required pipeline: $${reqPipeline.toLocaleString()}`,
+                      `Required ROI multiple: ${reqMultiple}x`,
+                      ...(cp != null && reqPipeline > 0 ? [`Projected at conversion rates: $${projectedPipeline.toLocaleString()} (${((projectedPipeline / reqPipeline) * 100).toFixed(0)}% of goal)`] : []),
+                    ] : ['No budget entered for this conference.', 'Add budget in conference settings to enable scoring.'],
+                    unavailable: bud == null ? 'No budget data available.' : undefined,
+                  },
+                  { key: 'Strategic Value', score: null, weight: Math.round(aw.strategicValue * 100),
+                    bullets: ['Client/prospect overlap not yet computed.', 'Weight redistributed to remaining components.'],
+                    unavailable: 'Strategic-value subcomponents unavailable.',
+                  },
+                ];
+              })().map((c) => (
                 <div key={c.key} className="mt-4 border rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <p className={`font-semibold ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
