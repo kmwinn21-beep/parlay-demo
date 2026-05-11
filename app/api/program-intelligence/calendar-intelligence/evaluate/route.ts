@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   const results:any[] = [];
   for (const c of confs) {
-    const safeCount = async (sql: string, args: unknown[] = []) => {
+    const safeCount = async (sql: string, args: Array<string | number | null> = []) => {
       try {
         const res = await db.execute({ sql, args });
         return Number((res.rows[0] as Record<string, unknown>)?.cnt ?? 0);
