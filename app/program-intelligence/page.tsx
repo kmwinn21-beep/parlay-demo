@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BarChart,
@@ -78,6 +78,7 @@ interface CalendarConferenceRow {
   recommendationReason?: string[];
   confidenceFactors?: string[];
   tierProbabilityFactors?: { must: number; high: number; worth: number };
+  targetingScored?: boolean;
   diagnostics?: {
     targetingEngine?: {
       mustTargetCount: number;
@@ -442,6 +443,9 @@ export default function ProgramIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
   const [calendarRows, setCalendarRows] = useState<CalendarConferenceRow[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarScoringProgress, setCalendarScoringProgress] = useState<{ completed: number; total: number } | null>(null);
+  const calendarScoredRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [calendarSort, setCalendarSort] = useState<keyof CalendarConferenceRow | 'score'>('score');
   const [calendarRecommendationFilter, setCalendarRecommendationFilter] = useState('all');
@@ -468,6 +472,7 @@ export default function ProgramIntelligencePage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    calendarScoredRef.current = false;
     try {
       const res = await fetch(
         `/api/program-intelligence/performance?startDate=${startDate}&endDate=${endDate}`,
@@ -479,11 +484,6 @@ export default function ProgramIntelligencePage() {
       }
       const data = await res.json() as { conferences: ConferenceSummary[] };
       setConferences(data.conferences ?? []);
-      const calRes = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
-      if (calRes.ok) {
-        const calData = await calRes.json() as { conferences: CalendarConferenceRow[] };
-        setCalendarRows(calData.conferences ?? []);
-      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -491,7 +491,61 @@ export default function ProgramIntelligencePage() {
     }
   }, [startDate, endDate]);
 
+  // Load basic calendar data (fast — no targeting engine)
+  const fetchCalendarBasic = useCallback(async () => {
+    setCalendarLoading(true);
+    try {
+      const calRes = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
+      if (calRes.ok) {
+        const calData = await calRes.json() as { conferences: CalendarConferenceRow[] };
+        setCalendarRows(calData.conferences ?? []);
+      }
+    } catch { /* non-fatal */ } finally {
+      setCalendarLoading(false);
+    }
+  }, []);
+
+  // Score conferences one-by-one with targeting engine, updating state as each completes
+  const scoreCalendarConferences = useCallback(async (rows: CalendarConferenceRow[]) => {
+    if (calendarScoredRef.current || rows.length === 0) return;
+    calendarScoredRef.current = true;
+    setCalendarScoringProgress({ completed: 0, total: rows.length });
+    let completed = 0;
+    for (const row of rows) {
+      try {
+        const res = await fetch(
+          `/api/program-intelligence/calendar-intelligence/${row.conferenceId}`,
+          { cache: 'no-store' },
+        );
+        if (res.ok) {
+          const data = await res.json() as { conference: CalendarConferenceRow };
+          const scored = data.conference;
+          setCalendarRows(prev => prev.map(r => r.conferenceId === scored.conferenceId ? scored : r));
+          // Keep selected drawer in sync
+          setSelectedCalendarRow(prev => prev?.conferenceId === scored.conferenceId ? scored : prev);
+        }
+      } catch { /* skip this conference, keep going */ }
+      completed++;
+      setCalendarScoringProgress({ completed, total: rows.length });
+    }
+    setCalendarScoringProgress(null);
+  }, []);
+
   useEffect(() => { void fetchData(); }, [fetchData]);
+
+  // Load calendar basic data when the calendar tab is first activated
+  useEffect(() => {
+    if (activeTab === 'calendar' && calendarRows.length === 0 && !calendarLoading) {
+      void fetchCalendarBasic();
+    }
+  }, [activeTab, calendarRows.length, calendarLoading, fetchCalendarBasic]);
+
+  // Start per-conference scoring once basic data is loaded and tab is active
+  useEffect(() => {
+    if (activeTab === 'calendar' && calendarRows.length > 0 && !calendarScoredRef.current) {
+      void scoreCalendarConferences(calendarRows);
+    }
+  }, [activeTab, calendarRows, scoreCalendarConferences]);
 
   // All derived state computed before any conditional returns (rules of hooks)
 
@@ -665,12 +719,35 @@ export default function ProgramIntelligencePage() {
 
         {activeTab === 'calendar' && (
           <div className="space-y-4">
+            {calendarLoading && calendarRows.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
+                <p className="text-gray-500 text-sm font-medium">Loading conference data…</p>
+              </div>
+            ) : (
+            <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
               <div className="card py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.calendarRecommendationScore != null).length}</p></div>
               <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
               <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
               <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
             </div>
+            {calendarScoringProgress !== null && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-500 animate-spin rounded-full flex-shrink-0" />
+                  <span className="text-sm font-medium text-blue-700">Scoring conferences with Target Recommendations engine…</span>
+                  <span className="ml-auto text-sm text-blue-600 tabular-nums">{calendarScoringProgress.completed} of {calendarScoringProgress.total}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                    style={{ width: `${(calendarScoringProgress.completed / calendarScoringProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-500 mt-1.5">Scores for Target Opportunity and Strategic Value are populating as each conference is processed.</p>
+              </div>
+            )}
             <div className="card">
               <div className="flex flex-wrap gap-2 mb-3">
                 <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend & Invest</option><option value="attend_maintain">Attend & Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
@@ -735,6 +812,8 @@ export default function ProgramIntelligencePage() {
                 </>
               )}
             </div>
+            </>
+            )}
           </div>
         )}
         {activeTab === 'performance' && (
