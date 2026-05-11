@@ -65,6 +65,13 @@ interface CalendarConferenceRow {
   dataAge: number;
   recommendationReason?: string[];
   confidenceFactors?: string[];
+  tierProbabilityFactors?: { must: number; high: number; worth: number };
+  diagnostics?: {
+    targetOpportunity?: { total_targets?: number; must_target_count?: number; high_priority_count?: number; worth_engaging_count?: number } | null;
+    engagementMeetings?: { total_meetings?: number } | null;
+    engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
+    budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
+  };
 }
 
 interface ConferenceSummary {
@@ -1105,38 +1112,95 @@ export default function ProgramIntelligencePage() {
 
             <div className="mt-6">
               <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Score Breakdown</h4>
-              {[
-                { key: 'Audience Fit', score: selectedCalendarRow.calendarRecommendationScore, weight: 25, bullets: [
-                  `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
-                  `Average ICP Fit Score: Not available`,
-                  `Buyer Access Score: Not available`,
-                  `Title confidence: Not available`,
-                ]},
-                { key: 'Target Opportunity', score: null, weight: 20, bullets: [
-                  'Must Target count: Not available',
-                  'High Priority count: Not available',
-                  'Worth Engaging count: Not available',
-                  'Actionable target rate: Not available',
-                ], unavailable: 'Target scoring details unavailable in this dataset.'},
-                { key: 'Engagement Capture', score: null, weight: 15, bullets: [
-                  selectedCalendarRow.conferenceType === 'historical' ? 'Engagement data not available — this is a Historical conference with no activity logging.' : 'Engagement detail metrics unavailable in current payload.',
-                  'Weight redistributed to remaining components.',
-                ], unavailable: 'No engagement sub-metrics available'},
-                { key: 'Commercial Potential', score: null, weight: 15, bullets: [
-                  'Realistic pipeline goal: Not available',
-                  'Required pipeline: Not available',
-                  'Coverage: Not available',
-                ], unavailable: 'Commercial inputs unavailable'},
-                { key: 'Cost Justification', score: null, weight: 15, bullets: [
-                  'No budget data entered for this conference.',
-                  'Add budget in the conference settings to enable Cost Justification scoring.',
-                ], unavailable: 'No budget data available'},
-                { key: 'Strategic Value', score: null, weight: 10, bullets: [
-                  'Client company count: Not available',
-                  'Relationship leverage score: Not available',
-                  'Year-over-year trend: Not available',
-                ], unavailable: 'Strategic-value subcomponents unavailable'},
-              ].map((c, idx) => (
+              {(() => {
+                const d = selectedCalendarRow.diagnostics ?? {};
+                const tpf = selectedCalendarRow.tierProbabilityFactors ?? { must: 0.25, high: 0.15, worth: 0.075 };
+
+                // Target Opportunity
+                const to = d.targetOpportunity;
+                const totalTargets = Number(to?.total_targets ?? 0);
+                const mustCount = Number(to?.must_target_count ?? 0);
+                const highCount = Number(to?.high_priority_count ?? 0);
+                const worthCount = Number(to?.worth_engaging_count ?? 0);
+                const actionableCount = mustCount + highCount + worthCount;
+                const actionableRate = totalTargets > 0 ? actionableCount / totalTargets : null;
+                const targetScore = to != null && totalTargets > 0
+                  ? Math.min(Math.round(((mustCount * tpf.must + highCount * tpf.high + worthCount * tpf.worth) / (totalTargets * tpf.must)) * 100), 100)
+                  : null;
+
+                // Engagement Capture
+                const em = d.engagementMeetings;
+                const ef = d.engagementFollowUps;
+                const totalMeetings = Number(em?.total_meetings ?? 0);
+                const totalFollowups = Number(ef?.total_followups ?? 0);
+                const completedFollowups = Number(ef?.completed_followups ?? 0);
+                const meetingRate = selectedCalendarRow.attendeeCount > 0 ? totalMeetings / selectedCalendarRow.attendeeCount : 0;
+                const followupRate = totalFollowups > 0 ? completedFollowups / totalFollowups : null;
+                const engagementScore = em != null
+                  ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 15)), 100)
+                  : null;
+
+                // Cost Justification
+                const bud = d.budget;
+                const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
+                const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
+                const costScore = bud != null && reqPipeline > 0 ? Math.min(Math.round((1 / reqMultiple) * 100 * 5), 100) : (bud != null ? 50 : null);
+
+                // Compute weights for null components
+                const weights = { audienceFit: 0.25, targetOpportunity: 0.20, engagementCapture: 0.15, commercialPotential: 0.15, costJustification: 0.15, strategicValue: 0.10 };
+                const nulls = [
+                  ...(targetScore == null ? ['targetOpportunity'] : []),
+                  ...(engagementScore == null ? ['engagementCapture'] : []),
+                  ...(['commercialPotential']),
+                  ...(costScore == null ? ['costJustification'] : []),
+                  ...(['strategicValue']),
+                ] as (keyof typeof weights)[];
+                const totalNullW = nulls.reduce((s, k) => s + weights[k], 0);
+                const available = (Object.keys(weights) as (keyof typeof weights)[]).filter(k => !nulls.includes(k));
+                const totalAvailW = available.reduce((s, k) => s + weights[k], 0);
+                const aw: Record<string, number> = { ...weights };
+                for (const n of nulls) aw[n] = 0;
+                for (const k of available) aw[k] = weights[k] + (weights[k] / totalAvailW) * totalNullW;
+                return [
+                  { key: 'Audience Fit', score: selectedCalendarRow.calendarRecommendationScore, weight: Math.round(aw.audienceFit * 100), bullets: [
+                    `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
+                  ]},
+                  { key: 'Target Opportunity', score: targetScore, weight: Math.round(aw.targetOpportunity * 100),
+                    bullets: to != null ? [
+                      `Must Target: ${mustCount}`,
+                      `High Priority: ${highCount}`,
+                      `Worth Engaging: ${worthCount}`,
+                      `Actionable rate: ${actionableRate != null ? (actionableRate * 100).toFixed(0) + '%' : 'N/A'} of ${totalTargets} targets`,
+                    ] : ['No targets assigned for this conference.', 'Assign targets in the conference to enable this score.'],
+                    unavailable: to == null ? 'No target data for this conference.' : undefined,
+                  },
+                  { key: 'Engagement Capture', score: engagementScore, weight: Math.round(aw.engagementCapture * 100),
+                    bullets: em != null ? [
+                      `Meetings: ${totalMeetings} (${(meetingRate * 100).toFixed(0)}% of attendees)`,
+                      ...(ef != null ? [`Follow-ups: ${completedFollowups} of ${totalFollowups} completed`] : []),
+                    ] : [
+                      selectedCalendarRow.conferenceType === 'historical' ? 'No activity logged — historical conference.' : 'No meetings recorded for this conference.',
+                      'Weight redistributed to remaining components.',
+                    ],
+                    unavailable: em == null ? 'No engagement data available.' : undefined,
+                  },
+                  { key: 'Commercial Potential', score: null, weight: Math.round(aw.commercialPotential * 100),
+                    bullets: ['Pipeline attribution data not yet available.', 'Weight redistributed to remaining components.'],
+                    unavailable: 'Pipeline data unavailable.',
+                  },
+                  { key: 'Cost Justification', score: costScore, weight: Math.round(aw.costJustification * 100),
+                    bullets: bud != null ? [
+                      `Required pipeline: $${reqPipeline.toLocaleString()}`,
+                      `Required multiple: ${reqMultiple}x`,
+                    ] : ['No budget entered for this conference.', 'Add budget in conference settings to enable scoring.'],
+                    unavailable: bud == null ? 'No budget data available.' : undefined,
+                  },
+                  { key: 'Strategic Value', score: null, weight: Math.round(aw.strategicValue * 100),
+                    bullets: ['Client/prospect overlap not yet computed.', 'Weight redistributed to remaining components.'],
+                    unavailable: 'Strategic-value subcomponents unavailable.',
+                  },
+                ];
+              })().map((c) => (
                 <div key={c.key} className="mt-4 border rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <p className={`font-semibold ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
