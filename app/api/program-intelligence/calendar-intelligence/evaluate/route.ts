@@ -5,11 +5,12 @@ import { db, dbReady } from '@/lib/db';
 function interp(score: number | null) { if (score == null) return null; if (score >= 90) return 'Exceptional Calendar Fit'; if (score >= 75) return 'Strong Calendar Fit'; if (score >= 60) return 'Moderate Calendar Fit'; if (score >= 40) return 'Limited Calendar Fit'; return 'Weak Calendar Fit'; }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth(request); if (auth instanceof NextResponse) return auth;
-  await dbReady;
-  const body = await request.json().catch(() => ({}));
-  const scope = String(body.scope ?? 'all');
-  const ids: number[] = Array.isArray(body.conference_ids) ? body.conference_ids.map(Number).filter(Boolean) : [];
+  try {
+    const auth = await requireAuth(request); if (auth instanceof NextResponse) return auth;
+    await dbReady;
+    const body = await request.json().catch(() => ({}));
+    const scope = String(body.scope ?? 'all');
+    const ids: number[] = Array.isArray(body.conference_ids) ? body.conference_ids.map(Number).filter(Boolean) : [];
 
   const confRows = await db.execute({ sql: `SELECT id,name,date,is_historical FROM conferences ORDER BY date DESC`, args: [] });
   let confs = (confRows.rows as any[]).map(r => ({ id:Number(r.id), name:String(r.name??''), date:r.date?String(r.date):null, is_historical:Number(r.is_historical??0)===1 }));
@@ -18,11 +19,24 @@ export async function POST(request: NextRequest) {
 
   const results:any[] = [];
   for (const c of confs) {
-    const attendeeCount = Number((await db.execute({ sql:'SELECT COUNT(*) AS cnt FROM conference_attendees WHERE conference_id=?', args:[c.id]})).rows[0]?.cnt ?? 0);
-    const companyCount = Number((await db.execute({ sql:'SELECT COUNT(DISTINCT a.company_id) AS cnt FROM conference_attendees ca JOIN attendees a ON a.id=ca.attendee_id WHERE ca.conference_id=?', args:[c.id]})).rows[0]?.cnt ?? 0);
-    const meetings = Number((await db.execute({ sql:'SELECT COUNT(*) AS cnt FROM meetings WHERE conference_id=?', args:[c.id]})).rows[0]?.cnt ?? 0);
-    const followups = Number((await db.execute({ sql:'SELECT COUNT(*) AS cnt FROM follow_ups WHERE conference_id=?', args:[c.id]})).rows[0]?.cnt ?? 0);
-    const budget = await db.execute({ sql:'SELECT required_pipeline_amount FROM conference_budget WHERE conference_id=? LIMIT 1', args:[c.id]});
+    const safeCount = async (sql: string, args: unknown[] = []) => {
+      try {
+        const res = await db.execute({ sql, args });
+        return Number((res.rows[0] as Record<string, unknown>)?.cnt ?? 0);
+      } catch {
+        return 0;
+      }
+    };
+    const attendeeCount = await safeCount('SELECT COUNT(*) AS cnt FROM conference_attendees WHERE conference_id=?', [c.id]);
+    const companyCount = await safeCount('SELECT COUNT(DISTINCT a.company_id) AS cnt FROM conference_attendees ca JOIN attendees a ON a.id=ca.attendee_id WHERE ca.conference_id=?', [c.id]);
+    const meetings = await safeCount('SELECT COUNT(*) AS cnt FROM meetings WHERE conference_id=?', [c.id]);
+    const followups = await safeCount('SELECT COUNT(*) AS cnt FROM follow_ups WHERE conference_id=?', [c.id]);
+    let budget: { rows: Array<{ required_pipeline_amount?: unknown }> } = { rows: [] };
+    try {
+      budget = await db.execute({ sql:'SELECT required_pipeline_amount FROM conference_budget WHERE conference_id=? LIMIT 1', args:[c.id]}) as { rows: Array<{ required_pipeline_amount?: unknown }> };
+    } catch {
+      budget = { rows: [] };
+    }
     const required = budget.rows[0]?.required_pipeline_amount != null ? Number(budget.rows[0].required_pipeline_amount) : null;
 
     const audienceFit = companyCount > 0 ? Math.min(100, 40 + companyCount) : null;
@@ -71,5 +85,9 @@ export async function POST(request: NextRequest) {
     evaluate_count: results.filter(r=>r.recommendation_key==='evaluate_before_committing').length,
     remove_count: results.filter(r=>r.recommendation_key==='remove_or_do_not_prioritize').length,
   };
-  return NextResponse.json({ summary, conferences: results });
+    return NextResponse.json({ summary, conferences: results });
+  } catch (error) {
+    console.error('POST /api/program-intelligence/calendar-intelligence/evaluate error:', error);
+    return NextResponse.json({ error: 'Unable to evaluate calendar recommendations.' }, { status: 500 });
+  }
 }
