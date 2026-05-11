@@ -126,6 +126,7 @@ export async function GET(request: NextRequest) {
           END AS rank
         FROM conferences c
         LEFT JOIN conf_ces cc ON c.id = cc.conference_id
+        WHERE COALESCE(c.is_historical, 0) = 0
         ORDER BY
           CASE WHEN COALESCE(cc.ces_score, 0) > 0 THEN 0 ELSE 1 END,
           rank ASC,
