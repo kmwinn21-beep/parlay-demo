@@ -607,14 +607,14 @@ export default function ProgramIntelligencePage() {
       </div>
 
       {/* Tab nav */}
-      <div className="bg-white border-b border-gray-200 px-6">
+      <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto">
-          <nav className="flex gap-1 -mb-px">
+          <nav className="flex gap-1 -mb-px overflow-x-auto hide-scrollbar px-6">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-brand-secondary text-brand-secondary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -651,7 +651,63 @@ export default function ProgramIntelligencePage() {
                 <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as any)}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
                 <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as any)}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
               </div>
-              {calendarRowsFiltered.length === 0 ? <div className="text-center py-10"><p className="font-medium text-gray-700">No conferences to score yet</p><p className="text-sm text-gray-400 mt-1">Upload historical conference lists or complete an active conference to generate calendar recommendations.</p><div className="mt-3 flex justify-center gap-2"><button className="btn-secondary text-sm" onClick={() => router.push('/conferences/new?mode=historical')}>Upload historical conference →</button><button className="btn-secondary text-sm" onClick={() => router.push('/conferences')}>View conferences →</button></div></div> : <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="text-left text-gray-500">{['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'].map((k) => <th key={k} className="p-2 cursor-pointer" onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>{k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}</th>)}</tr></thead><tbody>{calendarRowsFiltered.map((r) => <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}><td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td><td className="p-2">{r.conferenceYear}</td><td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td><td className="p-2">{r.attendeeCount}</td><td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td><td className="p-2">{r.calendarRecommendationScore ?? '—'}</td><td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td><td className="p-2">{r.confidenceLevel}</td><td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td></tr>)}</tbody></table></div>}
+              {calendarRowsFiltered.length === 0 ? (
+                <div className="text-center py-10">
+                  <p className="font-medium text-gray-700">No conferences to score yet</p>
+                  <p className="text-sm text-gray-400 mt-1">Upload historical conference lists or complete an active conference to generate calendar recommendations.</p>
+                  <div className="mt-3 flex justify-center gap-2">
+                    <button className="btn-secondary text-sm" onClick={() => router.push('/conferences/new?mode=historical')}>Upload historical conference →</button>
+                    <button className="btn-secondary text-sm" onClick={() => router.push('/conferences')}>View conferences →</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Mobile card list */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {calendarRowsFiltered.map((r) => (
+                      <button key={r.conferenceId} className="w-full text-left py-3 px-1 flex items-center justify-between gap-3 active:bg-gray-50" onClick={() => setSelectedCalendarRow(r)}>
+                        <div className="min-w-0">
+                          <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpCompanies}/{r.totalCompanies} ICP ({r.icpDensityPct.toFixed(0)}%)</p>
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
+                          <p className="text-xs text-gray-500 capitalize">{r.recommendationTier.replaceAll('_', ' ')}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500">
+                          {(['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'] as const).map((k) => (
+                            <th key={k} className="p-2 cursor-pointer" onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>
+                              {k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {calendarRowsFiltered.map((r) => (
+                          <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}>
+                            <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
+                            <td className="p-2">{r.conferenceYear}</td>
+                            <td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
+                            <td className="p-2">{r.attendeeCount}</td>
+                            <td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
+                            <td className="p-2">{r.calendarRecommendationScore ?? '—'}</td>
+                            <td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td>
+                            <td className="p-2">{r.confidenceLevel}</td>
+                            <td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
