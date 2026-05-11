@@ -519,6 +519,7 @@ export default function ProgramIntelligencePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}`}</style>
       {/* Page header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
@@ -535,7 +536,11 @@ export default function ProgramIntelligencePage() {
       {/* Tab nav */}
       <div className="bg-white border-b border-gray-200 px-6">
         <div className="max-w-7xl mx-auto">
-          <nav className="flex gap-1 -mb-px">
+          <div
+            className="overflow-x-auto -mx-1 px-1 hide-scrollbar"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+          <nav className="flex gap-1 -mb-px min-w-max whitespace-nowrap">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -550,6 +555,7 @@ export default function ProgramIntelligencePage() {
               </button>
             ))}
           </nav>
+          </div>
         </div>
       </div>
 
