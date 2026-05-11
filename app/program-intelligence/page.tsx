@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BarChart,
@@ -60,14 +60,40 @@ interface CalendarConferenceRow {
   icpCompanies: number;
   icpDensityPct: number;
   calendarRecommendationScore: number | null;
+  componentScores?: {
+    audienceFit: number | null;
+    targetOpportunity: number | null;
+    engagementCapture: number | null;
+    commercialPotential: number | null;
+    costJustification: number | null;
+    strategicValue: number | null;
+  };
+  confidenceMultiplier?: number;
+  availableComponentCount?: number;
+  totalComponentCount?: number;
+  maxPossibleScore?: number;
   recommendationTier: string;
   confidenceLevel: 'high' | 'medium' | 'low';
   dataAge: number;
   recommendationReason?: string[];
   confidenceFactors?: string[];
   tierProbabilityFactors?: { must: number; high: number; worth: number };
+  targetingScored?: boolean;
   diagnostics?: {
-    targetOpportunity?: { total_targets?: number; must_target_count?: number; high_priority_count?: number; worth_engaging_count?: number; monitor_count?: number } | null;
+    targetingEngine?: {
+      mustTargetCount: number;
+      highPriorityCount: number;
+      worthEngagingCount: number;
+      monitorCount: number;
+      lowPriorityCount: number;
+      needsTitleReviewCount: number;
+      totalScoredCompanies: number;
+      avgTargetPriorityScore: number;
+      avgBuyerAccessScore: number;
+      avgRelationshipLeverageScore: number;
+      actionableCount: number;
+      isLargeConference: boolean;
+    } | null;
     engagementMeetings?: { total_meetings?: number } | null;
     engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
     budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
@@ -219,6 +245,37 @@ function calendarScoreColor(score: number | null): string {
   if (score >= 55) return '#d97706';
   if (score >= 40) return '#f97316';
   return '#dc2626';
+}
+
+const CALENDAR_TIER_INFO: Record<string, { label: string; classes: string }> = {
+  attend_invest_more:      { label: 'Attend & Invest',         classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  attend_maintain:         { label: 'Attend & Maintain',       classes: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+  attend_reconsider_format:{ label: 'Reconsider Format',       classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  evaluate_before_committing:{ label: 'Evaluate First',        classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  remove_from_calendar:    { label: 'Remove from Calendar',    classes: 'bg-red-50 text-red-700 border-red-200' },
+  do_not_prioritize:       { label: 'Do Not Prioritize',       classes: 'bg-red-50 text-red-600 border-red-100' },
+};
+
+function calendarTierInfo(tier: string): { label: string; classes: string } {
+  return CALENDAR_TIER_INFO[tier] ?? { label: tierLabel(tier), classes: 'bg-gray-50 text-gray-600 border-gray-200' };
+}
+
+function confidencePillClasses(level: string): string {
+  if (level === 'high') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (level === 'medium') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function formatDataAge(dataAge: number): string {
+  if (dataAge < 1) return '< 1 year';
+  const years = Math.round(dataAge);
+  return years === 1 ? '1 year' : `${years} years`;
+}
+
+function dataAgeColorClass(dataAge: number): string {
+  if (dataAge > 4) return 'text-red-600';
+  if (dataAge > 2) return 'text-amber-600';
+  return '';
 }
 
 function tierLabel(tier: string): string {
@@ -417,6 +474,9 @@ export default function ProgramIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
   const [calendarRows, setCalendarRows] = useState<CalendarConferenceRow[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarScoringProgress, setCalendarScoringProgress] = useState<{ completed: number; total: number } | null>(null);
+  const calendarScoredRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [calendarSort, setCalendarSort] = useState<keyof CalendarConferenceRow | 'score'>('score');
   const [calendarRecommendationFilter, setCalendarRecommendationFilter] = useState('all');
@@ -443,6 +503,7 @@ export default function ProgramIntelligencePage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    calendarScoredRef.current = false;
     try {
       const res = await fetch(
         `/api/program-intelligence/performance?startDate=${startDate}&endDate=${endDate}`,
@@ -454,11 +515,6 @@ export default function ProgramIntelligencePage() {
       }
       const data = await res.json() as { conferences: ConferenceSummary[] };
       setConferences(data.conferences ?? []);
-      const calRes = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
-      if (calRes.ok) {
-        const calData = await calRes.json() as { conferences: CalendarConferenceRow[] };
-        setCalendarRows(calData.conferences ?? []);
-      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -466,7 +522,61 @@ export default function ProgramIntelligencePage() {
     }
   }, [startDate, endDate]);
 
+  // Load basic calendar data (fast — no targeting engine)
+  const fetchCalendarBasic = useCallback(async () => {
+    setCalendarLoading(true);
+    try {
+      const calRes = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
+      if (calRes.ok) {
+        const calData = await calRes.json() as { conferences: CalendarConferenceRow[] };
+        setCalendarRows(calData.conferences ?? []);
+      }
+    } catch { /* non-fatal */ } finally {
+      setCalendarLoading(false);
+    }
+  }, []);
+
+  // Score conferences one-by-one with targeting engine, updating state as each completes
+  const scoreCalendarConferences = useCallback(async (rows: CalendarConferenceRow[]) => {
+    if (calendarScoredRef.current || rows.length === 0) return;
+    calendarScoredRef.current = true;
+    setCalendarScoringProgress({ completed: 0, total: rows.length });
+    let completed = 0;
+    for (const row of rows) {
+      try {
+        const res = await fetch(
+          `/api/program-intelligence/calendar-intelligence/${row.conferenceId}`,
+          { cache: 'no-store' },
+        );
+        if (res.ok) {
+          const data = await res.json() as { conference: CalendarConferenceRow };
+          const scored = data.conference;
+          setCalendarRows(prev => prev.map(r => r.conferenceId === scored.conferenceId ? scored : r));
+          // Keep selected drawer in sync
+          setSelectedCalendarRow(prev => prev?.conferenceId === scored.conferenceId ? scored : prev);
+        }
+      } catch { /* skip this conference, keep going */ }
+      completed++;
+      setCalendarScoringProgress({ completed, total: rows.length });
+    }
+    setCalendarScoringProgress(null);
+  }, []);
+
   useEffect(() => { void fetchData(); }, [fetchData]);
+
+  // Load calendar basic data when the calendar tab is first activated
+  useEffect(() => {
+    if (activeTab === 'calendar' && calendarRows.length === 0 && !calendarLoading) {
+      void fetchCalendarBasic();
+    }
+  }, [activeTab, calendarRows.length, calendarLoading, fetchCalendarBasic]);
+
+  // Start per-conference scoring once basic data is loaded and tab is active
+  useEffect(() => {
+    if (activeTab === 'calendar' && calendarRows.length > 0 && !calendarScoredRef.current) {
+      void scoreCalendarConferences(calendarRows);
+    }
+  }, [activeTab, calendarRows, scoreCalendarConferences]);
 
   // All derived state computed before any conditional returns (rules of hooks)
 
@@ -640,12 +750,35 @@ export default function ProgramIntelligencePage() {
 
         {activeTab === 'calendar' && (
           <div className="space-y-4">
+            {calendarLoading && calendarRows.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
+                <p className="text-gray-500 text-sm font-medium">Loading conference data…</p>
+              </div>
+            ) : (
+            <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-              <div className="card py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.calendarRecommendationScore != null).length}</p></div>
+              <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
               <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
               <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
               <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
             </div>
+            {calendarScoringProgress !== null && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-500 animate-spin rounded-full flex-shrink-0" />
+                  <span className="text-sm font-medium text-blue-700">Scoring conferences with Target Recommendations engine…</span>
+                  <span className="ml-auto text-sm text-blue-600 tabular-nums">{calendarScoringProgress.completed} of {calendarScoringProgress.total}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                    style={{ width: `${(calendarScoringProgress.completed / calendarScoringProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-500 mt-1.5">Scores for Target Opportunity and Strategic Value are populating as each conference is processed.</p>
+              </div>
+            )}
             <div className="card">
               <div className="flex flex-wrap gap-2 mb-3">
                 <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend & Invest</option><option value="attend_maintain">Attend & Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
@@ -666,14 +799,14 @@ export default function ProgramIntelligencePage() {
                   {/* Mobile card list */}
                   <div className="md:hidden divide-y divide-gray-100">
                     {calendarRowsFiltered.map((r) => (
-                      <button key={r.conferenceId} className="w-full text-left py-3 px-1 flex items-center justify-between gap-3 active:bg-gray-50" onClick={() => setSelectedCalendarRow(r)}>
+                      <button key={r.conferenceId} className={`w-full text-left py-3 px-1 flex items-center justify-between gap-3 transition-colors ${selectedCalendarRow?.conferenceId === r.conferenceId ? 'bg-blue-50' : 'active:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                         <div className="min-w-0">
                           <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
                           <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpCompanies}/{r.totalCompanies} ICP ({r.icpDensityPct.toFixed(0)}%)</p>
                         </div>
                         <div className="flex-shrink-0 text-right">
                           <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
-                          <p className="text-xs text-gray-500 capitalize">{r.recommendationTier.replaceAll('_', ' ')}</p>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border mt-0.5 ${calendarTierInfo(r.recommendationTier).classes}`}>{calendarTierInfo(r.recommendationTier).label}</span>
                         </div>
                       </button>
                     ))}
@@ -691,25 +824,31 @@ export default function ProgramIntelligencePage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {calendarRowsFiltered.map((r) => (
-                          <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}>
+                        {calendarRowsFiltered.map((r) => {
+                          const tierInfo = calendarTierInfo(r.recommendationTier);
+                          const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                          return (
+                          <tr key={r.conferenceId} className={`border-t cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                             <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
-                            <td className="p-2">{r.conferenceYear}</td>
-                            <td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
-                            <td className="p-2">{r.attendeeCount}</td>
-                            <td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
-                            <td className="p-2">{r.calendarRecommendationScore ?? '—'}</td>
-                            <td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td>
-                            <td className="p-2">{r.confidenceLevel}</td>
-                            <td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td>
+                            <td className="p-2 text-gray-600">{r.conferenceYear}</td>
+                            <td className="p-2 text-gray-600">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
+                            <td className="p-2 text-gray-600">{r.attendeeCount}</td>
+                            <td className="p-2 text-gray-600">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
+                            <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
+                            <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
+                            <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
+                            <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </>
               )}
             </div>
+            </>
+            )}
           </div>
         )}
         {activeTab === 'performance' && (
@@ -1165,124 +1304,111 @@ export default function ProgramIntelligencePage() {
                 {selectedCalendarRow.calendarRecommendationScore ?? '—'}<span className="text-2xl text-gray-400">/100</span>
               </p>
               <p className="font-semibold mt-1" style={{ color: calendarScoreColor(selectedCalendarRow.calendarRecommendationScore) }}>{tierLabel(selectedCalendarRow.recommendationTier)}</p>
+              <p className="text-xs text-gray-400 mt-2">Score based on {selectedCalendarRow.availableComponentCount ?? '?'} of 6 components ({Math.round((selectedCalendarRow.confidenceMultiplier ?? 0) * 100)}% of total scoring weight)</p>
+              <p className="text-xs text-gray-400">Maximum possible score with available data: {selectedCalendarRow.maxPossibleScore ?? '—'}/100</p>
             </div>
 
             <div className="mt-6">
               <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Score Breakdown</h4>
               {(() => {
                 const d = selectedCalendarRow.diagnostics ?? {};
-                const tpf = selectedCalendarRow.tierProbabilityFactors ?? { must: 0.25, high: 0.15, worth: 0.075 };
+                const cs = selectedCalendarRow.componentScores;
 
-                // Target Opportunity — tiers stored as '1'/'2'/'3'/'unassigned' in DB
-                const to = d.targetOpportunity;
-                const totalTargets = Number(to?.total_targets ?? 0);
-                const mustCount = Number(to?.must_target_count ?? 0);
-                const highCount = Number(to?.high_priority_count ?? 0);
-                const worthCount = Number(to?.worth_engaging_count ?? 0);
-                const monitorCount = Number(to?.monitor_count ?? 0);
-                const actionableCount = mustCount + highCount + worthCount;
-                const actionableRate = totalTargets > 0 ? actionableCount / totalTargets : null;
-                // Score = weighted conversion likelihood vs benchmark of 15% blended conversion
-                const weightedLikelihood = totalTargets > 0
-                  ? (mustCount * tpf.must + highCount * tpf.high + worthCount * tpf.worth) / totalTargets
-                  : 0;
-                const BENCHMARK_CONVERSION = 0.15;
-                const targetScore = to != null && totalTargets > 0
-                  ? Math.min(Math.round((weightedLikelihood / BENCHMARK_CONVERSION) * 100), 100)
-                  : null;
-
-                // Engagement Capture
+                // Bullet detail data from diagnostics (scores come pre-computed from the API)
+                const te = d.targetingEngine;
                 const em = d.engagementMeetings;
                 const ef = d.engagementFollowUps;
                 const totalMeetings = Number(em?.total_meetings ?? 0);
                 const totalFollowups = Number(ef?.total_followups ?? 0);
                 const completedFollowups = Number(ef?.completed_followups ?? 0);
                 const meetingRate = selectedCalendarRow.attendeeCount > 0 ? totalMeetings / selectedCalendarRow.attendeeCount : 0;
-                const followupRate = totalFollowups > 0 ? completedFollowups / totalFollowups : null;
-                const engagementScore = em != null
-                  ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 15)), 100)
-                  : null;
 
-                // Commercial Potential: projected pipeline vs required pipeline
                 const cp = d.commercialPotential;
                 const projectedPipeline = Number(cp?.projected_pipeline ?? 0);
                 const bud = d.budget;
                 const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
                 const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
-                const commercialScore = cp != null && reqPipeline > 0
-                  ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
-                  : (cp != null ? null : null);
 
-                // Cost Justification: score based on projected pipeline / (required pipeline / multiple)
-                // i.e. how well does projected pipeline justify the spend at the required ROI multiple
-                const costScore = bud != null && reqPipeline > 0
-                  ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
-                  : (bud != null ? 50 : null);
+                // Fixed default weights — never change regardless of null components
+                const W = { audienceFit: 25, targetOpportunity: 20, engagementCapture: 15, commercialPotential: 15, costJustification: 15, strategicValue: 10 };
 
-                // Compute weights for null components
-                const weights = { audienceFit: 0.25, targetOpportunity: 0.20, engagementCapture: 0.15, commercialPotential: 0.15, costJustification: 0.15, strategicValue: 0.10 };
-                const nulls = [
-                  ...(targetScore == null ? ['targetOpportunity'] : []),
-                  ...(engagementScore == null ? ['engagementCapture'] : []),
-                  ...(commercialScore == null ? ['commercialPotential'] : []),
-                  ...(costScore == null ? ['costJustification'] : []),
-                  ...(['strategicValue']),
-                ] as (keyof typeof weights)[];
-                const totalNullW = nulls.reduce((s, k) => s + weights[k], 0);
-                const available = (Object.keys(weights) as (keyof typeof weights)[]).filter(k => !nulls.includes(k));
-                const totalAvailW = available.reduce((s, k) => s + weights[k], 0);
-                const aw: Record<string, number> = { ...weights };
-                for (const n of nulls) aw[n] = 0;
-                for (const k of available) aw[k] = weights[k] + (weights[k] / totalAvailW) * totalNullW;
+                const teBenchmarks = te != null ? (te.isLargeConference
+                  ? { must: '15%', high: '30%', worth: '25%' }
+                  : { must: '10%', high: '20%', worth: '20%' }) : null;
+                const teActionableRate = te != null && te.totalScoredCompanies > 0
+                  ? (te.actionableCount / te.totalScoredCompanies * 100).toFixed(0) + '%'
+                  : null;
+
                 return [
-                  { key: 'Audience Fit', score: selectedCalendarRow.calendarRecommendationScore, weight: Math.round(aw.audienceFit * 100), bullets: [
+                  { key: 'Audience Fit', score: cs?.audienceFit ?? null, weight: W.audienceFit, bullets: [
                     `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
+                    ...(te != null ? [`Avg buyer access score: ${te.avgBuyerAccessScore.toFixed(0)}/100 across ${te.totalScoredCompanies} scored companies`] : []),
                   ]},
-                  { key: 'Target Opportunity', score: targetScore, weight: Math.round(aw.targetOpportunity * 100),
-                    bullets: to != null ? [
-                      `Must Target: ${mustCount}`,
-                      `High Priority: ${highCount}`,
-                      `Worth Engaging: ${worthCount}`,
-                      `Monitor: ${monitorCount}`,
-                      `Actionable rate: ${actionableRate != null ? (actionableRate * 100).toFixed(0) + '%' : 'N/A'} of ${totalTargets} total targets`,
-                    ] : ['No targets assigned for this conference.', 'Assign targets in the conference to enable this score.'],
-                    unavailable: to == null ? 'No target data for this conference.' : undefined,
+                  { key: 'Target Opportunity', score: cs?.targetOpportunity ?? null, weight: W.targetOpportunity,
+                    bullets: te != null ? [
+                      `Based on Target Recommendations engine — all ${te.totalScoredCompanies} scored companies`,
+                      `Must Target: ${te.mustTargetCount} (benchmark ${teBenchmarks!.must})`,
+                      `High Priority: ${te.highPriorityCount} (benchmark ${teBenchmarks!.high})`,
+                      `Worth Engaging: ${te.worthEngagingCount} (benchmark ${teBenchmarks!.worth})`,
+                      `Monitor / Low Priority: ${te.monitorCount + te.lowPriorityCount}`,
+                      ...(te.needsTitleReviewCount > 0 ? [`Needs Title Review: ${te.needsTitleReviewCount} (low confidence — review attendee titles)`] : []),
+                      `Avg priority score: ${te.avgTargetPriorityScore.toFixed(0)}/100 (benchmark 60+)`,
+                      `Actionable rate: ${teActionableRate} — ${te.actionableCount} companies have a high-confidence recommended action`,
+                    ] : [
+                      'Target scoring has not been run for this conference.',
+                      'Ensure the prospect company type is configured to enable this component. This would add up to 20 points to your score.',
+                    ],
+                    unavailable: te == null ? 'Prospect company type not configured or no attendees found.' : undefined,
                   },
-                  { key: 'Engagement Capture', score: engagementScore, weight: Math.round(aw.engagementCapture * 100),
+                  { key: 'Engagement Capture', score: cs?.engagementCapture ?? null, weight: W.engagementCapture,
                     bullets: em != null ? [
                       `Meetings: ${totalMeetings} (${(meetingRate * 100).toFixed(0)}% of attendees)`,
                       ...(ef != null ? [`Follow-ups: ${completedFollowups} of ${totalFollowups} completed`] : []),
+                    ] : selectedCalendarRow.conferenceType === 'historical' ? [
+                      'Not applicable — Historical Conference. Engagement Capture requires activity data from an attended conference.',
                     ] : [
-                      selectedCalendarRow.conferenceType === 'historical' ? 'No activity logged — historical conference.' : 'No meetings recorded for this conference.',
-                      'Weight redistributed to remaining components.',
+                      'No meetings recorded for this conference.',
+                      'This would add up to 15 points to your score.',
                     ],
-                    unavailable: em == null ? 'No engagement data available.' : undefined,
+                    unavailable: em == null ? (selectedCalendarRow.conferenceType === 'historical' ? 'Not applicable for historical conferences.' : 'No engagement data available.') : undefined,
                   },
-                  { key: 'Commercial Potential', score: commercialScore, weight: Math.round(aw.commercialPotential * 100),
+                  { key: 'Commercial Potential', score: cs?.commercialPotential ?? null, weight: W.commercialPotential,
                     bullets: cp != null ? [
                       `Projected pipeline: $${projectedPipeline.toLocaleString()}`,
-                      ...(reqPipeline > 0 ? [`Required pipeline: $${reqPipeline.toLocaleString()} (${reqMultiple}x multiple)`, `Coverage: ${reqPipeline > 0 ? ((projectedPipeline / reqPipeline) * 100).toFixed(0) : '—'}%`] : ['No budget entered — coverage cannot be computed.']),
-                    ] : ['No target WSE or avg cost data available.', 'Ensure targets are assigned and avg cost per unit is set.'],
+                      ...(reqPipeline > 0 ? [`Required pipeline: $${reqPipeline.toLocaleString()} (${reqMultiple}x multiple)`, `Coverage: ${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%`] : ['No budget entered — coverage cannot be computed.']),
+                    ] : [
+                      'No target WSE or avg cost data available.',
+                      'Ensure targets are assigned and avg cost per unit is set in admin settings.',
+                    ],
                     unavailable: cp == null ? 'Commercial inputs unavailable.' : undefined,
                   },
-                  { key: 'Cost Justification', score: costScore, weight: Math.round(aw.costJustification * 100),
+                  { key: 'Cost Justification', score: cs?.costJustification ?? null, weight: W.costJustification,
                     bullets: bud != null ? [
                       `Required pipeline: $${reqPipeline.toLocaleString()}`,
                       `Required ROI multiple: ${reqMultiple}x`,
                       ...(cp != null && reqPipeline > 0 ? [`Projected at conversion rates: $${projectedPipeline.toLocaleString()} (${((projectedPipeline / reqPipeline) * 100).toFixed(0)}% of goal)`] : []),
-                    ] : ['No budget entered for this conference.', 'Add budget in conference settings to enable scoring.'],
+                    ] : [
+                      'Budget not entered for this conference.',
+                      'Add budget in conference settings to enable Cost Justification scoring. This would add up to 15 points to your score.',
+                    ],
                     unavailable: bud == null ? 'No budget data available.' : undefined,
                   },
-                  { key: 'Strategic Value', score: null, weight: Math.round(aw.strategicValue * 100),
-                    bullets: ['Client/prospect overlap not yet computed.', 'Weight redistributed to remaining components.'],
-                    unavailable: 'Strategic-value subcomponents unavailable.',
+                  { key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue,
+                    bullets: te != null ? [
+                      `Avg relationship leverage score: ${te.avgRelationshipLeverageScore.toFixed(0)}/100 across ${te.totalScoredCompanies} companies`,
+                      `Based on internal relationships, prior engagement, and assigned rep coverage.`,
+                    ] : [
+                      'Prospect company type not configured — relationship leverage unavailable.',
+                      'This would add up to 10 points to your score.',
+                    ],
+                    unavailable: te == null ? 'Prospect company type not configured.' : undefined,
                   },
                 ];
               })().map((c) => (
                 <div key={c.key} className="mt-4 border rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <p className={`font-semibold ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
-                    <p className="text-sm text-gray-600">{c.score == null ? '—' : Math.round(c.score)}/100 · {c.weight}% weight{c.score == null ? ' — reweighted' : ''}</p>
+                    <p className="text-sm text-gray-600">{c.score == null ? '—' : Math.round(c.score)}/100 · {c.weight}% weight{c.score == null ? ' — not scored' : ''}</p>
                   </div>
                   <div className="mt-2 h-2 rounded bg-gray-100 overflow-hidden"><div className="h-full" style={{ width: `${c.score ?? 0}%`, backgroundColor: calendarScoreColor(c.score) }} /></div>
                   {c.score == null && <p className="text-xs text-gray-500 mt-2">{c.unavailable}</p>}

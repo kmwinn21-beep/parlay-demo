@@ -9,25 +9,65 @@ export const DEFAULT_WEIGHTS = {
 
 type WeightKey = keyof typeof DEFAULT_WEIGHTS;
 
-export function reweightComponents(weights: typeof DEFAULT_WEIGHTS, nullComponents: WeightKey[]) {
-  const totalNullWeight = nullComponents.reduce((sum, k) => sum + weights[k], 0);
-  const available = (Object.keys(weights) as WeightKey[]).filter((k) => !nullComponents.includes(k));
-  const totalAvailable = available.reduce((sum, k) => sum + weights[k], 0);
-  const reweighted = { ...weights } as Record<WeightKey, number>;
-  for (const n of nullComponents) reweighted[n] = 0;
-  for (const k of available) reweighted[k] = weights[k] + (weights[k] / totalAvailable) * totalNullWeight;
-  const total = (Object.values(reweighted) as number[]).reduce((a, b) => a + b, 0);
-  if (total !== 1 && total > 0) {
-    for (const k of Object.keys(reweighted) as WeightKey[]) reweighted[k] = reweighted[k] / total;
-  }
-  return reweighted as typeof DEFAULT_WEIGHTS;
+export interface ComponentScores {
+  audienceFit: number | null;
+  targetOpportunity: number | null;
+  engagementCapture: number | null;
+  commercialPotential: number | null;
+  costJustification: number | null;
+  strategicValue: number | null;
 }
 
-export function assembleFinalScore(componentScores: Record<WeightKey, number | null>) {
-  const nulls = (Object.keys(componentScores) as WeightKey[]).filter((k) => componentScores[k] == null);
-  const calculable = (Object.keys(componentScores) as WeightKey[]).filter((k) => componentScores[k] != null).length;
-  const appliedWeights = reweightComponents(DEFAULT_WEIGHTS, nulls);
-  if (calculable < 3) return { score: null, appliedWeights };
-  const raw = (Object.keys(componentScores) as WeightKey[]).reduce((sum, k) => sum + ((componentScores[k] ?? 0) * appliedWeights[k]), 0);
-  return { score: Math.max(0, Math.min(100, raw)), appliedWeights };
+export interface ScoreResult {
+  score: number | null;
+  confidenceMultiplier: number;
+  availableComponentCount: number;
+  totalComponentCount: number;
+  maxPossibleScore: number;
+}
+
+export function assembleFinalScore(componentScores: ComponentScores): ScoreResult {
+  const TOTAL_COMPONENTS = 6;
+
+  const availableComponentCount = (Object.keys(DEFAULT_WEIGHTS) as WeightKey[]).filter(
+    (k) => componentScores[k] !== null,
+  ).length;
+
+  const availableWeight = (Object.entries(DEFAULT_WEIGHTS) as [WeightKey, number][]).reduce(
+    (sum, [key, weight]) => (componentScores[key] !== null ? sum + weight : sum),
+    0,
+  );
+
+  const maxPossibleScore = Math.round(availableWeight * 100);
+  const confidenceMultiplier = availableComponentCount / TOTAL_COMPONENTS;
+
+  // Require at least 40% of total scoring weight to generate a score.
+  // Audience Fit + Target Opportunity (0.25 + 0.20 = 0.45) is the minimum meaningful pair.
+  if (availableWeight < 0.40) {
+    return {
+      score: null,
+      confidenceMultiplier,
+      availableComponentCount,
+      totalComponentCount: TOTAL_COMPONENTS,
+      maxPossibleScore,
+    };
+  }
+
+  // Null components contribute 0 — their weight simply disappears from the sum.
+  // This naturally penalizes the final score when data is missing without reweighting.
+  const rawScore = (Object.entries(DEFAULT_WEIGHTS) as [WeightKey, number][]).reduce(
+    (sum, [key, weight]) => {
+      const s = componentScores[key];
+      return s !== null ? sum + s * weight : sum;
+    },
+    0,
+  );
+
+  return {
+    score: Math.round(Math.min(100, Math.max(0, rawScore))),
+    confidenceMultiplier,
+    availableComponentCount,
+    totalComponentCount: TOTAL_COMPONENTS,
+    maxPossibleScore,
+  };
 }
