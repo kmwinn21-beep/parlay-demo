@@ -63,6 +63,8 @@ interface CalendarConferenceRow {
   recommendationTier: string;
   confidenceLevel: 'high' | 'medium' | 'low';
   dataAge: number;
+  recommendationReason?: string[];
+  confidenceFactors?: string[];
 }
 
 interface ConferenceSummary {
@@ -394,6 +396,11 @@ export default function ProgramIntelligencePage() {
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
   const [calendarRows, setCalendarRows] = useState<CalendarConferenceRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [calendarSort, setCalendarSort] = useState<keyof CalendarConferenceRow | 'score'>('score');
+  const [calendarRecommendationFilter, setCalendarRecommendationFilter] = useState('all');
+  const [calendarTypeFilter, setCalendarTypeFilter] = useState<'all'|'historical'|'active'>('all');
+  const [calendarConfidenceFilter, setCalendarConfidenceFilter] = useState<'all'|'high'|'medium'|'low'>('all');
+  const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
 
   useEffect(() => {
@@ -516,6 +523,31 @@ export default function ProgramIntelligencePage() {
 
   const interpretationReady = activeConferences.length >= 2;
 
+
+  const calendarRowsFiltered = useMemo(() => {
+    let rows = [...calendarRows];
+    if (calendarRecommendationFilter !== 'all') {
+      const m: Record<string, string[]> = {
+        attend_invest: ['attend_invest_more'],
+        attend_maintain: ['attend_maintain'],
+        reconsider: ['attend_reconsider_format'],
+        evaluate: ['evaluate_before_committing'],
+        cut_avoid: ['remove_from_calendar', 'do_not_prioritize'],
+      };
+      rows = rows.filter(r => m[calendarRecommendationFilter]?.includes(r.recommendationTier));
+    }
+    if (calendarTypeFilter !== 'all') rows = rows.filter(r => r.conferenceType === calendarTypeFilter);
+    if (calendarConfidenceFilter !== 'all') rows = rows.filter(r => r.confidenceLevel === calendarConfidenceFilter);
+    rows.sort((a, b) => {
+      if (calendarSort === 'score') return (b.calendarRecommendationScore ?? -1) - (a.calendarRecommendationScore ?? -1);
+      const av = a[calendarSort as keyof CalendarConferenceRow] as unknown;
+      const bv = b[calendarSort as keyof CalendarConferenceRow] as unknown;
+      if (typeof av === 'number' && typeof bv === 'number') return bv - av;
+      return String(av ?? '').localeCompare(String(bv ?? ''));
+    });
+    return rows;
+  }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarSort]);
+
   // Permission gate — after all hooks
   if (!capabilities) {
     return (
@@ -583,19 +615,22 @@ export default function ProgramIntelligencePage() {
         )}
 
 
+
         {activeTab === 'calendar' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="card"><p className="text-xs text-gray-500">Conferences Scored</p><p className="text-2xl font-bold">{calendarRows.filter(r => r.calendarRecommendationScore != null).length}</p></div>
-              <div className="card border-l-4 border-green-500"><p className="text-xs text-gray-500">Attend & Invest</p><p className="text-2xl font-bold">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
-              <div className="card border-l-4 border-amber-500"><p className="text-xs text-gray-500">Reconsider or Evaluate</p><p className="text-2xl font-bold">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
-              <div className="card border-l-4 border-red-500"><p className="text-xs text-gray-500">Cut or Avoid</p><p className="text-2xl font-bold">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+              <ScoreCard title="Conferences Scored" score={calendarRows.filter(r => r.calendarRecommendationScore != null).length} components={[]} />
+              <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
+              <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
+              <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
             </div>
-            <div className="card overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead><tr className="text-left text-gray-500"><th className="p-2">Conference</th><th className="p-2">Year</th><th className="p-2">Type</th><th className="p-2">Attendees</th><th className="p-2">ICP Companies</th><th className="p-2">Score</th><th className="p-2">Confidence</th><th className="p-2">Data Age</th></tr></thead>
-                <tbody>{calendarRows.map((r) => (<tr key={r.conferenceId} className="border-t"><td className="p-2">{r.conferenceName}</td><td className="p-2">{r.conferenceYear}</td><td className="p-2">{r.conferenceType}</td><td className="p-2">{r.attendeeCount}</td><td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td><td className="p-2">{r.calendarRecommendationScore ?? '—'}</td><td className="p-2">{r.confidenceLevel}</td><td className="p-2">{r.dataAge.toFixed(1)} years</td></tr>))}</tbody>
-              </table>
+            <div className="card">
+              <div className="flex flex-wrap gap-2 mb-3">
+                <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend & Invest</option><option value="attend_maintain">Attend & Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
+                <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as any)}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
+                <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as any)}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+              </div>
+              {calendarRowsFiltered.length === 0 ? <div className="text-center py-10"><p className="font-medium text-gray-700">No conferences to score yet</p><p className="text-sm text-gray-400 mt-1">Upload historical conference lists or complete an active conference to generate calendar recommendations.</p><div className="mt-3 flex justify-center gap-2"><button className="btn-secondary text-sm" onClick={() => router.push('/conferences/new?mode=historical')}>Upload historical conference →</button><button className="btn-secondary text-sm" onClick={() => router.push('/conferences')}>View conferences →</button></div></div> : <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="text-left text-gray-500">{['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'].map((k) => <th key={k} className="p-2 cursor-pointer" onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>{k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}</th>)}</tr></thead><tbody>{calendarRowsFiltered.map((r) => <tr key={r.conferenceId} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedCalendarRow(r)}><td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td><td className="p-2">{r.conferenceYear}</td><td className="p-2">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td><td className="p-2">{r.attendeeCount}</td><td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td><td className="p-2">{r.calendarRecommendationScore ?? '—'}</td><td className="p-2">{r.recommendationTier.replaceAll('_',' ')}</td><td className="p-2">{r.confidenceLevel}</td><td className="p-2">{r.dataAge > 4 ? <span className="text-red-600">{r.dataAge.toFixed(1)} years old</span> : r.dataAge > 2 ? <span className="text-amber-600">{r.dataAge.toFixed(1)} years old</span> : `${r.dataAge.toFixed(1)} years old`}</td></tr>)}</tbody></table></div>}
             </div>
           </div>
         )}
@@ -1035,6 +1070,19 @@ export default function ProgramIntelligencePage() {
           </div>
         )}
       </div>
+
+      {selectedCalendarRow && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedCalendarRow(null)}>
+          <div className="h-full w-full max-w-xl bg-white p-5 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center"><h3 className="text-lg font-bold">{selectedCalendarRow.conferenceName} ({selectedCalendarRow.conferenceYear})</h3><button onClick={() => setSelectedCalendarRow(null)}>✕</button></div>
+            <p className="mt-2 text-sm">Score: {selectedCalendarRow.calendarRecommendationScore ?? '—'}/100 · {selectedCalendarRow.recommendationTier.replaceAll('_', ' ')}</p>
+            <p className="text-sm">Confidence: {selectedCalendarRow.confidenceLevel}</p>
+            <p className="text-sm mt-2">Why this recommendation</p>
+            <ul className="list-disc pl-5 text-sm">{(selectedCalendarRow.recommendationReason ?? []).map((x, i) => <li key={i}>{x}</li>)}</ul>
+            <textarea className="input-field mt-4 w-full min-h-24" placeholder="Add notes about this conference — venue quality, networking value, strategic relationships, or anything else that should inform the calendar decision." />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
