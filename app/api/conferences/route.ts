@@ -75,18 +75,19 @@ export async function POST(request: NextRequest) {
     const notes = formData.get('notes') as string | null;
     const internal_attendees = formData.get('internal_attendees') as string | null;
     const conference_strategy_type_id = formData.get('conference_strategy_type_id') as string | null;
+    const is_historical = formData.get('is_historical') === '1';
     const file = formData.get('file') as File | null;
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
 
-    if (!name || !start_date || !end_date || !location || !conference_strategy_type_id) {
+    if (!name || !start_date || !end_date || !location || (!is_historical && !conference_strategy_type_id)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     // Create the conference record
     const confResult = await db.execute({
-      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *',
-      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, Number(conference_strategy_type_id)],
+      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, is_historical) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, is_historical ? 1 : 0],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;

@@ -8,7 +8,20 @@ interface RankedConference {
   start_date: string;
   end_date: string;
   score: number;
-  rank: number;
+  rank: number | null;
+}
+
+interface ConferenceNavRow {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
+interface ConferenceEffectivenessResponse {
+  ces?: {
+    score?: number | null;
+  };
 }
 
 function scoreColor(score: number) {
@@ -30,21 +43,54 @@ function formatDate(d: string) {
 interface Props {
   title: string;
   currentConferenceId: number;
+  metric: 'ces' | 'sales_execution' | 'audience' | 'cost_efficiency';
   onClose: () => void;
 }
 
-export function ConferenceRankingsModal({ title, currentConferenceId, onClose }: Props) {
+export function ConferenceRankingsModal({ title, currentConferenceId, metric, onClose }: Props) {
   const [rows, setRows] = useState<RankedConference[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/conferences/rankings')
-      .then(r => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
-      .then((data: RankedConference[]) => setRows(data))
+    fetch('/api/conferences?nav=1')
+      .then(r => { if (!r.ok) throw new Error('Failed to load conferences'); return r.json(); })
+      .then(async (conferences: ConferenceNavRow[]) => {
+        const scored = await Promise.all((conferences ?? []).map(async (c) => {
+          try {
+            const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
+            if (!res.ok) return null;
+            const eff = await res.json() as ConferenceEffectivenessResponse;
+            const score = Number(
+              metric === 'ces' ? eff?.ces?.score
+                : metric === 'sales_execution' ? (eff as any)?.sales_execution?.sales_effectiveness_score
+                : metric === 'audience' ? (eff as any)?.marketing_audience?.marketing_audience_signal_score
+                : (eff as any)?.operational?.cost_efficiency?.cost_efficiency_score
+              ?? 0,
+            );
+            if (score <= 0) return null;
+            return {
+              id: c.id,
+              name: c.name,
+              start_date: c.start_date,
+              end_date: c.end_date,
+              score,
+            };
+          } catch {
+            return null;
+          }
+        }));
+
+        const ranked = scored
+          .filter((c): c is NonNullable<typeof c> => c !== null)
+          .sort((a, b) => b.score - a.score)
+          .map((c, idx) => ({ ...c, rank: idx + 1 }));
+
+        setRows(ranked);
+      })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [metric]);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center" onClick={onClose}>
@@ -103,7 +149,7 @@ export function ConferenceRankingsModal({ title, currentConferenceId, onClose }:
                     >
                       <td className="px-4 py-3 text-center">
                         <span className={`text-sm font-bold ${isCurrent ? 'text-brand-secondary' : 'text-gray-400'}`}>
-                          {conf.rank}
+                          {conf.rank ?? '—'}
                         </span>
                       </td>
                       <td className="px-3 py-3">

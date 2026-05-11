@@ -60,6 +60,7 @@ export async function PUT(
               updated_at = excluded.updated_at`,
       args: [conferenceId, JSON.stringify(line_items ?? []), return_on_cost ?? null, String(safeMultiple), requiredPipelineAmount],
     });
+    await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now') WHERE id = ?", args: [conferenceId] }).catch(() => {});
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('PUT /api/conferences/[id]/budget error:', error);

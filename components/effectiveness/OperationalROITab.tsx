@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
@@ -63,8 +63,8 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const currentConferenceId = Number(data.conference.id ?? 0);
 
   const cesScore = Number(costs.cost_efficiency_score ?? 0);
-  const rank = operational.conf_efficiency_rank ?? 1;
-  const total = operational.conf_efficiency_total ?? 1;
+  const [rank, setRank] = useState<number | null>((operational as any)?.conf_efficiency_rank ?? null);
+  const [total, setTotal] = useState<number | null>((operational as any)?.conf_efficiency_total ?? null);
 
   const rawScore = Number(costs.cost_efficiency_score_raw ?? cesScore);
   const modifier = Number(costs.cost_efficiency_modifier ?? 0);
@@ -77,6 +77,31 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const pipelineScore = costs.pipeline_influence_score != null ? Number(costs.pipeline_influence_score) : null;
   const pipelineTier = String(costs.pipeline_influence_tier ?? '');
   const confidence = String(costs.calculation_confidence ?? 'full');
+
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/conferences?nav=1')
+      .then(r => r.ok ? r.json() : [])
+      .then(async (confs: Array<{ id: number }>) => {
+        const currentId = Number((data as any)?.conference?.id ?? 0);
+        const scored = await Promise.all((confs ?? []).map(async c => {
+          const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
+          if (!res.ok) return null;
+          const eff = await res.json() as any;
+          const score = Number(eff?.operational?.cost_efficiency?.cost_efficiency_score ?? 0);
+          return score > 0 ? { id: c.id, score } : null;
+        }));
+        const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
+        const idx = ranked.findIndex((r: any) => r.id === currentId);
+        if (!cancelled && idx >= 0) {
+          setTotal(ranked.length || null);
+          setRank(idx + 1);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [data]);
 
   const [showInterpretation, setShowInterpretation] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
@@ -162,8 +187,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               title="View full rankings"
             >
               <div className="text-xs text-gray-500 font-medium mb-1 group-hover:text-brand-secondary transition-colors">Efficiency Rank</div>
-              <div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div>
-              <div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div>
+              {rank ? <><div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div><div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
               <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div>
             </button>
           </div>
@@ -285,6 +309,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
         <ConferenceRankingsModal
           title="Cost Efficiency Rankings"
           currentConferenceId={currentConferenceId}
+          metric="cost_efficiency"
           onClose={() => setShowRankings(false)}
         />
       )}

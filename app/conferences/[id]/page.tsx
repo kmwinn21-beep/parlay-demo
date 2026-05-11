@@ -112,6 +112,7 @@ interface Conference {
   internal_attendees?: string;
   conference_strategy_type_id?: number | null;
   conference_strategy_type_display_name?: string | null;
+  is_historical?: number | boolean | null;
   created_at: string;
   attendees: Attendee[];
 }
@@ -357,9 +358,10 @@ export default function ConferenceDetailPage() {
   } | null>(null);
   const [pendingConflicts, setPendingConflicts] = useState<ConflictItem[] | null>(null);
 
-  const visibleConferenceTabs = CONFERENCE_TAB_ORDER.filter(
-    (tabKey) => conferenceTabConfig.orderedKeys.includes(tabKey) && conferenceTabConfig.isVisible(tabKey),
-  );
+  const visibleConferenceTabs = CONFERENCE_TAB_ORDER.filter((tabKey) => {
+    if (conference?.is_historical && !['attendees', 'companies', 'notes'].includes(tabKey)) return false;
+    return conferenceTabConfig.orderedKeys.includes(tabKey) && conferenceTabConfig.isVisible(tabKey);
+  });
 
   useEffect(() => {
     if (visibleConferenceTabs.length === 0) return;
@@ -1185,6 +1187,11 @@ export default function ConferenceDetailPage() {
                   </svg>
                   {conference.location}
                 </span>
+                {conference.is_historical && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border border-amber-400 bg-amber-100 text-amber-900">
+                    Historical Conference
+                  </span>
+                )}
                 {conference.attendees.length === 0 ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-300">
                     <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1193,18 +1200,32 @@ export default function ConferenceDetailPage() {
                     Awaiting Attendee Upload
                   </span>
                 ) : (
-                  <div className="inline-flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 flex-wrap">
                     <span className="badge-blue">
                       {conference.attendees.length} attendees
                     </span>
-                    <span className="text-sm font-semibold text-gray-700">
-                      Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
-                    </span>
+                    {!conference.is_historical && (
+                      <span className="text-sm font-semibold text-gray-700">
+                        Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
+              )}
+              {conference.is_historical && (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  This conference has a Calendar Recommendation Score.{' '}
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/program-intelligence?tab=calendar&conferenceId=${conference.id}`)}
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    View it in Calendar Intelligence →
+                  </button>
+                </div>
               )}
               <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
                 <div>
