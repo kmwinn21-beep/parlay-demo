@@ -424,6 +424,23 @@ export default function ProgramIntelligencePage() {
   }, [startDate, endDate]);
 
   useEffect(() => { void fetchData(); }, [fetchData]);
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCalendarConferences = async () => {
+      try {
+        const res = await fetch('/api/program-intelligence/calendar-intelligence/conferences', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (isMounted) {
+          setCalendarConferences(Array.isArray(data?.conferences) ? data.conferences : []);
+        }
+      } catch {
+        if (isMounted) setCalendarConferences([]);
+      }
+    };
+    void fetchCalendarConferences();
+    return () => { isMounted = false; };
+  }, []);
 
   // All derived state computed before any conditional returns (rules of hooks)
 
@@ -601,7 +618,7 @@ export default function ProgramIntelligencePage() {
               <p className="text-sm text-gray-500 mt-1">Plan next year’s conference calendar using audience fit, target opportunity, commercial potential, cost justification, and strategic value.</p>
               <p className="text-xs text-gray-400 mt-2">Historical conferences are excluded from active performance rankings but included here for calendar planning recommendations.</p>
             </div>
-            <div className="card"><div className="flex flex-wrap items-center gap-2"><select value={calendarScope} onChange={(e)=>setCalendarScope(e.target.value as any)} className="input-field text-sm"><option value="all">All eligible conferences</option><option value="historical">Historical conferences only</option><option value="active">Active conferences only</option><option value="completed">Completed conferences only</option><option value="custom">Custom selection</option></select>{calendarScope==='custom' && <select multiple value={calendarSelectedIds.map(String)} onChange={(e)=>setCalendarSelectedIds(Array.from(e.target.selectedOptions).map(o=>Number(o.value)))} className="input-field text-sm min-w-[260px] h-28">{calendarConferences.map((c:any)=><option key={c.conference_id} value={c.conference_id}>{c.conference_name} · {c.status}{c.start_date?` · ${c.start_date}`:''}</option>)}</select>}<button className="btn-primary text-sm" disabled={calendarLoading} onClick={runCalendarEvaluation}>{calendarRan ? 'Refresh Recommendations' : 'Evaluate Calendar'}</button><button className="btn-secondary text-sm" onClick={()=>{setCalendarSelectedIds([]); setCalendarData({summary:{},conferences:[]}); setCalendarRan(false);}}>Clear Selection</button></div></div><div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="card"><div className="flex flex-wrap items-center gap-2"><select value={calendarScope} onChange={(e)=>setCalendarScope(e.target.value as any)} className="input-field text-sm"><option value="all">All eligible conferences</option><option value="historical">Historical conferences only</option><option value="active">Active conferences only</option><option value="completed">Completed conferences only</option><option value="custom">Custom selection</option></select>{calendarScope==='custom' && <select multiple value={calendarSelectedIds.map(String)} onChange={(e)=>setCalendarSelectedIds(Array.from(e.target.selectedOptions).map(o=>Number(o.value)))} className="input-field text-sm min-w-[260px] h-28">{calendarConferences.map((c:any)=><option key={c.conference_id} value={c.conference_id}>{c.conference_name} · {c.status}{c.start_date?` · ${c.start_date}`:''}</option>)}</select>}<button className="btn-primary text-sm" disabled={calendarLoading} onClick={runCalendarEvaluation}>{calendarRan ? 'Refresh Recommendations' : 'Evaluate Calendar'}</button><button className="btn-secondary text-sm" onClick={()=>{setCalendarSelectedIds([]); setCalendarData({summary:{},conferences:[]}); setCalendarRan(false);}}>Clear Selection</button></div>{calendarScope==='custom' && calendarConferences.length===0 && <p className="text-xs text-gray-500 mt-2">No conferences available for custom selection yet.</p>}</div><div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[['Attend & Invest More', calendarRan ? calendarData.summary?.attend_invest_more_count : null],['Attend Same Level', calendarRan ? calendarData.summary?.attend_same_level_count : null],['Reconsider Format', calendarRan ? calendarData.summary?.reconsider_format_count : null],['Evaluate', calendarRan ? calendarData.summary?.evaluate_count : null],['Remove / Do Not Prioritize', calendarRan ? calendarData.summary?.remove_count : null]].map(([k,v]) => (
                 <div key={String(k)} className="card py-3">
                   <p className="text-xs text-gray-500">{String(k)}</p><p className="text-2xl font-bold text-brand-primary">{v == null ? '—' : Number(v)}</p>
