@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { HISTORICAL_ACTIVITY_DISABLED_MESSAGE, isHistoricalConference } from '@/lib/historicalConference';
 
 // GET /api/attendees/[id]/touchpoints?conference_id=X
 // With conference_id: returns { counts: Record<optionId, count> } for that conference

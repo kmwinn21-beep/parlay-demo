@@ -19,7 +19,7 @@ import { useCapabilities } from '@/lib/useCapabilities';
 
 type DatePreset = 'this_year' | 'last_year' | 'last_12' | 'last_24' | 'custom';
 type SortMode = 'date' | 'score';
-type TabId = 'performance' | 'budget' | 'pipeline' | 'reps' | 'trends';
+type TabId = 'performance' | 'budget' | 'pipeline' | 'reps' | 'trends' | 'calendar';
 
 interface CESComponents {
   dim1_icp_target: number | null;
@@ -76,6 +76,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline Attribution' },
   { id: 'reps', label: 'Rep Performance' },
   { id: 'trends', label: 'Conference Trends' },
+  { id: 'calendar', label: 'Calendar Intelligence' },
 ];
 
 // Matches DIM_COLORS order from SummaryTab.tsx
@@ -376,6 +377,7 @@ export default function ProgramIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [calendarData, setCalendarData] = useState<any>({ summary: {}, conferences: [] });
   const [isPortrait, setIsPortrait] = useState(true);
 
   useEffect(() => {
@@ -556,6 +558,30 @@ export default function ProgramIntelligencePage() {
         {activeTab !== 'performance' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
+          </div>
+        )}
+
+
+        {activeTab === 'calendar' && (
+          <div className="space-y-6">
+            <div className="card">
+              <h2 className="text-lg font-semibold text-brand-primary">Calendar Intelligence</h2>
+              <p className="text-sm text-gray-500 mt-1">Plan next year’s conference calendar using audience fit, target opportunity, commercial potential, cost justification, and strategic value.</p>
+              <p className="text-xs text-gray-400 mt-2">Historical conferences are excluded from active performance rankings but included here for calendar planning recommendations.</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[['Attend & Invest More', calendarData.summary?.attend_invest_more_count],['Attend Same Level', calendarData.summary?.attend_same_level_count],['Reconsider Format', calendarData.summary?.reconsider_format_count],['Evaluate', calendarData.summary?.evaluate_count],['Remove / Do Not Prioritize', calendarData.summary?.remove_count]].map(([k,v]) => (
+                <div key={String(k)} className="card py-3">
+                  <p className="text-xs text-gray-500">{String(k)}</p><p className="text-2xl font-bold text-brand-primary">{Number(v ?? 0)}</p>
+                </div>
+              ))}
+            </div>
+            <div className="card overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">Conference</th><th>Status</th><th>Score</th><th>Recommendation</th><th>Confidence</th></tr></thead>
+                <tbody>{(calendarData.conferences ?? []).map((c:any) => <tr key={c.conference_id} className="border-b border-gray-100"><td className="py-2">{c.conference_name}</td><td>{c.is_historical ? 'Historical' : c.status}</td><td>{c.calendar_recommendation_score ?? '—'}</td><td>{c.recommendation_label ?? '—'}</td><td>{c.confidence}</td></tr>)}</tbody>
+              </table>
+            </div>
           </div>
         )}
 
