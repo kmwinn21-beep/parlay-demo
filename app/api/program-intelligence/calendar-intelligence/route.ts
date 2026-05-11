@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   await dbReady;
 
-  const res = await db.execute({
+  const [settingsRes, actionsRes, res] = await Promise.all([
+    db.execute({ sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_conversion','tier_high_priority_conversion','tier_worth_engaging_conversion')`, args: [] }),
+    db.execute({ sql: "SELECT id, action_key, is_actionable FROM config_options WHERE category='target_recommended_action' ORDER BY sort_order, id", args: [] }).catch(() => ({ rows: [] as Row[] })),
+    db.execute({
     sql: `WITH conf AS (
             SELECT c.id, c.name, c.end_date, COALESCE(c.is_historical, 0) AS is_historical,
                    COUNT(ca.attendee_id) AS attendee_count
@@ -39,15 +42,22 @@ export async function GET(request: NextRequest) {
           LEFT JOIN cmp ON cmp.conference_id = conf.id
           ORDER BY date(conf.end_date) DESC`,
     args: [],
-  });
+  })
+  ]);
 
+  const settings: Record<string,string> = {}; for (const x of settingsRes.rows as Row[]) settings[String(x.key)] = String(x.value ?? '');
+  const actions = actionsRes.rows as Row[];
   const conferences = (res.rows as Row[]).map((r) => {
     const totalCompanies = Number(r.total_companies ?? 0);
     const icpCompanies = Number(r.icp_companies ?? 0);
     const attendeeCount = Number(r.attendee_count ?? 0);
     const endDate = new Date(String(r.end_date));
     const dataAge = Math.max(0, (Date.now() - endDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    const mustConv = Number(settings['tier_must_target_conversion'] ?? '25') / 100 || 0.25;
+    const highConv = Number(settings['tier_high_priority_conversion'] ?? '15') / 100 || 0.15;
+    const worthConv = Number(settings['tier_worth_engaging_conversion'] ?? '7.5') / 100 || 0.075;
     const score = totalCompanies > 0 ? Math.round(Math.min((icpCompanies / totalCompanies) / 0.15, 1) * 100) : null;
+    const actionableCount = actions.filter(a => Number(a.is_actionable ?? 0) === 1).length;
     const recommendationTier = score == null
       ? 'evaluate_before_committing'
       : score >= 85 ? 'attend_invest_more'
@@ -73,8 +83,17 @@ export async function GET(request: NextRequest) {
         `ICP density is ${(totalCompanies > 0 ? (icpCompanies / totalCompanies) * 100 : 0).toFixed(1)}% based on ${totalCompanies} companies.`,
       ],
       confidenceFactors: attendeeCount < 50 ? ['Attendee sample under 50 lowers confidence.'] : [],
+      tierProbabilityFactors: { must: mustConv, high: highConv, worth: worthConv },
+      actionableActionTypesConfigured: actionableCount,
     };
   });
 
+  for (const c of conferences) {
+    await db.execute({
+      sql: `INSERT INTO calendar_intelligence_scores (conference_id, score_payload, calculated_at) VALUES (?, ?, datetime('now'))
+            ON CONFLICT(conference_id) DO UPDATE SET score_payload = excluded.score_payload, calculated_at = excluded.calculated_at`,
+      args: [c.conferenceId, JSON.stringify(c)],
+    }).catch(() => {});
+  }
   return NextResponse.json({ conferences, conferenceTypeConstants: { HISTORICAL_CONFERENCE_TYPE, ACTIVE_CONFERENCE_TYPE } });
 }
