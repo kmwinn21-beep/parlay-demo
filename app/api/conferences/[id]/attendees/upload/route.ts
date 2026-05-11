@@ -791,6 +791,7 @@ export async function POST(
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [conferenceId, aid],
     }));
+    await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now') WHERE id = ?", args: [conferenceId] }).catch(() => {});
 
     // Propagate attendee products to their associated companies (merge, don't overwrite)
     const companyProductUpdates = new Map<number, Set<string>>();

@@ -1215,6 +1215,18 @@ export default function ConferenceDetailPage() {
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
               )}
+              {conference.is_historical && (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  This conference has a Calendar Recommendation Score.{' '}
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/program-intelligence?tab=calendar&conferenceId=${conference.id}`)}
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    View it in Calendar Intelligence →
+                  </button>
+                </div>
+              )}
               <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
                 <div>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
