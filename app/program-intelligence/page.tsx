@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BarChart,
@@ -460,6 +460,73 @@ function ScoreCard({
   );
 }
 
+// ── Calendar Intelligence module-level store ──────────────────────────────────
+// Survives component unmount/remount so scoring continues during navigation.
+// Pattern matches TargetRecommendationsTab compilationStore.
+
+type CalendarScoringStatus = 'idle' | 'loading_basic' | 'scoring' | 'ready';
+
+type CalendarStore = {
+  status: CalendarScoringStatus;
+  rows: CalendarConferenceRow[];
+  scoringProgress: { completed: number; total: number } | null;
+};
+
+let _calendarStore: CalendarStore = { status: 'idle', rows: [], scoringProgress: null };
+const _calendarListeners = new Set<() => void>();
+
+function getCalendarStore(): CalendarStore { return _calendarStore; }
+
+function setCalendarStore(update: Partial<CalendarStore>) {
+  _calendarStore = { ..._calendarStore, ...update };
+  _calendarListeners.forEach(l => l());
+}
+
+function subscribeCalendarStore(listener: () => void): () => void {
+  _calendarListeners.add(listener);
+  return () => _calendarListeners.delete(listener);
+}
+
+let _calendarScoringPromise: Promise<void> | null = null;
+
+function startCalendarScoring(force = false) {
+  const status = _calendarStore.status;
+  if (!force && (status === 'loading_basic' || status === 'scoring' || status === 'ready')) return;
+  if (_calendarScoringPromise && !force) return;
+
+  _calendarScoringPromise = (async () => {
+    setCalendarStore({ status: 'loading_basic', rows: [], scoringProgress: null });
+    try {
+      const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
+      if (!res.ok) { setCalendarStore({ status: 'idle' }); return; }
+      const data = await res.json() as { conferences: CalendarConferenceRow[] };
+      const basicRows = data.conferences ?? [];
+      setCalendarStore({ rows: basicRows });
+      if (basicRows.length === 0) { setCalendarStore({ status: 'ready' }); return; }
+
+      setCalendarStore({ status: 'scoring', scoringProgress: { completed: 0, total: basicRows.length } });
+      let completed = 0;
+      for (const row of basicRows) {
+        try {
+          const r = await fetch(
+            `/api/program-intelligence/calendar-intelligence/${row.conferenceId}`,
+            { cache: 'no-store' },
+          );
+          if (r.ok) {
+            const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
+            setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
+          }
+        } catch { /* skip this conference, keep going */ }
+        completed++;
+        setCalendarStore({ scoringProgress: { completed, total: basicRows.length } });
+      }
+      setCalendarStore({ status: 'ready', scoringProgress: null });
+    } catch {
+      setCalendarStore({ status: 'idle' });
+    }
+  })().finally(() => { _calendarScoringPromise = null; });
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProgramIntelligencePage() {
@@ -473,10 +540,7 @@ export default function ProgramIntelligencePage() {
   const [sortMode, setSortMode] = useState<SortMode>('date');
   const [loading, setLoading] = useState(true);
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
-  const [calendarRows, setCalendarRows] = useState<CalendarConferenceRow[]>([]);
-  const [calendarLoading, setCalendarLoading] = useState(false);
-  const [calendarScoringProgress, setCalendarScoringProgress] = useState<{ completed: number; total: number } | null>(null);
-  const calendarScoredRef = useRef(false);
+  const [calendarState, setCalendarStateLocal] = useState<CalendarStore>(getCalendarStore);
   const [error, setError] = useState<string | null>(null);
   const [calendarSort, setCalendarSort] = useState<keyof CalendarConferenceRow | 'score'>('score');
   const [calendarRecommendationFilter, setCalendarRecommendationFilter] = useState('all');
@@ -503,7 +567,6 @@ export default function ProgramIntelligencePage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    calendarScoredRef.current = false;
     try {
       const res = await fetch(
         `/api/program-intelligence/performance?startDate=${startDate}&endDate=${endDate}`,
@@ -522,63 +585,34 @@ export default function ProgramIntelligencePage() {
     }
   }, [startDate, endDate]);
 
-  // Load basic calendar data (fast — no targeting engine)
-  const fetchCalendarBasic = useCallback(async () => {
-    setCalendarLoading(true);
-    try {
-      const calRes = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
-      if (calRes.ok) {
-        const calData = await calRes.json() as { conferences: CalendarConferenceRow[] };
-        setCalendarRows(calData.conferences ?? []);
-      }
-    } catch { /* non-fatal */ } finally {
-      setCalendarLoading(false);
-    }
+  // Subscribe to the module-level calendar store — survives navigation
+  useEffect(() => {
+    setCalendarStateLocal(getCalendarStore());
+    return subscribeCalendarStore(() => setCalendarStateLocal(getCalendarStore()));
   }, []);
 
-  // Score conferences one-by-one with targeting engine, updating state as each completes
-  const scoreCalendarConferences = useCallback(async (rows: CalendarConferenceRow[]) => {
-    if (calendarScoredRef.current || rows.length === 0) return;
-    calendarScoredRef.current = true;
-    setCalendarScoringProgress({ completed: 0, total: rows.length });
-    let completed = 0;
-    for (const row of rows) {
-      try {
-        const res = await fetch(
-          `/api/program-intelligence/calendar-intelligence/${row.conferenceId}`,
-          { cache: 'no-store' },
-        );
-        if (res.ok) {
-          const data = await res.json() as { conference: CalendarConferenceRow };
-          const scored = data.conference;
-          setCalendarRows(prev => prev.map(r => r.conferenceId === scored.conferenceId ? scored : r));
-          // Keep selected drawer in sync
-          setSelectedCalendarRow(prev => prev?.conferenceId === scored.conferenceId ? scored : prev);
-        }
-      } catch { /* skip this conference, keep going */ }
-      completed++;
-      setCalendarScoringProgress({ completed, total: rows.length });
+  // Trigger scoring when the calendar tab is first opened
+  useEffect(() => {
+    if (activeTab === 'calendar' && _calendarStore.status === 'idle') {
+      startCalendarScoring();
     }
-    setCalendarScoringProgress(null);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  // Load calendar basic data when the calendar tab is first activated
-  useEffect(() => {
-    if (activeTab === 'calendar' && calendarRows.length === 0 && !calendarLoading) {
-      void fetchCalendarBasic();
-    }
-  }, [activeTab, calendarRows.length, calendarLoading, fetchCalendarBasic]);
-
-  // Start per-conference scoring once basic data is loaded and tab is active
-  useEffect(() => {
-    if (activeTab === 'calendar' && calendarRows.length > 0 && !calendarScoredRef.current) {
-      void scoreCalendarConferences(calendarRows);
-    }
-  }, [activeTab, calendarRows, scoreCalendarConferences]);
-
   // All derived state computed before any conditional returns (rules of hooks)
+
+  // Derived from module-level store — template uses these names unchanged
+  const calendarRows = calendarState.rows;
+  const calendarLoading = calendarState.status === 'loading_basic';
+  const calendarScoringProgress = calendarState.scoringProgress;
+
+  // Keep open drawer in sync when its conference gets scored
+  useEffect(() => {
+    if (!selectedCalendarRow) return;
+    const updated = calendarRows.find(r => r.conferenceId === selectedCalendarRow.conferenceId);
+    if (updated && updated !== selectedCalendarRow) setSelectedCalendarRow(updated);
+  }, [calendarRows, selectedCalendarRow]);
 
   // All conferences with a valid CES (used for chart — show everything)
   const scoredConferences = useMemo(
