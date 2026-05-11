@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { HISTORICAL_ACTIVITY_DISABLED_MESSAGE, isHistoricalConference } from '@/lib/historicalConference';
 
 export async function GET(request: NextRequest) {
   try {
