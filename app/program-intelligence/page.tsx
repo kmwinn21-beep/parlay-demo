@@ -202,6 +202,20 @@ function cesScoreColor(score: number): string {
   return '#dc2626';
 }
 
+
+
+function calendarScoreColor(score: number | null): string {
+  if (score == null) return '#9ca3af';
+  if (score >= 85) return '#059669';
+  if (score >= 70) return '#0d9488';
+  if (score >= 55) return '#d97706';
+  if (score >= 40) return '#f97316';
+  return '#dc2626';
+}
+
+function tierLabel(tier: string): string {
+  return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+}
 function formatCurrency(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
@@ -1073,13 +1087,87 @@ export default function ProgramIntelligencePage() {
 
       {selectedCalendarRow && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedCalendarRow(null)}>
-          <div className="h-full w-full max-w-xl bg-white p-5 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center"><h3 className="text-lg font-bold">{selectedCalendarRow.conferenceName} ({selectedCalendarRow.conferenceYear})</h3><button onClick={() => setSelectedCalendarRow(null)}>✕</button></div>
-            <p className="mt-2 text-sm">Score: {selectedCalendarRow.calendarRecommendationScore ?? '—'}/100 · {selectedCalendarRow.recommendationTier.replaceAll('_', ' ')}</p>
-            <p className="text-sm">Confidence: {selectedCalendarRow.confidenceLevel}</p>
-            <p className="text-sm mt-2">Why this recommendation</p>
-            <ul className="list-disc pl-5 text-sm">{(selectedCalendarRow.recommendationReason ?? []).map((x, i) => <li key={i}>{x}</li>)}</ul>
-            <textarea className="input-field mt-4 w-full min-h-24" placeholder="Add notes about this conference — venue quality, networking value, strategic relationships, or anything else that should inform the calendar decision." />
+          <div className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">{selectedCalendarRow.conferenceName} · {selectedCalendarRow.conferenceYear} · {selectedCalendarRow.conferenceType === 'historical' ? 'Historical' : 'Active'}</h3>
+                <p className="text-xs text-gray-500 mt-1">Data age: {selectedCalendarRow.dataAge.toFixed(1)} years</p>
+              </div>
+              <button onClick={() => setSelectedCalendarRow(null)} className="text-gray-500">✕</button>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-5xl font-bold" style={{ color: calendarScoreColor(selectedCalendarRow.calendarRecommendationScore) }}>
+                {selectedCalendarRow.calendarRecommendationScore ?? '—'}<span className="text-2xl text-gray-400">/100</span>
+              </p>
+              <p className="font-semibold mt-1" style={{ color: calendarScoreColor(selectedCalendarRow.calendarRecommendationScore) }}>{tierLabel(selectedCalendarRow.recommendationTier)}</p>
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Score Breakdown</h4>
+              {[
+                { key: 'Audience Fit', score: selectedCalendarRow.calendarRecommendationScore, weight: 25, bullets: [
+                  `${selectedCalendarRow.icpCompanies} ICP companies out of ${selectedCalendarRow.totalCompanies} total (${selectedCalendarRow.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
+                  `Average ICP Fit Score: Not available`,
+                  `Buyer Access Score: Not available`,
+                  `Title confidence: Not available`,
+                ]},
+                { key: 'Target Opportunity', score: null, weight: 20, bullets: [
+                  'Must Target count: Not available',
+                  'High Priority count: Not available',
+                  'Worth Engaging count: Not available',
+                  'Actionable target rate: Not available',
+                ], unavailable: 'Target scoring details unavailable in this dataset.'},
+                { key: 'Engagement Capture', score: null, weight: 15, bullets: [
+                  selectedCalendarRow.conferenceType === 'historical' ? 'Engagement data not available — this is a Historical conference with no activity logging.' : 'Engagement detail metrics unavailable in current payload.',
+                  'Weight redistributed to remaining components.',
+                ], unavailable: 'No engagement sub-metrics available'},
+                { key: 'Commercial Potential', score: null, weight: 15, bullets: [
+                  'Realistic pipeline goal: Not available',
+                  'Required pipeline: Not available',
+                  'Coverage: Not available',
+                ], unavailable: 'Commercial inputs unavailable'},
+                { key: 'Cost Justification', score: null, weight: 15, bullets: [
+                  'No budget data entered for this conference.',
+                  'Add budget in the conference settings to enable Cost Justification scoring.',
+                ], unavailable: 'No budget data available'},
+                { key: 'Strategic Value', score: null, weight: 10, bullets: [
+                  'Client company count: Not available',
+                  'Relationship leverage score: Not available',
+                  'Year-over-year trend: Not available',
+                ], unavailable: 'Strategic-value subcomponents unavailable'},
+              ].map((c, idx) => (
+                <div key={c.key} className="mt-4 border rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <p className={`font-semibold ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
+                    <p className="text-sm text-gray-600">{c.score == null ? '—' : Math.round(c.score)}/100 · {c.weight}% weight{c.score == null ? ' — reweighted' : ''}</p>
+                  </div>
+                  <div className="mt-2 h-2 rounded bg-gray-100 overflow-hidden"><div className="h-full" style={{ width: `${c.score ?? 0}%`, backgroundColor: calendarScoreColor(c.score) }} /></div>
+                  {c.score == null && <p className="text-xs text-gray-500 mt-2">{c.unavailable}</p>}
+                  <ul className="list-disc pl-5 mt-2 text-xs text-gray-600 space-y-1">{c.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Calendar Recommendation</h4>
+              <span className="inline-flex mt-2 px-3 py-1 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-200">{tierLabel(selectedCalendarRow.recommendationTier)}</span>
+              <p className="text-sm text-gray-700 mt-3">{selectedCalendarRow.conferenceName} scored {selectedCalendarRow.calendarRecommendationScore ?? 'N/A'}/100 with ICP density of {selectedCalendarRow.icpDensityPct.toFixed(1)}%. {selectedCalendarRow.recommendationTier.includes('invest') ? 'Strong audience signals support increasing investment.' : selectedCalendarRow.recommendationTier.includes('reconsider') ? 'Audience signals are mixed — attendance may be justified with a lighter format.' : selectedCalendarRow.recommendationTier.includes('remove') || selectedCalendarRow.recommendationTier.includes('not_prioritize') ? 'Current audience alignment is weak and may not justify future spend.' : 'Review with current-year attendee and budget data before committing.'}</p>
+              <p className="text-sm mt-3"><span className="font-semibold">Investment Recommendation:</span> {selectedCalendarRow.recommendationTier === 'attend_invest_more' ? 'Increase Investment' : selectedCalendarRow.recommendationTier === 'attend_maintain' ? 'Maintain Investment' : selectedCalendarRow.recommendationTier === 'attend_reconsider_format' ? 'Reduce Sponsorship' : selectedCalendarRow.recommendationTier === 'evaluate_before_committing' ? 'Attend Only' : 'Do Not Attend'}</p>
+              <p className="text-sm mt-1"><span className="font-semibold">Recommended Investment Level:</span> {selectedCalendarRow.recommendationTier === 'attend_invest_more' ? 'Higher' : selectedCalendarRow.recommendationTier === 'attend_maintain' ? 'Same' : selectedCalendarRow.recommendationTier === 'evaluate_before_committing' ? 'Defer' : 'Lower'}</p>
+              <p className="text-sm mt-3"><span className="font-semibold">Confidence:</span> {selectedCalendarRow.confidenceLevel}</p>
+              <ul className="list-disc pl-5 text-xs text-gray-500 mt-1">
+                <li>{selectedCalendarRow.attendeeCount >= 50 ? 'Full attendee list with ICP scoring available.' : 'Attendee sample is limited; confidence reduced.'}</li>
+                <li>{selectedCalendarRow.dataAge <= 2 ? 'Data is recent enough for directional planning.' : `Data is ${selectedCalendarRow.dataAge.toFixed(1)} years old — recommendation may be directional.`}</li>
+                <li>{selectedCalendarRow.totalCompanies > 0 ? 'Company coverage is available for audience fit analysis.' : 'No company coverage detected.'}</li>
+              </ul>
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Your Notes</h4>
+              <p className="text-xs text-gray-500 mt-1">Add context the score can&apos;t capture — venue quality, networking value, strategic relationships, or anything that should inform the calendar decision.</p>
+              <textarea className="input-field mt-2 w-full min-h-24" placeholder="Add notes about this conference — venue quality, networking value, strategic relationships, or anything else that should inform the calendar decision." />
+            </div>
           </div>
         </div>
       )}
