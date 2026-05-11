@@ -19,7 +19,7 @@ import { useCapabilities } from '@/lib/useCapabilities';
 
 type DatePreset = 'this_year' | 'last_year' | 'last_12' | 'last_24' | 'custom';
 type SortMode = 'date' | 'score';
-type TabId = 'performance' | 'budget' | 'pipeline' | 'reps' | 'trends';
+type TabId = 'performance' | 'budget' | 'pipeline' | 'reps' | 'trends' | 'calendar';
 
 interface CESComponents {
   dim1_icp_target: number | null;
@@ -49,6 +49,22 @@ interface CostEffComponents {
   cost_per_meeting: number | null;
 }
 
+
+interface CalendarConferenceRow {
+  conferenceId: number;
+  conferenceName: string;
+  conferenceYear: number;
+  conferenceType: 'historical' | 'active';
+  attendeeCount: number;
+  totalCompanies: number;
+  icpCompanies: number;
+  icpDensityPct: number;
+  calendarRecommendationScore: number | null;
+  recommendationTier: string;
+  confidenceLevel: 'high' | 'medium' | 'low';
+  dataAge: number;
+}
+
 interface ConferenceSummary {
   conference_id: number;
   conference_name: string;
@@ -76,6 +92,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline Attribution' },
   { id: 'reps', label: 'Rep Performance' },
   { id: 'trends', label: 'Conference Trends' },
+  { id: 'calendar', label: 'Calendar Intelligence' },
 ];
 
 // Matches DIM_COLORS order from SummaryTab.tsx
@@ -375,6 +392,7 @@ export default function ProgramIntelligencePage() {
   const [sortMode, setSortMode] = useState<SortMode>('date');
   const [loading, setLoading] = useState(true);
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
+  const [calendarRows, setCalendarRows] = useState<CalendarConferenceRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
 
@@ -407,6 +425,11 @@ export default function ProgramIntelligencePage() {
       }
       const data = await res.json() as { conferences: ConferenceSummary[] };
       setConferences(data.conferences ?? []);
+      const calRes = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
+      if (calRes.ok) {
+        const calData = await calRes.json() as { conferences: CalendarConferenceRow[] };
+        setCalendarRows(calData.conferences ?? []);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -553,12 +576,29 @@ export default function ProgramIntelligencePage() {
 
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab !== 'performance' && (
+        {activeTab !== 'performance' && activeTab !== 'calendar' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
         )}
 
+
+        {activeTab === 'calendar' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="card"><p className="text-xs text-gray-500">Conferences Scored</p><p className="text-2xl font-bold">{calendarRows.filter(r => r.calendarRecommendationScore != null).length}</p></div>
+              <div className="card border-l-4 border-green-500"><p className="text-xs text-gray-500">Attend & Invest</p><p className="text-2xl font-bold">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
+              <div className="card border-l-4 border-amber-500"><p className="text-xs text-gray-500">Reconsider or Evaluate</p><p className="text-2xl font-bold">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
+              <div className="card border-l-4 border-red-500"><p className="text-xs text-gray-500">Cut or Avoid</p><p className="text-2xl font-bold">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
+            </div>
+            <div className="card overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead><tr className="text-left text-gray-500"><th className="p-2">Conference</th><th className="p-2">Year</th><th className="p-2">Type</th><th className="p-2">Attendees</th><th className="p-2">ICP Companies</th><th className="p-2">Score</th><th className="p-2">Confidence</th><th className="p-2">Data Age</th></tr></thead>
+                <tbody>{calendarRows.map((r) => (<tr key={r.conferenceId} className="border-t"><td className="p-2">{r.conferenceName}</td><td className="p-2">{r.conferenceYear}</td><td className="p-2">{r.conferenceType}</td><td className="p-2">{r.attendeeCount}</td><td className="p-2">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td><td className="p-2">{r.calendarRecommendationScore ?? '—'}</td><td className="p-2">{r.confidenceLevel}</td><td className="p-2">{r.dataAge.toFixed(1)} years</td></tr>))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {activeTab === 'performance' && (
           <div className="space-y-6">
             {/* Date range controls */}
