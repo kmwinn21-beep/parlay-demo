@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import type { InValue } from '@libsql/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,25 @@ const HISTORICAL_CONFERENCE_TYPE = 1;
 const ACTIVE_CONFERENCE_TYPE = 0;
 
 type Row = Record<string, unknown>;
+
+
+async function tableExists(name: string): Promise<boolean> {
+  try {
+    const res = await db.execute({ sql: `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, args: [name] });
+    return (res.rows as Row[]).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function runLoggedQuery(label: string, sql: string, args: InValue[] = []): Promise<Row[]> {
+  const result = await db.execute({ sql, args });
+  const rows = result.rows as Row[];
+  console.info(`[calendar-intelligence] ${label} query`, sql);
+  console.info(`[calendar-intelligence] ${label} rows`, rows.length);
+  if (rows.length) console.info(`[calendar-intelligence] ${label} first_row`, rows[0]);
+  return rows;
+}
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -47,7 +67,7 @@ export async function GET(request: NextRequest) {
 
   const settings: Record<string,string> = {}; for (const x of settingsRes.rows as Row[]) settings[String(x.key)] = String(x.value ?? '');
   const actions = actionsRes.rows as Row[];
-  const conferences = (res.rows as Row[]).map((r) => {
+  const conferences = await Promise.all((res.rows as Row[]).map(async (r) => {
     const totalCompanies = Number(r.total_companies ?? 0);
     const icpCompanies = Number(r.icp_companies ?? 0);
     const attendeeCount = Number(r.attendee_count ?? 0);
@@ -58,6 +78,19 @@ export async function GET(request: NextRequest) {
     const worthConv = Number(settings['tier_worth_engaging_conversion'] ?? '7.5') / 100 || 0.075;
     const score = totalCompanies > 0 ? Math.round(Math.min((icpCompanies / totalCompanies) / 0.15, 1) * 100) : null;
     const actionableCount = actions.filter(a => Number(a.is_actionable ?? 0) === 1).length;
+    const conferenceId = Number(r.id);
+    const targetRows = await runLoggedQuery('target-opportunity', `SELECT COUNT(*) AS total_targets,
+      SUM(CASE WHEN tr.tier_label = 'Must Target' THEN 1 ELSE 0 END) AS must_target_count,
+      SUM(CASE WHEN tr.tier_label = 'High Priority' THEN 1 ELSE 0 END) AS high_priority_count,
+      AVG(CAST(tr.target_priority_score AS REAL)) AS avg_target_priority_score
+      FROM conference_targets ct
+      LEFT JOIN target_recommendations tr ON tr.attendee_id = ct.attendee_id AND tr.conference_id = ct.conference_id
+      WHERE ct.conference_id = ?`, [conferenceId]).catch(() => []);
+    const meetingsRows = await runLoggedQuery('engagement-meetings', `SELECT COUNT(*) AS total_meetings FROM meetings WHERE conference_id = ?`, [conferenceId]).catch(() => []);
+    const followUpRows = await runLoggedQuery('engagement-followups', `SELECT COUNT(*) AS total_followups, SUM(CASE WHEN COALESCE(completed,0)=1 THEN 1 ELSE 0 END) AS completed_followups FROM follow_ups WHERE conference_id = ?`, [conferenceId]).catch(() => []);
+    const budgetTable = await tableExists('conference_budget') ? 'conference_budget' : (await tableExists('conference_budgets') ? 'conference_budgets' : null);
+    const budgetRows = budgetTable ? await runLoggedQuery('cost-budget', `SELECT * FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, [conferenceId]).catch(() => []) : [];
+
     const recommendationTier = score == null
       ? 'evaluate_before_committing'
       : score >= 85 ? 'attend_invest_more'
@@ -67,7 +100,7 @@ export async function GET(request: NextRequest) {
       : 'evaluate_before_committing';
 
     return {
-      conferenceId: Number(r.id),
+      conferenceId,
       conferenceName: String(r.name ?? ''),
       conferenceYear: endDate.getUTCFullYear(),
       conferenceType: Number(r.is_historical) === HISTORICAL_CONFERENCE_TYPE ? 'historical' : 'active',
@@ -85,8 +118,14 @@ export async function GET(request: NextRequest) {
       confidenceFactors: attendeeCount < 50 ? ['Attendee sample under 50 lowers confidence.'] : [],
       tierProbabilityFactors: { must: mustConv, high: highConv, worth: worthConv },
       actionableActionTypesConfigured: actionableCount,
+      diagnostics: {
+        targetOpportunity: targetRows[0] ?? null,
+        engagementMeetings: meetingsRows[0] ?? null,
+        engagementFollowUps: followUpRows[0] ?? null,
+        budget: budgetRows[0] ?? null,
+      },
     };
-  });
+  }));
 
   for (const c of conferences) {
     await db.execute({
