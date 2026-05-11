@@ -378,6 +378,13 @@ export default function ProgramIntelligencePage() {
   const [conferences, setConferences] = useState<ConferenceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [calendarData, setCalendarData] = useState<any>({ summary: {}, conferences: [] });
+  const [calendarConferences, setCalendarConferences] = useState<any[]>([]);
+  const [calendarScope, setCalendarScope] = useState<'all'|'historical'|'active'|'completed'|'custom'>('all');
+  const [calendarSelectedIds, setCalendarSelectedIds] = useState<number[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarRan, setCalendarRan] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [selectedCalendarConferenceId, setSelectedCalendarConferenceId] = useState<number | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
 
   useEffect(() => {
@@ -515,6 +522,25 @@ export default function ProgramIntelligencePage() {
     );
   }
 
+
+  const runCalendarEvaluation = async () => {
+    setCalendarLoading(true); setCalendarError(null);
+    try {
+      const res = await fetch('/api/program-intelligence/calendar-intelligence/evaluate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: calendarScope, conference_ids: calendarSelectedIds })
+      });
+      if (!res.ok) throw new Error('Unable to evaluate calendar recommendations.');
+      const data = await res.json();
+      setCalendarData(data);
+      setCalendarRan(true);
+      const top = (data.conferences ?? [])[0];
+      setSelectedCalendarConferenceId(top?.conference_id ?? null);
+    } catch (e) {
+      setCalendarError(e instanceof Error ? e.message : 'Unable to evaluate calendar recommendations.');
+    } finally { setCalendarLoading(false); }
+  };
+
   const manyConferences = sortedConferences.length > 6;
 
   return (
@@ -575,19 +601,23 @@ export default function ProgramIntelligencePage() {
               <p className="text-sm text-gray-500 mt-1">Plan next year’s conference calendar using audience fit, target opportunity, commercial potential, cost justification, and strategic value.</p>
               <p className="text-xs text-gray-400 mt-2">Historical conferences are excluded from active performance rankings but included here for calendar planning recommendations.</p>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[['Attend & Invest More', calendarData.summary?.attend_invest_more_count],['Attend Same Level', calendarData.summary?.attend_same_level_count],['Reconsider Format', calendarData.summary?.reconsider_format_count],['Evaluate', calendarData.summary?.evaluate_count],['Remove / Do Not Prioritize', calendarData.summary?.remove_count]].map(([k,v]) => (
+            <div className="card"><div className="flex flex-wrap items-center gap-2"><select value={calendarScope} onChange={(e)=>setCalendarScope(e.target.value as any)} className="input-field text-sm"><option value="all">All eligible conferences</option><option value="historical">Historical conferences only</option><option value="active">Active conferences only</option><option value="completed">Completed conferences only</option><option value="custom">Custom selection</option></select>{calendarScope==='custom' && <select multiple value={calendarSelectedIds.map(String)} onChange={(e)=>setCalendarSelectedIds(Array.from(e.target.selectedOptions).map(o=>Number(o.value)))} className="input-field text-sm min-w-[260px] h-28">{calendarConferences.map((c:any)=><option key={c.conference_id} value={c.conference_id}>{c.conference_name} · {c.status}{c.start_date?` · ${c.start_date}`:''}</option>)}</select>}<button className="btn-primary text-sm" disabled={calendarLoading} onClick={runCalendarEvaluation}>{calendarRan ? 'Refresh Recommendations' : 'Evaluate Calendar'}</button><button className="btn-secondary text-sm" onClick={()=>{setCalendarSelectedIds([]); setCalendarData({summary:{},conferences:[]}); setCalendarRan(false);}}>Clear Selection</button></div></div><div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[['Attend & Invest More', calendarRan ? calendarData.summary?.attend_invest_more_count : '—'],['Attend Same Level', calendarData.summary?.attend_same_level_count],['Reconsider Format', calendarData.summary?.reconsider_format_count],['Evaluate', calendarData.summary?.evaluate_count],['Remove / Do Not Prioritize', calendarData.summary?.remove_count]].map(([k,v]) => (
                 <div key={String(k)} className="card py-3">
                   <p className="text-xs text-gray-500">{String(k)}</p><p className="text-2xl font-bold text-brand-primary">{Number(v ?? 0)}</p>
                 </div>
               ))}
             </div>
+            {calendarError && <div className="card border border-red-200 text-red-700">{calendarError} <button className="btn-secondary text-sm ml-2" onClick={runCalendarEvaluation}>Try Again</button></div>}
+            {calendarLoading && <div className="card">Evaluating conference calendar…</div>}
+            {!calendarLoading && calendarRan && (calendarData.conferences ?? []).length === 0 && <div className="card"><p className="font-medium">No calendar recommendations yet</p><p className="text-sm text-gray-500 mt-1">Choose historical, active, or completed conferences to evaluate for next year’s calendar planning.</p></div>}
             <div className="card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">Conference</th><th>Status</th><th>Score</th><th>Recommendation</th><th>Confidence</th></tr></thead>
-                <tbody>{(calendarData.conferences ?? []).map((c:any) => <tr key={c.conference_id} className="border-b border-gray-100"><td className="py-2">{c.conference_name}</td><td>{c.is_historical ? 'Historical' : c.status}</td><td>{c.calendar_recommendation_score ?? '—'}</td><td>{c.recommendation_label ?? '—'}</td><td>{c.confidence}</td></tr>)}</tbody>
+                <tbody>{(calendarData.conferences ?? []).map((c:any) => <tr key={c.conference_id} onClick={()=>setSelectedCalendarConferenceId(c.conference_id)} className={`border-b border-gray-100 cursor-pointer ${selectedCalendarConferenceId===c.conference_id?'bg-blue-50':''}`}><td className="py-2">{c.conference_name}</td><td>{c.is_historical ? 'Historical' : c.status}</td><td>{c.calendar_recommendation_score ?? '—'}</td><td>{c.recommendation_label ?? '—'}</td><td>{c.confidence}</td></tr>)}</tbody>
               </table>
             </div>
+            {(() => { const selected = (calendarData.conferences ?? []).find((c:any)=>c.conference_id===selectedCalendarConferenceId) ?? (calendarData.conferences ?? [])[0]; if (!selected) return null; return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"><div className="card"><p className="text-xs text-gray-500">Calendar Recommendation Score</p><p className="text-2xl font-bold text-brand-primary">{selected.calendar_recommendation_score ?? '—'}/100</p><p className="text-sm text-gray-500">{selected.calendar_recommendation_interpretation ?? 'Unavailable'}</p></div><div className="card"><p className="text-xs text-gray-500">Recommended Calendar Decision</p><p className="font-semibold text-brand-primary">{selected.recommendation_label ?? '—'}</p><ul className="mt-2 text-xs text-gray-600 list-disc ml-4">{(selected.recommendation_reasons ?? []).slice(0,4).map((r:string,i:number)=><li key={i}>{r}</li>)}</ul></div><div className="card"><p className="text-xs text-gray-500">Investment Guidance</p><p className="font-semibold text-brand-primary">{selected.investment_guidance_label ?? '—'}</p></div><div className="card"><p className="text-xs text-gray-500">Recommendation Confidence</p><p className="text-2xl font-bold">{selected.confidence}</p>{selected.is_historical && <p className="text-xs text-gray-500 mt-2">This conference was uploaded as a Historical Conference. It is excluded from active rankings but included in Calendar Intelligence for planning recommendations.</p>}</div></div>; })()}
           </div>
         )}
 
