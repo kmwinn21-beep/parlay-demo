@@ -4,6 +4,8 @@ import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions } from '@/lib/auth';
 import { resolvePlanState } from '@/lib/trialState';
 import { sendTrialReminderEmail } from '@/lib/email';
+import { createTenantDb } from '@/lib/tenantDb';
+import type { Client } from '@libsql/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,13 +19,31 @@ export async function POST(request: NextRequest) {
 
     await dbReady;
 
-    const result = await db.execute({
-      sql: 'SELECT id, email, password_hash, role, email_verified, active FROM users WHERE email = ?',
+    // Look up account by email to find tenant DB credentials
+    const accountRow = await db.execute({
+      sql: `SELECT id, turso_db_url, turso_auth_token FROM accounts WHERE admin_email = ?`,
+      args: [email],
+    });
+
+    let tenantClient: Client | null = null;
+    let accountId: string | undefined;
+
+    if (accountRow.rows[0]?.turso_db_url) {
+      accountId = String(accountRow.rows[0].id);
+      tenantClient = createTenantDb(
+        String(accountRow.rows[0].turso_db_url),
+        String(accountRow.rows[0].turso_auth_token),
+      );
+    }
+
+    // Query users from tenant DB (if found) or fall back to master DB (ops users)
+    const userDb: Client = tenantClient ?? db;
+    const result = await userDb.execute({
+      sql: 'SELECT id, email, password_hash, role, email_verified, active, first_name FROM users WHERE email = ?',
       args: [email],
     });
 
     if (result.rows.length === 0) {
-      // Perform dummy compare to prevent timing attacks
       await bcrypt.compare(password, '$2a$12$dummyhashtopreventtimingattacks00000000000000000000000');
       return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
     }
@@ -43,32 +63,29 @@ export async function POST(request: NextRequest) {
       email: String(user.email),
       role: String(user.role) as 'user' | 'administrator',
       emailVerified: Boolean(user.email_verified),
+      accountId,
     };
 
     const token = await signToken(sessionUser);
 
-    // Record login session and update last_seen_at (fire-and-forget, don't block login)
-    db.execute({
+    // Record login session and update last_seen_at (fire-and-forget)
+    userDb.execute({
       sql: 'INSERT INTO user_sessions (user_id, ip_address, user_agent) VALUES (?, ?, ?)',
-      args: [
-        sessionUser.id,
-        request.headers.get('x-forwarded-for') ?? null,
-        request.headers.get('user-agent') ?? null,
-      ],
+      args: [sessionUser.id, request.headers.get('x-forwarded-for') ?? null, request.headers.get('user-agent') ?? null],
     }).catch(() => {});
-    db.execute({
+    userDb.execute({
       sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
       args: [sessionUser.id],
     }).catch(() => {});
 
     // Fire-and-forget: send trial reminder emails if nearing expiry
     let redirectTo: string | undefined;
-    resolvePlanState().then(async (planState) => {
+    resolvePlanState(tenantClient ?? undefined).then(async (planState) => {
       if (planState.trialState === 'active' && planState.daysRemaining != null && planState.daysRemaining <= 3) {
         const keyMap: Record<number, string> = { 3: 'trial_reminder_12_sent', 2: 'trial_reminder_13_sent', 1: 'trial_reminder_14_sent' };
         const sentKey = keyMap[planState.daysRemaining];
         if (sentKey) {
-          const sentRes = await db.execute({
+          const sentRes = await userDb.execute({
             sql: `SELECT value FROM site_settings WHERE key = ?`,
             args: [sentKey],
           }).catch(() => ({ rows: [] }));
@@ -76,14 +93,14 @@ export async function POST(request: NextRequest) {
           if (!alreadySent) {
             const upgradeUrl = process.env.NEXT_PUBLIC_PRICING_URL ?? `${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/pricing`;
             sendTrialReminderEmail(email, String(user.first_name ?? email.split('@')[0]), planState.daysRemaining, upgradeUrl).catch(() => {});
-            db.execute({ sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, 'true')`, args: [sentKey] }).catch(() => {});
+            userDb.execute({ sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, 'true')`, args: [sentKey] }).catch(() => {});
           }
         }
       }
     }).catch(() => {});
 
-    // Check if onboarding is pending to include redirectTo in response
-    const onboardingCheck = await db.execute({
+    // Check if onboarding is pending
+    const onboardingCheck = await userDb.execute({
       sql: `SELECT key, value FROM site_settings WHERE key IN ('onboarding_completed', 'onboarding_track')`,
       args: [],
     }).catch(() => ({ rows: [] }));

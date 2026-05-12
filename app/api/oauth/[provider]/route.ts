@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
   const user = await requireAuth(request);
@@ -11,7 +11,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
   }
 
-  await dbReady;
+  const db = await getDb(user.accountId);
   await db.execute({
     sql: 'DELETE FROM oauth_connections WHERE user_id = ? AND provider = ?',
     args: [user.id, provider],

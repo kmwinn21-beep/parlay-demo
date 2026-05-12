@@ -1,4 +1,5 @@
-import { createClient } from '@libsql/client';
+import { createClient, type Client } from '@libsql/client';
+import { migrations } from '@/lib/db-migrations';
 
 export const db = createClient({
   url: process.env.TURSO_DATABASE_URL!,
@@ -84,8 +85,8 @@ export async function initDb(): Promise<void> {
     args: [],
   });
 
-  // Run migrations — ignore errors if columns already exist
-  const migrations = [
+  // Run migrations — ignore errors if columns already exist (see lib/db-migrations.ts)
+  const _migrationsRef = [
     `ALTER TABLE attendees ADD COLUMN action TEXT`,
     `ALTER TABLE attendees ADD COLUMN next_steps TEXT`,
     `ALTER TABLE attendees ADD COLUMN next_steps_notes TEXT`,
@@ -1213,6 +1214,310 @@ export async function initDb(): Promise<void> {
 export const dbReady: Promise<void> = initDb().catch((err) => {
   console.error('Failed to initialize database schema:', err);
 });
+
+// Seed a brand-new tenant DB with the full schema and default config data.
+// ALTER TABLE statements fail silently (columns already present in the full CREATE TABLE).
+// Role constraint migration is skipped — users table is created with the full constraint.
+export async function seedFreshDb(client: Client): Promise<void> {
+  // Base tables
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS conferences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      location TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS companies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      website TEXT,
+      profit_type TEXT,
+      company_type TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS attendees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      title TEXT,
+      company_id INTEGER REFERENCES companies(id),
+      email TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS conference_attendees (
+      conference_id INTEGER REFERENCES conferences(id) ON DELETE CASCADE,
+      attendee_id INTEGER REFERENCES attendees(id) ON DELETE CASCADE,
+      PRIMARY KEY (conference_id, attendee_id)
+    );
+  `);
+
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS conference_attendee_details (
+      attendee_id INTEGER NOT NULL,
+      conference_id INTEGER NOT NULL,
+      action TEXT,
+      next_steps TEXT,
+      next_steps_notes TEXT,
+      notes TEXT,
+      PRIMARY KEY (attendee_id, conference_id),
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+      FOREIGN KEY (conference_id) REFERENCES conferences(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS config_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      value TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Users with full role constraint (fresh DB — no need for the constraint migration)
+  await client.execute({
+    sql: `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator')),
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      verification_token TEXT,
+      reset_token TEXT,
+      reset_token_expires INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      config_id INTEGER REFERENCES config_options(id),
+      display_name TEXT,
+      email_pending TEXT,
+      email_change_token TEXT,
+      email_change_expires INTEGER,
+      active INTEGER NOT NULL DEFAULT 1,
+      invite_token TEXT,
+      invite_expires INTEGER,
+      first_name TEXT,
+      last_name TEXT,
+      signature_html TEXT,
+      last_seen_at TEXT,
+      is_admin INTEGER NOT NULL DEFAULT 0
+    )`,
+    args: [],
+  });
+
+  // Run CREATE TABLE IF NOT EXISTS and CREATE INDEX IF NOT EXISTS from migrations
+  const ddl = migrations.filter(sql => /^\s*(CREATE\s+(TABLE|UNIQUE\s+INDEX|INDEX))/i.test(sql));
+  await Promise.all(ddl.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
+
+  // Run DML seeds (INSERT/UPDATE) from migrations — ALTER TABLE fails silently (no-op on fresh DB)
+  const dml = migrations.filter(sql => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql));
+  await Promise.all(dml.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
+
+  // Unit type seed
+  const utCheck = await client.execute({ sql: "SELECT id FROM config_options WHERE category = 'unit_type' ORDER BY id", args: [] });
+  if (utCheck.rows.length === 0) {
+    await client.execute({ sql: "INSERT INTO config_options (category, value, sort_order) VALUES ('unit_type', 'Units', 0)", args: [] });
+  }
+
+  // Base config seeds — always INSERT OR IGNORE (fresh DB may have some rows from migrations)
+  const baseSeeds: Array<{ category: string; value: string; sort_order: number }> = [
+    { category: 'company_type', value: '3rd Party Operator', sort_order: 1 },
+    { category: 'company_type', value: 'Owner/Operator', sort_order: 2 },
+    { category: 'company_type', value: 'Capital Partner', sort_order: 3 },
+    { category: 'company_type', value: 'Vendor', sort_order: 4 },
+    { category: 'company_type', value: 'Partner', sort_order: 5 },
+    { category: 'company_type', value: 'Other', sort_order: 6 },
+    { category: 'status', value: 'Client', sort_order: 1 },
+    { category: 'status', value: 'Priority', sort_order: 2 },
+    { category: 'status', value: 'Interested', sort_order: 3 },
+    { category: 'status', value: 'Not Interested', sort_order: 4 },
+    { category: 'status', value: 'Unknown', sort_order: 5 },
+    { category: 'action', value: 'Scheduled', sort_order: 1 },
+    { category: 'action', value: 'Held', sort_order: 2 },
+    { category: 'action', value: 'Rescheduled', sort_order: 3 },
+    { category: 'action', value: 'Cancelled', sort_order: 4 },
+    { category: 'action', value: 'No-Show', sort_order: 5 },
+    { category: 'action', value: 'Social Conversation', sort_order: 6 },
+    { category: 'action', value: 'Pending', sort_order: 7 },
+    { category: 'next_steps', value: 'Schedule Follow Up Meeting', sort_order: 1 },
+    { category: 'next_steps', value: 'General Follow Up', sort_order: 2 },
+    { category: 'next_steps', value: 'Other', sort_order: 3 },
+  ];
+  const categorySeeds: Array<{ category: string; value: string; sort_order: number }> = [
+    { category: 'seniority', value: 'C-Suite', sort_order: 1 },
+    { category: 'seniority', value: 'BOD', sort_order: 2 },
+    { category: 'seniority', value: 'VP/SVP', sort_order: 3 },
+    { category: 'seniority', value: 'VP Level', sort_order: 4 },
+    { category: 'seniority', value: 'ED', sort_order: 5 },
+    { category: 'seniority', value: 'Director', sort_order: 6 },
+    { category: 'seniority', value: 'Manager', sort_order: 7 },
+    { category: 'seniority', value: 'Associate', sort_order: 8 },
+    { category: 'seniority', value: 'Admin', sort_order: 9 },
+    { category: 'seniority', value: 'Other', sort_order: 10 },
+    { category: 'profit_type', value: 'For-Profit', sort_order: 1 },
+    { category: 'profit_type', value: 'Non-Profit', sort_order: 2 },
+    { category: 'action', value: 'Rescheduled', sort_order: 3 },
+    { category: 'action', value: 'Cancelled', sort_order: 4 },
+    { category: 'action', value: 'Pending', sort_order: 5 },
+    { category: 'company_type', value: 'Capital', sort_order: 7 },
+    { category: 'company_type', value: 'Operator', sort_order: 8 },
+    { category: 'entity_structure', value: 'Parent', sort_order: 1 },
+    { category: 'entity_structure', value: 'Child', sort_order: 2 },
+    { category: 'services', value: 'Other', sort_order: 1 },
+    { category: 'services', value: 'N/A', sort_order: 2 },
+    { category: 'event_type', value: 'Sponsored Event', sort_order: 1 },
+    { category: 'event_type', value: 'Lunch', sort_order: 2 },
+    { category: 'event_type', value: 'Dinner', sort_order: 3 },
+    { category: 'event_type', value: 'Company Hosted', sort_order: 4 },
+    { category: 'event_type', value: 'Partner', sort_order: 5 },
+    { category: 'event_type', value: 'Conference Event', sort_order: 6 },
+    { category: 'conference_strategy_type', value: 'Pipeline Generation', sort_order: 1 },
+    { category: 'conference_strategy_type', value: 'Pipeline Acceleration', sort_order: 2 },
+    { category: 'conference_strategy_type', value: 'Customer Retention / Customer Nurture', sort_order: 3 },
+    { category: 'conference_strategy_type', value: 'Market Presence / Brand Visibility', sort_order: 4 },
+    { category: 'conference_strategy_type', value: 'Strategic Account Relationship Building', sort_order: 5 },
+    { category: 'conference_strategy_type', value: 'Partner / Ecosystem Development', sort_order: 6 },
+    { category: 'conference_strategy_type', value: 'Competitive Defense', sort_order: 7 },
+    { category: 'conference_strategy_type', value: 'Thought Leadership', sort_order: 8 },
+    { category: 'rep_relationship_type', value: 'Strong', sort_order: 1 },
+    { category: 'rep_relationship_type', value: 'Former Client', sort_order: 2 },
+    { category: 'rep_relationship_type', value: 'Other', sort_order: 3 },
+    { category: 'meeting_type', value: 'Pre-Scheduled', sort_order: 1 },
+    { category: 'meeting_type', value: 'Speed', sort_order: 2 },
+    { category: 'function', value: 'Operations', sort_order: 1 },
+    { category: 'function', value: 'Finance', sort_order: 2 },
+    { category: 'function', value: 'Sales', sort_order: 3 },
+    { category: 'function', value: 'Marketing', sort_order: 4 },
+    { category: 'function', value: 'HR', sort_order: 5 },
+    { category: 'function', value: 'Legal', sort_order: 6 },
+    { category: 'function', value: 'IT', sort_order: 7 },
+    { category: 'function', value: 'Accounting', sort_order: 8 },
+    { category: 'products', value: 'Product', sort_order: 1 },
+    { category: 'cost_type', value: 'Registration', sort_order: 1 },
+    { category: 'cost_type', value: 'Sponsorship', sort_order: 2 },
+    { category: 'cost_type', value: 'Swag', sort_order: 3 },
+    { category: 'cost_type', value: 'Booth Setup', sort_order: 4 },
+    { category: 'cost_type', value: 'Travel', sort_order: 5 },
+    { category: 'cost_type', value: 'Lodging', sort_order: 6 },
+    { category: 'cost_type', value: 'Entertainment', sort_order: 7 },
+    { category: 'cost_type', value: 'Meals', sort_order: 8 },
+    { category: 'cost_type', value: 'Other', sort_order: 9 },
+  ];
+  await Promise.all([...baseSeeds, ...categorySeeds].map(seed =>
+    client.execute({
+      sql: 'INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES (?, ?, ?)',
+      args: [seed.category, seed.value, seed.sort_order],
+    }).catch(() => {})
+  ));
+
+  // Mark system-seeded options as protected
+  const systemSeeds: Array<{ category: string; value: string }> = [
+    { category: 'company_type', value: '3rd Party Operator' },
+    { category: 'company_type', value: 'Owner/Operator' },
+    { category: 'company_type', value: 'Capital Partner' },
+    { category: 'company_type', value: 'Vendor' },
+    { category: 'company_type', value: 'Partner' },
+    { category: 'company_type', value: 'Other' },
+    { category: 'company_type', value: 'Capital' },
+    { category: 'company_type', value: 'Operator' },
+    { category: 'company_type', value: 'Prospect' },
+    { category: 'status', value: 'Client' },
+    { category: 'status', value: 'Priority' },
+    { category: 'status', value: 'Interested' },
+    { category: 'status', value: 'Not Interested' },
+    { category: 'status', value: 'Unknown' },
+    { category: 'action', value: 'Scheduled' },
+    { category: 'action', value: 'Held' },
+    { category: 'action', value: 'Rescheduled' },
+    { category: 'action', value: 'Cancelled' },
+    { category: 'action', value: 'No-Show' },
+    { category: 'action', value: 'Social Conversation' },
+    { category: 'action', value: 'Pending' },
+    { category: 'next_steps', value: 'Schedule Follow Up Meeting' },
+    { category: 'next_steps', value: 'General Follow Up' },
+    { category: 'next_steps', value: 'Other' },
+    { category: 'next_steps', value: 'Post-Mtg' },
+    { category: 'seniority', value: 'C-Suite' },
+    { category: 'seniority', value: 'BOD' },
+    { category: 'seniority', value: 'VP/SVP' },
+    { category: 'seniority', value: 'VP Level' },
+    { category: 'seniority', value: 'ED' },
+    { category: 'seniority', value: 'Director' },
+    { category: 'seniority', value: 'Manager' },
+    { category: 'seniority', value: 'Associate' },
+    { category: 'seniority', value: 'Admin' },
+    { category: 'seniority', value: 'Other' },
+    { category: 'profit_type', value: 'For-Profit' },
+    { category: 'profit_type', value: 'Non-Profit' },
+    { category: 'entity_structure', value: 'Parent' },
+    { category: 'entity_structure', value: 'Child' },
+    { category: 'event_type', value: 'Sponsored Event' },
+    { category: 'event_type', value: 'Lunch' },
+    { category: 'event_type', value: 'Dinner' },
+    { category: 'event_type', value: 'Company Hosted' },
+    { category: 'event_type', value: 'Partner' },
+    { category: 'event_type', value: 'Conference Event' },
+    { category: 'touchpoints', value: 'Booth Stop' },
+    { category: 'touchpoints', value: 'Coffee' },
+    { category: 'touchpoints', value: 'Dinner' },
+    { category: 'touchpoints', value: 'Event' },
+    { category: 'touchpoints', value: 'Breakfast/Lunch' },
+    { category: 'touchpoints', value: 'Other' },
+    { category: 'attendee_conference_status', value: 'Target' },
+  ];
+  await Promise.all(systemSeeds.map(seed =>
+    client.execute({
+      sql: 'UPDATE config_options SET is_system = 1 WHERE category = ? AND value = ?',
+      args: [seed.category, seed.value],
+    }).catch(() => {})
+  ));
+
+  // Seed default Lead Capture form template
+  try {
+    const tmplCount = await client.execute({ sql: 'SELECT COUNT(*) as cnt FROM form_templates', args: [] });
+    if (Number(tmplCount.rows[0].cnt) === 0) {
+      const tmplResult = await client.execute({
+        sql: `INSERT INTO form_templates (name, created_by) VALUES ('Lead Capture', 'system') RETURNING id`,
+        args: [],
+      });
+      const tmplId = Number(tmplResult.rows[0].id);
+      const defaultFields = [
+        { field_type: 'attendee_picker', field_key: 'attendee_name', label: 'Name', sort_order: 1, required: 1 },
+        { field_type: 'text_single', field_key: 'title', label: 'Title', sort_order: 2, required: 0 },
+        { field_type: 'text_single', field_key: 'company', label: 'Company', sort_order: 3, required: 0 },
+        { field_type: 'text_single', field_key: 'email', label: 'Email Address', sort_order: 4, required: 0 },
+        { field_type: 'text_paragraph', field_key: 'notes', label: 'Notes', sort_order: 5, required: 0 },
+      ];
+      for (const f of defaultFields) {
+        await client.execute({
+          sql: `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required) VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [tmplId, f.field_type, f.field_key, f.label, f.sort_order, f.required],
+        });
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Ensure action_key is set for meeting-related actions
+  const actionKeySeeds: Array<{ key: string; pattern: string }> = [
+    { key: 'meeting_scheduled', pattern: '%scheduled%' },
+    { key: 'meeting_held', pattern: '%held%' },
+    { key: 'rescheduled', pattern: '%reschedul%' },
+    { key: 'cancelled', pattern: '%cancel%' },
+    { key: 'no_show', pattern: '%no%show%' },
+    { key: 'pending', pattern: '%pending%' },
+  ];
+  await Promise.all(actionKeySeeds.map(({ key, pattern }) =>
+    client.execute({
+      sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ? AND (action_key IS NULL OR action_key = '')",
+      args: [key, pattern],
+    }).catch(() => {})
+  ));
+}
 
 export interface Conference {
   id: number;
