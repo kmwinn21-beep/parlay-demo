@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { findDbByToken } from '@/lib/getDb';
 import { signToken, authCookieOptions } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -9,20 +9,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Verification token is required.' }, { status: 400 });
     }
 
-    await dbReady;
-
-    const result = await db.execute({
-      sql: 'SELECT id, email, role FROM users WHERE verification_token = ?',
-      args: [token],
-    });
-
-    if (result.rows.length === 0) {
+    const found = await findDbByToken('verification_token', token, 'id, email, role');
+    if (!found) {
       return NextResponse.json({ error: 'Invalid or already-used verification link.' }, { status: 400 });
     }
 
-    const user = result.rows[0];
+    const { client: userDb, row: user } = found;
 
-    await db.execute({
+    await userDb.execute({
       sql: 'UPDATE users SET email_verified = 1, verification_token = NULL WHERE id = ?',
       args: [Number(user.id)],
     });
