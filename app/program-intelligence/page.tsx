@@ -965,6 +965,283 @@ export default function ProgramIntelligencePage() {
 
 
 
+        {activeTab === 'reps' && (
+          <div className="space-y-4">
+            {repLoading ? (
+              <div className="text-center py-16">
+                <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
+                <p className="text-gray-500 text-sm font-medium">Loading rep performance data…</p>
+              </div>
+            ) : repError ? (
+              <div className="card text-center py-10">
+                <p className="font-medium text-gray-700">Failed to load rep performance</p>
+                <p className="text-sm text-gray-400 mt-1">{repError}</p>
+              </div>
+            ) : !repDerivedData || repDerivedData.sorted.length === 0 ? (
+              <div className="card flex flex-col items-center justify-center py-16 gap-4 text-center">
+                <svg className="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <div>
+                  <p className="font-medium text-gray-700">No rep performance data for this period</p>
+                  <p className="text-sm text-gray-400 mt-1">Sales Execution Scores will appear here once conferences have been scored with rep-level meeting and follow-up data.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Summary stat cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="card border-l-4 border-brand-secondary py-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reps Tracked</p>
+                    <p className="text-3xl font-bold text-brand-primary">{repDerivedData.filteredForCards.length}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">with SES data in period</p>
+                  </div>
+                  <div className="card border-l-4 py-4" style={{ borderLeftColor: sesScoreColor(repDerivedData.cardAvgSES) }}>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Team Avg SES</p>
+                    <p className="text-3xl font-bold" style={{ color: sesScoreColor(repDerivedData.cardAvgSES) }}>{repDerivedData.cardAvgSES ?? '—'}</p>
+                    <p className="text-xs font-semibold mt-0.5" style={{ color: sesScoreColor(repDerivedData.cardAvgSES) }}>{sesTierLabel(repDerivedData.cardAvgSES)}</p>
+                  </div>
+                  <div className="card border-l-4 border-emerald-500 py-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Top Performer</p>
+                    {repDerivedData.topPerformer ? (
+                      <>
+                        <p className="text-base font-bold text-gray-900 mt-1 truncate">{repDerivedData.topPerformer.repName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">avg <span className="font-semibold" style={{ color: sesScoreColor(repDerivedData.topPerformer.avgSES) }}>{repDerivedData.topPerformer.avgSES}</span></p>
+                      </>
+                    ) : <p className="text-2xl font-bold text-gray-300">—</p>}
+                  </div>
+                  <div className="card border-l-4 border-blue-400 py-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Most Consistent</p>
+                    {repDerivedData.mostConsistent ? (
+                      <>
+                        <p className="text-base font-bold text-gray-900 mt-1 truncate">{repDerivedData.mostConsistent.repName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">range <span className="font-semibold text-gray-600">{repDerivedData.mostConsistent.minScore}–{repDerivedData.mostConsistent.maxScore}</span></p>
+                      </>
+                    ) : <p className="text-2xl font-bold text-gray-300">—</p>}
+                  </div>
+                </div>
+
+                {/* Filter bar */}
+                <div className="card">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <select className="input-field text-sm py-1.5" value={repMinConferences} onChange={e => { setRepMinConferences(Number(e.target.value)); setRepPage(1); }}>
+                      <option value={0}>All reps</option>
+                      <option value={2}>2+ conferences</option>
+                      <option value={3}>3+ conferences</option>
+                      <option value={5}>5+ conferences</option>
+                    </select>
+                    <select className="input-field text-sm py-1.5" value={repTierFilter} onChange={e => { setRepTierFilter(e.target.value); setRepPage(1); }}>
+                      <option value="all">All tiers</option>
+                      <option value="strong_above">Strong &amp; above</option>
+                      <option value="acceptable_above">Acceptable &amp; above</option>
+                      <option value="needs_work_below">Needs Work &amp; below</option>
+                      <option value="weak_only">Weak only</option>
+                    </select>
+                    <select className="input-field text-sm py-1.5" value={repSort} onChange={e => { setRepSort(e.target.value); setRepPage(1); }}>
+                      <option value="avg_desc">Average score (high to low)</option>
+                      <option value="avg_asc">Average score (low to high)</option>
+                      <option value="name_asc">Name (A–Z)</option>
+                      <option value="most_consistent">Most consistent</option>
+                      <option value="most_variable">Most variable</option>
+                    </select>
+                    <label className="flex items-center gap-2 ml-auto cursor-pointer select-none">
+                      <span className="text-sm text-gray-600">Show component breakdown</span>
+                      <button
+                        role="switch"
+                        aria-checked={showComponents}
+                        onClick={() => setShowComponents(v => !v)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showComponents ? 'bg-brand-secondary' : 'bg-gray-200'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${showComponents ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Heatmap table */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="text-sm border-collapse" style={{ minWidth: `${160 + repDerivedData.conferences.length * 72 + 96}px` }}>
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left p-3 font-semibold text-gray-500 text-xs uppercase tracking-wide sticky left-0 bg-gray-50 z-10" style={{ minWidth: 160, width: 160 }}>Rep</th>
+                          {repDerivedData.conferences.map(conf => (
+                            <th key={conf.id} className="p-2 text-center font-semibold text-gray-500 text-xs" style={{ minWidth: 72, width: 72 }}>
+                              <div className="truncate max-w-[68px]" title={conf.name}>{conf.name.length > 12 ? conf.name.slice(0, 11) + '…' : conf.name}</div>
+                              <div className="text-[10px] font-normal text-gray-400">{new Date(conf.date).getUTCFullYear()}</div>
+                            </th>
+                          ))}
+                          <th className="text-right p-3 font-semibold text-gray-500 text-xs uppercase tracking-wide sticky right-0 bg-gray-50 z-10" style={{ minWidth: 96, width: 96 }}>Avg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repDerivedData.sorted.slice((repPage - 1) * REP_PAGE_SIZE, repPage * REP_PAGE_SIZE).map(rep => {
+                          const totalConfs = repDerivedData.conferences.length;
+                          const attendedConfs = rep.confCount;
+                          const sparse = attendedConfs < totalConfs / 2;
+                          return (
+                            <React.Fragment key={rep.repId}>
+                              <tr
+                                className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer group"
+                                onClick={() => setSelectedRep(rep)}
+                              >
+                                <td className="p-3 sticky left-0 bg-white z-10 group-hover:bg-gray-50 transition-colors border-r border-gray-100" style={{ minWidth: 160, width: 160 }}>
+                                  <p className="font-medium text-brand-secondary">{rep.repName}</p>
+                                  {rep.role && <p className="text-xs text-gray-400 mt-0.5 capitalize">{rep.role.replace(/_/g, ' ')}</p>}
+                                </td>
+                                {repDerivedData.conferences.map(conf => {
+                                  const cell = rep.conferences[conf.id];
+                                  const score = cell?.sesScore ?? null;
+                                  return (
+                                    <td key={conf.id} className={`p-2 text-center font-semibold tabular-nums ${sesCellClasses(score)}`} style={{ minWidth: 72, width: 72 }}>
+                                      {score != null ? score : <span className="text-gray-300 font-normal text-xs">—</span>}
+                                    </td>
+                                  );
+                                })}
+                                <td className="p-3 sticky right-0 bg-white z-10 group-hover:bg-gray-50 transition-colors border-l border-gray-100 text-right" style={{ minWidth: 96, width: 96 }}>
+                                  <div className="font-bold text-base tabular-nums" style={{ color: sesScoreColor(rep.avgSES) }}>{rep.avgSES ?? '—'}</div>
+                                  {rep.trend && (
+                                    <div className={`text-xs ${rep.trend === 'up' ? 'text-emerald-500' : rep.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                                      {rep.trend === 'up' ? '↑' : rep.trend === 'down' ? '↓' : '→'}
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-gray-400">{rep.minScore}–{rep.maxScore}</div>
+                                  {sparse && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
+                                </td>
+                              </tr>
+                              {showComponents && (
+                                <tr className="border-b border-gray-50 bg-gray-25">
+                                  <td className="px-3 py-1.5 sticky left-0 bg-gray-50 z-10 border-r border-gray-100" style={{ minWidth: 160, width: 160 }}>
+                                    <span className="text-xs text-gray-400 italic">Components</span>
+                                  </td>
+                                  {repDerivedData.conferences.map(conf => {
+                                    const cell = rep.conferences[conf.id];
+                                    if (!cell) return <td key={conf.id} className="p-2 bg-gray-50 text-center" style={{ minWidth: 72 }}><span className="text-[10px] text-gray-300">—</span></td>;
+                                    const c = cell.components;
+                                    return (
+                                      <td key={conf.id} className="p-1.5 bg-gray-50" style={{ minWidth: 72, width: 72 }}>
+                                        <div className="space-y-0.5 text-[10px]">
+                                          {([
+                                            ['Mtg', c.meeting_execution],
+                                            ['FU', c.followup_execution],
+                                            ['PI', c.pipeline_influence],
+                                            ['Tgt', c.target_account_execution],
+                                            ['Prod', c.rep_productivity],
+                                          ] as [string, number | null][]).map(([label, val]) => (
+                                            <div key={label} className="flex justify-between gap-1">
+                                              <span className="text-gray-400">{label}</span>
+                                              <span className={`font-medium tabular-nums ${sesCellClasses(val).replace(/bg-\S+ /, '')}`}>{val ?? '—'}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                  <td className="px-3 py-1.5 sticky right-0 bg-gray-50 z-10 border-l border-gray-100" style={{ minWidth: 96, width: 96 }}>
+                                    <div className="space-y-0.5 text-[10px] text-right">
+                                      {([
+                                        ['Mtg', rep.componentAverages.meeting_execution],
+                                        ['FU', rep.componentAverages.followup_execution],
+                                        ['PI', rep.componentAverages.pipeline_influence],
+                                        ['Tgt', rep.componentAverages.target_account_execution],
+                                        ['Prod', rep.componentAverages.rep_productivity],
+                                      ] as [string, number | null][]).map(([label, val]) => (
+                                        <div key={label} className="flex justify-end gap-1">
+                                          <span className="text-gray-400">{label}</span>
+                                          <span className={`font-medium tabular-nums ${sesCellClasses(val).replace(/bg-\S+ /, '')}`}>{val ?? '—'}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {repDerivedData.sorted.length > REP_PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Showing {(repPage - 1) * REP_PAGE_SIZE + 1}–{Math.min(repPage * REP_PAGE_SIZE, repDerivedData.sorted.length)} of {repDerivedData.sorted.length} reps</span>
+                      <div className="flex gap-2">
+                        <button disabled={repPage === 1} onClick={() => setRepPage(p => p - 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">← Prev</button>
+                        <button disabled={repPage * REP_PAGE_SIZE >= repDerivedData.sorted.length} onClick={() => setRepPage(p => p + 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">Next →</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Interpretation panel */}
+                {repDerivedData.filteredForCards.length >= 2 && (() => {
+                  const reps = repDerivedData.filteredForCards;
+                  const topPerformers = reps.filter(r => r.avgSES != null && r.avgSES >= 75);
+                  const underperformers = reps.filter(r => r.avgSES != null && r.avgSES < 60 && r.confCount >= 2);
+                  const highVarianceRep = [...reps].filter(r => r.confCount >= 3).sort((a, b) => b.sd - a.sd)[0];
+                  const coachingCandidates = underperformers;
+                  const insights: { label: string; color: string; text: string }[] = [];
+
+                  if (topPerformers.length > 0) {
+                    const names = topPerformers.map(r => r.repName).join(', ');
+                    insights.push({
+                      label: 'Top Performers',
+                      color: '#059669',
+                      text: `${names} maintained Strong or better execution across all conferences this period. Consider using their pre-conference preparation and floor execution approach as the team standard.`,
+                    });
+                  }
+
+                  if (underperformers.length > 0) {
+                    const worst = [...underperformers].sort((a, b) => (a.avgSES ?? 0) - (b.avgSES ?? 0))[0];
+                    const weakComp = getLowestComponent(worst.componentAverages);
+                    const belowCount = repDerivedData.conferences.filter(c => {
+                      const cell = worst.conferences[c.id];
+                      return cell?.sesScore != null && cell.sesScore < 60;
+                    }).length;
+                    insights.push({
+                      label: 'Underperformer Flag',
+                      color: '#dc2626',
+                      text: `${worst.repName} scored below Acceptable at ${belowCount} of ${worst.confCount} conferences — the lowest cross-conference average on the team at ${worst.avgSES}/100. ${weakComp.label} is the primary drag on their score (${weakComp.score}/100).`,
+                    });
+                  }
+
+                  if (highVarianceRep && highVarianceRep.sd > 15) {
+                    insights.push({
+                      label: 'Variance Signal',
+                      color: '#d97706',
+                      text: `${highVarianceRep.repName} shows the highest performance variance this period — ranging from ${highVarianceRep.minScore} to ${highVarianceRep.maxScore} across conferences. This pattern suggests conference-dependent performance rather than a consistent execution issue. Review which conferences drove the highest and lowest scores.`,
+                    });
+                  }
+
+                  if (coachingCandidates.length > 0) {
+                    const count = coachingCandidates.length;
+                    insights.push({
+                      label: 'Coaching Trigger',
+                      color: '#7c3aed',
+                      text: `${count} ${count === 1 ? 'rep' : 'reps'} scored below Acceptable on average this period. Open the rep detail view for specific coaching signals by component.`,
+                    });
+                  }
+
+                  if (insights.length === 0) return null;
+                  return (
+                    <div className="card">
+                      <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">What the data shows</h2>
+                      <div className="space-y-3">
+                        {insights.map(insight => (
+                          <div key={insight.label} className="flex gap-3">
+                            <div className="w-1 flex-shrink-0 rounded-full mt-0.5" style={{ backgroundColor: insight.color }} />
+                            <div>
+                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 block mb-0.5">{insight.label}</span>
+                              <p className="text-sm text-gray-700">{insight.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        )}
+
         {activeTab === 'calendar' && (
           <div className="space-y-4">
             {calendarLoading && calendarRows.length === 0 ? (
@@ -1504,6 +1781,163 @@ export default function ProgramIntelligencePage() {
           </div>
         )}
       </div>
+
+      {selectedRep && repDerivedData && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedRep(null)}>
+          <div className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">{selectedRep.repName}</h3>
+                {selectedRep.role && <p className="text-xs text-gray-500 mt-0.5 capitalize">{selectedRep.role.replace(/_/g, ' ')}</p>}
+              </div>
+              <button onClick={() => setSelectedRep(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
+            {(() => {
+              const stats = repDerivedData.filteredForCards.find(r => r.repId === selectedRep.repId) ?? repDerivedData.sorted.find(r => r.repId === selectedRep.repId);
+              if (!stats) return null;
+              const avgSES = stats.avgSES;
+              const componentAverages = stats.componentAverages;
+              const isBelow70 = avgSES != null && avgSES < 70;
+
+              const signals: string[] = [];
+              if (componentAverages.meeting_execution != null && componentAverages.meeting_execution < 60)
+                signals.push('Meeting hold rate is below acceptable threshold across conferences. Review pre-conference scheduling discipline and same-day confirmation practices.');
+              if (componentAverages.followup_execution != null && componentAverages.followup_execution < 60)
+                signals.push('Follow-up completion is consistently low. This rep may need a structured post-conference follow-up workflow or accountability check-in.');
+              if (componentAverages.target_account_execution != null && componentAverages.target_account_execution < 50)
+                signals.push('Target account engagement rate is weak. This rep may not be prioritizing their target list on the floor. Review pre-conference briefing process.');
+              if (componentAverages.pipeline_influence != null && componentAverages.pipeline_influence < 50)
+                signals.push('Pipeline influence is low relative to meeting activity. Meetings are being held but not converting to pipeline. Review conversation quality and follow-through.');
+              if (componentAverages.rep_productivity != null && componentAverages.rep_productivity < 50)
+                signals.push('Company engagement breadth is below benchmark. This rep may be spending disproportionate time with a small number of contacts rather than working the full target list.');
+
+              const confScores = repDerivedData.conferences
+                .map(c => ({ conf: c, cell: selectedRep.conferences[c.id] }))
+                .filter(x => x.cell?.sesScore != null)
+                .sort((a, b) => new Date(a.conf.date).getTime() - new Date(b.conf.date).getTime());
+
+              const allScores = confScores.map(x => x.cell!.sesScore!);
+              const bestConf = confScores.length ? confScores.reduce((b, x) => x.cell!.sesScore! > b.cell!.sesScore! ? x : b) : null;
+              const worstConf = confScores.length ? confScores.reduce((w, x) => x.cell!.sesScore! < w.cell!.sesScore! ? x : w) : null;
+              const sd2 = stddev(allScores);
+              const consistencyLabel = sd2 < 8 ? 'High' : sd2 < 15 ? 'Medium' : 'Low';
+              const mostCommonTier = (() => {
+                const counts: Record<string, number> = {};
+                for (const s of allScores) { const t = sesTierLabel(s); counts[t] = (counts[t] ?? 0) + 1; }
+                return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+              })();
+
+              return (
+                <>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="text-4xl font-bold" style={{ color: sesScoreColor(avgSES) }}>{avgSES ?? '—'}</div>
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: sesScoreColor(avgSES) }}>{sesTierLabel(avgSES)}</div>
+                      <div className="text-xs text-gray-400">avg SES · {stats.confCount} conference{stats.confCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    {stats.trend && (
+                      <div className={`ml-auto text-lg font-bold ${stats.trend === 'up' ? 'text-emerald-500' : stats.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                        {stats.trend === 'up' ? '↑' : stats.trend === 'down' ? '↓' : '→'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs">Performance Summary</h4>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="text-gray-400">Score range</span><span className="float-right font-medium text-gray-700">{stats.minScore}–{stats.maxScore}</span></div>
+                      <div><span className="text-gray-400">Consistency</span><span className="float-right font-medium text-gray-700">{consistencyLabel}</span></div>
+                      <div><span className="text-gray-400">Best conference</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{bestConf?.conf.name ?? '—'} ({bestConf?.cell?.sesScore ?? '—'})</span></div>
+                      <div><span className="text-gray-400">Worst conference</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{worstConf?.conf.name ?? '—'} ({worstConf?.cell?.sesScore ?? '—'})</span></div>
+                      <div><span className="text-gray-400">Most common tier</span><span className="float-right font-medium text-gray-700">{mostCommonTier}</span></div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-3">Conference Breakdown</h4>
+                    <div className="space-y-3">
+                      {confScores.map(({ conf, cell }) => (
+                        <div key={conf.id} className="border border-gray-100 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-gray-800 text-sm">{conf.name}</p>
+                              <p className="text-xs text-gray-400">{new Date(conf.date).getUTCFullYear()}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xl font-bold tabular-nums" style={{ color: sesScoreColor(cell!.sesScore) }}>{cell!.sesScore}</div>
+                              <div className="text-xs font-medium" style={{ color: sesScoreColor(cell!.sesScore) }}>{sesTierLabel(cell!.sesScore)}</div>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${cell!.sesScore ?? 0}%`, backgroundColor: sesScoreColor(cell!.sesScore) }} />
+                            </div>
+                          </div>
+                          <div className="mt-2 grid grid-cols-5 gap-1 text-[10px]">
+                            {([
+                              ['Mtg', cell!.components.meeting_execution],
+                              ['FU', cell!.components.followup_execution],
+                              ['PI', cell!.components.pipeline_influence],
+                              ['Tgt', cell!.components.target_account_execution],
+                              ['Prod', cell!.components.rep_productivity],
+                            ] as [string, number | null][]).map(([label, val]) => (
+                              <div key={label} className="text-center">
+                                <div className="text-gray-400">{label}</div>
+                                <div className="font-semibold" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">Component Averages</h4>
+                    <div className="space-y-2">
+                      {([
+                        ['Meeting Execution', componentAverages.meeting_execution],
+                        ['Follow-up Execution', componentAverages.followup_execution],
+                        ['Pipeline Influence', componentAverages.pipeline_influence],
+                        ['Target Account Execution', componentAverages.target_account_execution],
+                        ['Rep Productivity', componentAverages.rep_productivity],
+                      ] as [string, number | null][]).map(([label, val]) => (
+                        <div key={label}>
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="text-gray-500">{label}</span>
+                            <span className="font-semibold" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${val ?? 0}%`, backgroundColor: sesScoreColor(val) }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isBelow70 && (
+                    <div className="mt-5">
+                      <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">Coaching Signals</h4>
+                      {signals.length > 0 ? (
+                        <ul className="space-y-2">
+                          {signals.map((s, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-gray-700">
+                              <span className="text-amber-500 flex-shrink-0 mt-0.5">•</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No coaching signals — this rep is performing at or above threshold across all components.</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {selectedCalendarRow && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedCalendarRow(null)}>
