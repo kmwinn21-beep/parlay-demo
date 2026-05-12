@@ -59,6 +59,7 @@ function computeSES(
   repExpectedActivities: number,
   repExpectedCompanies: number,
   eff: EffSettings,
+  attributedPipeline = 0,
 ): {
   sesScore: number | null;
   approxPipeline: number;
@@ -85,16 +86,11 @@ function computeSES(
     target_account_execution = Math.round(Math.min(100, ((d.targetsMet + d.targetsFu) / totalTargets) * 100));
   }
 
-  // Company-level attribution: each unique company engaged by this rep contributes
-  // one deal at the meeting conversion rate. Touchpoints to companies without a
-  // meeting also contribute at the lower touchpoint rate — approximated here as
-  // (total companies with meeting × followUpRate) since we don't separately track
-  // touchpoint-only companies per rep.
-  const approxPipeline = d.companiesWithMeeting * eff.followUpRate * eff.dealSize;
+  const approxPipeline = attributedPipeline;
 
   let pipeline_influence: number | null = null;
-  if (repPipelineDenominator != null && repPipelineDenominator > 0 && approxPipeline > 0) {
-    pipeline_influence = Math.round(Math.min((approxPipeline / repPipelineDenominator) * 100, 100));
+  if (repPipelineDenominator != null && repPipelineDenominator > 0 && attributedPipeline > 0) {
+    pipeline_influence = Math.round(Math.min((attributedPipeline / repPipelineDenominator) * 100, 100));
   }
 
   // Rep productivity: activity volume + company coverage vs per-rep expected benchmarks
@@ -366,7 +362,7 @@ export async function GET(req: NextRequest) {
                END,
                0.95
              ) * CASE
-                   WHEN COALESCE(cc.wse, 0) > 0 THEN cc.wse * e.cost_per_unit
+                   WHEN COALESCE(cc.wse, 0) > 0 AND e.cost_per_unit > 0 THEN cc.wse * e.cost_per_unit
                    ELSE e.deal_size
                  END AS pipeline_value
            FROM company_totals ct
@@ -627,12 +623,11 @@ export async function GET(req: NextRequest) {
         const repExpectedActivities = effSettings.expectedActivities / numActiveReps;
         const repExpectedCompanies = effSettings.expectedCompanies / numActiveReps;
 
-        const ses = computeSES(d, totalTargets, confPipelineDenominator, repExpectedActivities, repExpectedCompanies, effSettings);
+        const attributedPipeline = repPipelineMap.get(repId)?.get(confId) ?? 0;
+        const ses = computeSES(d, totalTargets, confPipelineDenominator, repExpectedActivities, repExpectedCompanies, effSettings, attributedPipeline);
         const totalCompanies = confTotalsMap.get(confId)?.totalCompanies ?? 0;
         const ces = computeRepCES(d, totalCompanies);
         const costData = costEffScoreMap.get(repId)?.get(confId);
-        // Use actual attributed pipeline dollars (company-level proportional query)
-        const attributedPipeline = repPipelineMap.get(repId)?.get(confId) ?? 0;
         conferences[confId] = {
           sesScore: ses.sesScore,
           cesScore: ces.score,
