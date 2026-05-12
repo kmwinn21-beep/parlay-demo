@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 // GET /api/attendees/[id]/touchpoints?conference_id=X
 // With conference_id: returns { counts: Record<optionId, count> } for that conference
@@ -100,6 +101,9 @@ export async function POST(
     return NextResponse.json({ error: 'conference_id and option_id required' }, { status: 400 });
   }
 
+  const stageBlock = await validateConferenceStage(request, Number(conference_id), 'canLogTouchpoint');
+  if (stageBlock) return stageBlock;
+
   const insertRes = await db.execute({
     sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id) VALUES (?, ?, ?) RETURNING id`,
     args: [attendeeId, conference_id, option_id],
@@ -149,6 +153,9 @@ export async function DELETE(
   if (!conference_id || !option_id) {
     return NextResponse.json({ error: 'conference_id and option_id required' }, { status: 400 });
   }
+
+  const stageBlock = await validateConferenceStage(request, Number(conference_id), 'canDeleteTouchpoint');
+  if (stageBlock) return stageBlock;
 
   const latest = await db.execute({
     sql: `SELECT id FROM attendee_touchpoints

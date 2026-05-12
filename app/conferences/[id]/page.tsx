@@ -38,6 +38,9 @@ import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { ConferenceEffectivenessModal } from '@/components/ConferenceEffectivenessModal';
 import { AgendaTab } from '@/components/AgendaTab';
 import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTargetsTab';
+import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
+import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
+import { getConferencePermissions } from '@/lib/conference-permissions';
 
 interface Attendee {
   id: number;
@@ -113,6 +116,10 @@ interface Conference {
   conference_strategy_type_id?: number | null;
   conference_strategy_type_display_name?: string | null;
   is_historical?: number | boolean | null;
+  post_conference_days?: number | null;
+  stage_override?: string | null;
+  stage_override_by?: string | null;
+  stage_override_reason?: string | null;
   created_at: string;
   attendees: Attendee[];
 }
@@ -344,6 +351,59 @@ export default function ConferenceDetailPage() {
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showCrmExport, setShowCrmExport] = useState(false);
+  const [showAdminStage, setShowAdminStage] = useState(false);
+  const [stageActionLoading, setStageActionLoading] = useState(false);
+  const [stageExtendDays, setStageExtendDays] = useState(7);
+
+  // Compute conference stage (null for historical)
+  const conferenceStage = useMemo(() => {
+    if (!conference || conference.is_historical) return null;
+    try {
+      return computeConferenceStage({
+        start_date: conference.start_date,
+        end_date: conference.end_date,
+        post_conference_days: conference.post_conference_days ?? null,
+        stage_override: conference.stage_override ?? null,
+      });
+    } catch {
+      return null;
+    }
+  }, [conference]);
+
+  const stageDaysRemaining = useMemo(() => {
+    if (!conference || conferenceStage !== 'post_conference') return undefined;
+    return postConferenceDaysRemaining({
+      end_date: conference.end_date,
+      post_conference_days: conference.post_conference_days ?? null,
+    });
+  }, [conference, conferenceStage]);
+
+  const stagePermissions = useMemo(() => {
+    if (!conferenceStage) return null;
+    return getConferencePermissions(conferenceStage, isAdminUser);
+  }, [conferenceStage, isAdminUser]);
+
+  async function applyStageAction(action: string, extra?: Record<string, unknown>) {
+    setStageActionLoading(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/stage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...extra }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Failed to update stage.');
+        return;
+      }
+      await fetchConference();
+      toast.success('Conference stage updated.');
+    } catch {
+      toast.error('Failed to update stage.');
+    } finally {
+      setStageActionLoading(false);
+    }
+  }
 
   // Upload attendee list state
   const [isUploading, setIsUploading] = useState(false);
@@ -1135,13 +1195,6 @@ export default function ConferenceDetailPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
                 <div className="flex items-center gap-6 border-l border-gray-200 pl-3 overflow-x-auto flex-nowrap hide-scrollbar">
-                  <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
-                  <PostConferenceReview
-                    conferenceId={conference.id}
-                    conferenceName={conference.name}
-                    endDate={conference.end_date}
-                    userRole={currentUser?.role ?? 'user'}
-                  />
                   <ConferenceEffectivenessModal
                     conferenceId={conference.id}
                     conferenceName={conference.name}
@@ -1192,6 +1245,9 @@ export default function ConferenceDetailPage() {
                     Historical Conference
                   </span>
                 )}
+                {conferenceStage && (
+                  <ConferenceStageBadge stage={conferenceStage} daysRemaining={stageDaysRemaining} />
+                )}
                 {conference.attendees.length === 0 ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-300">
                     <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1204,9 +1260,9 @@ export default function ConferenceDetailPage() {
                     <span className="badge-blue">
                       {conference.attendees.length} attendees
                     </span>
-                    {!conference.is_historical && (
-                      <span className="text-sm font-semibold text-gray-700">
-                        Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                    {!conference.is_historical && conference.conference_strategy_type_display_name && (
+                      <span className="badge-blue">
+                        {conference.conference_strategy_type_display_name}
                       </span>
                     )}
                   </div>
@@ -1225,6 +1281,93 @@ export default function ConferenceDetailPage() {
                   >
                     View it in Calendar Intelligence →
                   </button>
+                </div>
+              )}
+              {conferenceStage === 'post_conference' && !isAdminUser && (
+                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 flex items-start gap-2">
+                  <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
+                  </svg>
+                  <span>
+                    <strong>Post-conference window is open.</strong> Log any remaining meetings, touchpoints, or follow-ups.{' '}
+                    {stageDaysRemaining != null && (
+                      <span className={stageDaysRemaining <= 2 ? 'font-semibold text-red-700' : ''}>
+                        {stageDaysRemaining} day{stageDaysRemaining !== 1 ? 's' : ''} remaining before this conference closes.
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {isAdminUser && conferenceStage && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminStage(!showAdminStage)}
+                    className="text-xs font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Stage Controls (Admin)
+                  </button>
+                  {showAdminStage && (
+                    <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 flex flex-wrap items-center gap-2">
+                      {conferenceStage !== 'closed' && (
+                        <button
+                          type="button"
+                          disabled={stageActionLoading}
+                          onClick={() => applyStageAction('close_now')}
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 text-white hover:bg-gray-900 disabled:opacity-50 transition-colors"
+                        >
+                          Close Now
+                        </button>
+                      )}
+                      {conferenceStage === 'closed' && (
+                        <button
+                          type="button"
+                          disabled={stageActionLoading}
+                          onClick={() => applyStageAction('reopen')}
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-green-700 text-white hover:bg-green-900 disabled:opacity-50 transition-colors"
+                        >
+                          Reopen
+                        </button>
+                      )}
+                      {conferenceStage === 'post_conference' && (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={1}
+                            max={90}
+                            value={stageExtendDays}
+                            onChange={e => setStageExtendDays(Number(e.target.value))}
+                            className="w-14 rounded border border-gray-300 px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-accent"
+                          />
+                          <button
+                            type="button"
+                            disabled={stageActionLoading}
+                            onClick={() => applyStageAction('extend_window', { days: stageExtendDays })}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-amber-600 text-white hover:bg-amber-800 disabled:opacity-50 transition-colors"
+                          >
+                            Extend Window
+                          </button>
+                        </div>
+                      )}
+                      {conference.stage_override && (
+                        <button
+                          type="button"
+                          disabled={stageActionLoading}
+                          onClick={() => applyStageAction('clear_override')}
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                        >
+                          Clear Override
+                        </button>
+                      )}
+                      {conference.stage_override && (
+                        <span className="text-xs text-gray-500">Override set by {conference.stage_override_by}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
@@ -1893,7 +2036,9 @@ export default function ConferenceDetailPage() {
                   <button
                     type="button"
                     onClick={() => setNewMeetingOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary text-sm font-medium hover:bg-blue-50 transition-colors"
+                    disabled={stagePermissions != null && !stagePermissions.canLogMeeting}
+                    title={stagePermissions != null && !stagePermissions.canLogMeeting ? 'Activity logging is closed for this conference.' : undefined}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary text-sm font-medium hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -2183,6 +2328,7 @@ export default function ConferenceDetailPage() {
           conferenceId={conference.id}
           conferenceName={conference.name}
           onClose={() => setShowBudgetModal(false)}
+          readOnly={stagePermissions != null && !stagePermissions.canEditBudget}
         />
       )}
 

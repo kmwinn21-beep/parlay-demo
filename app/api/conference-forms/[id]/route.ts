@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   try {
     await dbReady;
+    const formRow = await db.execute({
+      sql: 'SELECT conference_id FROM conference_forms WHERE id = ?',
+      args: [params.id],
+    });
+    if (formRow.rows[0]?.conference_id != null) {
+      const stageBlock = await validateConferenceStage(request, Number(formRow.rows[0].conference_id), 'canSubmitForm');
+      if (stageBlock) return stageBlock;
+    }
     const { name, conference_logo_url, background_color,
             accent_color, accent_gradient, image_url, image_max_width, html_content,
             image_offset_y, html_offset_y, form_width, form_height, form_offset_y,

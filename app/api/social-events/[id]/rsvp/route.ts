@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function PUT(
   request: NextRequest,
@@ -18,6 +19,16 @@ export async function PUT(
     const parts = String(rsvp_status).split(',').map((s: string) => s.trim());
     if (!parts.every((p: string) => validValues.includes(p))) {
       return NextResponse.json({ error: 'rsvp_status must be comma-separated values of: yes, no, maybe, attended' }, { status: 400 });
+    }
+
+    // Validate conference stage before writing
+    const seRow = await db.execute({
+      sql: 'SELECT conference_id FROM social_events WHERE id = ?',
+      args: [id],
+    });
+    if (seRow.rows[0]?.conference_id != null) {
+      const stageBlock = await validateConferenceStage(request, Number(seRow.rows[0].conference_id), 'canRsvpSocialEvent');
+      if (stageBlock) return stageBlock;
     }
 
     // Fetch previous RSVP status before upserting so we can detect a new "attended" selection

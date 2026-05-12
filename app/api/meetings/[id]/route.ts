@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function PUT(
   request: NextRequest,
@@ -16,13 +17,16 @@ export async function PUT(
     }
 
     const existing = await db.execute({
-      sql: 'SELECT id FROM meetings WHERE id = ?',
+      sql: 'SELECT id, conference_id FROM meetings WHERE id = ?',
       args: [id],
     });
 
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
+
+    const stageBlock = await validateConferenceStage(request, Number(existing.rows[0].conference_id), 'canEditMeeting');
+    if (stageBlock) return stageBlock;
 
     await db.execute({
       sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, additional_attendees = ?, meeting_type = ? WHERE id = ?`,
@@ -37,7 +41,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
@@ -52,6 +56,9 @@ export async function DELETE(
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
+
+    const stageBlock = await validateConferenceStage(request, Number(existing.rows[0].conference_id), 'canDeleteMeeting');
+    if (stageBlock) return stageBlock;
 
     const meeting = existing.rows[0];
     const attendeeId = meeting.attendee_id;
