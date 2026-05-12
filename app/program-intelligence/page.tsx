@@ -936,7 +936,12 @@ export default function ProgramIntelligencePage() {
     const topPerformer = [...filteredForCards].sort((a, b) => (b.avgSES ?? -1) - (a.avgSES ?? -1))[0] ?? null;
     const mostConsistent = filteredForCards.filter(r => r.confCount >= 2).sort((a, b) => a.sd - b.sd)[0] ?? null;
 
-    return { sorted, conferences, cardAvgSES, topPerformer, mostConsistent, filteredForCards };
+    // Only show conference columns that have at least one rep with data in the heatmap
+    const confsWithData = conferences.filter(conf =>
+      withStats.some(rep => rep.conferences[conf.id] != null),
+    );
+
+    return { sorted, conferences: confsWithData, cardAvgSES, topPerformer, mostConsistent, filteredForCards };
   }, [repData, repMinConferences, repTierFilter, repSort]);
 
   // Permission gate — after all hooks
@@ -1999,12 +2004,27 @@ export default function ProgramIntelligencePage() {
 
                   <div className="mt-5">
                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs">Performance Summary</h4>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-400">SES range</span><span className="float-right font-medium text-gray-700">{stats.minScore}–{stats.maxScore}</span></div>
-                      <div><span className="text-gray-400">Consistency</span><span className="float-right font-medium text-gray-700">{consistencyLabel}</span></div>
-                      <div><span className="text-gray-400">Best (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{bestSES?.conf.name ?? '—'} ({bestSES?.cell?.sesScore ?? '—'})</span></div>
-                      <div><span className="text-gray-400">Worst (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{worstSES?.conf.name ?? '—'} ({worstSES?.cell?.sesScore ?? '—'})</span></div>
-                      <div><span className="text-gray-400">Most common tier</span><span className="float-right font-medium text-gray-700">{mostCommonTier}</span></div>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">SES Range</div>
+                        <div className="font-semibold text-gray-700 mt-0.5">{stats.minScore}–{stats.maxScore}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Consistency</div>
+                        <div className="font-semibold text-gray-700 mt-0.5">{consistencyLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Best (SES)</div>
+                        <div className="font-semibold text-gray-700 mt-0.5 truncate">{bestSES?.conf.name ?? '—'} ({bestSES?.cell?.sesScore ?? '—'})</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Worst (SES)</div>
+                        <div className="font-semibold text-gray-700 mt-0.5 truncate">{worstSES?.conf.name ?? '—'} ({worstSES?.cell?.sesScore ?? '—'})</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Most Common Tier</div>
+                        <div className="font-semibold text-gray-700 mt-0.5">{mostCommonTier}</div>
+                      </div>
                     </div>
                   </div>
 
@@ -2206,7 +2226,7 @@ export default function ProgramIntelligencePage() {
                   },
                   { key: 'Commercial Potential', score: cs?.commercialPotential ?? null, weight: W.commercialPotential,
                     bullets: cp != null ? [
-                      `Projected pipeline: $${projectedPipeline.toLocaleString()}`,
+                      `Available pipeline: $${projectedPipeline.toLocaleString()}`,
                       ...(reqPipeline > 0 ? [`Required pipeline: $${reqPipeline.toLocaleString()} (${reqMultiple}x multiple)`, `Coverage: ${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%`] : ['No budget entered — coverage cannot be computed.']),
                     ] : [
                       'No target WSE or avg cost data available.',
