@@ -167,7 +167,7 @@ function CompanyRecordPopup({ company, onClose }: { company: ByRepCompany; onClo
   );
 }
 
-function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onToggleTarget }: { company: ByRepCompany; type: PopupType; conferenceName: string; onClose: () => void; targetMap?: Map<number, TargetEntry>; onToggleTarget?: (entry: Omit<TargetEntry, 'tier'>) => Promise<void> }) {
+function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onToggleTarget, readOnly = false }: { company: ByRepCompany; type: PopupType; conferenceName: string; onClose: () => void; targetMap?: Map<number, TargetEntry>; onToggleTarget?: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>; readOnly?: boolean }) {
   const titles: Record<PopupType, string> = { company: 'Company Record', notes: 'Notes', attendees: 'Attendees' };
 
   return (
@@ -209,6 +209,7 @@ function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onTog
                       {onToggleTarget && <TargetBtn
                         isTarget={isTarget}
                         size="md"
+                        disabled={readOnly}
                         onClick={() => onToggleTarget({
                           attendeeId: Number(a.id),
                           firstName: String(a.first_name),
@@ -243,7 +244,7 @@ function IconButton({ title, onClick, children }: { title: string; onClick: () =
   );
 }
 
-function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle, targetMap, onToggleTarget }: {
+function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle, targetMap, onToggleTarget, readOnly = false }: {
   entry: ByRepEntry;
   conferenceId: number;
   conferenceName: string;
@@ -251,6 +252,7 @@ function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle
   onToggle: (rep: string) => void;
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
 }) {
   const isOpen = expandedRep === entry.rep;
   const [popup, setPopup] = useState<{ company: ByRepCompany; type: PopupType } | null>(null);
@@ -313,18 +315,19 @@ function RepSection({ entry, conferenceId, conferenceName, expandedRep, onToggle
       )}
 
       {popup && (
-        <CompanyPopup company={popup.company} type={popup.type} conferenceName={conferenceName} onClose={() => setPopup(null)} targetMap={targetMap} onToggleTarget={onToggleTarget} />
+        <CompanyPopup company={popup.company} type={popup.type} conferenceName={conferenceName} onClose={() => setPopup(null)} targetMap={targetMap} onToggleTarget={onToggleTarget} readOnly={readOnly} />
       )}
     </div>
   );
 }
 
-export function ByRepTab({ entries, conferenceId, conferenceName, targetMap, onToggleTarget }: {
+export function ByRepTab({ entries, conferenceId, conferenceName, targetMap, onToggleTarget, readOnly = false }: {
   entries: ByRepEntry[];
   conferenceId: number;
   conferenceName: string;
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
 }) {
   const [expandedRep, setExpandedRep] = useState<string | null>(null);
 
@@ -344,7 +347,7 @@ export function ByRepTab({ entries, conferenceId, conferenceName, targetMap, onT
     <div className="space-y-3">
       <p className="text-sm text-gray-500">{entries.length} rep{entries.length !== 1 ? 's' : ''} with company assignments — click to expand</p>
       {entries.map((entry) => (
-        <RepSection key={entry.rep} entry={entry} conferenceId={conferenceId} conferenceName={conferenceName} expandedRep={expandedRep} onToggle={handleToggle} targetMap={targetMap} onToggleTarget={onToggleTarget} />
+        <RepSection key={entry.rep} entry={entry} conferenceId={conferenceId} conferenceName={conferenceName} expandedRep={expandedRep} onToggle={handleToggle} targetMap={targetMap} onToggleTarget={onToggleTarget} readOnly={readOnly} />
       ))}
     </div>
   );

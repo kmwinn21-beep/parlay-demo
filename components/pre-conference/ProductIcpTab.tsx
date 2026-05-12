@@ -13,10 +13,12 @@ export function ProductIcpTab({
   productIcp,
   targetMap,
   onToggleTarget,
+  readOnly = false,
 }: {
   productIcp: ProductIcpEntry[];
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
 }) {
   if (productIcp.length === 0) {
     return (
@@ -105,6 +107,7 @@ export function ProductIcpTab({
                           </Link>
                           <TargetBtn
                             isTarget={isTarget}
+                            disabled={readOnly}
                             onClick={() => onToggleTarget({
                               attendeeId: a.id,
                               firstName: a.firstName,

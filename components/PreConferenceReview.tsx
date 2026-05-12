@@ -212,7 +212,7 @@ function StatPill({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-export function PreConferenceReview({ conferenceId, conferenceName }: { conferenceId: number; conferenceName: string }) {
+export function PreConferenceReview({ conferenceId, conferenceName, targetsReadOnly = false }: { conferenceId: number; conferenceName: string; targetsReadOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PreConferenceData | null>(null);
@@ -397,18 +397,18 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                 <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} strategyAssessment={data.strategyAssessment ?? null} />
               )}
               {activeTab === 'icp' && (
-                <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
               {activeTab === 'social' && <SocialEventsTab events={data.socialEvents} />}
               {activeTab === 'by-rep' && (
-                <ByRepTab entries={data.byRep} conferenceId={conferenceId} conferenceName={conferenceName} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <ByRepTab entries={data.byRep} conferenceId={conferenceId} conferenceName={conferenceName} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'relationships' && (
-                <RelationshipsTab relationships={data.relationships} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <RelationshipsTab relationships={data.relationships} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'product_icp' && (
-                <ProductIcpTab productIcp={data.productIcp} targetMap={targetMap} onToggleTarget={toggleTarget} />
+                <ProductIcpTab productIcp={data.productIcp} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'conference_targets' && (
                 <ConferenceTargetsTab
@@ -418,10 +418,15 @@ export function PreConferenceReview({ conferenceId, conferenceName }: { conferen
                   meetingAttendeeIds={meetingAttendeeIds}
                   onToggleTarget={toggleTarget}
                   onSetTier={setTargetTier}
+                  readOnly={targetsReadOnly}
                 />
               )}
               {activeTab === 'target_recommendations' && (
-                <TargetRecommendationsTab conferenceId={conferenceId} targetMap={targetMap} onAddTargetWithTier={addTargetWithTier} />
+                <TargetRecommendationsTab
+                  conferenceId={conferenceId}
+                  targetMap={targetMap}
+                  onAddTargetWithTier={targetsReadOnly ? undefined : addTargetWithTier}
+                />
               )}
               {activeTab === 'parlay_recommendations' && (
                 <ParlayRecommendationsTab

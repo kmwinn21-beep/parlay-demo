@@ -98,13 +98,15 @@ function TargetCard({
   avgCostPerUnit,
   onDragStart,
   onToggleTarget,
+  readOnly = false,
 }: {
   entry: TargetEntry;
   hasMeeting: boolean;
   isDragging: boolean;
   avgCostPerUnit: number;
-  onDragStart: () => void;
+  onDragStart?: () => void;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
 }) {
   const valuePill = (entry.companyWse != null && avgCostPerUnit > 0)
     ? '$' + Math.round(entry.companyWse * avgCostPerUnit).toLocaleString('en-US')
@@ -112,9 +114,9 @@ function TargetCard({
 
   return (
     <div
-      draggable
+      draggable={!readOnly && !!onDragStart}
       onDragStart={onDragStart}
-      className={`bg-white border border-gray-200 rounded-xl p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-all ${
+      className={`bg-white border border-gray-200 rounded-xl p-3 ${readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} hover:shadow-sm transition-all ${
         isDragging ? 'opacity-40 ring-2 ring-brand-secondary' : ''
       }`}
     >
@@ -135,6 +137,7 @@ function TargetCard({
         <TargetBtn
           isTarget={true}
           size="sm"
+          disabled={readOnly}
           onClick={() => onToggleTarget({
             attendeeId: entry.attendeeId,
             firstName: entry.firstName,
@@ -186,6 +189,7 @@ export function ConferenceTargetsTab({
   addableGroups,
   onAddTargets,
   loadingAddAttendees,
+  readOnly = false,
 }: {
   conferenceId: number;
   conferenceName: string;
@@ -196,6 +200,7 @@ export function ConferenceTargetsTab({
   addableGroups?: AddableGroup[];
   onAddTargets?: (entries: Array<Omit<TargetEntry, 'tier'>>) => Promise<void>;
   loadingAddAttendees?: boolean;
+  readOnly?: boolean;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
@@ -670,9 +675,9 @@ export function ConferenceTargetsTab({
                 key={tier.key}
                 className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg}`}
                 style={isOver ? { outline: tier.dragOutline, outlineOffset: '2px' } : {}}
-                onDragOver={e => { e.preventDefault(); setDragOverTier(tier.key); }}
-                onDragLeave={() => setDragOverTier(null)}
-                onDrop={() => handleDrop(tier.key)}
+                onDragOver={readOnly ? undefined : (e => { e.preventDefault(); setDragOverTier(tier.key); })}
+                onDragLeave={readOnly ? undefined : (() => setDragOverTier(null))}
+                onDrop={readOnly ? undefined : (() => handleDrop(tier.key))}
               >
                 <div className="flex items-center justify-between mb-3">
                   <span className={`text-lg font-bold uppercase tracking-wider ${tier.labelClass}`}>{tier.label}</span>
@@ -694,8 +699,9 @@ export function ConferenceTargetsTab({
                       hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
                       isDragging={draggingId === entry.attendeeId}
                       avgCostPerUnit={avgCostPerUnit}
-                      onDragStart={() => setDraggingId(entry.attendeeId)}
+                      onDragStart={readOnly ? undefined : () => setDraggingId(entry.attendeeId)}
                       onToggleTarget={onToggleTarget}
+                      readOnly={readOnly}
                     />
                   ))}
                   {tierCards.length === 0 && (

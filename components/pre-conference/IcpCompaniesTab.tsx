@@ -32,10 +32,12 @@ export function IcpCompaniesTab({
   companies,
   targetMap,
   onToggleTarget,
+  readOnly = false,
 }: {
   companies: IcpCompany[];
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
 }) {
   if (companies.length === 0) {
     return (
@@ -95,6 +97,7 @@ export function IcpCompaniesTab({
                       <span className="text-gray-400">{a.health}</span>
                       <TargetBtn
                         isTarget={isTarget}
+                        disabled={readOnly}
                         onClick={() => onToggleTarget({
                           attendeeId: Number(a.id),
                           firstName: String(a.first_name),

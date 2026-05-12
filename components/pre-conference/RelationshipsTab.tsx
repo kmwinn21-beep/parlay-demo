@@ -13,10 +13,12 @@ export function RelationshipsTab({
   relationships,
   targetMap,
   onToggleTarget,
+  readOnly = false,
 }: {
   relationships: RelationshipRow[];
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
 }) {
   if (relationships.length === 0) {
     return (
@@ -90,6 +92,7 @@ export function RelationshipsTab({
                         </Link>
                         <TargetBtn
                           isTarget={isTarget}
+                          disabled={readOnly}
                           onClick={() => onToggleTarget({
                             attendeeId: Number(a.id),
                             firstName: String(a.first_name),
