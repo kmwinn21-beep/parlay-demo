@@ -5,6 +5,9 @@ import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
     const { searchParams } = new URL(request.url);
     const attendeeId = searchParams.get('attendee_id');
@@ -185,6 +188,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
     const { id, outcome } = body;

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 
-async function checkMembership(groupId: number, userId: number): Promise<boolean> {
+import type { Client } from '@libsql/client';
+
+async function checkMembership(db: Client, groupId: number, userId: number): Promise<boolean> {
   const result = await db.execute({
     sql: `SELECT 1 FROM group_conversation_members WHERE group_id = ? AND user_id = ?`,
     args: [groupId, userId],
@@ -20,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (isNaN(groupId)) return NextResponse.json({ error: 'Invalid group id' }, { status: 400 });
 
 
-  if (!(await checkMembership(groupId, user.id))) {
+  if (!(await checkMembership(db, groupId, user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (isNaN(groupId)) return NextResponse.json({ error: 'Invalid group id' }, { status: 400 });
 
 
-  if (!(await checkMembership(groupId, user.id))) {
+  if (!(await checkMembership(db, groupId, user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

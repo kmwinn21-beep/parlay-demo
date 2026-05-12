@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
+import type { Client } from '@libsql/client';
 
 function parseStatusValues(status: unknown): string[] {
   if (status == null) return [];
@@ -14,7 +15,7 @@ function parseStatusValues(status: unknown): string[] {
 /** Sync user-scoped status marks for a company after a PATCH.
  *  For each user-scoped option, inserts or deletes from company_user_statuses
  *  based on whether that option's value appears in statusPayload. */
-async function syncUserScopedStatuses(opts: {
+async function syncUserScopedStatuses(db: Client, opts: {
   companyId: string;
   actorEmail: string;
   statusPayload: unknown;
@@ -389,7 +390,7 @@ export async function PATCH(
       });
 
       // Sync user-scoped status marks using the original body.status as signal
-      await syncUserScopedStatuses({
+      await syncUserScopedStatuses(db, {
         companyId: params.id,
         actorEmail: user.email,
         statusPayload: body.status,
