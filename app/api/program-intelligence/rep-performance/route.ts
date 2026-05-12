@@ -319,18 +319,25 @@ export async function GET(req: NextRequest) {
       ).catch(() => [] as Row[]),
     ]);
 
-    // l. Pipeline attribution per rep per conference — company-level, proportional share
-    // Each engaged company contributes pipeline_value = fuRate × dealSize.
-    // That value is split among reps proportionally by their held-meeting count with that company.
+    // l. Pipeline attribution per rep per conference
+    // Replicates the core pipeline_influence CTE from the conference effectiveness route:
+    //   - Per company: pipeline_value = min(convRate × multiTouchMult, 0.95) × dealValue
+    //   - dealValue = wse × cost_per_unit if wse > 0, else avg_annual_deal_size
+    //   - multiTouchMult = 1.5 if interactions ≥ 3, 1.25 if interactions = 2, else 1.0
+    //   - Attributed to reps proportionally by their held-meeting count per company
+    // confIds appears once (in rep_company CTE); the rest use sub-query results.
     let repPipelineRows: Row[] = [];
     try {
       repPipelineRows = await runQuery(
-        `SELECT rc.conference_id, rc.rep_raw,
-                SUM(
-                  rc.held * 1.0 / NULLIF(tot.total_held, 0)
-                  * ed.fu_rate * ed.deal_size
-                ) AS attributed_pipeline
-         FROM (
+        `WITH eff AS (
+           SELECT
+             COALESCE(MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL) END), 30) / 100.0 AS fu_rate,
+             COALESCE(MAX(CASE WHEN key='touchpoint_conversion_rate' THEN CAST(value AS REAL) END), 15) / 100.0 AS tp_rate,
+             COALESCE(MAX(CASE WHEN key='avg_cost_per_unit' THEN CAST(value AS REAL) END), 0) AS cost_per_unit,
+             COALESCE(MAX(CASE WHEN key='avg_annual_deal_size' THEN CAST(value AS REAL) END), 50000) AS deal_size
+           FROM effectiveness_defaults
+         ),
+         rep_company AS (
            SELECT m.conference_id, m.scheduled_by AS rep_raw, a.company_id,
                   COUNT(CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN 1 END) AS held
            FROM meetings m
@@ -341,25 +348,38 @@ export async function GET(req: NextRequest) {
              AND a.company_id IS NOT NULL
            GROUP BY m.conference_id, m.scheduled_by, a.company_id
            HAVING held > 0
-         ) rc
-         JOIN (
-           SELECT m2.conference_id, a2.company_id,
-                  COUNT(CASE WHEN LOWER(COALESCE(cop2.action_key,''))='meeting_held' THEN 1 END) AS total_held
-           FROM meetings m2
-           JOIN attendees a2 ON m2.attendee_id = a2.id
-           LEFT JOIN config_options cop2 ON cop2.category='action' AND LOWER(m2.outcome)=LOWER(cop2.value)
-           WHERE m2.conference_id IN (${placeholders})
-             AND a2.company_id IS NOT NULL
-           GROUP BY m2.conference_id, a2.company_id
-         ) tot ON tot.conference_id = rc.conference_id AND tot.company_id = rc.company_id
-         CROSS JOIN (
+         ),
+         company_totals AS (
+           SELECT conference_id, company_id,
+                  SUM(held) AS total_held
+           FROM rep_company
+           GROUP BY conference_id, company_id
+         ),
+         company_pi AS (
            SELECT
-             COALESCE(MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL) END), 30) / 100.0 AS fu_rate,
-             COALESCE(MAX(CASE WHEN key='avg_annual_deal_size' THEN CAST(value AS REAL) END), 50000) AS deal_size
-           FROM effectiveness_defaults
-         ) ed
+             ct.conference_id, ct.company_id,
+             MIN(
+               e.fu_rate * CASE
+                 WHEN ct.total_held >= 3 THEN 1.50
+                 WHEN ct.total_held = 2 THEN 1.25
+                 ELSE 1.00
+               END,
+               0.95
+             ) * CASE
+                   WHEN COALESCE(cc.wse, 0) > 0 THEN cc.wse * e.cost_per_unit
+                   ELSE e.deal_size
+                 END AS pipeline_value
+           FROM company_totals ct
+           LEFT JOIN conference_companies cc ON cc.conference_id = ct.conference_id AND cc.company_id = ct.company_id
+           CROSS JOIN eff e
+         )
+         SELECT rc.conference_id, rc.rep_raw,
+                SUM(cpi.pipeline_value * rc.held * 1.0 / ct.total_held) AS attributed_pipeline
+         FROM rep_company rc
+         JOIN company_totals ct ON ct.conference_id = rc.conference_id AND ct.company_id = rc.company_id
+         JOIN company_pi cpi ON cpi.conference_id = rc.conference_id AND cpi.company_id = rc.company_id
          GROUP BY rc.conference_id, rc.rep_raw`,
-        [...confIds, ...confIds],
+        confIds,
       );
     } catch {
       repPipelineRows = [];
