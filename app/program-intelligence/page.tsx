@@ -278,6 +278,12 @@ function dataAgeColorClass(dataAge: number): string {
   return '';
 }
 
+function icpDensityPillClasses(pct: number): string {
+  if (pct >= 30) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (pct >= 15) return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
 function tierLabel(tier: string): string {
   return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 }
@@ -836,7 +842,7 @@ export default function ProgramIntelligencePage() {
                       <button key={r.conferenceId} className={`w-full text-left py-3 px-1 flex items-center justify-between gap-3 transition-colors ${selectedCalendarRow?.conferenceId === r.conferenceId ? 'bg-blue-50' : 'active:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                         <div className="min-w-0">
                           <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpCompanies}/{r.totalCompanies} ICP ({r.icpDensityPct.toFixed(0)}%)</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · <span title={`${r.icpCompanies} ICP / ${r.totalCompanies} total`}>{r.icpDensityPct.toFixed(0)}% ICP</span></p>
                         </div>
                         <div className="flex-shrink-0 text-right">
                           <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
@@ -851,7 +857,7 @@ export default function ProgramIntelligencePage() {
                       <thead>
                         <tr className="text-left text-gray-500">
                           {(['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'] as const).map((k) => (
-                            <th key={k} className="p-2 cursor-pointer" onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>
+                            <th key={k} className={`p-2 cursor-pointer${k === 'icpCompanies' ? ' text-center' : ''}`} onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>
                               {k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}
                             </th>
                           ))}
@@ -867,7 +873,7 @@ export default function ProgramIntelligencePage() {
                             <td className="p-2 text-gray-600">{r.conferenceYear}</td>
                             <td className="p-2 text-gray-600">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
                             <td className="p-2 text-gray-600">{r.attendeeCount}</td>
-                            <td className="p-2 text-gray-600">{r.icpCompanies}/{r.totalCompanies} ({r.icpDensityPct.toFixed(1)}%)</td>
+                            <td className="p-2 text-center"><span title={`${r.icpCompanies} ICP / ${r.totalCompanies} total`} className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-xs font-semibold border ${icpDensityPillClasses(r.icpDensityPct)}`}>{r.icpDensityPct.toFixed(0)}%</span></td>
                             <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
                             <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
                             <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
@@ -1465,11 +1471,6 @@ export default function ProgramIntelligencePage() {
               </ul>
             </div>
 
-            <div className="mt-6">
-              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Your Notes</h4>
-              <p className="text-xs text-gray-500 mt-1">Add context the score can&apos;t capture — venue quality, networking value, strategic relationships, or anything that should inform the calendar decision.</p>
-              <textarea className="input-field mt-2 w-full min-h-24" placeholder="Add notes about this conference — venue quality, networking value, strategic relationships, or anything else that should inform the calendar decision." />
-            </div>
           </div>
         </div>
       )}
