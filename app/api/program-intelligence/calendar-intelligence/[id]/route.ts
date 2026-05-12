@@ -83,6 +83,12 @@ export interface TargetingAggregation {
   avgRelationshipLeverageScore: number;
   actionableCount: number;
   isLargeConference: boolean;
+  // WSE sums by tier — used for Commercial Potential pipeline projection
+  mustTargetWse: number;
+  highPriorityWse: number;
+  worthEngagingWse: number;
+  // First 5 scored companies for debug logging
+  debugSample: Array<{ companyName: string; wse: number | null; tier: string }>;
 }
 
 const ACTIONABLE_KEYS = new Set(['book_meeting', 'route_to_account_owner', 'invite_to_hosted_event', 'rep_floor_outreach']);
@@ -223,20 +229,24 @@ async function runTargetingForConference(
   let mustTargetCount = 0, highPriorityCount = 0, worthEngagingCount = 0, monitorCount = 0, lowPriorityCount = 0;
   let needsTitleReviewCount = 0, actionableCount = 0;
   let sumPriorityScore = 0, sumBuyerAccessScore = 0, sumRelationshipScore = 0;
+  let mustTargetWse = 0, highPriorityWse = 0, worthEngagingWse = 0;
+  const debugSample: Array<{ companyName: string; wse: number | null; tier: string }> = [];
 
   for (const s of scores) {
+    const wse = s.wse ?? 0;
     switch (s.target_priority_tier_key) {
-      case 'must_target': mustTargetCount++; break;
-      case 'high_priority': highPriorityCount++; break;
-      case 'worth_engaging': worthEngagingCount++; break;
-      case 'monitor': monitorCount++; break;
-      default: lowPriorityCount++; break;
+      case 'must_target':    mustTargetCount++;    mustTargetWse    += wse; break;
+      case 'high_priority':  highPriorityCount++;  highPriorityWse  += wse; break;
+      case 'worth_engaging': worthEngagingCount++; worthEngagingWse += wse; break;
+      case 'monitor':  monitorCount++;  break;
+      default:         lowPriorityCount++; break;
     }
     if (s.confidence_level === 'Low') needsTitleReviewCount++;
     if (ACTIONABLE_KEYS.has(s.recommended_action_key)) actionableCount++;
     sumPriorityScore += s.target_priority_score;
     sumBuyerAccessScore += s.buyer_access_score;
     sumRelationshipScore += s.relationship_leverage_score;
+    if (debugSample.length < 5) debugSample.push({ companyName: s.company_name, wse: s.wse, tier: s.target_priority_tier_key });
   }
 
   return {
@@ -252,6 +262,10 @@ async function runTargetingForConference(
     avgRelationshipLeverageScore: sumRelationshipScore / totalScoredCompanies,
     actionableCount,
     isLargeConference: totalScoredCompanies > 500,
+    mustTargetWse,
+    highPriorityWse,
+    worthEngagingWse,
+    debugSample,
   };
 }
 
@@ -402,9 +416,11 @@ export async function GET(
     tierConfig: hasSavedTierConfig ? tierConfig : null,
   });
 
-  const mustConv = Number(settings['tier_must_target_conversion'] ?? '25') / 100 || 0.25;
-  const highConv = Number(settings['tier_high_priority_conversion'] ?? '15') / 100 || 0.15;
-  const worthConv = Number(settings['tier_worth_engaging_conversion'] ?? '7.5') / 100 || 0.075;
+  // Read win probabilities from site_settings (set by Target Classification in ICP Settings).
+  // Use truthiness check so a user-configured 0% is honoured rather than overridden by || fallback.
+  const mustConv  = settings['tier_must_target_conversion']    ? Number(settings['tier_must_target_conversion'])    / 100 : 0.25;
+  const highConv  = settings['tier_high_priority_conversion']  ? Number(settings['tier_high_priority_conversion'])  / 100 : 0.15;
+  const worthConv = settings['tier_worth_engaging_conversion'] ? Number(settings['tier_worth_engaging_conversion']) / 100 : 0.075;
 
   const r = confRow;
   const totalCompanies = Number(r.total_companies ?? 0);
@@ -448,33 +464,23 @@ export async function GET(
     : null;
 
   // --- Component 4 & 5: Commercial Potential + Cost Justification ---
-  const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
-  const companyBestTier = new Map<number, { tier: string; wse: number }>();
-  const commercialByCompany = await db.execute({
-    sql: `SELECT ct.tier, a.company_id, MAX(CAST(c.wse AS REAL)) AS wse
-          FROM conference_targets ct
-          JOIN attendees a ON a.id = ct.attendee_id
-          JOIN companies c ON c.id = a.company_id
-          WHERE ct.conference_id = ? AND c.wse IS NOT NULL AND c.wse > 0
-          GROUP BY a.company_id, ct.tier`,
-    args: [conferenceId],
-  }).then(r => r.rows as Row[]).catch(() => [] as Row[]);
-  for (const row of commercialByCompany) {
-    const compId = Number(row.company_id);
-    const tier = String(row.tier ?? 'unassigned');
-    const wse = Number(row.wse ?? 0);
-    const existing = companyBestTier.get(compId);
-    if (!existing || (TIER_PRIORITY[tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
-      companyBestTier.set(compId, { tier, wse });
+  // WSE sums come from the scoring engine (same source as Target Recommendations tab),
+  // not from conference_targets which is often empty for future conferences.
+  const mustWse  = targetingAgg?.mustTargetWse  ?? 0;
+  const highWse  = targetingAgg?.highPriorityWse ?? 0;
+  const worthWse = targetingAgg?.worthEngagingWse ?? 0;
+
+  // Debug log: first 5 scored companies showing WSE, tier, probability, and pipeline contribution
+  if (targetingAgg?.debugSample && targetingAgg.debugSample.length > 0) {
+    console.log(`[cal-intel ${conferenceId}] avgCostPerUnit=${avgCostPerUnit} mustConv=${mustConv} highConv=${highConv} worthConv=${worthConv}`);
+    for (const c of targetingAgg.debugSample) {
+      const probFactor = c.tier === 'must_target' ? mustConv : c.tier === 'high_priority' ? highConv : c.tier === 'worth_engaging' ? worthConv : 0;
+      const pipelineContrib = c.wse != null && avgCostPerUnit > 0 ? Math.round(c.wse * probFactor * avgCostPerUnit) : 0;
+      console.log(`[cal-intel ${conferenceId}]   company="${c.companyName}" wse=${c.wse ?? 'null'} pipeline_value=${c.wse != null && avgCostPerUnit > 0 ? Math.round(c.wse * avgCostPerUnit) : 'n/a'} tier=${c.tier} probFactor=${probFactor} pipelineContrib=${pipelineContrib}`);
     }
   }
-  let mustWse = 0, highWse = 0, worthWse = 0;
-  for (const { tier, wse } of Array.from(companyBestTier.values())) {
-    if (tier === '1') mustWse += wse;
-    else if (tier === '2') highWse += wse;
-    else if (tier === '3') worthWse += wse;
-  }
-  const projectedPipeline = avgCostPerUnit > 0
+
+  const projectedPipeline = targetingAgg != null && avgCostPerUnit > 0
     ? Math.round((mustWse * mustConv + highWse * highConv + worthWse * worthConv) * avgCostPerUnit)
     : null;
 
