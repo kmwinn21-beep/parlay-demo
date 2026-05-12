@@ -61,6 +61,7 @@ function computeSES(
   eff: EffSettings,
 ): {
   sesScore: number | null;
+  approxPipeline: number;
   components: {
     meeting_execution: number | null;
     followup_execution: number | null;
@@ -84,12 +85,12 @@ function computeSES(
     target_account_execution = Math.round(Math.min(100, ((d.targetsMet + d.targetsFu) / totalTargets) * 100));
   }
 
-  // Pipeline influence: approximate attributed pipeline vs rep's allocated target
+  const approxPipeline =
+    d.meetingsHeld * eff.followUpRate * eff.dealSize +
+    d.touchpoints * eff.touchpointRate * eff.dealSize;
+
   let pipeline_influence: number | null = null;
-  if (repPipelineDenominator != null && repPipelineDenominator > 0 && (d.meetingsHeld > 0 || d.touchpoints > 0)) {
-    const approxPipeline =
-      d.meetingsHeld * eff.followUpRate * eff.dealSize +
-      d.touchpoints * eff.touchpointRate * eff.dealSize;
+  if (repPipelineDenominator != null && repPipelineDenominator > 0 && approxPipeline > 0) {
     pipeline_influence = Math.round(Math.min((approxPipeline / repPipelineDenominator) * 100, 100));
   }
 
@@ -113,6 +114,7 @@ function computeSES(
 
   return {
     sesScore: score,
+    approxPipeline,
     components: { meeting_execution, followup_execution, pipeline_influence, target_account_execution, rep_productivity },
   };
 }
@@ -421,18 +423,24 @@ export async function GET(req: NextRequest) {
     // dim2 = rep's hold rate * 0.5 + fu attachment * 0.5
     // dim4 = rep's companies with meeting / total companies at conference (rep's engagement breadth)
     // dim5 = rep's followup completion rate
-    const computeRepCES = (d: RepConfData, totalCompanies: number): number | null => {
+    const computeRepCES = (d: RepConfData, totalCompanies: number): {
+      score: number | null;
+      components: { meeting_execution: number | null; engagement_breadth: number | null; followup_execution: number | null };
+    } => {
       const holdRate = pct(d.meetingsHeld, d.meetingsScheduled);
       const fuAttach = d.companiesWithMeeting > 0 ? pct(d.coWithMtgFu, d.companiesWithMeeting) : null;
       const dim2 = holdRate != null && fuAttach != null ? holdRate * 0.5 + fuAttach * 0.5 : (holdRate ?? fuAttach ?? null);
       const dim4 = totalCompanies > 0 ? (d.companiesWithMeeting / totalCompanies) * 100 : null;
       const dim5 = pct(d.followupsCompleted, d.followupsCreated);
+      const meeting_execution = dim2 != null ? Math.round(dim2) : null;
+      const engagement_breadth = dim4 != null ? Math.round(dim4) : null;
+      const followup_execution = dim5 != null ? Math.round(dim5) : null;
       const { score } = reweight([
-        { key: 'dim2_meeting_exec', score: dim2 != null ? Math.round(dim2) : null, weight: 0.20 },
-        { key: 'dim4_breadth', score: dim4 != null ? Math.round(dim4) : null, weight: 0.05 },
-        { key: 'dim5_followup', score: dim5 != null ? Math.round(dim5) : null, weight: 0.10 },
+        { key: 'dim2_meeting_exec', score: meeting_execution, weight: 0.20 },
+        { key: 'dim4_breadth', score: engagement_breadth, weight: 0.05 },
+        { key: 'dim5_followup', score: followup_execution, weight: 0.10 },
       ]);
-      return score;
+      return { score, components: { meeting_execution, engagement_breadth, followup_execution } };
     };
 
     // 6. Compute cost efficiency per rep per conference
@@ -477,12 +485,19 @@ export async function GET(req: NextRequest) {
       sesScore: number | null;
       cesScore: number | null;
       costEffScore: number | null;
+      approxPipeline: number;       // estimated pipeline dollars this rep influenced at this conf
+      pipelineGoalShare: number;    // rep's proportionate share of the pipeline goal for this conf
       components: {
         meeting_execution: number | null;
         followup_execution: number | null;
         pipeline_influence: number | null;
         target_account_execution: number | null;
         rep_productivity: number | null;
+      };
+      ces_components: {
+        meeting_execution: number | null;
+        engagement_breadth: number | null;
+        followup_execution: number | null;
       };
     };
 
@@ -520,11 +535,15 @@ export async function GET(req: NextRequest) {
 
         const ses = computeSES(d, totalTargets, confPipelineDenominator, repExpectedActivities, repExpectedCompanies, effSettings);
         const totalCompanies = confTotalsMap.get(confId)?.totalCompanies ?? 0;
+        const ces = computeRepCES(d, totalCompanies);
         conferences[confId] = {
           sesScore: ses.sesScore,
-          cesScore: computeRepCES(d, totalCompanies),
+          cesScore: ces.score,
           costEffScore: costEffScoreMap.get(repId)?.get(confId) ?? null,
+          approxPipeline: ses.approxPipeline,
+          pipelineGoalShare: confPipelineDenominator ?? 0,
           components: ses.components,
+          ces_components: ces.components,
         };
       }
 
