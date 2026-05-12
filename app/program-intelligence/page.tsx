@@ -103,6 +103,7 @@ interface CalendarConferenceRow {
 
 interface RepConferenceScore {
   sesScore: number | null;
+  cesScore: number | null;
   costEffScore: number | null;
   components: {
     meeting_execution: number | null;
@@ -124,7 +125,6 @@ interface RepPerfConference {
   id: number;
   name: string;
   date: string;
-  cesScore: number | null;
 }
 
 interface RepPerfData {
@@ -1039,7 +1039,7 @@ export default function ProgramIntelligencePage() {
                         </button>
                       ))}
                     </div>
-                    {repScoreView === 'ces' && <span className="text-xs text-gray-400">Conference-level — same score shown for all reps per column</span>}
+                    {repScoreView === 'ces' && <span className="text-xs text-gray-400">Each rep&apos;s individual effectiveness at each conference</span>}
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
                     <select className="input-field text-sm py-1.5" value={repMinConferences} onChange={e => { setRepMinConferences(Number(e.target.value)); setRepPage(1); }}>
@@ -1099,9 +1099,9 @@ export default function ProgramIntelligencePage() {
                           const sparse = attendedConfs < totalConfs / 2;
                           // Compute avg for the selected score view
                           const viewScores = repDerivedData.conferences.map(c => {
-                            if (repScoreView === 'ces') return c.cesScore;
                             const cell = rep.conferences[c.id];
                             if (!cell) return null;
+                            if (repScoreView === 'ces') return cell.cesScore;
                             return repScoreView === 'cost' ? cell.costEffScore : cell.sesScore;
                           }).filter((s): s is number => s != null);
                           const viewAvg = viewScores.length ? Math.round(viewScores.reduce((a, b) => a + b, 0) / viewScores.length) : null;
@@ -1117,12 +1117,14 @@ export default function ProgramIntelligencePage() {
                                 </td>
                                 {repDerivedData.conferences.map(conf => {
                                   const cell = rep.conferences[conf.id];
-                                  const score = repScoreView === 'ces'
-                                    ? conf.cesScore
-                                    : repScoreView === 'cost'
-                                      ? (cell?.costEffScore ?? null)
-                                      : (cell?.sesScore ?? null);
-                                  const notAttended = repScoreView !== 'ces' && !cell;
+                                  const score = !cell
+                                    ? null
+                                    : repScoreView === 'ces'
+                                      ? cell.cesScore
+                                      : repScoreView === 'cost'
+                                        ? cell.costEffScore
+                                        : cell.sesScore;
+                                  const notAttended = !cell;
                                   return (
                                     <td key={conf.id} className={`p-2 text-center font-semibold tabular-nums ${notAttended ? 'bg-gray-50 text-gray-300' : sesCellClasses(score)}`} style={{ minWidth: 72, width: 72 }}>
                                       {score != null ? score : <span className="font-normal text-xs">—</span>}
@@ -1137,7 +1139,7 @@ export default function ProgramIntelligencePage() {
                                     </div>
                                   )}
                                   <div className="text-xs text-gray-400">{rep.minScore}–{rep.maxScore}</div>
-                                  {sparse && repScoreView !== 'ces' && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
+                                  {sparse && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
                                 </td>
                               </tr>
                               {showComponents && (
@@ -1864,8 +1866,8 @@ export default function ProgramIntelligencePage() {
               // Cost efficiency averages
               const costScores = allConfEntries.map(x => x.cell!.costEffScore).filter((s): s is number => s != null);
               const avgCost = costScores.length ? Math.round(costScores.reduce((a, b) => a + b, 0) / costScores.length) : null;
-              // CES averages (conference-level)
-              const cesScores = repDerivedData.conferences.map(c => c.cesScore).filter((s): s is number => s != null);
+              // CES averages (per-rep)
+              const cesScores = allConfEntries.map(x => x.cell!.cesScore).filter((s): s is number => s != null);
               const avgCES = cesScores.length ? Math.round(cesScores.reduce((a, b) => a + b, 0) / cesScores.length) : null;
 
               // Score to show in header based on drawer view
@@ -1930,7 +1932,7 @@ export default function ProgramIntelligencePage() {
                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-3">Conference Breakdown</h4>
                     <div className="space-y-3">
                       {allConfEntries.map(({ conf, cell }) => {
-                        const activeScore = drawerScoreView === 'ses' ? cell!.sesScore : drawerScoreView === 'ces' ? conf.cesScore : cell!.costEffScore;
+                        const activeScore = drawerScoreView === 'ses' ? cell!.sesScore : drawerScoreView === 'ces' ? cell!.cesScore : cell!.costEffScore;
                         const scoreLabel = drawerScoreView === 'ses' ? 'SES' : drawerScoreView === 'ces' ? 'CES' : 'Cost';
                         return (
                           <div key={conf.id} className="border border-gray-100 rounded-lg p-3">
@@ -1964,10 +1966,10 @@ export default function ProgramIntelligencePage() {
                                 </div>
                               ))}
                             </div>
-                            {/* Show cost eff score if available */}
-                            {(cell!.costEffScore != null || conf.cesScore != null) && (
+                            {/* Show other scores when not in SES view */}
+                            {(cell!.cesScore != null || cell!.costEffScore != null) && (
                               <div className="mt-2 flex gap-3 text-[10px]">
-                                {conf.cesScore != null && <span className="text-gray-400">CES <span className="font-semibold" style={{ color: sesScoreColor(conf.cesScore) }}>{conf.cesScore}</span></span>}
+                                {cell!.cesScore != null && <span className="text-gray-400">CES <span className="font-semibold" style={{ color: sesScoreColor(cell!.cesScore) }}>{cell!.cesScore}</span></span>}
                                 {cell!.costEffScore != null && <span className="text-gray-400">Cost Eff. <span className="font-semibold" style={{ color: sesScoreColor(cell!.costEffScore) }}>{cell!.costEffScore}</span></span>}
                               </div>
                             )}

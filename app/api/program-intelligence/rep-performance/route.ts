@@ -324,44 +324,23 @@ export async function GET(req: NextRequest) {
       for (const repId of reps) getOrCreate(repId, confId).targetsFu += Number(r.targets_fu ?? 0) / reps.length;
     }
 
-    // 5. Compute CES per conference by aggregating all-rep data
-    // Aggregate: sum per-rep data to conference level
-    const confAggMap = new Map<number, RepConfData>();
-    for (const [, confMap] of Array.from(repConfMap.entries())) {
-      for (const [confId, d] of Array.from(confMap.entries())) {
-        if (!confAggMap.has(confId)) {
-          confAggMap.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0 });
-        }
-        const agg = confAggMap.get(confId)!;
-        agg.meetingsScheduled += d.meetingsScheduled;
-        agg.meetingsHeld += d.meetingsHeld;
-        agg.companiesWithMeeting += d.companiesWithMeeting;
-        agg.coWithMtgFu += d.coWithMtgFu;
-        agg.followupsCreated += d.followupsCreated;
-        agg.followupsCompleted += d.followupsCompleted;
-      }
-    }
-
-    const confCESMap = new Map<number, number | null>();
-    for (const [confId, agg] of Array.from(confAggMap.entries())) {
-      const totals = confTotalsMap.get(confId);
-      const totalCompanies = totals?.totalCompanies ?? 0;
-      const companiesEngaged = totals?.companiesEngaged ?? agg.companiesWithMeeting;
-
-      const holdRate = pct(agg.meetingsHeld, agg.meetingsScheduled);
-      const fuAttach = agg.companiesWithMeeting > 0 ? pct(agg.coWithMtgFu, agg.companiesWithMeeting) : null;
+    // 5. Compute per-rep CES (conference effectiveness) per conference
+    // dim2 = rep's hold rate * 0.5 + fu attachment * 0.5
+    // dim4 = rep's companies with meeting / total companies at conference (rep's engagement breadth)
+    // dim5 = rep's followup completion rate
+    const computeRepCES = (d: RepConfData, totalCompanies: number): number | null => {
+      const holdRate = pct(d.meetingsHeld, d.meetingsScheduled);
+      const fuAttach = d.companiesWithMeeting > 0 ? pct(d.coWithMtgFu, d.companiesWithMeeting) : null;
       const dim2 = holdRate != null && fuAttach != null ? holdRate * 0.5 + fuAttach * 0.5 : (holdRate ?? fuAttach ?? null);
-
-      const dim4 = totalCompanies > 0 ? (companiesEngaged / totalCompanies) * 100 : null;
-      const dim5 = pct(agg.followupsCompleted, agg.followupsCreated);
-
-      const { score: cesScore } = reweight([
+      const dim4 = totalCompanies > 0 ? (d.companiesWithMeeting / totalCompanies) * 100 : null;
+      const dim5 = pct(d.followupsCompleted, d.followupsCreated);
+      const { score } = reweight([
         { key: 'dim2_meeting_exec', score: dim2 != null ? Math.round(dim2) : null, weight: 0.20 },
         { key: 'dim4_breadth', score: dim4 != null ? Math.round(dim4) : null, weight: 0.05 },
         { key: 'dim5_followup', score: dim5 != null ? Math.round(dim5) : null, weight: 0.10 },
       ]);
-      confCESMap.set(confId, cesScore);
-    }
+      return score;
+    };
 
     // 6. Compute cost efficiency per rep per conference
     // Active reps per conference = reps with at least 1 meeting held
@@ -403,6 +382,7 @@ export async function GET(req: NextRequest) {
     // 7. Build rep results
     type RepConfScore = {
       sesScore: number | null;
+      cesScore: number | null;
       costEffScore: number | null;
       components: {
         meeting_execution: number | null;
@@ -428,8 +408,10 @@ export async function GET(req: NextRequest) {
       for (const [confId, d] of Array.from(confMap.entries())) {
         const totalTargets = targetTotalMap.get(confId) ?? 0;
         const ses = computeSES(d, totalTargets);
+        const totalCompanies = confTotalsMap.get(confId)?.totalCompanies ?? 0;
         conferences[confId] = {
           sesScore: ses.sesScore,
+          cesScore: computeRepCES(d, totalCompanies),
           costEffScore: costEffScoreMap.get(repId)?.get(confId) ?? null,
           components: ses.components,
         };
@@ -588,7 +570,6 @@ export async function GET(req: NextRequest) {
       id: Number(r.id),
       name: String(r.name),
       date: String(r.conf_date),
-      cesScore: confCESMap.get(Number(r.id)) ?? null,
     }));
 
     return NextResponse.json({ conferences, reps: repResults, priorAvg });
