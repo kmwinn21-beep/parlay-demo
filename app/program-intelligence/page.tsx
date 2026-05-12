@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BarChart,
@@ -99,6 +99,38 @@ interface CalendarConferenceRow {
     budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
     commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
   };
+}
+
+interface RepConferenceScore {
+  sesScore: number | null;
+  cesScore: number | null;
+  costEffScore: number | null;
+  components: {
+    meeting_execution: number | null;
+    followup_execution: number | null;
+    pipeline_influence: number | null;
+    target_account_execution: number | null;
+    rep_productivity: number | null;
+  };
+}
+
+interface RepRow {
+  repId: string;
+  repName: string;
+  role: string | null;
+  conferences: Record<number, RepConferenceScore>;
+}
+
+interface RepPerfConference {
+  id: number;
+  name: string;
+  date: string;
+}
+
+interface RepPerfData {
+  conferences: RepPerfConference[];
+  reps: RepRow[];
+  priorAvg: Record<string, number>;
 }
 
 interface ConferenceSummary {
@@ -322,6 +354,54 @@ function weakestDimLabel(components: CESComponents): string {
     }
   }
   return DIM_LABELS[worst] ?? 'unknown component';
+}
+
+// ── Rep Performance helpers ───────────────────────────────────────────────────
+
+function sesScoreColor(score: number | null): string {
+  if (score == null) return '#9ca3af';
+  if (score >= 90) return '#059669';
+  if (score >= 75) return '#10b981';
+  if (score >= 60) return '#374151';
+  if (score >= 50) return '#d97706';
+  return '#dc2626';
+}
+
+function sesCellClasses(score: number | null): string {
+  if (score == null) return 'bg-gray-50 text-gray-400';
+  if (score >= 90) return 'bg-emerald-100 text-emerald-700';
+  if (score >= 75) return 'bg-emerald-50 text-emerald-700';
+  if (score >= 60) return 'bg-white text-gray-700';
+  if (score >= 50) return 'bg-amber-50 text-amber-700';
+  return 'bg-red-50 text-red-700';
+}
+
+function sesTierLabel(score: number | null): string {
+  if (score == null) return '—';
+  if (score >= 90) return 'Exceptional';
+  if (score >= 75) return 'Strong';
+  if (score >= 60) return 'Acceptable';
+  if (score >= 50) return 'Needs Work';
+  return 'Weak';
+}
+
+function stddev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  return Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length);
+}
+
+function getLowestComponent(comps: RepConferenceScore['components']): { key: string; label: string; score: number } {
+  const map: [string, string, number | null][] = [
+    ['meeting_execution', 'Meeting Execution', comps.meeting_execution],
+    ['followup_execution', 'Follow-up Execution', comps.followup_execution],
+    ['pipeline_influence', 'Pipeline Influence', comps.pipeline_influence],
+    ['target_account_execution', 'Target Account Execution', comps.target_account_execution],
+    ['rep_productivity', 'Rep Productivity', comps.rep_productivity],
+  ];
+  const available = map.filter(([, , v]) => v != null) as [string, string, number][];
+  if (!available.length) return { key: '', label: '—', score: 0 };
+  return available.sort((a, b) => a[2] - b[2]).map(([key, label, score]) => ({ key, label, score }))[0];
 }
 
 // ── Custom Tooltip ────────────────────────────────────────────────────────────
@@ -555,6 +635,20 @@ export default function ProgramIntelligencePage() {
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
 
+  // Rep Performance state
+  const [repData, setRepData] = useState<RepPerfData | null>(null);
+  const [repLoading, setRepLoading] = useState(false);
+  const [repError, setRepError] = useState<string | null>(null);
+  const [repMinConferences, setRepMinConferences] = useState(0);
+  const [repTierFilter, setRepTierFilter] = useState('all');
+  const [repSort, setRepSort] = useState('avg_desc');
+  const [showComponents, setShowComponents] = useState(false);
+  const [selectedRep, setSelectedRep] = useState<RepRow | null>(null);
+  const [repPage, setRepPage] = useState(1);
+  const [repScoreView, setRepScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
+  const [drawerScoreView, setDrawerScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
+  const REP_PAGE_SIZE = 30;
+
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
     setIsPortrait(mql.matches);
@@ -605,6 +699,20 @@ export default function ProgramIntelligencePage() {
   }, [activeTab]);
 
   useEffect(() => { void fetchData(); }, [fetchData]);
+
+  // Rep Performance data fetch
+  useEffect(() => {
+    if (activeTab !== 'reps') return;
+    let cancelled = false;
+    setRepLoading(true);
+    setRepError(null);
+    fetch(`/api/program-intelligence/rep-performance?startDate=${startDate}&endDate=${endDate}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : r.json().then((b: { error?: string }) => { throw new Error(b.error ?? `HTTP ${r.status}`); }))
+      .then((data: RepPerfData) => { if (!cancelled) { setRepData(data); setRepPage(1); } })
+      .catch(e => { if (!cancelled) setRepError(String(e)); })
+      .finally(() => { if (!cancelled) setRepLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, startDate, endDate]);
 
   // All derived state computed before any conditional returns (rules of hooks)
 
@@ -720,6 +828,79 @@ export default function ProgramIntelligencePage() {
     return rows;
   }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarSort]);
 
+  // Rep Performance derived data
+  const repDerivedData = useMemo(() => {
+    if (!repData) return null;
+    const { conferences, reps, priorAvg } = repData;
+
+    const withStats = reps.map(rep => {
+      const scores = Object.values(rep.conferences).map(c => c.sesScore).filter((s): s is number => s != null);
+      const confCount = Object.keys(rep.conferences).length;
+      const avgSES = scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : null;
+      const sd = stddev(scores);
+      const minScore = scores.length ? Math.min(...scores) : null;
+      const maxScore = scores.length ? Math.max(...scores) : null;
+      const avgCompSum = {
+        meeting_execution: [] as number[],
+        followup_execution: [] as number[],
+        pipeline_influence: [] as number[],
+        target_account_execution: [] as number[],
+        rep_productivity: [] as number[],
+      };
+      for (const c of Object.values(rep.conferences)) {
+        if (c.components.meeting_execution != null) avgCompSum.meeting_execution.push(c.components.meeting_execution);
+        if (c.components.followup_execution != null) avgCompSum.followup_execution.push(c.components.followup_execution);
+        if (c.components.pipeline_influence != null) avgCompSum.pipeline_influence.push(c.components.pipeline_influence);
+        if (c.components.target_account_execution != null) avgCompSum.target_account_execution.push(c.components.target_account_execution);
+        if (c.components.rep_productivity != null) avgCompSum.rep_productivity.push(c.components.rep_productivity);
+      }
+      const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+      const componentAverages = {
+        meeting_execution: avg(avgCompSum.meeting_execution),
+        followup_execution: avg(avgCompSum.followup_execution),
+        pipeline_influence: avg(avgCompSum.pipeline_influence),
+        target_account_execution: avg(avgCompSum.target_account_execution),
+        rep_productivity: avg(avgCompSum.rep_productivity),
+      };
+      const priorAvgSES = priorAvg[rep.repId] ?? null;
+      const trend = avgSES != null && priorAvgSES != null
+        ? (avgSES - priorAvgSES > 3 ? 'up' : avgSES - priorAvgSES < -3 ? 'down' : 'stable')
+        : null;
+      return { ...rep, avgSES, confCount, sd, minScore, maxScore, componentAverages, trend };
+    });
+
+    const minConfFiltered = withStats.filter(r => r.confCount >= repMinConferences);
+
+    const tierFiltered = minConfFiltered.filter(r => {
+      if (repTierFilter === 'all') return true;
+      if (r.avgSES == null) return false;
+      if (repTierFilter === 'strong_above') return r.avgSES >= 75;
+      if (repTierFilter === 'acceptable_above') return r.avgSES >= 60;
+      if (repTierFilter === 'needs_work_below') return r.avgSES < 60;
+      if (repTierFilter === 'weak_only') return r.avgSES < 50;
+      return true;
+    });
+
+    const sorted = [...tierFiltered].sort((a, b) => {
+      if (repSort === 'avg_desc') return (b.avgSES ?? -1) - (a.avgSES ?? -1);
+      if (repSort === 'avg_asc') return (a.avgSES ?? 101) - (b.avgSES ?? 101);
+      if (repSort === 'name_asc') return a.repName.localeCompare(b.repName);
+      if (repSort === 'most_consistent') return a.sd - b.sd;
+      if (repSort === 'most_variable') return b.sd - a.sd;
+      return 0;
+    });
+
+    const filteredForCards = minConfFiltered;
+    const validCards = filteredForCards.filter(r => r.avgSES != null);
+    const cardAvgSES = validCards.length
+      ? Math.round(validCards.reduce((s, r) => s + (r.avgSES ?? 0), 0) / validCards.length)
+      : null;
+    const topPerformer = [...filteredForCards].sort((a, b) => (b.avgSES ?? -1) - (a.avgSES ?? -1))[0] ?? null;
+    const mostConsistent = filteredForCards.filter(r => r.confCount >= 2).sort((a, b) => a.sd - b.sd)[0] ?? null;
+
+    return { sorted, conferences, cardAvgSES, topPerformer, mostConsistent, filteredForCards };
+  }, [repData, repMinConferences, repTierFilter, repSort]);
+
   // Permission gate — after all hooks
   if (!capabilities) {
     return (
@@ -780,13 +961,321 @@ export default function ProgramIntelligencePage() {
 
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab !== 'performance' && activeTab !== 'calendar' && (
+        {activeTab !== 'performance' && activeTab !== 'calendar' && activeTab !== 'reps' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
         )}
 
 
+
+        {activeTab === 'reps' && (
+          <div className="space-y-4">
+            {repLoading ? (
+              <div className="text-center py-16">
+                <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
+                <p className="text-gray-500 text-sm font-medium">Loading rep performance data…</p>
+              </div>
+            ) : repError ? (
+              <div className="card text-center py-10">
+                <p className="font-medium text-gray-700">Failed to load rep performance</p>
+                <p className="text-sm text-gray-400 mt-1">{repError}</p>
+              </div>
+            ) : !repDerivedData || repDerivedData.sorted.length === 0 ? (
+              <div className="card flex flex-col items-center justify-center py-16 gap-4 text-center">
+                <svg className="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <div>
+                  <p className="font-medium text-gray-700">No rep performance data for this period</p>
+                  <p className="text-sm text-gray-400 mt-1">Sales Execution Scores will appear here once conferences have been scored with rep-level meeting and follow-up data.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Summary stat cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="card border-l-4 border-brand-secondary py-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reps Tracked</p>
+                    <p className="text-3xl font-bold text-brand-primary">{repDerivedData.filteredForCards.length}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">with SES data in period</p>
+                  </div>
+                  <div className="card border-l-4 py-4" style={{ borderLeftColor: sesScoreColor(repDerivedData.cardAvgSES) }}>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Team Avg SES</p>
+                    <p className="text-3xl font-bold" style={{ color: sesScoreColor(repDerivedData.cardAvgSES) }}>{repDerivedData.cardAvgSES ?? '—'}</p>
+                    <p className="text-xs font-semibold mt-0.5" style={{ color: sesScoreColor(repDerivedData.cardAvgSES) }}>{sesTierLabel(repDerivedData.cardAvgSES)}</p>
+                  </div>
+                  <div className="card border-l-4 border-emerald-500 py-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Top Performer</p>
+                    {repDerivedData.topPerformer ? (
+                      <>
+                        <p className="text-base font-bold text-gray-900 mt-1 truncate">{repDerivedData.topPerformer.repName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">avg <span className="font-semibold" style={{ color: sesScoreColor(repDerivedData.topPerformer.avgSES) }}>{repDerivedData.topPerformer.avgSES}</span></p>
+                      </>
+                    ) : <p className="text-2xl font-bold text-gray-300">—</p>}
+                  </div>
+                  <div className="card border-l-4 border-blue-400 py-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Most Consistent</p>
+                    {repDerivedData.mostConsistent ? (
+                      <>
+                        <p className="text-base font-bold text-gray-900 mt-1 truncate">{repDerivedData.mostConsistent.repName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">range <span className="font-semibold text-gray-600">{repDerivedData.mostConsistent.minScore}–{repDerivedData.mostConsistent.maxScore}</span></p>
+                      </>
+                    ) : <p className="text-2xl font-bold text-gray-300">—</p>}
+                  </div>
+                </div>
+
+                {/* Filter bar */}
+                <div className="card space-y-3">
+                  {/* Score view toggle */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-shrink-0">Score view</span>
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+                      {([['ses', 'Sales Execution'], ['ces', 'Conf. Effectiveness'], ['cost', 'Cost Efficiency']] as const).map(([view, label]) => (
+                        <button
+                          key={view}
+                          onClick={() => { setRepScoreView(view); setRepPage(1); }}
+                          className={`px-3 py-1.5 transition-colors whitespace-nowrap ${repScoreView === view ? 'bg-brand-secondary text-white font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {repScoreView === 'ces' && <span className="text-xs text-gray-400">Each rep&apos;s individual effectiveness at each conference</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <select className="input-field text-sm py-1.5" value={repMinConferences} onChange={e => { setRepMinConferences(Number(e.target.value)); setRepPage(1); }}>
+                      <option value={0}>All reps</option>
+                      <option value={2}>2+ conferences</option>
+                      <option value={3}>3+ conferences</option>
+                      <option value={5}>5+ conferences</option>
+                    </select>
+                    <select className="input-field text-sm py-1.5" value={repTierFilter} onChange={e => { setRepTierFilter(e.target.value); setRepPage(1); }}>
+                      <option value="all">All tiers</option>
+                      <option value="strong_above">Strong &amp; above</option>
+                      <option value="acceptable_above">Acceptable &amp; above</option>
+                      <option value="needs_work_below">Needs Work &amp; below</option>
+                      <option value="weak_only">Weak only</option>
+                    </select>
+                    <select className="input-field text-sm py-1.5" value={repSort} onChange={e => { setRepSort(e.target.value); setRepPage(1); }}>
+                      <option value="avg_desc">Average score (high to low)</option>
+                      <option value="avg_asc">Average score (low to high)</option>
+                      <option value="name_asc">Name (A–Z)</option>
+                      <option value="most_consistent">Most consistent</option>
+                      <option value="most_variable">Most variable</option>
+                    </select>
+                    <label className="flex items-center gap-2 ml-auto cursor-pointer select-none">
+                      <span className="text-sm text-gray-600">Show component breakdown</span>
+                      <button
+                        role="switch"
+                        aria-checked={showComponents}
+                        onClick={() => setShowComponents(v => !v)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showComponents ? 'bg-brand-secondary' : 'bg-gray-200'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${showComponents ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Heatmap table */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="text-sm border-collapse" style={{ minWidth: `${160 + repDerivedData.conferences.length * 72 + 96}px` }}>
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left p-3 font-semibold text-gray-500 text-xs uppercase tracking-wide sticky left-0 bg-gray-50 z-10" style={{ minWidth: 160, width: 160 }}>Rep</th>
+                          {repDerivedData.conferences.map(conf => (
+                            <th key={conf.id} className="p-2 text-center font-semibold text-gray-500 text-xs" style={{ minWidth: 72, width: 72 }}>
+                              <div className="truncate max-w-[68px]" title={conf.name}>{conf.name.length > 12 ? conf.name.slice(0, 11) + '…' : conf.name}</div>
+                              <div className="text-[10px] font-normal text-gray-400">{new Date(conf.date).getUTCFullYear()}</div>
+                            </th>
+                          ))}
+                          <th className="text-right p-3 font-semibold text-gray-500 text-xs uppercase tracking-wide sticky right-0 bg-gray-50 z-10" style={{ minWidth: 96, width: 96 }}>Avg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repDerivedData.sorted.slice((repPage - 1) * REP_PAGE_SIZE, repPage * REP_PAGE_SIZE).map(rep => {
+                          const totalConfs = repDerivedData.conferences.length;
+                          const attendedConfs = rep.confCount;
+                          const sparse = attendedConfs < totalConfs / 2;
+                          // Compute avg for the selected score view
+                          const viewScores = repDerivedData.conferences.map(c => {
+                            const cell = rep.conferences[c.id];
+                            if (!cell) return null;
+                            if (repScoreView === 'ces') return cell.cesScore;
+                            return repScoreView === 'cost' ? cell.costEffScore : cell.sesScore;
+                          }).filter((s): s is number => s != null);
+                          const viewAvg = viewScores.length ? Math.round(viewScores.reduce((a, b) => a + b, 0) / viewScores.length) : null;
+                          return (
+                            <React.Fragment key={rep.repId}>
+                              <tr
+                                className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer group"
+                                onClick={() => { setSelectedRep(rep); setDrawerScoreView('ses'); }}
+                              >
+                                <td className="p-3 sticky left-0 bg-white z-10 group-hover:bg-gray-50 transition-colors border-r border-gray-100" style={{ minWidth: 160, width: 160 }}>
+                                  <p className="font-medium text-brand-secondary">{rep.repName}</p>
+                                  {rep.role && <p className="text-xs text-gray-400 mt-0.5 capitalize">{rep.role.replace(/_/g, ' ')}</p>}
+                                </td>
+                                {repDerivedData.conferences.map(conf => {
+                                  const cell = rep.conferences[conf.id];
+                                  const score = !cell
+                                    ? null
+                                    : repScoreView === 'ces'
+                                      ? cell.cesScore
+                                      : repScoreView === 'cost'
+                                        ? cell.costEffScore
+                                        : cell.sesScore;
+                                  const notAttended = !cell;
+                                  return (
+                                    <td key={conf.id} className={`p-2 text-center font-semibold tabular-nums ${notAttended ? 'bg-gray-50 text-gray-300' : sesCellClasses(score)}`} style={{ minWidth: 72, width: 72 }}>
+                                      {score != null ? score : <span className="font-normal text-xs">—</span>}
+                                    </td>
+                                  );
+                                })}
+                                <td className="p-3 sticky right-0 bg-white z-10 group-hover:bg-gray-50 transition-colors border-l border-gray-100 text-right" style={{ minWidth: 96, width: 96 }}>
+                                  <div className="font-bold text-base tabular-nums" style={{ color: sesScoreColor(viewAvg) }}>{viewAvg ?? '—'}</div>
+                                  {repScoreView === 'ses' && rep.trend && (
+                                    <div className={`text-xs ${rep.trend === 'up' ? 'text-emerald-500' : rep.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                                      {rep.trend === 'up' ? '↑' : rep.trend === 'down' ? '↓' : '→'}
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-gray-400">{rep.minScore}–{rep.maxScore}</div>
+                                  {sparse && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
+                                </td>
+                              </tr>
+                              {showComponents && (
+                                <tr className="border-b border-gray-50 bg-gray-25">
+                                  <td className="px-3 py-1.5 sticky left-0 bg-gray-50 z-10 border-r border-gray-100" style={{ minWidth: 160, width: 160 }}>
+                                    <span className="text-xs text-gray-400 italic">Components</span>
+                                  </td>
+                                  {repDerivedData.conferences.map(conf => {
+                                    const cell = rep.conferences[conf.id];
+                                    if (!cell) return <td key={conf.id} className="p-2 bg-gray-50 text-center" style={{ minWidth: 72 }}><span className="text-[10px] text-gray-300">—</span></td>;
+                                    const c = cell.components;
+                                    return (
+                                      <td key={conf.id} className="p-1.5 bg-gray-50" style={{ minWidth: 72, width: 72 }}>
+                                        <div className="space-y-0.5 text-[10px]">
+                                          {([
+                                            ['Mtg', c.meeting_execution],
+                                            ['FU', c.followup_execution],
+                                            ['PI', c.pipeline_influence],
+                                            ['Tgt', c.target_account_execution],
+                                            ['Prod', c.rep_productivity],
+                                          ] as [string, number | null][]).map(([label, val]) => (
+                                            <div key={label} className="flex justify-between gap-1">
+                                              <span className="text-gray-400">{label}</span>
+                                              <span className={`font-medium tabular-nums ${sesCellClasses(val).replace(/bg-\S+ /, '')}`}>{val ?? '—'}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                  <td className="px-3 py-1.5 sticky right-0 bg-gray-50 z-10 border-l border-gray-100" style={{ minWidth: 96, width: 96 }}>
+                                    <div className="space-y-0.5 text-[10px] text-right">
+                                      {([
+                                        ['Mtg', rep.componentAverages.meeting_execution],
+                                        ['FU', rep.componentAverages.followup_execution],
+                                        ['PI', rep.componentAverages.pipeline_influence],
+                                        ['Tgt', rep.componentAverages.target_account_execution],
+                                        ['Prod', rep.componentAverages.rep_productivity],
+                                      ] as [string, number | null][]).map(([label, val]) => (
+                                        <div key={label} className="flex justify-end gap-1">
+                                          <span className="text-gray-400">{label}</span>
+                                          <span className={`font-medium tabular-nums ${sesCellClasses(val).replace(/bg-\S+ /, '')}`}>{val ?? '—'}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {repDerivedData.sorted.length > REP_PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">Showing {(repPage - 1) * REP_PAGE_SIZE + 1}–{Math.min(repPage * REP_PAGE_SIZE, repDerivedData.sorted.length)} of {repDerivedData.sorted.length} reps</span>
+                      <div className="flex gap-2">
+                        <button disabled={repPage === 1} onClick={() => setRepPage(p => p - 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">← Prev</button>
+                        <button disabled={repPage * REP_PAGE_SIZE >= repDerivedData.sorted.length} onClick={() => setRepPage(p => p + 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">Next →</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Interpretation panel */}
+                {repDerivedData.filteredForCards.length >= 2 && (() => {
+                  const reps = repDerivedData.filteredForCards;
+                  const topPerformers = reps.filter(r => r.avgSES != null && r.avgSES >= 75);
+                  const underperformers = reps.filter(r => r.avgSES != null && r.avgSES < 60 && r.confCount >= 2);
+                  const highVarianceRep = [...reps].filter(r => r.confCount >= 3).sort((a, b) => b.sd - a.sd)[0];
+                  const coachingCandidates = underperformers;
+                  const insights: { label: string; color: string; text: string }[] = [];
+
+                  if (topPerformers.length > 0) {
+                    const names = topPerformers.map(r => r.repName).join(', ');
+                    insights.push({
+                      label: 'Top Performers',
+                      color: '#059669',
+                      text: `${names} maintained Strong or better execution across all conferences this period. Consider using their pre-conference preparation and floor execution approach as the team standard.`,
+                    });
+                  }
+
+                  if (underperformers.length > 0) {
+                    const worst = [...underperformers].sort((a, b) => (a.avgSES ?? 0) - (b.avgSES ?? 0))[0];
+                    const weakComp = getLowestComponent(worst.componentAverages);
+                    const belowCount = repDerivedData.conferences.filter(c => {
+                      const cell = worst.conferences[c.id];
+                      return cell?.sesScore != null && cell.sesScore < 60;
+                    }).length;
+                    insights.push({
+                      label: 'Underperformer Flag',
+                      color: '#dc2626',
+                      text: `${worst.repName} scored below Acceptable at ${belowCount} of ${worst.confCount} conferences — the lowest cross-conference average on the team at ${worst.avgSES}/100. ${weakComp.label} is the primary drag on their score (${weakComp.score}/100).`,
+                    });
+                  }
+
+                  if (highVarianceRep && highVarianceRep.sd > 15) {
+                    insights.push({
+                      label: 'Variance Signal',
+                      color: '#d97706',
+                      text: `${highVarianceRep.repName} shows the highest performance variance this period — ranging from ${highVarianceRep.minScore} to ${highVarianceRep.maxScore} across conferences. This pattern suggests conference-dependent performance rather than a consistent execution issue. Review which conferences drove the highest and lowest scores.`,
+                    });
+                  }
+
+                  if (coachingCandidates.length > 0) {
+                    const count = coachingCandidates.length;
+                    insights.push({
+                      label: 'Coaching Trigger',
+                      color: '#7c3aed',
+                      text: `${count} ${count === 1 ? 'rep' : 'reps'} scored below Acceptable on average this period. Open the rep detail view for specific coaching signals by component.`,
+                    });
+                  }
+
+                  if (insights.length === 0) return null;
+                  return (
+                    <div className="card">
+                      <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">What the data shows</h2>
+                      <div className="space-y-3">
+                        {insights.map(insight => (
+                          <div key={insight.label} className="flex gap-3">
+                            <div className="w-1 flex-shrink-0 rounded-full mt-0.5" style={{ backgroundColor: insight.color }} />
+                            <div>
+                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 block mb-0.5">{insight.label}</span>
+                              <p className="text-sm text-gray-700">{insight.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        )}
 
         {activeTab === 'calendar' && (
           <div className="space-y-4">
@@ -1327,6 +1816,215 @@ export default function ProgramIntelligencePage() {
           </div>
         )}
       </div>
+
+      {selectedRep && repDerivedData && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedRep(null)}>
+          <div className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">{selectedRep.repName}</h3>
+                {selectedRep.role && <p className="text-xs text-gray-500 mt-0.5 capitalize">{selectedRep.role.replace(/_/g, ' ')}</p>}
+              </div>
+              <button onClick={() => setSelectedRep(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
+            {(() => {
+              const stats = repDerivedData.filteredForCards.find(r => r.repId === selectedRep.repId) ?? repDerivedData.sorted.find(r => r.repId === selectedRep.repId);
+              if (!stats) return null;
+              const avgSES = stats.avgSES;
+              const componentAverages = stats.componentAverages;
+              const isBelow70 = avgSES != null && avgSES < 70;
+
+              const signals: string[] = [];
+              if (componentAverages.meeting_execution != null && componentAverages.meeting_execution < 60)
+                signals.push('Meeting hold rate is below acceptable threshold across conferences. Review pre-conference scheduling discipline and same-day confirmation practices.');
+              if (componentAverages.followup_execution != null && componentAverages.followup_execution < 60)
+                signals.push('Follow-up completion is consistently low. This rep may need a structured post-conference follow-up workflow or accountability check-in.');
+              if (componentAverages.target_account_execution != null && componentAverages.target_account_execution < 50)
+                signals.push('Target account engagement rate is weak. This rep may not be prioritizing their target list on the floor. Review pre-conference briefing process.');
+              if (componentAverages.pipeline_influence != null && componentAverages.pipeline_influence < 50)
+                signals.push('Pipeline influence is low relative to meeting activity. Meetings are being held but not converting to pipeline. Review conversation quality and follow-through.');
+              if (componentAverages.rep_productivity != null && componentAverages.rep_productivity < 50)
+                signals.push('Company engagement breadth is below benchmark. This rep may be spending disproportionate time with a small number of contacts rather than working the full target list.');
+
+              // All conferences this rep attended, sorted chronologically
+              const allConfEntries = repDerivedData.conferences
+                .map(c => ({ conf: c, cell: selectedRep.conferences[c.id] ?? null }))
+                .filter(x => x.cell != null)
+                .sort((a, b) => new Date(a.conf.date).getTime() - new Date(b.conf.date).getTime());
+
+              const sesScores = allConfEntries.map(x => x.cell!.sesScore).filter((s): s is number => s != null);
+              const bestSES = sesScores.length ? allConfEntries.filter(x => x.cell!.sesScore != null).reduce((b, x) => x.cell!.sesScore! > b.cell!.sesScore! ? x : b) : null;
+              const worstSES = sesScores.length ? allConfEntries.filter(x => x.cell!.sesScore != null).reduce((w, x) => x.cell!.sesScore! < w.cell!.sesScore! ? x : w) : null;
+              const sd2 = stddev(sesScores);
+              const consistencyLabel = sd2 < 8 ? 'High' : sd2 < 15 ? 'Medium' : 'Low';
+              const mostCommonTier = (() => {
+                const counts: Record<string, number> = {};
+                for (const s of sesScores) { const t = sesTierLabel(s); counts[t] = (counts[t] ?? 0) + 1; }
+                return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+              })();
+
+              // Cost efficiency averages
+              const costScores = allConfEntries.map(x => x.cell!.costEffScore).filter((s): s is number => s != null);
+              const avgCost = costScores.length ? Math.round(costScores.reduce((a, b) => a + b, 0) / costScores.length) : null;
+              // CES averages (per-rep)
+              const cesScores = allConfEntries.map(x => x.cell!.cesScore).filter((s): s is number => s != null);
+              const avgCES = cesScores.length ? Math.round(cesScores.reduce((a, b) => a + b, 0) / cesScores.length) : null;
+
+              // Score to show in header based on drawer view
+              const drawerAvg = drawerScoreView === 'ses' ? avgSES : drawerScoreView === 'ces' ? avgCES : avgCost;
+              const drawerLabel = drawerScoreView === 'ses' ? 'avg SES' : drawerScoreView === 'ces' ? 'avg Conf. Effectiveness' : 'avg Cost Efficiency';
+
+              return (
+                <>
+                  {/* Drawer score view toggle */}
+                  <div className="mt-3 flex rounded-lg border border-gray-200 overflow-hidden text-xs w-fit">
+                    {([['ses', 'Sales Exec'], ['ces', 'Conf. Eff.'], ['cost', 'Cost Eff.']] as const).map(([view, label]) => (
+                      <button
+                        key={view}
+                        onClick={() => setDrawerScoreView(view)}
+                        className={`px-3 py-1.5 transition-colors ${drawerScoreView === view ? 'bg-brand-secondary text-white font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="text-4xl font-bold" style={{ color: sesScoreColor(drawerAvg) }}>{drawerAvg ?? '—'}</div>
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: sesScoreColor(drawerAvg) }}>{sesTierLabel(drawerAvg)}</div>
+                      <div className="text-xs text-gray-400">{drawerLabel} · {stats.confCount} conference{stats.confCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    {drawerScoreView === 'ses' && stats.trend && (
+                      <div className={`ml-auto text-lg font-bold ${stats.trend === 'up' ? 'text-emerald-500' : stats.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                        {stats.trend === 'up' ? '↑' : stats.trend === 'down' ? '↓' : '→'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* All three scores as mini summary row */}
+                  <div className="mt-3 flex gap-3">
+                    {([
+                      ['SES', avgSES, 'Sales Exec'],
+                      ['CES', avgCES, 'Conf. Eff.'],
+                      ['Cost', avgCost, 'Cost Eff.'],
+                    ] as [string, number | null, string][]).map(([abbr, val, title]) => (
+                      <div key={abbr} className="flex-1 rounded-lg border border-gray-100 px-3 py-2 text-center">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wide">{title}</div>
+                        <div className="text-lg font-bold tabular-nums" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</div>
+                        <div className="text-[10px] font-medium" style={{ color: sesScoreColor(val) }}>{sesTierLabel(val)}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs">Performance Summary</h4>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="text-gray-400">SES range</span><span className="float-right font-medium text-gray-700">{stats.minScore}–{stats.maxScore}</span></div>
+                      <div><span className="text-gray-400">Consistency</span><span className="float-right font-medium text-gray-700">{consistencyLabel}</span></div>
+                      <div><span className="text-gray-400">Best (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{bestSES?.conf.name ?? '—'} ({bestSES?.cell?.sesScore ?? '—'})</span></div>
+                      <div><span className="text-gray-400">Worst (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{worstSES?.conf.name ?? '—'} ({worstSES?.cell?.sesScore ?? '—'})</span></div>
+                      <div><span className="text-gray-400">Most common tier</span><span className="float-right font-medium text-gray-700">{mostCommonTier}</span></div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-3">Conference Breakdown</h4>
+                    <div className="space-y-3">
+                      {allConfEntries.map(({ conf, cell }) => {
+                        const activeScore = drawerScoreView === 'ses' ? cell!.sesScore : drawerScoreView === 'ces' ? cell!.cesScore : cell!.costEffScore;
+                        const scoreLabel = drawerScoreView === 'ses' ? 'SES' : drawerScoreView === 'ces' ? 'CES' : 'Cost';
+                        return (
+                          <div key={conf.id} className="border border-gray-100 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-gray-800 text-sm">{conf.name}</p>
+                                <p className="text-xs text-gray-400">{new Date(conf.date).getUTCFullYear()}</p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xl font-bold tabular-nums" style={{ color: sesScoreColor(activeScore) }}>{activeScore ?? '—'}</div>
+                                <div className="text-[10px] text-gray-400">{scoreLabel} · {sesTierLabel(activeScore)}</div>
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${activeScore ?? 0}%`, backgroundColor: sesScoreColor(activeScore) }} />
+                              </div>
+                            </div>
+                            {/* Always show SES components */}
+                            <div className="mt-2 grid grid-cols-5 gap-1 text-[10px]">
+                              {([
+                                ['Mtg', cell!.components.meeting_execution],
+                                ['FU', cell!.components.followup_execution],
+                                ['PI', cell!.components.pipeline_influence],
+                                ['Tgt', cell!.components.target_account_execution],
+                                ['Prod', cell!.components.rep_productivity],
+                              ] as [string, number | null][]).map(([label, val]) => (
+                                <div key={label} className="text-center">
+                                  <div className="text-gray-400">{label}</div>
+                                  <div className="font-semibold" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {/* Show other scores when not in SES view */}
+                            {(cell!.cesScore != null || cell!.costEffScore != null) && (
+                              <div className="mt-2 flex gap-3 text-[10px]">
+                                {cell!.cesScore != null && <span className="text-gray-400">CES <span className="font-semibold" style={{ color: sesScoreColor(cell!.cesScore) }}>{cell!.cesScore}</span></span>}
+                                {cell!.costEffScore != null && <span className="text-gray-400">Cost Eff. <span className="font-semibold" style={{ color: sesScoreColor(cell!.costEffScore) }}>{cell!.costEffScore}</span></span>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">SES Component Averages</h4>
+                    <div className="space-y-2">
+                      {([
+                        ['Meeting Execution', componentAverages.meeting_execution],
+                        ['Follow-up Execution', componentAverages.followup_execution],
+                        ['Pipeline Influence', componentAverages.pipeline_influence],
+                        ['Target Account Execution', componentAverages.target_account_execution],
+                        ['Rep Productivity', componentAverages.rep_productivity],
+                      ] as [string, number | null][]).map(([label, val]) => (
+                        <div key={label}>
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="text-gray-500">{label}</span>
+                            <span className="font-semibold" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${val ?? 0}%`, backgroundColor: sesScoreColor(val) }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isBelow70 && (
+                    <div className="mt-5">
+                      <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">Coaching Signals</h4>
+                      {signals.length > 0 ? (
+                        <ul className="space-y-2">
+                          {signals.map((s, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-gray-700">
+                              <span className="text-amber-500 flex-shrink-0 mt-0.5">•</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No coaching signals — this rep is performing at or above threshold across all components.</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {selectedCalendarRow && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedCalendarRow(null)}>
