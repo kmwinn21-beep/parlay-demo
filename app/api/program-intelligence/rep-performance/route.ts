@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { reweight, pct } from '@/lib/effectiveness/salesExecution';
 import type { InValue } from '@libsql/client';
 
@@ -8,7 +9,6 @@ export const dynamic = 'force-dynamic';
 
 type Row = Record<string, unknown>;
 async function runQuery(sql: string, args: InValue[] = []): Promise<Row[]> {
-  await dbReady;
   const r = await db.execute({ sql, args });
   return r.rows as Row[];
 }
@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuth(req);
     if (auth instanceof NextResponse) return auth;
+    const db = await getDb(auth?.accountId);
 
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get('startDate') ?? '';

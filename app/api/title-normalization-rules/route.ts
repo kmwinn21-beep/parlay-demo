@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey, type TitleMatchConfidence } from '@/lib/titleNormalization';
 import { applyRuleToExactTitle, ensureTitleNormalizationSchema, getRuleForTitle, resolveAttendeeTitleMetadata, upsertTitleNormalizationRule } from '@/lib/titleNormalizationRules';
 
@@ -20,8 +21,8 @@ async function configOptionExists(id: number, category: string): Promise<boolean
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     await ensureTitleNormalizationSchema();
     const { searchParams } = new URL(request.url);
     const rawTitle = searchParams.get('raw_title');
@@ -49,8 +50,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const rawTitle = typeof body.raw_title === 'string' ? body.raw_title.trim() : '';
     const normalizedTitle = typeof body.normalized_title === 'string' ? body.normalized_title.trim() : '';

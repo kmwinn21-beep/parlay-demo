@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
-  await dbReady;
 
   // Get all conversations: last message + unread count per other user
   const result = await db.execute({

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 const AI_PROMPT = `You are a Chief Marketing Officer analyzing a company's public-facing presence to identify sales intelligence.
 
@@ -74,7 +75,7 @@ async function saveUsage(usage: { count: number; month: string }) {
 export async function GET(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
   const usage = await getUsage();
   return NextResponse.json({
     count: usage.count,
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
 
   const usage = await getUsage();
   if (usage.count >= MONTHLY_LIMIT) {

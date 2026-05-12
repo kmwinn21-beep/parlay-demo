@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const conferenceFormId = searchParams.get('conference_form_id');
     if (!conferenceFormId) return NextResponse.json({ error: 'conference_form_id required' }, { status: 400 });
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const {
       conference_form_id,

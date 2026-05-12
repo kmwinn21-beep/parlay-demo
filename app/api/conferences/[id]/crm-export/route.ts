@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 // ─── CSV helpers ──────────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ NOTES
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
 
   const conferenceId = Number(params.id);
   if (isNaN(conferenceId)) return NextResponse.json({ error: 'Invalid conference ID' }, { status: 400 });

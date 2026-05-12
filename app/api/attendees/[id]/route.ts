@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { classifySeniority } from '@/lib/parsers';
 import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
 
@@ -10,8 +11,8 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const attendeeResult = await db.execute({
       sql: `SELECT a.*, co.name as company_name, co.company_type, co.website as company_website, co.assigned_user as company_assigned_user
             FROM attendees a
@@ -51,8 +52,8 @@ export async function PUT(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone } = body;
     const functionVal = body['function'];
@@ -159,8 +160,8 @@ export async function PATCH(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { action, next_steps, next_steps_notes, status, notes, company_id, seniority, first_name, last_name, title, company_type, company_wse } = body;
 
@@ -332,8 +333,8 @@ export async function DELETE(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
 
     const existingResult = await db.execute({
       sql: 'SELECT id FROM attendees WHERE id = ?',

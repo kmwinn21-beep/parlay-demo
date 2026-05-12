@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const attendee_id = searchParams.get('attendee_id');
     const conference_id = searchParams.get('conference_id');
@@ -42,8 +43,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { attendee_id, conference_id, action, next_steps, next_steps_notes, assigned_rep } = body;
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 const KEYS = [
   'oauth_google_client_id',
@@ -15,8 +16,8 @@ const SECRET_KEYS = new Set(['oauth_google_client_secret', 'oauth_microsoft_clie
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
+  const db = await getDb(auth?.accountId);
 
-  await dbReady;
   const placeholders = KEYS.map(() => '?').join(',');
   const result = await db.execute({
     sql: `SELECT key, value FROM site_settings WHERE key IN (${placeholders})`,
@@ -43,10 +44,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
+  const db = await getDb(auth?.accountId);
 
   const body = await request.json() as Record<string, string>;
 
-  await dbReady;
   for (const key of KEYS) {
     if (key in body) {
       const value = String(body[key] ?? '').trim();

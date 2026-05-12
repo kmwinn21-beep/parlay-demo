@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const conferenceId = searchParams.get('conference_id');
     if (!conferenceId) return NextResponse.json({ error: 'conference_id required' }, { status: 400 });
@@ -117,8 +118,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const { conference_id, template_id, name, conference_logo_url, background_color,
             accent_color, accent_gradient, image_url, image_max_width, html_content,
             image_offset_y, html_offset_y, form_width, form_height, form_offset_y,

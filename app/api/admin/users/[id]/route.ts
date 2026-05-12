@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, VALID_ROLES, type UserRole } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { sendInviteEmail } from '@/lib/email';
 
 export async function PATCH(
@@ -9,11 +10,11 @@ export async function PATCH(
 ) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const userId = parseInt(params.id, 10);
   if (isNaN(userId)) return NextResponse.json({ error: 'Invalid user id.' }, { status: 400 });
 
-  await dbReady;
   const body = await request.json() as {
     role?: UserRole;
     active?: boolean;
@@ -76,13 +77,13 @@ export async function DELETE(
 ) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   const adminUser = authResult;
 
   const userId = parseInt(params.id, 10);
   if (isNaN(userId)) return NextResponse.json({ error: 'Invalid user id.' }, { status: 400 });
   if (userId === adminUser.id) return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 });
 
-  await dbReady;
 
   let body: { reassignToUserId?: number } = {};
   try { body = await request.json(); } catch { /* no body */ }

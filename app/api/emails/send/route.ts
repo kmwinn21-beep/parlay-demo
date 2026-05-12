@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getValidToken, sendViaGoogle, sendViaMicrosoft, type OAuthProvider } from '@/lib/oauthEmail';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function POST(request: NextRequest) {
   const user = await requireAuth(request);
   if (user instanceof NextResponse) return user;
+  const db = await getDb(user?.accountId);
 
   const formData = await request.formData();
   const provider = formData.get('provider') as OAuthProvider | null;
@@ -35,7 +37,6 @@ export async function POST(request: NextRequest) {
 
     if (provider === 'google') {
       // Get provider email for From header
-      await dbReady;
       const row = await db.execute({
         sql: 'SELECT provider_email FROM oauth_connections WHERE user_id = ? AND provider = ?',
         args: [user.id, 'google'],

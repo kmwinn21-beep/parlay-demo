@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,7 +9,8 @@ export const dynamic = 'force-dynamic';
 // joined with conference name and RSVP status.
 export async function GET(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const { searchParams } = new URL(request.url);
     const attendeeId = searchParams.get('attendee_id');
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady, getConfigOptionValues } from '@/lib/db';
+import { db, getConfigOptionValues } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
@@ -15,8 +16,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     // ?nav=1 — lightweight query for the header navigation dropdown (no JOIN/COUNT)
     if (request.nextUrl.searchParams.get('nav') === '1') {
       const result = await db.execute({
@@ -65,8 +66,8 @@ async function batchInsert<T>(
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const formData = await request.formData();
     const name = formData.get('name') as string;
     const start_date = formData.get('start_date') as string;

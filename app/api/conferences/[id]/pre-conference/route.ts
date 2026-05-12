@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
 import { computeStrategyAssessment, buildDefaultTierConfig } from '@/lib/strategyAssessment';
@@ -25,12 +26,12 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const confRow = await db.execute({
     sql: 'SELECT id, name, start_date, end_date, location, internal_attendees, conference_strategy_type_id FROM conferences WHERE id = ?',

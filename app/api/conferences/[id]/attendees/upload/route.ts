@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady, getConfigOptionValues } from '@/lib/db';
+import { db, getConfigOptionValues } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, classifyFunction, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
@@ -34,10 +35,10 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   const currentUser = authResult;
 
   try {
-    await dbReady;
 
     // Check permission: non-admins can only upload if site_settings allows it
     if (currentUser.role !== 'administrator') {

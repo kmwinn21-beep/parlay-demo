@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const result = await db.execute({ sql: 'SELECT key, value FROM site_settings', args: [] });
     const settings: Record<string, string> = {};
     for (const row of result.rows) settings[String(row.key)] = String(row.value);
@@ -22,11 +23,11 @@ export async function PUT(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   if (user.role !== 'administrator') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {
-    await dbReady;
     const { key, value } = await request.json() as { key: string; value: string };
     if (!key || value === undefined) {
       return NextResponse.json({ error: 'key and value are required' }, { status: 400 });

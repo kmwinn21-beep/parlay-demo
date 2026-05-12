@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 
@@ -166,12 +167,12 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const row = await db.execute({
     sql: 'SELECT value FROM site_settings WHERE key = ?',
@@ -194,6 +195,7 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'AI service not configured' }, { status: 503 });
@@ -203,7 +205,6 @@ export async function POST(
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   // Check reload count
   const existingRow = await db.execute({

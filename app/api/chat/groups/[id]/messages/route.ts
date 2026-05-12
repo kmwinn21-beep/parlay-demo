@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 async function checkMembership(groupId: number, userId: number): Promise<boolean> {
   const result = await db.execute({
@@ -14,11 +15,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   const groupId = parseInt(params.id, 10);
   if (isNaN(groupId)) return NextResponse.json({ error: 'Invalid group id' }, { status: 400 });
 
-  await dbReady;
 
   if (!(await checkMembership(groupId, user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -75,11 +76,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   const groupId = parseInt(params.id, 10);
   if (isNaN(groupId)) return NextResponse.json({ error: 'Invalid group id' }, { status: 400 });
 
-  await dbReady;
 
   if (!(await checkMembership(groupId, user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

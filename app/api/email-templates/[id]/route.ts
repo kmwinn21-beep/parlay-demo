@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireAdmin(request);
   if (user instanceof NextResponse) return user;
+  const db = await getDb(user?.accountId);
 
   const { id } = await params;
   const body = await request.json();
@@ -14,7 +16,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'name, subject, and body are required.' }, { status: 400 });
   }
 
-  await dbReady;
   await db.execute({
     sql: 'UPDATE email_templates SET name = ?, subject = ?, body = ? WHERE id = ?',
     args: [name.trim(), subject.trim(), templateBody.trim(), parseInt(id, 10)],
@@ -26,10 +27,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireAdmin(request);
   if (user instanceof NextResponse) return user;
+  const db = await getDb(user?.accountId);
 
   const { id } = await params;
 
-  await dbReady;
   await db.execute({
     sql: 'DELETE FROM email_templates WHERE id = ?',
     args: [parseInt(id, 10)],

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { requireAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -10,8 +11,8 @@ export async function PUT(
 ) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const id = Number(params.id);
     const body = await request.json();
     const { amount } = body as { amount: number };
@@ -35,8 +36,8 @@ export async function DELETE(
 ) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const id = Number(params.id);
     await db.execute({ sql: 'DELETE FROM annual_budgets WHERE id = ?', args: [id] });
     return NextResponse.json({ ok: true });

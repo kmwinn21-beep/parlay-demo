@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { field_type, label, placeholder, required, sort_order, options_source, options } = await request.json();
     if (!field_type || !label?.trim()) return NextResponse.json({ error: 'field_type and label required' }, { status: 400 });
 

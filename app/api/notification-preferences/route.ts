@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 
 const OPT_OUT_KEYS = [
@@ -23,8 +24,8 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const db = await getDb(user?.accountId);
 
-    await dbReady;
 
     const result = await db.execute({
       sql: `SELECT ${ALL_KEYS.join(', ')} FROM notification_preferences WHERE user_id = ?`,
@@ -54,6 +55,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const db = await getDb(user?.accountId);
 
     const body = await request.json() as Record<string, unknown>;
     const updates: string[] = [];
@@ -68,7 +70,6 @@ export async function PATCH(request: NextRequest) {
 
     if (updates.length === 0) return NextResponse.json({ error: 'No valid fields provided.' }, { status: 400 });
 
-    await dbReady;
 
     await db.execute({
       sql: `INSERT INTO notification_preferences (user_id, company_status_change, follow_up_assigned, note_tagged,

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
 import { DEFAULT_MARKETING_AUDIENCE_WEIGHTS, PRIORITY_SCORE, titleMatch, norm as normText } from '@/lib/effectiveness/marketingAudience';
 import { getPreset, resolveStrategyKey } from '@/lib/effectiveness/strategyWeights';
@@ -208,8 +210,10 @@ function followupHealthStatus(rate: number | null, total: number): 'healthy' | '
   return 'risk';
 }
 
-async function runQuery(sql: string): Promise<Record<string, unknown>[]> {
-  const result = await db.execute({ sql, args: [] });
+import type { Client } from '@libsql/client';
+
+async function runQuery(dbClient: Client, sql: string): Promise<Record<string, unknown>[]> {
+  const result = await dbClient.execute({ sql, args: [] });
   return result.rows.map((r: Record<string, unknown>) => {
     const obj: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(r)) obj[k] = v;
@@ -217,19 +221,20 @@ async function runQuery(sql: string): Promise<Record<string, unknown>[]> {
   });
 }
 
-async function scalar(sql: string): Promise<unknown> {
-  const rows = await runQuery(sql);
+async function scalar(dbClient: Client, sql: string): Promise<unknown> {
+  const rows = await runQuery(dbClient, sql);
   if (!rows.length) return null;
   const vals = Object.values(rows[0]);
   return vals.length ? vals[0] : null;
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const cid = Number(params.id);
     if (!cid || isNaN(cid)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
@@ -237,7 +242,7 @@ export async function GET(
     const w = `WITH ${ctes}`;
 
     // Fetch conference year for annual budget lookup
-    const confRow = await runQuery(
+    const confRow = await runQuery(db, 
       `SELECT c.name, c.start_date, c.end_date, c.location, c.conference_strategy_type_id,
               co.value AS conference_strategy_type_display_name, co.action_key AS conference_strategy_type_key
        FROM conferences c
@@ -247,7 +252,7 @@ export async function GET(
     const confInfo = confRow[0] ?? {};
 
     // Fetch conf event type and cost efficiency modifier
-    const confModifierRow = await runQuery(
+    const confModifierRow = await runQuery(db, 
       `SELECT conf_event_type, cost_efficiency_modifier, cost_efficiency_modifier_reason FROM conferences WHERE id = ${cid}`
     );
     const confModifierInfo = confModifierRow[0] ?? {};
@@ -259,7 +264,7 @@ export async function GET(
 
     // Total effective spend from conference_budget line_items JSON
     // (actual if set/nonzero, else budget per line item)
-    const totalSpendRow = await runQuery(
+    const totalSpendRow = await runQuery(db, 
       `SELECT
          COALESCE(SUM(
            COALESCE(NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL), 0),
@@ -279,7 +284,7 @@ export async function GET(
     const totalSpend = Number(totalSpendRow[0]?.total_spend ?? 0);
     let lineItems: unknown[] = [];
     try { lineItems = JSON.parse(String(totalSpendRow[0]?.line_items_json ?? '[]')); } catch { /* empty */ }
-    const budgetSettingsRow = await runQuery(`SELECT return_on_cost, required_pipeline_multiple, required_pipeline_amount FROM conference_budget WHERE conference_id = ${cid} LIMIT 1`);
+    const budgetSettingsRow = await runQuery(db, `SELECT return_on_cost, required_pipeline_multiple, required_pipeline_amount FROM conference_budget WHERE conference_id = ${cid} LIMIT 1`);
     const returnOnCostMultiple = Number(budgetSettingsRow[0]?.return_on_cost ?? 0);
     const expectedReturnAmount = totalSpend > 0 && returnOnCostMultiple > 0 ? totalSpend * returnOnCostMultiple : null;
     const requiredPipelineMultiple = Number(budgetSettingsRow[0]?.required_pipeline_multiple ?? 3.5) > 0 ? Number(budgetSettingsRow[0]?.required_pipeline_multiple ?? 3.5) : 3.5;
@@ -290,18 +295,18 @@ export async function GET(
     // Annual budget for this conference's year
     const confYear = confInfo.start_date ? String(confInfo.start_date).substring(0, 4) : null;
     const annualBudgetRow = confYear
-      ? await runQuery(`SELECT amount FROM annual_budgets WHERE year = ${confYear}`)
+      ? await runQuery(db, `SELECT amount FROM annual_budgets WHERE year = ${confYear}`)
       : [];
     const annualBudget = annualBudgetRow.length ? Number(annualBudgetRow[0].amount) : null;
 
     // Effectiveness defaults
-    const effRow = await runQuery(`SELECT key, value FROM effectiveness_defaults`);
+    const effRow = await runQuery(db, `SELECT key, value FROM effectiveness_defaults`);
     const effDefaults: Record<string, string> = {};
     for (const r of effRow) effDefaults[String(r.key)] = String(r.value ?? '');
 
     const adminSettings: Record<string, string> = {};
     try {
-      const adminSettingsRows = await runQuery(`SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
+      const adminSettingsRows = await runQuery(db, `SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles','icp_seniority_priority','icp_function_priority')`);
       for (const r of adminSettingsRows) adminSettings[String(r.key)] = String(r.value ?? '');
     } catch {
       // Backward-compatible fallback if site_settings table is unavailable
@@ -313,21 +318,21 @@ export async function GET(
       cost_per_meeting:  { elite_max: 400, strong_max: 700, healthy_max: 1100, weak_max: 1800 },
       pipeline_per_1k:  { elite_min: 10000, strong_min: 6000, healthy_min: 3500, weak_min: 1500 },
     };
-    const benchmarkRow = await runQuery(`SELECT value FROM effectiveness_defaults WHERE key = 'ces_benchmarks'`);
+    const benchmarkRow = await runQuery(db, `SELECT value FROM effectiveness_defaults WHERE key = 'ces_benchmarks'`);
     const cesBenchmarks = (() => {
       try { return { ...DEFAULT_BENCHMARKS, ...JSON.parse(String(benchmarkRow[0]?.value ?? '{}')) }; }
       catch { return DEFAULT_BENCHMARKS; }
     })();
 
     const DEFAULT_MODIFIERS: Record<string, number> = { flagship_industry_event: 5, regional_operator_conference: 0, vendor_heavy_trade_show: -5, other: 0 };
-    const modifierRow = await runQuery(`SELECT value FROM effectiveness_defaults WHERE key = 'ces_event_type_modifiers'`);
+    const modifierRow = await runQuery(db, `SELECT value FROM effectiveness_defaults WHERE key = 'ces_event_type_modifiers'`);
     const eventModifiers: Record<string, number> = (() => {
       try { return { ...DEFAULT_MODIFIERS, ...JSON.parse(String(modifierRow[0]?.value ?? '{}')) }; }
       catch { return DEFAULT_MODIFIERS; }
     })();
 
     // ── Events Coordinator Metrics ──────────────────────────────────────────
-    const [engagementSummary] = await runQuery(
+    const [engagementSummary] = await runQuery(db, 
       `${w} SELECT
         COUNT(*) AS total_companies,
         COUNT(CASE WHEN is_engaged=1 THEN 1 END) AS companies_engaged,
@@ -345,7 +350,7 @@ export async function GET(
        FROM company_engagement`
     ) ?? {};
 
-    const targetEngagement = (await runQuery(
+    const targetEngagement = (await runQuery(db, 
       `${w}
        SELECT
          COUNT(DISTINCT ct.attendee_id) AS targets_total,
@@ -402,7 +407,7 @@ export async function GET(
        WHERE ct.conference_id = ${cid}`
     ))[0] ?? {};
 
-    const hostedAttendance = (await runQuery(
+    const hostedAttendance = (await runQuery(db, 
       `SELECT
          COUNT(DISTINCT rsvp.attendee_id) AS total_invited,
          COUNT(DISTINCT CASE WHEN rsvp.rsvp_status='attended' THEN rsvp.attendee_id END) AS attended,
@@ -414,7 +419,7 @@ export async function GET(
     ))[0] ?? {};
 
     // Contacts engaged at Operator companies
-    const contactsEngagementRow = (await runQuery(
+    const contactsEngagementRow = (await runQuery(db, 
       `${w}
        SELECT
          COUNT(DISTINCT ca.attendee_id) AS operator_contacts_total,
@@ -430,7 +435,7 @@ export async function GET(
          )`
     ))[0] ?? {};
 
-    const repActivity = await runQuery(
+    const repActivity = await runQuery(db, 
       `SELECT
          m.scheduled_by AS rep_raw,
          COUNT(DISTINCT CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS meetings_held,
@@ -445,7 +450,7 @@ export async function GET(
     );
 
     // ── Rep name resolution ─────────────────────────────────────────────────
-    const userConfigRows = await runQuery(
+    const userConfigRows = await runQuery(db, 
       `SELECT co.id, COALESCE(u.display_name, co.value) AS display_name
        FROM config_options co
        LEFT JOIN users u ON u.config_id = co.id
@@ -458,7 +463,7 @@ export async function GET(
         .map(id => repNameMap.get(id) ?? id);
 
     // ── Seniority priority from site_settings ──────────────────────────────
-    const senioritySettingRow = await runQuery(
+    const senioritySettingRow = await runQuery(db, 
       `SELECT value FROM site_settings WHERE key = 'icp_seniority_priority'`
     );
     const seniorityPriority: Record<string, string> = (() => {
@@ -468,13 +473,13 @@ export async function GET(
     const PRIORITY_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1, Ignore: 0 };
 
     // ── Internal attendees at this conference ───────────────────────────────
-    const confDetailRow = await runQuery(`SELECT internal_attendees FROM conferences WHERE id = ${cid}`);
+    const confDetailRow = await runQuery(db, `SELECT internal_attendees FROM conferences WHERE id = ${cid}`);
     const internalAttendeeIds = new Set<string>(
       String(confDetailRow[0]?.internal_attendees ?? '').split(',').map(s => s.trim()).filter(Boolean)
     );
 
     // ── Company assigned users ──────────────────────────────────────────────
-    const companyAssignedRows = await runQuery(
+    const companyAssignedRows = await runQuery(db, 
       `${w}
        SELECT cc.company_id, co.assigned_user
        FROM conf_companies cc
@@ -487,7 +492,7 @@ export async function GET(
     }
 
     // ── Per-company-rep meeting engagements with seniority ──────────────────
-    const meetingEngagements = await runQuery(
+    const meetingEngagements = await runQuery(db, 
       `SELECT
          a.company_id, m.scheduled_by,
          a.seniority,
@@ -502,7 +507,7 @@ export async function GET(
 
     // ── Company-level touchpoints and social event counts ───────────────────
     const companyTouchpointMap = new Map<number, number>();
-    for (const r of await runQuery(
+    for (const r of await runQuery(db, 
       `SELECT a.company_id, COUNT(DISTINCT atp.id) AS tp_count
        FROM attendee_touchpoints atp
        JOIN attendees a ON atp.attendee_id = a.id
@@ -511,7 +516,7 @@ export async function GET(
     )) companyTouchpointMap.set(Number(r.company_id), Number(r.tp_count ?? 0));
 
     const companySocialMap = new Map<number, number>();
-    for (const r of await runQuery(
+    for (const r of await runQuery(db, 
       `SELECT a.company_id, COUNT(DISTINCT rsvp.attendee_id) AS ev_count
        FROM social_event_rsvps rsvp
        JOIN social_events se ON rsvp.social_event_id = se.id
@@ -521,7 +526,7 @@ export async function GET(
     )) companySocialMap.set(Number(r.company_id), Number(r.ev_count ?? 0));
 
     // ── Sales / Pipeline Metrics ────────────────────────────────────────────
-    const pipelineSummary = (await runQuery(
+    const pipelineSummary = (await runQuery(db, 
       `${w}
        SELECT
          COUNT(*) AS companies_influencing,
@@ -537,7 +542,7 @@ export async function GET(
        FROM pipeline_influence`
     ))[0] ?? {};
 
-    const netNewLogos = (await runQuery(
+    const netNewLogos = (await runQuery(db, 
       `${w},
        prior_companies AS (
          SELECT DISTINCT a.company_id FROM conference_attendees ca
@@ -551,7 +556,7 @@ export async function GET(
     ))[0] ?? {};
 
     // Per-company pipeline detail (also used for rep attribution loop below)
-    const companyPipeline = await runQuery(
+    const companyPipeline = await runQuery(db, 
       `${w}
        SELECT
          pi.company_id, pi.name, pi.icp, pi.wse, pi.status,
@@ -565,7 +570,7 @@ export async function GET(
     );
 
     // ── Supporting sets for Rep CES dimensions ─────────────────────────────
-    const icpCompanyRows = await runQuery(
+    const icpCompanyRows = await runQuery(db, 
       `SELECT DISTINCT a.company_id FROM conference_attendees ca
        JOIN attendees a  ON ca.attendee_id = a.id
        JOIN companies co ON a.company_id = co.id
@@ -573,7 +578,7 @@ export async function GET(
     );
     const icpCompanyIdSet = new Set<number>(icpCompanyRows.map(r => Number(r.company_id)));
 
-    const netNewCompanyRows = await runQuery(
+    const netNewCompanyRows = await runQuery(db, 
       `SELECT DISTINCT a.company_id FROM conference_attendees ca
        JOIN attendees a ON ca.attendee_id = a.id
        WHERE ca.conference_id = ${cid} AND a.company_id IS NOT NULL
@@ -585,14 +590,14 @@ export async function GET(
     );
     const netNewCompanyIdSet = new Set<number>(netNewCompanyRows.map(r => Number(r.company_id)));
 
-    const targetCompanyRows = await runQuery(
+    const targetCompanyRows = await runQuery(db, 
       `SELECT DISTINCT a.company_id FROM conference_targets ct
        JOIN attendees a ON ct.attendee_id = a.id
        WHERE ct.conference_id = ${cid} AND a.company_id IS NOT NULL`
     );
     const targetCompanyIdSet = new Set<number>(targetCompanyRows.map(r => Number(r.company_id)));
 
-    const companyFollowupRows = await runQuery(
+    const companyFollowupRows = await runQuery(db, 
       `SELECT a.company_id,
          COUNT(DISTINCT f.id) AS followups_created,
          COUNT(DISTINCT CASE WHEN COALESCE(f.completed,0) = 1 THEN f.id END) AS followups_completed
@@ -738,7 +743,7 @@ export async function GET(
     }
 
     // Second pass: attribute follow-ups directly to reps using assigned_rep; fallback to company portfolio split.
-    const followupsByRepRows = await runQuery(
+    const followupsByRepRows = await runQuery(db, 
       `SELECT fu.id, fu.assigned_rep, fu.completed, a.company_id
        FROM follow_ups fu
        JOIN attendees a ON fu.attendee_id = a.id
@@ -793,13 +798,13 @@ export async function GET(
     }
 
     // ── Conference-specific target engagement by rep (attendee-level) ─────
-    const targetRows = await runQuery(
+    const targetRows = await runQuery(db, 
       `SELECT DISTINCT ct.attendee_id, a.company_id
        FROM conference_targets ct
        JOIN attendees a ON a.id = ct.attendee_id
        WHERE ct.conference_id = ${cid}`
     );
-    const targetMeetingReps = await runQuery(
+    const targetMeetingReps = await runQuery(db, 
       `SELECT m.attendee_id, m.scheduled_by AS rep_raw
        FROM meetings m
        LEFT JOIN config_options cop ON cop.category='action' AND LOWER(TRIM(m.outcome))=LOWER(TRIM(cop.value))
@@ -807,20 +812,20 @@ export async function GET(
          AND cop.action_key='meeting_held'
          AND m.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
     );
-    const targetFollowupReps = await runQuery(
+    const targetFollowupReps = await runQuery(db, 
       `SELECT fu.attendee_id, fu.assigned_rep AS rep_raw
        FROM follow_ups fu
        WHERE fu.conference_id = ${cid}
          AND fu.next_steps IS NOT NULL AND fu.next_steps != ''
          AND fu.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
     );
-    const targetTouchpointRows = await runQuery(
+    const targetTouchpointRows = await runQuery(db, 
       `SELECT attendee_id
        FROM attendee_touchpoints
        WHERE conference_id = ${cid}
          AND attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ${cid})`
     );
-    const targetSocialRows = await runQuery(
+    const targetSocialRows = await runQuery(db, 
       `SELECT rsvp.attendee_id
        FROM social_event_rsvps rsvp
        JOIN social_events se ON se.id = rsvp.social_event_id
@@ -909,7 +914,7 @@ export async function GET(
       };});
 
     // ── Audience / CMO Metrics ──────────────────────────────────────────────
-    const icpCoverage = (await runQuery(
+    const icpCoverage = (await runQuery(db, 
       `${w}
        SELECT
          COUNT(DISTINCT CASE WHEN ce.icp='Yes' THEN ce.company_id END) AS icp_companies_total,
@@ -933,7 +938,7 @@ export async function GET(
        FROM company_engagement ce`
     ))[0] ?? {};
 
-    const seniorityMix = await runQuery(
+    const seniorityMix = await runQuery(db, 
       `${w}
        SELECT
          a.seniority,
@@ -947,7 +952,7 @@ export async function GET(
        GROUP BY a.seniority ORDER BY engaged_count DESC`
     );
 
-    const accountPenetration = (await runQuery(
+    const accountPenetration = (await runQuery(db, 
       `${w}
        SELECT
          COUNT(DISTINCT ca.attendee_id) AS total_attendees,
@@ -962,7 +967,7 @@ export async function GET(
        WHERE ca.conference_id=${cid}`
     ))[0] ?? {};
 
-    const personaDistribution = await runQuery(
+    const personaDistribution = await runQuery(db, 
       `${w}
        SELECT
          a.function,
@@ -976,7 +981,7 @@ export async function GET(
     );
 
     // ICP Quality Index (seniority-weighted engaged contacts at ICP companies)
-    const icpQuality = (await runQuery(
+    const icpQuality = (await runQuery(db, 
       `${w}
        SELECT
          SUM(CASE a.seniority
@@ -1298,7 +1303,7 @@ export async function GET(
     let confRank = 1;
     let totalConferences = 1;
     try {
-      const rankRows = await runQuery(
+      const rankRows = await runQuery(db, 
         `WITH all_meetings AS (
            SELECT m.conference_id, a.company_id,
              COUNT(CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS mtg
@@ -1401,11 +1406,11 @@ export async function GET(
 
     let engagedContacts: Record<string, unknown>[] = [];
     try {
-      const attendeeCols = await runQuery(`PRAGMA table_info(attendees)`);
+      const attendeeCols = await runQuery(db, `PRAGMA table_info(attendees)`);
       const colNames = new Set(attendeeCols.map(c => String(c.name ?? '').toLowerCase()));
       const seniorityExpr = colNames.has('seniority') ? `LOWER(TRIM(COALESCE(a.seniority,'')))` : `''`;
       const functionExpr = colNames.has('function') ? `LOWER(TRIM(COALESCE(a."function",'')))` : `''`;
-      engagedContacts = await runQuery(`${w}
+      engagedContacts = await runQuery(db, `${w}
         SELECT cc.company_id, COALESCE(c.name, c.company_name, 'Unknown Company') AS company_name, LOWER(TRIM(COALESCE(a.title,''))) AS title, ${seniorityExpr} AS seniority, ${functionExpr} AS function
         FROM conf_companies cc
         LEFT JOIN companies c ON c.id = cc.company_id
@@ -1423,8 +1428,8 @@ export async function GET(
     const configValueById = new Map<number, string>();
     try {
       const [ruleRows, configRows] = await Promise.all([
-        runQuery(`SELECT raw_title_key, normalized_title, buyer_role, function_id, seniority_id FROM title_normalization_rules WHERE source = 'user_confirmed'`),
-        runQuery(`SELECT id, value FROM config_options WHERE category IN ('function', 'seniority')`),
+        runQuery(db, `SELECT raw_title_key, normalized_title, buyer_role, function_id, seniority_id FROM title_normalization_rules WHERE source = 'user_confirmed'`),
+        runQuery(db, `SELECT id, value FROM config_options WHERE category IN ('function', 'seniority')`),
       ]);
       for (const row of configRows) configValueById.set(Number(row.id), String(row.value ?? '').toLowerCase().trim());
       for (const row of ruleRows) {

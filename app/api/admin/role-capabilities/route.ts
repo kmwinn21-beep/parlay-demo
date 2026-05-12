@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin, DEFAULT_ROLE_CAPABILITIES, resolveCapabilities, VALID_ROLES, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 async function getRawJson(): Promise<string | null> {
   const row = await db.execute({
@@ -13,8 +14,8 @@ async function getRawJson(): Promise<string | null> {
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
-  await dbReady;
   const raw = await getRawJson();
   let stored: Partial<RoleCapabilities> = {};
   try { stored = raw ? JSON.parse(raw) : {}; } catch { /* ignore */ }
@@ -30,8 +31,8 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
-  await dbReady;
   const body = await request.json() as Partial<RoleCapabilities>;
 
   // Strip admin-only caps from non-admin roles before saving

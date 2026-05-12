@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail } from '@/lib/notifications';
 
 function parseStatusValues(status: unknown): string[] {
@@ -15,8 +16,8 @@ export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { ids, fields } = body as {
       ids: number[];

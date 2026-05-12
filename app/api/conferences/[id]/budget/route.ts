@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +11,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await dbReady;
+    const user = await getSessionUser(_request);
+    const db = await getDb(user?.accountId);
     const conferenceId = Number(params.id);
     const result = await db.execute({
       sql: 'SELECT line_items, return_on_cost, required_pipeline_multiple, required_pipeline_amount FROM conference_budget WHERE conference_id = ?',
@@ -36,7 +39,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const conferenceId = Number(params.id);
     const stageBlock = await validateConferenceStage(request, conferenceId, 'canEditBudget');
     if (stageBlock) return stageBlock;

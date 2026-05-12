@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 
 export async function PATCH(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     if (!user) {
+    const db = await getDb(user?.accountId);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { displayName, configId } = await request.json();
 
-    await dbReady;
 
     const updates: string[] = [];
     const args: (string | number | null)[] = [];

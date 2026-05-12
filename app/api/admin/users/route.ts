@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, VALID_ROLES, type UserRole } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { sendInviteEmail } from '@/lib/email';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
-  await dbReady;
   const result = await db.execute({
     sql: `SELECT id, email, first_name, last_name, display_name, role, email_verified, active, config_id, created_at
           FROM users ORDER BY created_at ASC`,
@@ -31,8 +32,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
-  await dbReady;
   const { firstName, lastName, email: rawEmail, role } = await request.json() as {
     firstName: string; lastName: string; email: string; role: UserRole;
   };

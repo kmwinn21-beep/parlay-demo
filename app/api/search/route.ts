@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
-    await dbReady;
     const q = new URL(request.url).searchParams.get('q')?.trim() ?? '';
     if (q.length < 2) {
       return NextResponse.json({ attendees: [], companies: [], conferences: [], events: [] });

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { name } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 });
     await db.execute({
@@ -23,8 +24,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     await db.execute({ sql: `DELETE FROM form_templates WHERE id = ?`, args: [params.id] });
     return NextResponse.json({ success: true });
   } catch (error) {

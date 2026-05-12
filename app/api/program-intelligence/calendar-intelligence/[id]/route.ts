@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import type { InValue } from '@libsql/client';
 import { assembleFinalScore } from '@/lib/scoring/calendar-intelligence';
 import type { ComponentScores } from '@/lib/scoring/calendar-intelligence';
@@ -313,7 +314,7 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const conferenceId = Number(id);

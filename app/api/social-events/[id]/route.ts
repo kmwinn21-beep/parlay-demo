@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const { id } = params;
     const body = await request.json();
 
@@ -84,7 +87,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await dbReady;
+    const user = await getSessionUser(_request);
+    const db = await getDb(user?.accountId);
     const { id } = params;
 
     const existing = await db.execute({

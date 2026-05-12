@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getSessionUser, validatePassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     if (!user) {
+    const db = await getDb(user?.accountId);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -21,7 +23,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: passwordCheck.error }, { status: 400 });
     }
 
-    await dbReady;
 
     const result = await db.execute({
       sql: 'SELECT password_hash FROM users WHERE id = ?',

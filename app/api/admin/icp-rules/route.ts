@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getIcpConfig } from '@/lib/icpRules';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
+  const db = await getDb(auth?.accountId);
   try {
     const config = await getIcpConfig();
     return NextResponse.json(config);
@@ -20,9 +22,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
+  const db = await getDb(auth?.accountId);
 
   try {
-    await dbReady;
     const { category, conditions } = await request.json() as {
       category: string;
       conditions: { option_value: string; operator: 'AND' | 'OR' }[];

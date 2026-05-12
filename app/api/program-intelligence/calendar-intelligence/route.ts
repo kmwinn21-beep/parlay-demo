@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import type { InValue } from '@libsql/client';
 import { assembleFinalScore } from '@/lib/scoring/calendar-intelligence';
 import type { ComponentScores } from '@/lib/scoring/calendar-intelligence';
@@ -60,7 +61,7 @@ function determineRecommendationTier(
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
 
   const [settingsRes, actionsRes, res] = await Promise.all([
     db.execute({ sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_conversion','tier_high_priority_conversion','tier_worth_engaging_conversion')`, args: [] }),

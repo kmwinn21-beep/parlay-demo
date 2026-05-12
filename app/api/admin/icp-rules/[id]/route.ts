@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
+  const db = await getDb(auth?.accountId);
 
   try {
-    await dbReady;
     const ruleId = Number(params.id);
     const { category, conditions } = await request.json() as {
       category: string;
@@ -37,9 +38,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
+  const db = await getDb(auth?.accountId);
 
   try {
-    await dbReady;
     const ruleId = Number(params.id);
     await db.execute({ sql: 'DELETE FROM icp_rules WHERE id = ?', args: [ruleId] });
     await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now')", args: [] }).catch(() => {});

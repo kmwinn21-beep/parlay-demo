@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { classifySeniority } from '@/lib/parsers';
 
 export async function GET(
@@ -9,12 +10,12 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const [targetsRes, usersRes, seniorityRes] = await Promise.all([
     db.execute({
@@ -87,6 +88,7 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const confId = parseInt(id, 10);
@@ -97,7 +99,6 @@ export async function POST(
   const tier = body.tier ?? 'unassigned';
   if (!attendeeId) return NextResponse.json({ error: 'attendee_id required' }, { status: 400 });
 
-  await dbReady;
 
   // Check if already a target
   const existing = await db.execute({

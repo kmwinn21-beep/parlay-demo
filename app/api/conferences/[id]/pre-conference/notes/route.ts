@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function POST(
   request: NextRequest,
@@ -9,12 +10,12 @@ export async function POST(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   const { id } = await params;
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const body = await request.json();
   const { entity_type, entity_id, content, conference_name, tagged_users, attendee_name, company_name } = body;

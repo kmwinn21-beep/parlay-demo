@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function PUT(
@@ -7,7 +9,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const { id } = params;
     const body = await request.json();
     const { attendee_id, rsvp_status } = body;

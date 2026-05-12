@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   const withId = request.nextUrl.searchParams.get('with');
   if (!withId) return NextResponse.json({ error: 'Missing ?with param' }, { status: 400 });
   const otherId = parseInt(withId, 10);
   if (isNaN(otherId)) return NextResponse.json({ error: 'Invalid user id' }, { status: 400 });
 
-  await dbReady;
 
   const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const bypassSecret = process.env.DEMO_BYPASS_SECRET;
@@ -54,8 +55,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
-  await dbReady;
   const { receiverId, content } = await request.json() as { receiverId: number; content: string };
   if (!receiverId || !content?.trim()) {
     return NextResponse.json({ error: 'receiverId and content are required' }, { status: 400 });

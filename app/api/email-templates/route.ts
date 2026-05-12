@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const user = await requireAuth(request);
   if (user instanceof NextResponse) return user;
+  const db = await getDb(user?.accountId);
 
-  await dbReady;
   const rows = await db.execute({
     sql: 'SELECT id, name, subject, body, created_at FROM email_templates ORDER BY name ASC',
     args: [],
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await requireAdmin(request);
   if (user instanceof NextResponse) return user;
+  const db = await getDb(user?.accountId);
 
   const body = await request.json();
   const { name, subject, body: templateBody } = body as { name?: string; subject?: string; body?: string };
@@ -26,7 +28,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'name, subject, and body are required.' }, { status: 400 });
   }
 
-  await dbReady;
   const result = await db.execute({
     sql: 'INSERT INTO email_templates (name, subject, body, created_by) VALUES (?, ?, ?, ?) RETURNING id',
     args: [name.trim(), subject.trim(), templateBody.trim(), user.id],

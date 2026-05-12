@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { requireAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -7,9 +8,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
-    await dbReady;
 
     const [usersResult, sparklineResult] = await Promise.all([
       db.execute({

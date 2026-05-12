@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getIcpConfig } from '@/lib/icpRules';
 import { buildDefaultTierConfig, type TierThresholdConfig } from '@/lib/strategyAssessment';
 import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
@@ -61,13 +62,13 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const conferenceId = Number(id);
   if (!Number.isFinite(conferenceId)) return NextResponse.json({ error: 'Invalid conference ID' }, { status: 400 });
 
   try {
-    await dbReady;
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
     if (conferenceRes.rows.length === 0) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import {
   getConfigIdByEmail,
   notifyCompanyAssignees,
@@ -12,8 +13,8 @@ import {
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const entityType = searchParams.get('entity_type');
     const entityId = searchParams.get('entity_id');
@@ -85,8 +86,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const {
       entity_type, entity_id, content, conference_name, rep,
       attendee_name, company_name, skip_notification, tagged_users,
