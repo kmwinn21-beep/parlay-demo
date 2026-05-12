@@ -1195,13 +1195,6 @@ export default function ConferenceDetailPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
                 <div className="flex items-center gap-6 border-l border-gray-200 pl-3 overflow-x-auto flex-nowrap hide-scrollbar">
-                  <PreConferenceReview conferenceId={conference.id} conferenceName={conference.name} />
-                  <PostConferenceReview
-                    conferenceId={conference.id}
-                    conferenceName={conference.name}
-                    endDate={conference.end_date}
-                    userRole={currentUser?.role ?? 'user'}
-                  />
                   <ConferenceEffectivenessModal
                     conferenceId={conference.id}
                     conferenceName={conference.name}
@@ -1267,9 +1260,9 @@ export default function ConferenceDetailPage() {
                     <span className="badge-blue">
                       {conference.attendees.length} attendees
                     </span>
-                    {!conference.is_historical && (
-                      <span className="text-sm font-semibold text-gray-700">
-                        Strategy: {conference.conference_strategy_type_display_name || 'Not set'}
+                    {!conference.is_historical && conference.conference_strategy_type_display_name && (
+                      <span className="badge-blue">
+                        {conference.conference_strategy_type_display_name}
                       </span>
                     )}
                   </div>
