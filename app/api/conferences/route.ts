@@ -84,10 +84,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Look up default post-conference window from effectiveness_defaults
+    let defaultPostConferenceDays = 10;
+    try {
+      const pcRow = await db.execute({
+        sql: `SELECT value FROM effectiveness_defaults WHERE key = 'default_post_conference_days'`,
+        args: [],
+      });
+      if (pcRow.rows[0]) {
+        const parsed = parseInt(String(pcRow.rows[0].value), 10);
+        if (Number.isFinite(parsed) && parsed > 0) defaultPostConferenceDays = parsed;
+      }
+    } catch { /* use default */ }
+
     // Create the conference record
     const confResult = await db.execute({
-      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, is_historical) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
-      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, is_historical ? 1 : 0],
+      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, is_historical, post_conference_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, is_historical ? 1 : 0, defaultPostConferenceDays],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;

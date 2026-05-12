@@ -14,6 +14,7 @@ interface BudgetVsActualModalProps {
   conferenceId: number;
   conferenceName: string;
   onClose: () => void;
+  readOnly?: boolean;
 }
 
 function genId() {
@@ -47,7 +48,7 @@ function VariancePill({ variance }: { variance: number | null }) {
   );
 }
 
-export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: BudgetVsActualModalProps) {
+export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, readOnly = false }: BudgetVsActualModalProps) {
   const [items, setItems] = useState<LineItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -229,6 +230,7 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
         </div>
 
         {/* Body */}
+        <fieldset disabled={readOnly} className="contents">
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
@@ -519,20 +521,26 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose }: B
             </>
           )}
         </div>
+        </fieldset>
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-200 flex-shrink-0">
+          {readOnly && (
+            <span className="text-xs text-gray-500 mr-auto">Read-only — conference is closed.</span>
+          )}
           <button type="button" onClick={onClose} className="btn-secondary text-sm">
-            Cancel
+            {readOnly ? 'Close' : 'Cancel'}
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving || isLoading}
-            className="btn-primary text-sm"
-          >
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || isLoading}
+              className="btn-primary text-sm"
+            >
+              {isSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getConfigIdByEmail, notifyCompanyAssignees } from '@/lib/notifications';
 import { confirmAttendeeMatch } from '@/lib/matching';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function POST(
   request: NextRequest,
@@ -26,6 +27,9 @@ export async function POST(
     if (!first_name || !last_name) {
       return NextResponse.json({ error: 'first_name and last_name are required' }, { status: 400 });
     }
+
+    const stageBlock = await validateConferenceStage(request, Number(params.id), 'canAddAttendee');
+    if (stageBlock) return stageBlock;
 
     // Check conference exists
     const confResult = await db.execute({

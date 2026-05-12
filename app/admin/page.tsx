@@ -4537,6 +4537,7 @@ function AdminEffectivenessTab() {
   const [section3Open, setSection3Open] = useState(false);
   const [section4Open, setSection4Open] = useState(false);
   const [section5Open, setSection5Open] = useState(false);
+  const [section6Open, setSection6Open] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Section 1: Conference Costs
@@ -4578,6 +4579,9 @@ function AdminEffectivenessTab() {
   const [eventModifiers, setEventModifiers] = useState(DEFAULT_MODIFIERS);
   const [savingModifiers, setSavingModifiers] = useState(false);
 
+  // Section 6: Conference Lifecycle
+  const [defaultPostConferenceDays, setDefaultPostConferenceDays] = useState('10');
+
   // Section 4: Annual Conference Budgets
   interface AnnualBudgetRow { id: number; year: number; amount: number; }
   const [annualBudgets, setAnnualBudgets] = useState<AnnualBudgetRow[]>([]);
@@ -4613,6 +4617,7 @@ function AdminEffectivenessTab() {
       setFollowUpRate(d.follow_up_meeting_conversion_rate ?? '');
       setTouchpointRate(d.touchpoint_conversion_rate ?? '');
       setHostedEventRate(d.hosted_event_attendee_conversion_rate ?? '');
+      setDefaultPostConferenceDays(d.default_post_conference_days ?? '10');
       setAnnualBudgets(Array.isArray(annualBudgetsData) ? annualBudgetsData : []);
       setEditingBudget(
         Object.fromEntries((Array.isArray(annualBudgetsData) ? annualBudgetsData : []).map(
@@ -5377,6 +5382,42 @@ function AdminEffectivenessTab() {
                 {savingModifiers ? 'Saving…' : 'Save Modifiers'}
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 6: Conference Lifecycle ── */}
+      <div className="card p-0 overflow-hidden">
+        <button type="button" onClick={() => setSection6Open(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors">
+          <h2 className="text-base font-semibold text-brand-primary font-serif">Conference Lifecycle</h2>
+          <SectionChevron open={section6Open} />
+        </button>
+        {section6Open && (
+          <div className="border-t border-gray-100 px-6 py-5 space-y-4">
+            <p className="text-sm text-gray-500">Configure how long the post-conference activity window stays open by default after a conference ends. Individual conferences can override this setting.</p>
+            <div className="flex items-end gap-4">
+              <div>
+                <label className="label text-xs">Default Post-Conference Window (days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={defaultPostConferenceDays}
+                  onChange={e => setDefaultPostConferenceDays(e.target.value)}
+                  className="input-field w-24 text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={savingField === 'default_post_conference_days'}
+                onClick={() => saveKey('default_post_conference_days', defaultPostConferenceDays)}
+                className="btn-primary text-sm"
+              >
+                {savingField === 'default_post_conference_days' ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">New conferences will default to this value. After the window closes, the conference is marked <strong>Closed</strong> and activity logging is disabled for non-admins.</p>
           </div>
         )}
       </div>

@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
+import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
+import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Conference {
@@ -16,6 +18,9 @@ interface Conference {
   internal_attendees?: string;
   created_at: string;
   attendee_count: number;
+  is_historical?: number | null;
+  post_conference_days?: number | null;
+  stage_override?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -87,7 +92,26 @@ function confDatesInMonth(confs: Conference[], y: number, m: number): Set<string
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+function getConfStage(conf: Conference) {
+  if (conf.is_historical) return null;
+  try {
+    return computeConferenceStage({
+      start_date: conf.start_date,
+      end_date: conf.end_date,
+      post_conference_days: conf.post_conference_days ?? null,
+      stage_override: conf.stage_override ?? null,
+    });
+  } catch {
+    return null;
+  }
+}
+
 function ConferenceCard({ conf }: { conf: Conference }) {
+  const stage = getConfStage(conf);
+  const daysRemaining = stage === 'post_conference'
+    ? postConferenceDaysRemaining({ end_date: conf.end_date, post_conference_days: conf.post_conference_days ?? null })
+    : undefined;
+
   return (
     <Link
       href={`/conferences/${conf.id}`}
@@ -95,9 +119,12 @@ function ConferenceCard({ conf }: { conf: Conference }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <h4 className="text-md font-semibold text-brand-primary group-hover:text-brand-secondary font-serif leading-snug line-clamp-2">
-            {conf.name}
-          </h4>
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <h4 className="text-md font-semibold text-brand-primary group-hover:text-brand-secondary font-serif leading-snug line-clamp-2">
+              {conf.name}
+            </h4>
+            {stage && <ConferenceStageBadge stage={stage} daysRemaining={daysRemaining} />}
+          </div>
           <div className="mt-1.5 space-y-0.5">
             <div className="flex items-center gap-1 text-sm text-gray-600">
               <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,6 +239,7 @@ export default function ConferencesPage() {
   const [filterDateFrom, setFilterDateFrom]                   = useState('');
   const [filterDateTo, setFilterDateTo]                       = useState('');
   const [filterInternalAttendees, setFilterInternalAttendees] = useState<string[]>([]);
+  const [filterStage, setFilterStage]                         = useState('');
 
   // Calendar
   const [calExpanded, setCalExpanded] = useState<boolean | null>(null);
@@ -304,10 +332,27 @@ export default function ConferencesPage() {
       const atts = (c.internal_attendees || '').split(',').map((s) => s.trim()).filter(Boolean);
       if (!filterInternalAttendees.some((fa) => atts.includes(fa))) return false;
     }
+    if (filterStage) {
+      if (c.is_historical) {
+        if (filterStage !== 'historical') return false;
+      } else {
+        try {
+          const stage = computeConferenceStage({
+            start_date: c.start_date,
+            end_date: c.end_date,
+            post_conference_days: c.post_conference_days ?? null,
+            stage_override: c.stage_override ?? null,
+          });
+          if (stage !== filterStage) return false;
+        } catch {
+          if (filterStage !== 'historical') return false;
+        }
+      }
+    }
     if (selectedDate && (c.start_date > selectedDate || c.end_date < selectedDate)) return false;
     return true;
   }), [conferences, windowStart, windowEnd, filterYear, filterMonth, filterCity, filterState,
-       filterDateFrom, filterDateTo, filterInternalAttendees, selectedDate]);
+       filterDateFrom, filterDateTo, filterInternalAttendees, filterStage, selectedDate]);
 
   // Group into the 3 calendar months
   const grouped = useMemo(() => calMonths.map(([y, m], idx) => ({
@@ -325,11 +370,11 @@ export default function ConferencesPage() {
   }, [calMonths, conferences]);
 
   const hasFilters = !!(filterYear || filterMonth || filterCity || filterState ||
-    filterDateFrom || filterDateTo || filterInternalAttendees.length || selectedDate);
+    filterDateFrom || filterDateTo || filterInternalAttendees.length || filterStage || selectedDate);
 
   const clearFilters = () => {
     setFilterYear(''); setFilterMonth(''); setFilterCity(''); setFilterState('');
-    setFilterDateFrom(''); setFilterDateTo(''); setFilterInternalAttendees([]); setSelectedDate(null);
+    setFilterDateFrom(''); setFilterDateTo(''); setFilterInternalAttendees([]); setFilterStage(''); setSelectedDate(null);
   };
 
   const isMonthExpanded = (y: number, m: number) => {
@@ -500,6 +545,17 @@ export default function ConferencesPage() {
                 placeholder="All attendees"
                 emptyMessage="No internal attendees found."
               />
+            </div>
+            <div>
+              <label className="label text-xs">Stage</label>
+              <select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="input-field text-sm">
+                <option value="">All stages</option>
+                <option value="planning">Planning</option>
+                <option value="in_progress">In Progress</option>
+                <option value="post_conference">Post-Conference</option>
+                <option value="closed">Closed</option>
+                <option value="historical">Historical</option>
+              </select>
             </div>
           </div>
         </div>

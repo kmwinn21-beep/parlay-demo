@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function GET(request: NextRequest) {
   try {
@@ -108,6 +109,9 @@ export async function POST(request: NextRequest) {
     if (!attendee_id || !conference_id || !meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
     }
+
+    const stageBlock = await validateConferenceStage(request, Number(conference_id), 'canLogMeeting');
+    if (stageBlock) return stageBlock;
 
     // Look up the current display name for "Meeting Scheduled" by action_key
     const meetingScheduledConfig = await db.execute({

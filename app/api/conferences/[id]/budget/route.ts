@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +38,8 @@ export async function PUT(
   try {
     await dbReady;
     const conferenceId = Number(params.id);
+    const stageBlock = await validateConferenceStage(request, conferenceId, 'canEditBudget');
+    if (stageBlock) return stageBlock;
     const body = await request.json();
     const { line_items, return_on_cost, required_pipeline_multiple } = body as { line_items: unknown[]; return_on_cost: string | null; required_pipeline_multiple?: string | null };
     const parsedMultiple = Number(required_pipeline_multiple ?? 3.5);

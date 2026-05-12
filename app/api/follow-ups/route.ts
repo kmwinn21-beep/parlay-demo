@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, dbReady } from '@/lib/db';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
+import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -103,6 +104,15 @@ export async function DELETE(request: NextRequest) {
 
     if (id == null) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    const fuRow = await db.execute({
+      sql: 'SELECT conference_id FROM follow_ups WHERE id = ?',
+      args: [id],
+    });
+    if (fuRow.rows[0]?.conference_id != null) {
+      const stageBlock = await validateConferenceStage(request, Number(fuRow.rows[0].conference_id), 'canDeleteFollowUp');
+      if (stageBlock) return stageBlock;
     }
 
     await db.execute({

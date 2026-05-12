@@ -781,6 +781,21 @@ export async function initDb(): Promise<void> {
       ended_at TEXT,
       last_active_at TEXT DEFAULT (datetime('now'))
     )`,
+    `ALTER TABLE conferences ADD COLUMN post_conference_days INTEGER DEFAULT 10`,
+    `ALTER TABLE conferences ADD COLUMN stage_override TEXT`,
+    `ALTER TABLE conferences ADD COLUMN stage_override_by TEXT`,
+    `ALTER TABLE conferences ADD COLUMN stage_override_at INTEGER`,
+    `ALTER TABLE conferences ADD COLUMN stage_override_reason TEXT`,
+    `CREATE TABLE IF NOT EXISTS conference_stage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      from_stage TEXT,
+      to_stage TEXT NOT NULL,
+      triggered_by TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id),
+      reason TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.
