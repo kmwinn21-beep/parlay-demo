@@ -105,12 +105,23 @@ interface RepConferenceScore {
   sesScore: number | null;
   cesScore: number | null;
   costEffScore: number | null;
+  approxPipeline: number;
+  pipelineGoalShare: number;
   components: {
     meeting_execution: number | null;
     followup_execution: number | null;
     pipeline_influence: number | null;
     target_account_execution: number | null;
     rep_productivity: number | null;
+  };
+  ces_components: {
+    meeting_execution: number | null;
+    engagement_breadth: number | null;
+    followup_execution: number | null;
+  };
+  cost_components: {
+    cpm_score: number | null;
+    cpc_score: number | null;
   };
 }
 
@@ -847,12 +858,30 @@ export default function ProgramIntelligencePage() {
         target_account_execution: [] as number[],
         rep_productivity: [] as number[],
       };
+      const avgCESCompSum = {
+        meeting_execution: [] as number[],
+        engagement_breadth: [] as number[],
+        followup_execution: [] as number[],
+      };
+      const avgCostCompSum = {
+        cpm_score: [] as number[],
+        cpc_score: [] as number[],
+      };
+      let totalApproxPipeline = 0;
+      let totalPipelineGoal = 0;
       for (const c of Object.values(rep.conferences)) {
         if (c.components.meeting_execution != null) avgCompSum.meeting_execution.push(c.components.meeting_execution);
         if (c.components.followup_execution != null) avgCompSum.followup_execution.push(c.components.followup_execution);
         if (c.components.pipeline_influence != null) avgCompSum.pipeline_influence.push(c.components.pipeline_influence);
         if (c.components.target_account_execution != null) avgCompSum.target_account_execution.push(c.components.target_account_execution);
         if (c.components.rep_productivity != null) avgCompSum.rep_productivity.push(c.components.rep_productivity);
+        if (c.ces_components.meeting_execution != null) avgCESCompSum.meeting_execution.push(c.ces_components.meeting_execution);
+        if (c.ces_components.engagement_breadth != null) avgCESCompSum.engagement_breadth.push(c.ces_components.engagement_breadth);
+        if (c.ces_components.followup_execution != null) avgCESCompSum.followup_execution.push(c.ces_components.followup_execution);
+        if (c.cost_components.cpm_score != null) avgCostCompSum.cpm_score.push(c.cost_components.cpm_score);
+        if (c.cost_components.cpc_score != null) avgCostCompSum.cpc_score.push(c.cost_components.cpc_score);
+        totalApproxPipeline += c.approxPipeline ?? 0;
+        totalPipelineGoal += c.pipelineGoalShare ?? 0;
       }
       const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
       const componentAverages = {
@@ -862,11 +891,20 @@ export default function ProgramIntelligencePage() {
         target_account_execution: avg(avgCompSum.target_account_execution),
         rep_productivity: avg(avgCompSum.rep_productivity),
       };
+      const cesComponentAverages = {
+        meeting_execution: avg(avgCESCompSum.meeting_execution),
+        engagement_breadth: avg(avgCESCompSum.engagement_breadth),
+        followup_execution: avg(avgCESCompSum.followup_execution),
+      };
+      const costComponentAverages = {
+        cpm_score: avg(avgCostCompSum.cpm_score),
+        cpc_score: avg(avgCostCompSum.cpc_score),
+      };
       const priorAvgSES = priorAvg[rep.repId] ?? null;
       const trend = avgSES != null && priorAvgSES != null
         ? (avgSES - priorAvgSES > 3 ? 'up' : avgSES - priorAvgSES < -3 ? 'down' : 'stable')
         : null;
-      return { ...rep, avgSES, confCount, sd, minScore, maxScore, componentAverages, trend };
+      return { ...rep, avgSES, confCount, sd, minScore, maxScore, componentAverages, cesComponentAverages, costComponentAverages, totalApproxPipeline, totalPipelineGoal, trend };
     });
 
     const minConfFiltered = withStats.filter(r => r.confCount >= repMinConferences);
@@ -898,7 +936,12 @@ export default function ProgramIntelligencePage() {
     const topPerformer = [...filteredForCards].sort((a, b) => (b.avgSES ?? -1) - (a.avgSES ?? -1))[0] ?? null;
     const mostConsistent = filteredForCards.filter(r => r.confCount >= 2).sort((a, b) => a.sd - b.sd)[0] ?? null;
 
-    return { sorted, conferences, cardAvgSES, topPerformer, mostConsistent, filteredForCards };
+    // Only show conference columns that have at least one rep with data in the heatmap
+    const confsWithData = conferences.filter(conf =>
+      withStats.some(rep => rep.conferences[conf.id] != null),
+    );
+
+    return { sorted, conferences: confsWithData, cardAvgSES, topPerformer, mostConsistent, filteredForCards };
   }, [repData, repMinConferences, repTierFilter, repSort]);
 
   // Permission gate — after all hooks
@@ -1832,6 +1875,10 @@ export default function ProgramIntelligencePage() {
               if (!stats) return null;
               const avgSES = stats.avgSES;
               const componentAverages = stats.componentAverages;
+              const cesComponentAverages = stats.cesComponentAverages;
+              const costComponentAverages = stats.costComponentAverages;
+              const totalApproxPipeline = stats.totalApproxPipeline ?? 0;
+              const totalPipelineGoal = stats.totalPipelineGoal ?? 0;
               const isBelow70 = avgSES != null && avgSES < 70;
 
               const signals: string[] = [];
@@ -1917,14 +1964,67 @@ export default function ProgramIntelligencePage() {
                     ))}
                   </div>
 
+                  {/* Pipeline influence bar — rep's total vs proportionate goal */}
+                  {totalPipelineGoal > 0 && (
+                    <div className="mt-4 rounded-lg border border-gray-100 px-4 py-3">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="font-semibold text-gray-600 uppercase tracking-wide text-[10px]">Pipeline Influenced vs Goal</span>
+                        <span className="text-gray-400 text-[10px]">Proportionate share of required pipeline</span>
+                      </div>
+                      <div className="flex items-end justify-between mb-1">
+                        <span className="text-xl font-bold tabular-nums" style={{ color: sesScoreColor(totalPipelineGoal > 0 ? Math.min(Math.round((totalApproxPipeline / totalPipelineGoal) * 100), 100) : null) }}>
+                          ${totalApproxPipeline >= 1000000
+                            ? `${(totalApproxPipeline / 1000000).toFixed(1)}M`
+                            : totalApproxPipeline >= 1000
+                              ? `${Math.round(totalApproxPipeline / 1000)}K`
+                              : Math.round(totalApproxPipeline).toLocaleString()}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          Goal: ${totalPipelineGoal >= 1000000
+                            ? `${(totalPipelineGoal / 1000000).toFixed(1)}M`
+                            : totalPipelineGoal >= 1000
+                              ? `${Math.round(totalPipelineGoal / 1000)}K`
+                              : Math.round(totalPipelineGoal).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                        {(() => {
+                          const pct = totalPipelineGoal > 0 ? Math.min((totalApproxPipeline / totalPipelineGoal) * 100, 100) : 0;
+                          const score = Math.round(pct);
+                          return <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: sesScoreColor(score) }} />;
+                        })()}
+                      </div>
+                      <div className="mt-1 text-[10px] text-gray-400">
+                        {totalPipelineGoal > 0
+                          ? `${Math.round((totalApproxPipeline / totalPipelineGoal) * 100)}% of proportionate goal across ${allConfEntries.length} conference${allConfEntries.length !== 1 ? 's' : ''}`
+                          : 'No pipeline target set for attended conferences'}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-5">
                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs">Performance Summary</h4>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-400">SES range</span><span className="float-right font-medium text-gray-700">{stats.minScore}–{stats.maxScore}</span></div>
-                      <div><span className="text-gray-400">Consistency</span><span className="float-right font-medium text-gray-700">{consistencyLabel}</span></div>
-                      <div><span className="text-gray-400">Best (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{bestSES?.conf.name ?? '—'} ({bestSES?.cell?.sesScore ?? '—'})</span></div>
-                      <div><span className="text-gray-400">Worst (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{worstSES?.conf.name ?? '—'} ({worstSES?.cell?.sesScore ?? '—'})</span></div>
-                      <div><span className="text-gray-400">Most common tier</span><span className="float-right font-medium text-gray-700">{mostCommonTier}</span></div>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">SES Range</div>
+                        <div className="font-semibold text-gray-700 mt-0.5">{stats.minScore}–{stats.maxScore}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Consistency</div>
+                        <div className="font-semibold text-gray-700 mt-0.5">{consistencyLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Best (SES)</div>
+                        <div className="font-semibold text-gray-700 mt-0.5 truncate">{bestSES?.conf.name ?? '—'} ({bestSES?.cell?.sesScore ?? '—'})</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Worst (SES)</div>
+                        <div className="font-semibold text-gray-700 mt-0.5 truncate">{worstSES?.conf.name ?? '—'} ({worstSES?.cell?.sesScore ?? '—'})</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Most Common Tier</div>
+                        <div className="font-semibold text-gray-700 mt-0.5">{mostCommonTier}</div>
+                      </div>
                     </div>
                   </div>
 
@@ -1980,15 +2080,29 @@ export default function ProgramIntelligencePage() {
                   </div>
 
                   <div className="mt-5">
-                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">SES Component Averages</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">
+                      {drawerScoreView === 'ses' ? 'SES' : drawerScoreView === 'ces' ? 'CES' : 'Cost Eff.'} Component Averages
+                    </h4>
                     <div className="space-y-2">
-                      {([
-                        ['Meeting Execution', componentAverages.meeting_execution],
-                        ['Follow-up Execution', componentAverages.followup_execution],
-                        ['Pipeline Influence', componentAverages.pipeline_influence],
-                        ['Target Account Execution', componentAverages.target_account_execution],
-                        ['Rep Productivity', componentAverages.rep_productivity],
-                      ] as [string, number | null][]).map(([label, val]) => (
+                      {(drawerScoreView === 'ces'
+                        ? ([
+                            ['Meeting Execution', cesComponentAverages.meeting_execution],
+                            ['Engagement Breadth', cesComponentAverages.engagement_breadth],
+                            ['Follow-up Execution', cesComponentAverages.followup_execution],
+                          ] as [string, number | null][])
+                        : drawerScoreView === 'cost'
+                          ? ([
+                              ['Cost per Meeting', costComponentAverages.cpm_score],
+                              ['Cost per Company', costComponentAverages.cpc_score],
+                            ] as [string, number | null][])
+                          : ([
+                              ['Meeting Execution', componentAverages.meeting_execution],
+                              ['Follow-up Execution', componentAverages.followup_execution],
+                              ['Pipeline Influence', componentAverages.pipeline_influence],
+                              ['Target Account Execution', componentAverages.target_account_execution],
+                              ['Rep Productivity', componentAverages.rep_productivity],
+                            ] as [string, number | null][])
+                      ).map(([label, val]) => (
                         <div key={label}>
                           <div className="flex justify-between text-xs mb-0.5">
                             <span className="text-gray-500">{label}</span>
@@ -2112,7 +2226,7 @@ export default function ProgramIntelligencePage() {
                   },
                   { key: 'Commercial Potential', score: cs?.commercialPotential ?? null, weight: W.commercialPotential,
                     bullets: cp != null ? [
-                      `Projected pipeline: $${projectedPipeline.toLocaleString()}`,
+                      `Available pipeline: $${projectedPipeline.toLocaleString()}`,
                       ...(reqPipeline > 0 ? [`Required pipeline: $${reqPipeline.toLocaleString()} (${reqMultiple}x multiple)`, `Coverage: ${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%`] : ['No budget entered — coverage cannot be computed.']),
                     ] : [
                       'No target WSE or avg cost data available.',

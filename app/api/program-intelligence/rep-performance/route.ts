@@ -40,10 +40,29 @@ interface RepConfData {
   followupsCompleted: number;
   targetsMet: number;
   targetsFu: number;
+  touchpoints: number;
 }
 
-function computeSES(d: RepConfData, totalTargets: number): {
+interface EffSettings {
+  followUpRate: number;   // conversion rate for meetings → pipeline (0..1)
+  touchpointRate: number; // conversion rate for touchpoints → pipeline
+  dealSize: number;       // avg deal size in $
+  expectedReturn: number; // expected ROI multiplier on spend
+  expectedActivities: number;  // total expected meetings+touchpoints per conference
+  expectedCompanies: number;   // total expected companies engaged per conference
+}
+
+function computeSES(
+  d: RepConfData,
+  totalTargets: number,
+  repPipelineDenominator: number | null,
+  repExpectedActivities: number,
+  repExpectedCompanies: number,
+  eff: EffSettings,
+  attributedPipeline = 0,
+): {
   sesScore: number | null;
+  approxPipeline: number;
   components: {
     meeting_execution: number | null;
     followup_execution: number | null;
@@ -67,15 +86,35 @@ function computeSES(d: RepConfData, totalTargets: number): {
     target_account_execution = Math.round(Math.min(100, ((d.targetsMet + d.targetsFu) / totalTargets) * 100));
   }
 
+  const approxPipeline = attributedPipeline;
+
+  let pipeline_influence: number | null = null;
+  if (repPipelineDenominator != null && repPipelineDenominator > 0 && attributedPipeline > 0) {
+    pipeline_influence = Math.round(Math.min((attributedPipeline / repPipelineDenominator) * 100, 100));
+  }
+
+  // Rep productivity: activity volume + company coverage vs per-rep expected benchmarks
+  let rep_productivity: number | null = null;
+  const activities = d.meetingsHeld + d.touchpoints;
+  const activityScore = repExpectedActivities > 0 ? Math.min((activities / repExpectedActivities) * 100, 100) : null;
+  const coverageScore = repExpectedCompanies > 0 ? Math.min((d.companiesWithMeeting / repExpectedCompanies) * 100, 100) : null;
+  if (activityScore != null || coverageScore != null) {
+    const parts = [activityScore, coverageScore].filter((v): v is number => v != null);
+    rep_productivity = Math.round(parts.reduce((a, b) => a + b, 0) / parts.length);
+  }
+
   const { score } = reweight([
     { key: 'meeting_execution', score: meeting_execution, weight: 0.25 },
     { key: 'followup_execution', score: followup_execution, weight: 0.20 },
+    { key: 'pipeline_influence', score: pipeline_influence, weight: 0.25 },
     { key: 'target_account_execution', score: target_account_execution, weight: 0.15 },
+    { key: 'rep_productivity', score: rep_productivity, weight: 0.15 },
   ]);
 
   return {
     sesScore: score,
-    components: { meeting_execution, followup_execution, pipeline_influence: null, target_account_execution, rep_productivity: null },
+    approxPipeline,
+    components: { meeting_execution, followup_execution, pipeline_influence, target_account_execution, rep_productivity },
   };
 }
 
@@ -134,6 +173,8 @@ export async function GET(req: NextRequest) {
       budgetRows,
       confTotalsRows,
       confSpendRows,
+      touchpointRows,
+      effDefaultsRows,
     ] = await Promise.all([
       // a. Meetings by rep
       runQuery(
@@ -248,11 +289,203 @@ export async function GET(req: NextRequest) {
          GROUP BY cb.conference_id`,
         confIds,
       ).catch(() => [] as Row[]),
+      // j. Touchpoints per rep per conference (via meetings → attendees)
+      runQuery(
+        `SELECT m.conference_id, m.scheduled_by AS rep_raw,
+                COUNT(DISTINCT atp.id) AS touchpoints
+         FROM meetings m
+         JOIN attendees a ON m.attendee_id = a.id
+         JOIN attendee_touchpoints atp ON atp.attendee_id = a.id
+         WHERE m.conference_id IN (${placeholders})
+           AND m.scheduled_by IS NOT NULL AND m.scheduled_by != ''
+         GROUP BY m.conference_id, m.scheduled_by`,
+        confIds,
+      ).catch(() => [] as Row[]),
+      // k. Effectiveness defaults for pipeline influence + productivity scoring
+      runQuery(
+        `SELECT key, value FROM effectiveness_defaults
+         WHERE key IN (
+           'follow_up_meeting_conversion_rate',
+           'touchpoint_conversion_rate',
+           'avg_annual_deal_size',
+           'expected_return_on_event_cost',
+           'expected_sales_activities',
+           'expected_companies_engaged'
+         )`,
+      ).catch(() => [] as Row[]),
     ]);
+
+    // l. Pipeline attribution per rep per conference
+    // Replicates the core pipeline_influence CTE from the conference effectiveness route:
+    //   - Per company: pipeline_value = min(convRate × multiTouchMult, 0.95) × dealValue
+    //   - dealValue = wse × cost_per_unit if wse > 0, else avg_annual_deal_size
+    // Pipeline attribution per rep per conference.
+    // Mirrors the pipeline_influence CTE in conferences/[id]/effectiveness/route.ts exactly:
+    //   - wse comes from companies.wse (global company record), not conference_companies
+    //   - total_interactions = meetings_held + touchpoints + hosted_events (same multi-touch multiplier)
+    //   - base conv rate: follow_up_rate if meetings_held > 0, touchpoint_rate if touchpoints > 0, else 0
+    //   - pipeline_value = min(base_rate × multi_touch_mult, 0.95) × deal_value
+    //   - deal_value = wse × cost_per_unit when wse > 0 AND cost_per_unit > 0, else avg_annual_deal_size
+    //   - attribution to reps: proportional by held-meeting count per company
+    let repPipelineRows: Row[] = [];
+    try {
+      repPipelineRows = await runQuery(
+        `WITH eff AS (
+           SELECT
+             COALESCE(MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL) END), 30) / 100.0 AS fu_rate,
+             COALESCE(MAX(CASE WHEN key='touchpoint_conversion_rate'        THEN CAST(value AS REAL) END), 15) / 100.0 AS tp_rate,
+             COALESCE(MAX(CASE WHEN key='avg_cost_per_unit'                 THEN CAST(value AS REAL) END), 0)           AS cost_per_unit,
+             COALESCE(MAX(CASE WHEN key='avg_annual_deal_size'              THEN CAST(value AS REAL) END), 50000)        AS deal_size
+           FROM effectiveness_defaults
+         ),
+         -- Per-company meetings held at each conference
+         company_meetings AS (
+           SELECT m.conference_id, a.company_id,
+                  COUNT(DISTINCT CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN m.id END) AS meetings_held
+           FROM meetings m
+           JOIN attendees a ON m.attendee_id = a.id
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+           WHERE m.conference_id IN (${placeholders})
+             AND a.company_id IS NOT NULL
+           GROUP BY m.conference_id, a.company_id
+         ),
+         -- Per-company touchpoints at each conference
+         company_touchpoints AS (
+           SELECT atp.conference_id, a.company_id,
+                  COUNT(DISTINCT atp.id) AS touchpoints
+           FROM attendee_touchpoints atp
+           JOIN attendees a ON atp.attendee_id = a.id
+           WHERE atp.conference_id IN (${placeholders})
+             AND a.company_id IS NOT NULL
+           GROUP BY atp.conference_id, a.company_id
+         ),
+         -- Per-company hosted social event attendance at each conference
+         company_hosted AS (
+           SELECT se.conference_id, a.company_id,
+                  COUNT(DISTINCT rsvp.social_event_id) AS hosted_events
+           FROM social_event_rsvps rsvp
+           JOIN social_events se ON rsvp.social_event_id = se.id
+           JOIN attendees a      ON rsvp.attendee_id = a.id
+           WHERE se.conference_id IN (${placeholders})
+             AND rsvp.rsvp_status = 'attended'
+             AND se.event_type    = 'Company Hosted'
+             AND a.company_id IS NOT NULL
+           GROUP BY se.conference_id, a.company_id
+         ),
+         -- Engaged companies per conference with total interaction counts
+         company_engagement AS (
+           SELECT
+             cm.conference_id, cm.company_id,
+             COALESCE(cm.meetings_held, 0)  AS meetings_held,
+             COALESCE(ct.touchpoints, 0)    AS touchpoints,
+             COALESCE(ch.hosted_events, 0)  AS hosted_events,
+             COALESCE(cm.meetings_held, 0) + COALESCE(ct.touchpoints, 0) + COALESCE(ch.hosted_events, 0) AS total_interactions
+           FROM company_meetings cm
+           LEFT JOIN company_touchpoints ct ON ct.conference_id = cm.conference_id AND ct.company_id = cm.company_id
+           LEFT JOIN company_hosted      ch ON ch.conference_id = cm.conference_id AND ch.company_id = cm.company_id
+           WHERE cm.meetings_held > 0
+         ),
+         -- Per-company pipeline value using companies.wse (matches effectiveness route)
+         company_pi AS (
+           SELECT
+             ce.conference_id, ce.company_id,
+             MIN(
+               CASE
+                 WHEN ce.meetings_held > 0 THEN e.fu_rate
+                 WHEN ce.touchpoints   > 0 THEN e.tp_rate
+                 ELSE 0
+               END
+               * CASE
+                   WHEN ce.total_interactions >= 3 THEN 1.50
+                   WHEN ce.total_interactions  = 2 THEN 1.25
+                   ELSE 1.00
+                 END,
+               0.95
+             ) * CASE
+                   WHEN COALESCE(co.wse, 0) > 0 AND e.cost_per_unit > 0
+                     THEN co.wse * e.cost_per_unit
+                   ELSE e.deal_size
+                 END AS pipeline_value
+           FROM company_engagement ce
+           JOIN companies co ON co.id = ce.company_id
+           CROSS JOIN eff e
+         ),
+         -- Which rep held meetings at each company (for proportional attribution)
+         rep_company AS (
+           SELECT m.conference_id, m.scheduled_by AS rep_raw, a.company_id,
+                  COUNT(CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN 1 END) AS held
+           FROM meetings m
+           JOIN attendees a ON m.attendee_id = a.id
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+           WHERE m.conference_id IN (${placeholders})
+             AND m.scheduled_by IS NOT NULL AND m.scheduled_by != ''
+             AND a.company_id IS NOT NULL
+           GROUP BY m.conference_id, m.scheduled_by, a.company_id
+           HAVING held > 0
+         ),
+         company_totals AS (
+           SELECT conference_id, company_id, SUM(held) AS total_held
+           FROM rep_company
+           GROUP BY conference_id, company_id
+         )
+         SELECT rc.conference_id, rc.rep_raw,
+                SUM(cpi.pipeline_value * rc.held * 1.0 / ct.total_held) AS attributed_pipeline
+         FROM rep_company rc
+         JOIN company_totals ct  ON ct.conference_id = rc.conference_id AND ct.company_id = rc.company_id
+         JOIN company_pi     cpi ON cpi.conference_id = rc.conference_id AND cpi.company_id = rc.company_id
+         GROUP BY rc.conference_id, rc.rep_raw`,
+        [...confIds, ...confIds, ...confIds, ...confIds],
+      );
+    } catch (err) {
+      console.error('[rep-performance] pipeline attribution query failed:', err);
+      repPipelineRows = [];
+    }
+
+    // Build rep pipeline map: repId → confId → attributed pipeline dollars
+    const repPipelineMap = new Map<string, Map<number, number>>();
+    for (const r of repPipelineRows) {
+      const reps = resolveRepIds(r.rep_raw);
+      if (!reps.length) continue;
+      const confId = Number(r.conference_id);
+      const dollars = Number(r.attributed_pipeline ?? 0);
+      for (const repId of reps) {
+        if (!repPipelineMap.has(repId)) repPipelineMap.set(repId, new Map());
+        repPipelineMap.get(repId)!.set(confId, (repPipelineMap.get(repId)!.get(confId) ?? 0) + dollars / reps.length);
+      }
+    }
 
     // Build lookup maps
     const targetTotalMap = new Map<number, number>();
     for (const r of targetTotalRows) targetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
+
+    // Parse effectiveness defaults
+    const effLookup = new Map<string, number>();
+    for (const r of effDefaultsRows) effLookup.set(String(r.key), Number(r.value ?? 0));
+    const effSettings: EffSettings = {
+      followUpRate: effLookup.get('follow_up_meeting_conversion_rate') != null
+        ? effLookup.get('follow_up_meeting_conversion_rate')! / 100
+        : 0.30,
+      touchpointRate: effLookup.get('touchpoint_conversion_rate') != null
+        ? effLookup.get('touchpoint_conversion_rate')! / 100
+        : 0.15,
+      dealSize: effLookup.get('avg_annual_deal_size') || 50000,
+      expectedReturn: effLookup.get('expected_return_on_event_cost') || 3,
+      expectedActivities: effLookup.get('expected_sales_activities') || 60,
+      expectedCompanies: effLookup.get('expected_companies_engaged') || 30,
+    };
+
+    // Touchpoints per rep per conference
+    const touchpointMap = new Map<string, Map<number, number>>();
+    for (const r of touchpointRows) {
+      const reps = resolveRepIds(r.rep_raw);
+      if (!reps.length) continue;
+      const confId = Number(r.conference_id);
+      const tp = Number(r.touchpoints ?? 0);
+      for (const repId of reps) {
+        if (!touchpointMap.has(repId)) touchpointMap.set(repId, new Map());
+        touchpointMap.get(repId)!.set(confId, (touchpointMap.get(repId)!.get(confId) ?? 0) + tp / reps.length);
+      }
+    }
 
     const confTotalsMap = new Map<number, { totalCompanies: number; companiesEngaged: number }>();
     for (const r of confTotalsRows) {
@@ -279,7 +512,7 @@ export async function GET(req: NextRequest) {
       if (!repConfMap.has(repId)) repConfMap.set(repId, new Map());
       const confMap = repConfMap.get(repId)!;
       if (!confMap.has(confId)) {
-        confMap.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0 });
+        confMap.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0, touchpoints: 0 });
       }
       return confMap.get(confId)!;
     };
@@ -328,18 +561,24 @@ export async function GET(req: NextRequest) {
     // dim2 = rep's hold rate * 0.5 + fu attachment * 0.5
     // dim4 = rep's companies with meeting / total companies at conference (rep's engagement breadth)
     // dim5 = rep's followup completion rate
-    const computeRepCES = (d: RepConfData, totalCompanies: number): number | null => {
+    const computeRepCES = (d: RepConfData, totalCompanies: number): {
+      score: number | null;
+      components: { meeting_execution: number | null; engagement_breadth: number | null; followup_execution: number | null };
+    } => {
       const holdRate = pct(d.meetingsHeld, d.meetingsScheduled);
       const fuAttach = d.companiesWithMeeting > 0 ? pct(d.coWithMtgFu, d.companiesWithMeeting) : null;
       const dim2 = holdRate != null && fuAttach != null ? holdRate * 0.5 + fuAttach * 0.5 : (holdRate ?? fuAttach ?? null);
       const dim4 = totalCompanies > 0 ? (d.companiesWithMeeting / totalCompanies) * 100 : null;
       const dim5 = pct(d.followupsCompleted, d.followupsCreated);
+      const meeting_execution = dim2 != null ? Math.round(dim2) : null;
+      const engagement_breadth = dim4 != null ? Math.round(dim4) : null;
+      const followup_execution = dim5 != null ? Math.round(dim5) : null;
       const { score } = reweight([
-        { key: 'dim2_meeting_exec', score: dim2 != null ? Math.round(dim2) : null, weight: 0.20 },
-        { key: 'dim4_breadth', score: dim4 != null ? Math.round(dim4) : null, weight: 0.05 },
-        { key: 'dim5_followup', score: dim5 != null ? Math.round(dim5) : null, weight: 0.10 },
+        { key: 'dim2_meeting_exec', score: meeting_execution, weight: 0.20 },
+        { key: 'dim4_breadth', score: engagement_breadth, weight: 0.05 },
+        { key: 'dim5_followup', score: followup_execution, weight: 0.10 },
       ]);
-      return score;
+      return { score, components: { meeting_execution, engagement_breadth, followup_execution } };
     };
 
     // 6. Compute cost efficiency per rep per conference
@@ -353,28 +592,36 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const costEffScoreMap = new Map<string, Map<number, number | null>>();
+    interface CostSubScores {
+      score: number | null;
+      cpmScore: number | null;
+      cpcScore: number | null;
+    }
+
+    const costEffScoreMap = new Map<string, Map<number, CostSubScores>>();
     for (const [repId, confMap] of Array.from(repConfMap.entries())) {
-      const repCostMap = new Map<number, number | null>();
+      const repCostMap = new Map<number, CostSubScores>();
       for (const [confId, d] of Array.from(confMap.entries())) {
         const totalSpend = confSpendMap.get(confId) ?? 0;
         const numReps = Math.max(activeRepsPerConf.get(confId) ?? 1, 1);
         const repSpend = totalSpend / numReps;
 
-        let costEffScore: number | null = null;
+        let score: number | null = null;
+        let cpmScore: number | null = null;
+        let cpcScore: number | null = null;
         if (repSpend > 0 && d.meetingsHeld >= 1) {
-          const cpm = repSpend / d.meetingsHeld; // cost per meeting
-          const cpc = d.companiesWithMeeting > 0 ? repSpend / d.companiesWithMeeting : null; // cost per company
+          const cpm = repSpend / d.meetingsHeld;
+          const cpc = d.companiesWithMeeting > 0 ? repSpend / d.companiesWithMeeting : null;
 
-          const cpmScore = scoreLowerIsBetter(cpm, 400, 700, 1100, 1800);
-          const cpcScore = cpc != null ? scoreLowerIsBetter(cpc, 350, 650, 1000, 1600) : null;
+          cpmScore = scoreLowerIsBetter(cpm, 400, 700, 1100, 1800);
+          cpcScore = cpc != null ? scoreLowerIsBetter(cpc, 350, 650, 1000, 1600) : null;
 
           const parts: { val: number; w: number }[] = [{ val: cpmScore, w: 0.50 }];
           if (cpcScore != null) parts.push({ val: cpcScore, w: 0.50 });
           const totalW = parts.reduce((s, p) => s + p.w, 0);
-          costEffScore = Math.round(parts.reduce((s, p) => s + p.val * p.w, 0) / totalW);
+          score = Math.round(parts.reduce((s, p) => s + p.val * p.w, 0) / totalW);
         }
-        repCostMap.set(confId, costEffScore);
+        repCostMap.set(confId, { score, cpmScore, cpcScore });
       }
       costEffScoreMap.set(repId, repCostMap);
     }
@@ -384,12 +631,23 @@ export async function GET(req: NextRequest) {
       sesScore: number | null;
       cesScore: number | null;
       costEffScore: number | null;
+      approxPipeline: number;       // company-level pipeline $ (companiesWithMeeting × convRate × dealSize)
+      pipelineGoalShare: number;    // rep's proportionate share of the conference pipeline goal
       components: {
         meeting_execution: number | null;
         followup_execution: number | null;
         pipeline_influence: number | null;
         target_account_execution: number | null;
         rep_productivity: number | null;
+      };
+      ces_components: {
+        meeting_execution: number | null;
+        engagement_breadth: number | null;
+        followup_execution: number | null;
+      };
+      cost_components: {
+        cpm_score: number | null;   // cost per meeting scored
+        cpc_score: number | null;   // cost per company scored
       };
     };
 
@@ -406,14 +664,42 @@ export async function GET(req: NextRequest) {
 
       const conferences: Record<number, RepConfScore> = {};
       for (const [confId, d] of Array.from(confMap.entries())) {
+        // Populate touchpoints from separate query
+        d.touchpoints = touchpointMap.get(repId)?.get(confId) ?? 0;
+
         const totalTargets = targetTotalMap.get(confId) ?? 0;
-        const ses = computeSES(d, totalTargets);
+        const numActiveReps = Math.max(activeRepsPerConf.get(confId) ?? 1, 1);
+        const totalSpend = confSpendMap.get(confId) ?? 0;
+        const requiredPipeline = reqPipelineMap.get(confId) ?? null;
+
+        // Per-rep pipeline denominator: required pipeline / reps, or spend * expected return / reps
+        const confPipelineDenominator = requiredPipeline != null && requiredPipeline > 0
+          ? requiredPipeline / numActiveReps
+          : totalSpend > 0
+            ? (totalSpend * effSettings.expectedReturn) / numActiveReps
+            : null;
+
+        // Per-rep expected activity benchmarks (conference totals divided by active reps)
+        const repExpectedActivities = effSettings.expectedActivities / numActiveReps;
+        const repExpectedCompanies = effSettings.expectedCompanies / numActiveReps;
+
+        const attributedPipeline = repPipelineMap.get(repId)?.get(confId) ?? 0;
+        const ses = computeSES(d, totalTargets, confPipelineDenominator, repExpectedActivities, repExpectedCompanies, effSettings, attributedPipeline);
         const totalCompanies = confTotalsMap.get(confId)?.totalCompanies ?? 0;
+        const ces = computeRepCES(d, totalCompanies);
+        const costData = costEffScoreMap.get(repId)?.get(confId);
         conferences[confId] = {
           sesScore: ses.sesScore,
-          cesScore: computeRepCES(d, totalCompanies),
-          costEffScore: costEffScoreMap.get(repId)?.get(confId) ?? null,
+          cesScore: ces.score,
+          costEffScore: costData?.score ?? null,
+          approxPipeline: attributedPipeline,
+          pipelineGoalShare: confPipelineDenominator ?? 0,
           components: ses.components,
+          ces_components: ces.components,
+          cost_components: {
+            cpm_score: costData?.cpmScore ?? null,
+            cpc_score: costData?.cpcScore ?? null,
+          },
         };
       }
 
@@ -511,7 +797,7 @@ export async function GET(req: NextRequest) {
         const getP = (repId: string, confId: number): RepConfData => {
           if (!priorRepConfMap.has(repId)) priorRepConfMap.set(repId, new Map());
           const cm = priorRepConfMap.get(repId)!;
-          if (!cm.has(confId)) cm.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0 });
+          if (!cm.has(confId)) cm.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0, touchpoints: 0 });
           return cm.get(confId)!;
         };
 
@@ -555,7 +841,7 @@ export async function GET(req: NextRequest) {
         for (const [repId, confMap] of Array.from(priorRepConfMap.entries())) {
           const scores: number[] = [];
           for (const [confId, d] of Array.from(confMap.entries())) {
-            const { sesScore } = computeSES(d, priorTargetTotalMap.get(confId) ?? 0);
+            const { sesScore } = computeSES(d, priorTargetTotalMap.get(confId) ?? 0, null, effSettings.expectedActivities, effSettings.expectedCompanies, effSettings);
             if (sesScore != null) scores.push(sesScore);
           }
           if (scores.length > 0) priorAvg[repId] = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
