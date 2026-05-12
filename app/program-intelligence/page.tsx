@@ -119,6 +119,10 @@ interface RepConferenceScore {
     engagement_breadth: number | null;
     followup_execution: number | null;
   };
+  cost_components: {
+    cpm_score: number | null;
+    cpc_score: number | null;
+  };
 }
 
 interface RepRow {
@@ -859,6 +863,10 @@ export default function ProgramIntelligencePage() {
         engagement_breadth: [] as number[],
         followup_execution: [] as number[],
       };
+      const avgCostCompSum = {
+        cpm_score: [] as number[],
+        cpc_score: [] as number[],
+      };
       let totalApproxPipeline = 0;
       let totalPipelineGoal = 0;
       for (const c of Object.values(rep.conferences)) {
@@ -870,6 +878,8 @@ export default function ProgramIntelligencePage() {
         if (c.ces_components.meeting_execution != null) avgCESCompSum.meeting_execution.push(c.ces_components.meeting_execution);
         if (c.ces_components.engagement_breadth != null) avgCESCompSum.engagement_breadth.push(c.ces_components.engagement_breadth);
         if (c.ces_components.followup_execution != null) avgCESCompSum.followup_execution.push(c.ces_components.followup_execution);
+        if (c.cost_components.cpm_score != null) avgCostCompSum.cpm_score.push(c.cost_components.cpm_score);
+        if (c.cost_components.cpc_score != null) avgCostCompSum.cpc_score.push(c.cost_components.cpc_score);
         totalApproxPipeline += c.approxPipeline ?? 0;
         totalPipelineGoal += c.pipelineGoalShare ?? 0;
       }
@@ -886,11 +896,15 @@ export default function ProgramIntelligencePage() {
         engagement_breadth: avg(avgCESCompSum.engagement_breadth),
         followup_execution: avg(avgCESCompSum.followup_execution),
       };
+      const costComponentAverages = {
+        cpm_score: avg(avgCostCompSum.cpm_score),
+        cpc_score: avg(avgCostCompSum.cpc_score),
+      };
       const priorAvgSES = priorAvg[rep.repId] ?? null;
       const trend = avgSES != null && priorAvgSES != null
         ? (avgSES - priorAvgSES > 3 ? 'up' : avgSES - priorAvgSES < -3 ? 'down' : 'stable')
         : null;
-      return { ...rep, avgSES, confCount, sd, minScore, maxScore, componentAverages, cesComponentAverages, totalApproxPipeline, totalPipelineGoal, trend };
+      return { ...rep, avgSES, confCount, sd, minScore, maxScore, componentAverages, cesComponentAverages, costComponentAverages, totalApproxPipeline, totalPipelineGoal, trend };
     });
 
     const minConfFiltered = withStats.filter(r => r.confCount >= repMinConferences);
@@ -1857,6 +1871,7 @@ export default function ProgramIntelligencePage() {
               const avgSES = stats.avgSES;
               const componentAverages = stats.componentAverages;
               const cesComponentAverages = stats.cesComponentAverages;
+              const costComponentAverages = stats.costComponentAverages;
               const totalApproxPipeline = stats.totalApproxPipeline ?? 0;
               const totalPipelineGoal = stats.totalPipelineGoal ?? 0;
               const isBelow70 = avgSES != null && avgSES < 70;
@@ -2057,7 +2072,8 @@ export default function ProgramIntelligencePage() {
                           ] as [string, number | null][])
                         : drawerScoreView === 'cost'
                           ? ([
-                              ['Cost Efficiency (avg)', avgCost],
+                              ['Cost per Meeting', costComponentAverages.cpm_score],
+                              ['Cost per Company', costComponentAverages.cpc_score],
                             ] as [string, number | null][])
                           : ([
                               ['Meeting Execution', componentAverages.meeting_execution],

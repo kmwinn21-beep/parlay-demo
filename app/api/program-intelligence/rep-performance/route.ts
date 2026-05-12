@@ -85,9 +85,12 @@ function computeSES(
     target_account_execution = Math.round(Math.min(100, ((d.targetsMet + d.targetsFu) / totalTargets) * 100));
   }
 
-  const approxPipeline =
-    d.meetingsHeld * eff.followUpRate * eff.dealSize +
-    d.touchpoints * eff.touchpointRate * eff.dealSize;
+  // Company-level attribution: each unique company engaged by this rep contributes
+  // one deal at the meeting conversion rate. Touchpoints to companies without a
+  // meeting also contribute at the lower touchpoint rate — approximated here as
+  // (total companies with meeting × followUpRate) since we don't separately track
+  // touchpoint-only companies per rep.
+  const approxPipeline = d.companiesWithMeeting * eff.followUpRate * eff.dealSize;
 
   let pipeline_influence: number | null = null;
   if (repPipelineDenominator != null && repPipelineDenominator > 0 && approxPipeline > 0) {
@@ -454,28 +457,36 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const costEffScoreMap = new Map<string, Map<number, number | null>>();
+    interface CostSubScores {
+      score: number | null;
+      cpmScore: number | null;
+      cpcScore: number | null;
+    }
+
+    const costEffScoreMap = new Map<string, Map<number, CostSubScores>>();
     for (const [repId, confMap] of Array.from(repConfMap.entries())) {
-      const repCostMap = new Map<number, number | null>();
+      const repCostMap = new Map<number, CostSubScores>();
       for (const [confId, d] of Array.from(confMap.entries())) {
         const totalSpend = confSpendMap.get(confId) ?? 0;
         const numReps = Math.max(activeRepsPerConf.get(confId) ?? 1, 1);
         const repSpend = totalSpend / numReps;
 
-        let costEffScore: number | null = null;
+        let score: number | null = null;
+        let cpmScore: number | null = null;
+        let cpcScore: number | null = null;
         if (repSpend > 0 && d.meetingsHeld >= 1) {
-          const cpm = repSpend / d.meetingsHeld; // cost per meeting
-          const cpc = d.companiesWithMeeting > 0 ? repSpend / d.companiesWithMeeting : null; // cost per company
+          const cpm = repSpend / d.meetingsHeld;
+          const cpc = d.companiesWithMeeting > 0 ? repSpend / d.companiesWithMeeting : null;
 
-          const cpmScore = scoreLowerIsBetter(cpm, 400, 700, 1100, 1800);
-          const cpcScore = cpc != null ? scoreLowerIsBetter(cpc, 350, 650, 1000, 1600) : null;
+          cpmScore = scoreLowerIsBetter(cpm, 400, 700, 1100, 1800);
+          cpcScore = cpc != null ? scoreLowerIsBetter(cpc, 350, 650, 1000, 1600) : null;
 
           const parts: { val: number; w: number }[] = [{ val: cpmScore, w: 0.50 }];
           if (cpcScore != null) parts.push({ val: cpcScore, w: 0.50 });
           const totalW = parts.reduce((s, p) => s + p.w, 0);
-          costEffScore = Math.round(parts.reduce((s, p) => s + p.val * p.w, 0) / totalW);
+          score = Math.round(parts.reduce((s, p) => s + p.val * p.w, 0) / totalW);
         }
-        repCostMap.set(confId, costEffScore);
+        repCostMap.set(confId, { score, cpmScore, cpcScore });
       }
       costEffScoreMap.set(repId, repCostMap);
     }
@@ -485,8 +496,8 @@ export async function GET(req: NextRequest) {
       sesScore: number | null;
       cesScore: number | null;
       costEffScore: number | null;
-      approxPipeline: number;       // estimated pipeline dollars this rep influenced at this conf
-      pipelineGoalShare: number;    // rep's proportionate share of the pipeline goal for this conf
+      approxPipeline: number;       // company-level pipeline $ (companiesWithMeeting × convRate × dealSize)
+      pipelineGoalShare: number;    // rep's proportionate share of the conference pipeline goal
       components: {
         meeting_execution: number | null;
         followup_execution: number | null;
@@ -498,6 +509,10 @@ export async function GET(req: NextRequest) {
         meeting_execution: number | null;
         engagement_breadth: number | null;
         followup_execution: number | null;
+      };
+      cost_components: {
+        cpm_score: number | null;   // cost per meeting scored
+        cpc_score: number | null;   // cost per company scored
       };
     };
 
@@ -536,14 +551,19 @@ export async function GET(req: NextRequest) {
         const ses = computeSES(d, totalTargets, confPipelineDenominator, repExpectedActivities, repExpectedCompanies, effSettings);
         const totalCompanies = confTotalsMap.get(confId)?.totalCompanies ?? 0;
         const ces = computeRepCES(d, totalCompanies);
+        const costData = costEffScoreMap.get(repId)?.get(confId);
         conferences[confId] = {
           sesScore: ses.sesScore,
           cesScore: ces.score,
-          costEffScore: costEffScoreMap.get(repId)?.get(confId) ?? null,
+          costEffScore: costData?.score ?? null,
           approxPipeline: ses.approxPipeline,
           pipelineGoalShare: confPipelineDenominator ?? 0,
           components: ses.components,
           ces_components: ces.components,
+          cost_components: {
+            cpm_score: costData?.cpmScore ?? null,
+            cpc_score: costData?.cpcScore ?? null,
+          },
         };
       }
 
