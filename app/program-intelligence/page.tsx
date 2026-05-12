@@ -14,6 +14,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
+import type { BudgetCompletionStatus } from '@/lib/budgetCompleteness';
+import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,7 +99,7 @@ interface CalendarConferenceRow {
     } | null;
     engagementMeetings?: { total_meetings?: number } | null;
     engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
-    budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
+    budget?: { line_items?: unknown; return_on_cost?: string | null; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
     commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
   };
 }
@@ -624,6 +627,145 @@ function startCalendarScoring(force = false) {
   })().finally(() => { _calendarScoringPromise = null; });
 }
 
+// ── Budget Status Cell ────────────────────────────────────────────────────────
+
+function BudgetStatusCell({ row, onOpenModal }: { row: CalendarConferenceRow; onOpenModal: () => void }) {
+  const [open, setOpen] = useState(false);
+  const pillRef = React.useRef<HTMLButtonElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (pillRef.current?.contains(e.target as Node)) return;
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [open]);
+
+  if (row.conferenceType === 'historical') {
+    return <span className="text-gray-300 text-xs">—</span>;
+  }
+
+  const bud = row.diagnostics?.budget;
+  const status: BudgetCompletionStatus = evaluateBudgetCompleteness({
+    lineItems: bud?.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }> | null,
+    returnOnCost: bud?.return_on_cost,
+    requiredPipelineAmount: bud?.required_pipeline_amount,
+  });
+
+  if (status.status === 'complete') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+        </svg>
+        Complete
+      </span>
+    );
+  }
+
+  const isPartial = status.status === 'partial';
+  const pillCls = isPartial
+    ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+    : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200';
+
+  function handleToggle() {
+    if (!open && pillRef.current) {
+      const rect = pillRef.current.getBoundingClientRect();
+      const panelW = 280;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelW - 8));
+      const above = rect.top > 300;
+      setPanelPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, above });
+    }
+    setOpen(v => !v);
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={pillRef}
+        type="button"
+        onClick={handleToggle}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border transition-colors ${pillCls}`}
+      >
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 0 0 3.58 20h16.84a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.42 0z"/>
+        </svg>
+        {isPartial ? 'Partial' : 'No Budget'}
+      </button>
+      {open && panelPos && (
+        <div
+          ref={panelRef}
+          style={{
+            position: 'fixed',
+            top: panelPos.above ? panelPos.top : panelPos.top,
+            left: panelPos.left,
+            width: 280,
+            zIndex: 10000,
+            transform: panelPos.above ? 'translateY(-100%)' : 'translateY(0)',
+          }}
+          className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-left"
+        >
+          <p className="text-sm font-semibold text-gray-900 mb-1">
+            {isPartial ? 'Budget data incomplete' : 'No budget data entered'}
+          </p>
+          {isPartial ? (
+            <p className="text-xs text-gray-500 mb-3">Missing budget fields are limiting the accuracy of your Cost Justification and Commercial Potential scores.</p>
+          ) : (
+            <p className="text-xs text-gray-500 mb-3">Without budget data, Parlay cannot calculate Cost Justification or Commercial Potential scores. These two components represent 30% of the Calendar Recommendation Score — missing this data significantly reduces accuracy and lowers the maximum possible score. Current maximum possible score: <strong>70/100</strong>. With complete budget data, maximum possible score: <strong>100/100</strong>.</p>
+          )}
+          <div className="space-y-1 mb-3">
+            {status.missingFields.map(f => (
+              <div key={f} className="flex items-center gap-1.5 text-xs text-red-600">
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                {f}
+              </div>
+            ))}
+            {status.presentFields.map(f => (
+              <div key={f} className="flex items-center gap-1.5 text-xs text-green-600">
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+                </svg>
+                {f}
+              </div>
+            ))}
+          </div>
+          {isPartial ? (
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onOpenModal(); }}
+              className="text-xs text-brand-secondary hover:underline font-medium"
+            >
+              Add budget data →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onOpenModal(); }}
+              className="btn-primary text-xs w-full"
+            >
+              Add Budget Data
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProgramIntelligencePage() {
@@ -643,6 +785,8 @@ export default function ProgramIntelligencePage() {
   const [calendarRecommendationFilter, setCalendarRecommendationFilter] = useState('all');
   const [calendarTypeFilter, setCalendarTypeFilter] = useState<'all'|'historical'|'active'>('all');
   const [calendarConfidenceFilter, setCalendarConfidenceFilter] = useState<'all'|'high'|'medium'|'low'>('all');
+  const [calendarBudgetFilter, setCalendarBudgetFilter] = useState<'all'|'complete'|'partial'|'missing'|'needs_attention'>('all');
+  const [budgetModalConf, setBudgetModalConf] = useState<{ id: number; name: string } | null>(null);
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
 
@@ -829,6 +973,19 @@ export default function ProgramIntelligencePage() {
     }
     if (calendarTypeFilter !== 'all') rows = rows.filter(r => r.conferenceType === calendarTypeFilter);
     if (calendarConfidenceFilter !== 'all') rows = rows.filter(r => r.confidenceLevel === calendarConfidenceFilter);
+    if (calendarBudgetFilter !== 'all') {
+      rows = rows.filter(r => {
+        if (r.conferenceType === 'historical') return false;
+        const bud = r.diagnostics?.budget;
+        const s = evaluateBudgetCompleteness({
+          lineItems: bud?.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }> | null,
+          returnOnCost: bud?.return_on_cost,
+          requiredPipelineAmount: bud?.required_pipeline_amount,
+        });
+        if (calendarBudgetFilter === 'needs_attention') return s.status === 'partial' || s.status === 'missing';
+        return s.status === calendarBudgetFilter;
+      });
+    }
     rows.sort((a, b) => {
       if (calendarSort === 'score') return (b.calendarRecommendationScore ?? -1) - (a.calendarRecommendationScore ?? -1);
       const av = a[calendarSort as keyof CalendarConferenceRow] as unknown;
@@ -837,7 +994,7 @@ export default function ProgramIntelligencePage() {
       return String(av ?? '').localeCompare(String(bv ?? ''));
     });
     return rows;
-  }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarSort]);
+  }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarBudgetFilter, calendarSort]);
 
   // Rep Performance derived data
   const repDerivedData = useMemo(() => {
@@ -1329,12 +1486,41 @@ export default function ProgramIntelligencePage() {
               </div>
             ) : (
             <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-              <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
-              <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
-              <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
-              <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
-            </div>
+            {(() => {
+              const needsBudgetCount = calendarRows.filter(r => {
+                if (r.conferenceType === 'historical') return false;
+                const bud = r.diagnostics?.budget;
+                const s = evaluateBudgetCompleteness({
+                  lineItems: bud?.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }> | null,
+                  returnOnCost: bud?.return_on_cost,
+                  requiredPipelineAmount: bud?.required_pipeline_amount,
+                });
+                return s.status === 'partial' || s.status === 'missing';
+              }).length;
+              const budgetCardActive = calendarBudgetFilter === 'needs_attention';
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start">
+                  <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
+                  <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
+                  <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
+                  <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarBudgetFilter(budgetCardActive ? 'all' : 'needs_attention')}
+                    className={`card border-l-4 border-amber-400 py-4 text-left w-full transition-colors ${budgetCardActive ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-amber-50/50'}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Need Budget Data</p>
+                      <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 0 0 3.58 20h16.84a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.42 0z"/>
+                      </svg>
+                    </div>
+                    <p className="text-3xl font-bold text-brand-primary">{needsBudgetCount}</p>
+                    {budgetCardActive && <p className="text-[10px] text-amber-600 mt-1 font-medium">Filter active — click to clear</p>}
+                  </button>
+                </div>
+              );
+            })()}
             {calendarScoringProgress !== null && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -1356,6 +1542,7 @@ export default function ProgramIntelligencePage() {
                 <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend & Invest</option><option value="attend_maintain">Attend & Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
                 <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as any)}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
                 <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as any)}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+                <select className="input-field text-sm py-1.5" value={calendarBudgetFilter} onChange={(e) => setCalendarBudgetFilter(e.target.value as typeof calendarBudgetFilter)}><option value="all">All Budget Status</option><option value="complete">Complete</option><option value="partial">Partial</option><option value="missing">No Budget</option><option value="needs_attention">Needs Attention</option></select>
               </div>
               {calendarRowsFiltered.length === 0 ? (
                 <div className="text-center py-10">
@@ -1388,11 +1575,16 @@ export default function ProgramIntelligencePage() {
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="text-left text-gray-500">
-                          {(['conferenceName','conferenceYear','conferenceType','attendeeCount','icpCompanies','score','recommendationTier','confidenceLevel','dataAge'] as const).map((k) => (
-                            <th key={k} className={`p-2 cursor-pointer${k === 'icpCompanies' ? ' text-center' : ''}`} onClick={() => setCalendarSort(k === 'score' ? 'score' : k as any)}>
-                              {k==='conferenceName'?'Conference':k==='conferenceYear'?'Year':k==='conferenceType'?'Type':k==='attendeeCount'?'Attendees':k==='icpCompanies'?'ICP Companies':k==='score'?'Score':k==='recommendationTier'?'Recommendation':k==='confidenceLevel'?'Confidence':'Data Age'}
-                            </th>
-                          ))}
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('conferenceName')}>Conference</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('conferenceYear')}>Year</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('conferenceType')}>Type</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('attendeeCount')}>Attendees</th>
+                          <th className="p-2 text-center cursor-pointer" onClick={() => setCalendarSort('icpCompanies')}>ICP Companies</th>
+                          <th className="p-2 text-center">Budget Set?</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as any)}>Score</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
+                          <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1406,6 +1598,7 @@ export default function ProgramIntelligencePage() {
                             <td className="p-2 text-gray-600">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
                             <td className="p-2 text-gray-600">{r.attendeeCount}</td>
                             <td className="p-2 text-center"><span title={`${r.icpCompanies} ICP / ${r.totalCompanies} total`} className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-xs font-semibold border ${icpDensityPillClasses(r.icpDensityPct)}`}>{r.icpDensityPct.toFixed(0)}%</span></td>
+                            <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}><BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} /></td>
                             <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
                             <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
                             <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
@@ -2140,6 +2333,13 @@ export default function ProgramIntelligencePage() {
         </div>
       )}
 
+      {budgetModalConf && (
+        <BudgetVsActualModal
+          conferenceId={budgetModalConf.id}
+          conferenceName={budgetModalConf.name}
+          onClose={() => setBudgetModalConf(null)}
+        />
+      )}
       {selectedCalendarRow && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedCalendarRow(null)}>
           <div className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
