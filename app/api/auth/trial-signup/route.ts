@@ -5,6 +5,19 @@ import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 import { provisionAccount } from '@/lib/provision';
 
+const CORS_ORIGIN = 'https://useparlay.app';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': CORS_ORIGIN,
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Credentials': 'true',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
     await dbReady;
@@ -38,23 +51,23 @@ export async function POST(request: NextRequest) {
     const signupCurrentTool = body.signupCurrentTool?.trim() ?? '';
 
     if (!firstName || !lastName || !email || !password || !companyName) {
-      return NextResponse.json({ error: 'All fields are required.' }, { status: 400 });
+      return NextResponse.json({ error: 'All fields are required.' }, { status: 400, headers: corsHeaders });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: 'Invalid email address.' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid email address.' }, { status: 400, headers: corsHeaders });
     }
 
     const pwCheck = validatePassword(password);
     if (!pwCheck.valid) {
-      return NextResponse.json({ error: pwCheck.error }, { status: 400 });
+      return NextResponse.json({ error: pwCheck.error }, { status: 400, headers: corsHeaders });
     }
 
     // Reject if email already has an account
     const existing = await db.execute({ sql: 'SELECT id FROM accounts WHERE admin_email = ?', args: [email] });
     if (existing.rows.length > 0) {
-      return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409 });
+      return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409, headers: corsHeaders });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -124,11 +137,11 @@ export async function POST(request: NextRequest) {
       success: true,
       redirectTo,
       onboardingTrack,
-    });
+    }, { headers: corsHeaders });
     response.cookies.set({ ...authCookieOptions(), value: token });
     return response;
   } catch (err) {
     console.error('Trial signup error:', err);
-    return NextResponse.json({ error: 'Signup failed. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: 'Signup failed. Please try again.' }, { status: 500, headers: corsHeaders });
   }
 }
