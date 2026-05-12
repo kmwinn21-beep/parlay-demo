@@ -5,8 +5,8 @@ export type BudgetCompletionStatus = {
 };
 
 export interface BudgetCompletenessInput {
-  // line_items JSON array from conference_budget.line_items
-  lineItems: Array<{ budget?: string | number | null; actual?: string | number | null }> | null | undefined;
+  // line_items from conference_budget — may be a JSON string (as returned by Turso) or a parsed array
+  lineItems: Array<{ budget?: string | number | null; actual?: string | number | null }> | string | null | undefined;
   // conference_budget.return_on_cost — expected return on cost multiplier
   returnOnCost: string | number | null | undefined;
   // conference_budget.required_pipeline_amount
@@ -14,9 +14,15 @@ export interface BudgetCompletenessInput {
 }
 
 export function evaluateBudgetCompleteness(input: BudgetCompletenessInput): BudgetCompletionStatus {
-  const items = Array.isArray(input.lineItems) ? input.lineItems : [];
-  const totalBudget = items.reduce((s, i) => s + (Number(i?.budget) || 0), 0);
-  const totalActual = items.reduce((s, i) => s + (Number(i?.actual) || 0), 0);
+  // line_items arrives as a JSON string from Turso — parse it if needed
+  let rawItems: Array<{ budget?: string | number | null; actual?: string | number | null }>;
+  if (typeof input.lineItems === 'string') {
+    try { rawItems = JSON.parse(input.lineItems) || []; } catch { rawItems = []; }
+  } else {
+    rawItems = Array.isArray(input.lineItems) ? input.lineItems : [];
+  }
+  const totalBudget = rawItems.reduce((s, i) => s + (Number(i?.budget) || 0), 0);
+  const totalActual = rawItems.reduce((s, i) => s + (Number(i?.actual) || 0), 0);
   const hasBudgetSpend = totalBudget > 0 || totalActual > 0;
 
   const hasReturnOnCost = (Number(input.returnOnCost) || 0) > 0;
