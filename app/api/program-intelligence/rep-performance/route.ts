@@ -319,20 +319,98 @@ export async function GET(req: NextRequest) {
     // Replicates the core pipeline_influence CTE from the conference effectiveness route:
     //   - Per company: pipeline_value = min(convRate × multiTouchMult, 0.95) × dealValue
     //   - dealValue = wse × cost_per_unit if wse > 0, else avg_annual_deal_size
-    //   - multiTouchMult = 1.5 if interactions ≥ 3, 1.25 if interactions = 2, else 1.0
-    //   - Attributed to reps proportionally by their held-meeting count per company
-    // confIds appears once (in rep_company CTE); the rest use sub-query results.
+    // Pipeline attribution per rep per conference.
+    // Mirrors the pipeline_influence CTE in conferences/[id]/effectiveness/route.ts exactly:
+    //   - wse comes from companies.wse (global company record), not conference_companies
+    //   - total_interactions = meetings_held + touchpoints + hosted_events (same multi-touch multiplier)
+    //   - base conv rate: follow_up_rate if meetings_held > 0, touchpoint_rate if touchpoints > 0, else 0
+    //   - pipeline_value = min(base_rate × multi_touch_mult, 0.95) × deal_value
+    //   - deal_value = wse × cost_per_unit when wse > 0 AND cost_per_unit > 0, else avg_annual_deal_size
+    //   - attribution to reps: proportional by held-meeting count per company
     let repPipelineRows: Row[] = [];
     try {
       repPipelineRows = await runQuery(
         `WITH eff AS (
            SELECT
              COALESCE(MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL) END), 30) / 100.0 AS fu_rate,
-             COALESCE(MAX(CASE WHEN key='touchpoint_conversion_rate' THEN CAST(value AS REAL) END), 15) / 100.0 AS tp_rate,
-             COALESCE(MAX(CASE WHEN key='avg_cost_per_unit' THEN CAST(value AS REAL) END), 0) AS cost_per_unit,
-             COALESCE(MAX(CASE WHEN key='avg_annual_deal_size' THEN CAST(value AS REAL) END), 50000) AS deal_size
+             COALESCE(MAX(CASE WHEN key='touchpoint_conversion_rate'        THEN CAST(value AS REAL) END), 15) / 100.0 AS tp_rate,
+             COALESCE(MAX(CASE WHEN key='avg_cost_per_unit'                 THEN CAST(value AS REAL) END), 0)           AS cost_per_unit,
+             COALESCE(MAX(CASE WHEN key='avg_annual_deal_size'              THEN CAST(value AS REAL) END), 50000)        AS deal_size
            FROM effectiveness_defaults
          ),
+         -- Per-company meetings held at each conference
+         company_meetings AS (
+           SELECT m.conference_id, a.company_id,
+                  COUNT(DISTINCT CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN m.id END) AS meetings_held
+           FROM meetings m
+           JOIN attendees a ON m.attendee_id = a.id
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+           WHERE m.conference_id IN (${placeholders})
+             AND a.company_id IS NOT NULL
+           GROUP BY m.conference_id, a.company_id
+         ),
+         -- Per-company touchpoints at each conference
+         company_touchpoints AS (
+           SELECT atp.conference_id, a.company_id,
+                  COUNT(DISTINCT atp.id) AS touchpoints
+           FROM attendee_touchpoints atp
+           JOIN attendees a ON atp.attendee_id = a.id
+           WHERE atp.conference_id IN (${placeholders})
+             AND a.company_id IS NOT NULL
+           GROUP BY atp.conference_id, a.company_id
+         ),
+         -- Per-company hosted social event attendance at each conference
+         company_hosted AS (
+           SELECT se.conference_id, a.company_id,
+                  COUNT(DISTINCT rsvp.social_event_id) AS hosted_events
+           FROM social_event_rsvps rsvp
+           JOIN social_events se ON rsvp.social_event_id = se.id
+           JOIN attendees a      ON rsvp.attendee_id = a.id
+           WHERE se.conference_id IN (${placeholders})
+             AND rsvp.rsvp_status = 'attended'
+             AND se.event_type    = 'Company Hosted'
+             AND a.company_id IS NOT NULL
+           GROUP BY se.conference_id, a.company_id
+         ),
+         -- Engaged companies per conference with total interaction counts
+         company_engagement AS (
+           SELECT
+             cm.conference_id, cm.company_id,
+             COALESCE(cm.meetings_held, 0)  AS meetings_held,
+             COALESCE(ct.touchpoints, 0)    AS touchpoints,
+             COALESCE(ch.hosted_events, 0)  AS hosted_events,
+             COALESCE(cm.meetings_held, 0) + COALESCE(ct.touchpoints, 0) + COALESCE(ch.hosted_events, 0) AS total_interactions
+           FROM company_meetings cm
+           LEFT JOIN company_touchpoints ct ON ct.conference_id = cm.conference_id AND ct.company_id = cm.company_id
+           LEFT JOIN company_hosted      ch ON ch.conference_id = cm.conference_id AND ch.company_id = cm.company_id
+           WHERE cm.meetings_held > 0
+         ),
+         -- Per-company pipeline value using companies.wse (matches effectiveness route)
+         company_pi AS (
+           SELECT
+             ce.conference_id, ce.company_id,
+             MIN(
+               CASE
+                 WHEN ce.meetings_held > 0 THEN e.fu_rate
+                 WHEN ce.touchpoints   > 0 THEN e.tp_rate
+                 ELSE 0
+               END
+               * CASE
+                   WHEN ce.total_interactions >= 3 THEN 1.50
+                   WHEN ce.total_interactions  = 2 THEN 1.25
+                   ELSE 1.00
+                 END,
+               0.95
+             ) * CASE
+                   WHEN COALESCE(co.wse, 0) > 0 AND e.cost_per_unit > 0
+                     THEN co.wse * e.cost_per_unit
+                   ELSE e.deal_size
+                 END AS pipeline_value
+           FROM company_engagement ce
+           JOIN companies co ON co.id = ce.company_id
+           CROSS JOIN eff e
+         ),
+         -- Which rep held meetings at each company (for proportional attribution)
          rep_company AS (
            SELECT m.conference_id, m.scheduled_by AS rep_raw, a.company_id,
                   COUNT(CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN 1 END) AS held
@@ -346,38 +424,20 @@ export async function GET(req: NextRequest) {
            HAVING held > 0
          ),
          company_totals AS (
-           SELECT conference_id, company_id,
-                  SUM(held) AS total_held
+           SELECT conference_id, company_id, SUM(held) AS total_held
            FROM rep_company
            GROUP BY conference_id, company_id
-         ),
-         company_pi AS (
-           SELECT
-             ct.conference_id, ct.company_id,
-             MIN(
-               e.fu_rate * CASE
-                 WHEN ct.total_held >= 3 THEN 1.50
-                 WHEN ct.total_held = 2 THEN 1.25
-                 ELSE 1.00
-               END,
-               0.95
-             ) * CASE
-                   WHEN COALESCE(cc.wse, 0) > 0 AND e.cost_per_unit > 0 THEN cc.wse * e.cost_per_unit
-                   ELSE e.deal_size
-                 END AS pipeline_value
-           FROM company_totals ct
-           LEFT JOIN conference_companies cc ON cc.conference_id = ct.conference_id AND cc.company_id = ct.company_id
-           CROSS JOIN eff e
          )
          SELECT rc.conference_id, rc.rep_raw,
                 SUM(cpi.pipeline_value * rc.held * 1.0 / ct.total_held) AS attributed_pipeline
          FROM rep_company rc
-         JOIN company_totals ct ON ct.conference_id = rc.conference_id AND ct.company_id = rc.company_id
-         JOIN company_pi cpi ON cpi.conference_id = rc.conference_id AND cpi.company_id = rc.company_id
+         JOIN company_totals ct  ON ct.conference_id = rc.conference_id AND ct.company_id = rc.company_id
+         JOIN company_pi     cpi ON cpi.conference_id = rc.conference_id AND cpi.company_id = rc.company_id
          GROUP BY rc.conference_id, rc.rep_raw`,
-        confIds,
+        [...confIds, ...confIds, ...confIds, ...confIds],
       );
-    } catch {
+    } catch (err) {
+      console.error('[rep-performance] pipeline attribution query failed:', err);
       repPipelineRows = [];
     }
 
