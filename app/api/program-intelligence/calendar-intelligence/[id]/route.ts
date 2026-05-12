@@ -486,7 +486,7 @@ export async function GET(
 
   const budgetTable = await tableExists('conference_budget') ? 'conference_budget' : (await tableExists('conference_budgets') ? 'conference_budgets' : null);
   const budgetRows = budgetTable
-    ? await db.execute({ sql: `SELECT line_items, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, args: [conferenceId] }).then(r => r.rows as Row[]).catch(() => [] as Row[])
+    ? await db.execute({ sql: `SELECT line_items, return_on_cost, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, args: [conferenceId] }).then(r => r.rows as Row[]).catch(() => [] as Row[])
     : [];
   const budgetRow = budgetRows[0];
   const reqPipeline = Number(budgetRow?.required_pipeline_amount ?? 0);

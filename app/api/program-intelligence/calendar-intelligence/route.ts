@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
       : null;
 
     // --- Component 4: Cost Justification + Component 5: Commercial Potential ---
-    const budgetRows = budgetTable ? await runLoggedQuery('cost-budget', `SELECT line_items, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, [conferenceId]).catch(() => []) : [];
+    const budgetRows = budgetTable ? await runLoggedQuery('cost-budget', `SELECT line_items, return_on_cost, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, [conferenceId]).catch(() => []) : [];
     const budgetRow = budgetRows[0];
     const reqPipeline = Number(budgetRow?.required_pipeline_amount ?? 0);
     const commercialPotentialScore: number | null = projectedPipeline != null && reqPipeline > 0
