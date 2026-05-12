@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
+import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
 import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -220,7 +222,10 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function ConferencesPage() {
+function ConferencesPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const view = searchParams.get('view') ?? 'calendar';
   const now          = new Date();
   const todayStr     = buildDS(now.getFullYear(), now.getMonth(), now.getDate());
   const currentYear  = now.getFullYear();
@@ -407,8 +412,43 @@ export default function ConferencesPage() {
         </Link>
       </div>
 
+      {/* ── Tab navigation ── */}
+      {!isLoading && conferences.length > 0 && (
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex gap-6" aria-label="Conference views">
+            <button
+              type="button"
+              onClick={() => router.push('/conferences')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                view === 'calendar'
+                  ? 'border-brand-secondary text-brand-secondary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/conferences?view=by-stage')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                view === 'by-stage'
+                  ? 'border-brand-secondary text-brand-secondary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              By Stage
+            </button>
+          </nav>
+        </div>
+      )}
+
+      {/* ── By Stage view ── */}
+      {!isLoading && view === 'by-stage' && (
+        <ConferenceKanbanBoard conferences={conferences} />
+      )}
+
       {/* ── Calendar section ── */}
-      {!isLoading && conferences.length > 0 && calExpanded !== null && (
+      {!isLoading && view === 'calendar' && conferences.length > 0 && calExpanded !== null && (
         <div className="card">
           <div className="flex items-center justify-between mb-1">
             <button
@@ -479,7 +519,7 @@ export default function ConferencesPage() {
       )}
 
       {/* ── Filter pane ── */}
-      {!isLoading && conferences.length > 0 && (
+      {!isLoading && view === 'calendar' && conferences.length > 0 && (
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
             <button
@@ -581,7 +621,7 @@ export default function ConferencesPage() {
       )}
 
       {/* ── No results after filtering ── */}
-      {!isLoading && conferences.length > 0 && totalFiltered === 0 && (
+      {!isLoading && view === 'calendar' && conferences.length > 0 && totalFiltered === 0 && (
         <div className="card text-center py-10">
           <p className="text-gray-500 text-sm">No conferences in this period match the current filters.</p>
           <button onClick={clearFilters} className="mt-3 text-brand-secondary text-sm hover:underline">Clear filters</button>
@@ -589,7 +629,7 @@ export default function ConferencesPage() {
       )}
 
       {/* ── Month sections ── */}
-      {!isLoading && conferences.length > 0 && [...grouped].reverse().map(({ year, month, conferences: mc }) => {
+      {!isLoading && view === 'calendar' && conferences.length > 0 && [...grouped].reverse().map(({ year, month, conferences: mc }) => {
         const exp = isMonthExpanded(year, month);
         return (
           <div key={`${year}-${month}`}>
@@ -620,5 +660,13 @@ export default function ConferencesPage() {
         );
       })}
     </div>
+  );
+}
+
+export default function ConferencesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConferencesPageContent />
+    </Suspense>
   );
 }
