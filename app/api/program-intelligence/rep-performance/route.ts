@@ -319,6 +319,65 @@ export async function GET(req: NextRequest) {
       ).catch(() => [] as Row[]),
     ]);
 
+    // l. Pipeline attribution per rep per conference — company-level, proportional share
+    // Each engaged company contributes pipeline_value = fuRate × dealSize.
+    // That value is split among reps proportionally by their held-meeting count with that company.
+    let repPipelineRows: Row[] = [];
+    try {
+      repPipelineRows = await runQuery(
+        `SELECT rc.conference_id, rc.rep_raw,
+                SUM(
+                  rc.held * 1.0 / NULLIF(tot.total_held, 0)
+                  * ed.fu_rate * ed.deal_size
+                ) AS attributed_pipeline
+         FROM (
+           SELECT m.conference_id, m.scheduled_by AS rep_raw, a.company_id,
+                  COUNT(CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN 1 END) AS held
+           FROM meetings m
+           JOIN attendees a ON m.attendee_id = a.id
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+           WHERE m.conference_id IN (${placeholders})
+             AND m.scheduled_by IS NOT NULL AND m.scheduled_by != ''
+             AND a.company_id IS NOT NULL
+           GROUP BY m.conference_id, m.scheduled_by, a.company_id
+           HAVING held > 0
+         ) rc
+         JOIN (
+           SELECT m2.conference_id, a2.company_id,
+                  COUNT(CASE WHEN LOWER(COALESCE(cop2.action_key,''))='meeting_held' THEN 1 END) AS total_held
+           FROM meetings m2
+           JOIN attendees a2 ON m2.attendee_id = a2.id
+           LEFT JOIN config_options cop2 ON cop2.category='action' AND LOWER(m2.outcome)=LOWER(cop2.value)
+           WHERE m2.conference_id IN (${placeholders})
+             AND a2.company_id IS NOT NULL
+           GROUP BY m2.conference_id, a2.company_id
+         ) tot ON tot.conference_id = rc.conference_id AND tot.company_id = rc.company_id
+         CROSS JOIN (
+           SELECT
+             COALESCE(MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL) END), 30) / 100.0 AS fu_rate,
+             COALESCE(MAX(CASE WHEN key='avg_annual_deal_size' THEN CAST(value AS REAL) END), 50000) AS deal_size
+           FROM effectiveness_defaults
+         ) ed
+         GROUP BY rc.conference_id, rc.rep_raw`,
+        [...confIds, ...confIds],
+      );
+    } catch {
+      repPipelineRows = [];
+    }
+
+    // Build rep pipeline map: repId → confId → attributed pipeline dollars
+    const repPipelineMap = new Map<string, Map<number, number>>();
+    for (const r of repPipelineRows) {
+      const reps = resolveRepIds(r.rep_raw);
+      if (!reps.length) continue;
+      const confId = Number(r.conference_id);
+      const dollars = Number(r.attributed_pipeline ?? 0);
+      for (const repId of reps) {
+        if (!repPipelineMap.has(repId)) repPipelineMap.set(repId, new Map());
+        repPipelineMap.get(repId)!.set(confId, (repPipelineMap.get(repId)!.get(confId) ?? 0) + dollars / reps.length);
+      }
+    }
+
     // Build lookup maps
     const targetTotalMap = new Map<number, number>();
     for (const r of targetTotalRows) targetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
@@ -552,11 +611,13 @@ export async function GET(req: NextRequest) {
         const totalCompanies = confTotalsMap.get(confId)?.totalCompanies ?? 0;
         const ces = computeRepCES(d, totalCompanies);
         const costData = costEffScoreMap.get(repId)?.get(confId);
+        // Use actual attributed pipeline dollars (company-level proportional query)
+        const attributedPipeline = repPipelineMap.get(repId)?.get(confId) ?? 0;
         conferences[confId] = {
           sesScore: ses.sesScore,
           cesScore: ces.score,
           costEffScore: costData?.score ?? null,
-          approxPipeline: ses.approxPipeline,
+          approxPipeline: attributedPipeline,
           pipelineGoalShare: confPipelineDenominator ?? 0,
           components: ses.components,
           ces_components: ces.components,
