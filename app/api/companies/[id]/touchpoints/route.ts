@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 interface TouchpointRow {
   attendee_id: number;
@@ -23,12 +23,12 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const companyId = parseInt(id, 10);
   if (isNaN(companyId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const rows = await db.execute({
     sql: `SELECT at.attendee_id, a.first_name, a.last_name,

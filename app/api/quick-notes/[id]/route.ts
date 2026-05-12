@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const result = await db.execute({
       sql: 'DELETE FROM quick_notes WHERE id = ? AND created_by = ?',
       args: [Number(params.id), user.email],
@@ -27,8 +27,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const { content } = await request.json() as { content: string };
     if (!content?.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
     const result = await db.execute({
@@ -55,8 +55,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const { conference_id, company_id, attendee_id, conference_name, company_name, attendee_name } = await request.json() as {
       conference_id?: number | null;
       company_id?: number | null;

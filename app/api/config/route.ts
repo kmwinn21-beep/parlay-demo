@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { requireAuth, requireAdmin } from '@/lib/auth';
 import { getCategoryFormKeys } from '@/lib/configOptionForms';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const form = searchParams.get('form');
@@ -106,8 +106,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { category, value, sort_order, color } = body;
 
@@ -136,8 +136,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { items } = body as { items: { id: number; sort_order: number }[] };
 

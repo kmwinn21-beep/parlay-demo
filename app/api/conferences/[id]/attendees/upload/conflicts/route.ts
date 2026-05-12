@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady, getConfigOptionValues } from '@/lib/db';
+import { getConfigOptionValues } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { parseFile, parseFileWithMapping, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { SYSTEM_FIELD_LABELS } from '@/lib/columnMapping';
 import {
@@ -27,9 +28,9 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
-    await dbReady;
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
     access_type: 'offline',
     prompt: 'consent',
-    state: String(user.id),
+    state: `${user.id}:${user.accountId ?? ''}`,
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);

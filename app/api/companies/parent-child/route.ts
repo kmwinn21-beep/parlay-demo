@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const body = await request.json();
     const { parent_id, child_ids } = body as { parent_id: number; child_ids: number[] };
 

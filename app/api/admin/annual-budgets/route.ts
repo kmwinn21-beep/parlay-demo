@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
-import { requireAdmin } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import { requireAdmin, getSessionUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const result = await db.execute({
       sql: 'SELECT id, year, amount FROM annual_budgets ORDER BY year DESC',
       args: [],
@@ -21,8 +22,8 @@ export async function GET(_request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { year, amount } = body as { year: number; amount: number };
     if (!year || year < 1000 || year > 9999) {

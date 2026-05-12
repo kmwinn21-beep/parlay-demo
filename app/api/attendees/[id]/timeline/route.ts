@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
 
@@ -10,6 +10,7 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const attendeeId = parseInt(id, 10);
@@ -17,7 +18,6 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
   }
 
-  await dbReady;
 
   const [attRow, actionOptsRes] = await Promise.all([
     db.execute({

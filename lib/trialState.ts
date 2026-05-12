@@ -1,3 +1,4 @@
+import { type Client } from '@libsql/client';
 import { db, dbReady } from '@/lib/db';
 import { PLAN_CAPABILITIES, type PlanCapabilities, type PlanId } from '@/lib/capabilities';
 
@@ -10,9 +11,10 @@ export interface PlanState {
   planCapabilities: PlanCapabilities;
 }
 
-export async function resolvePlanState(): Promise<PlanState> {
+export async function resolvePlanState(client?: Client): Promise<PlanState> {
   await dbReady;
-  const rows = await db.execute({
+  const c = client ?? db;
+  const rows = await c.execute({
     sql: `SELECT key, value FROM site_settings WHERE key IN ('plan_id','trial_expires_at','grace_period_ends_at','plan_capabilities','activated_plan_at')`,
     args: [],
   });

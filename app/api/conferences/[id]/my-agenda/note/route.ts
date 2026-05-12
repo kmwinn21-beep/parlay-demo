@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 /**
  * PUT — save or update the note for a my-agenda item.
@@ -21,9 +21,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   try {
-    await dbReady;
     const conferenceId = Number(params.id);
     const body = await request.json() as {
       item_id?: number | null;

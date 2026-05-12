@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const formRow = await db.execute({
       sql: 'SELECT conference_id FROM conference_forms WHERE id = ?',
       args: [params.id],
@@ -49,8 +49,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     await db.execute({ sql: `DELETE FROM conference_forms WHERE id = ?`, args: [params.id] });
     return NextResponse.json({ success: true });
   } catch (error) {

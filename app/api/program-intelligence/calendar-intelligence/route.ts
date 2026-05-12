@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
-import type { InValue } from '@libsql/client';
+import { getDb } from '@/lib/getDb';
+import type { InValue, Client } from '@libsql/client';
 import { assembleFinalScore } from '@/lib/scoring/calendar-intelligence';
 import type { ComponentScores } from '@/lib/scoring/calendar-intelligence';
 
@@ -13,7 +13,7 @@ const ACTIVE_CONFERENCE_TYPE = 0;
 
 type Row = Record<string, unknown>;
 
-async function tableExists(name: string): Promise<boolean> {
+async function tableExists(db: Client, name: string): Promise<boolean> {
   try {
     const res = await db.execute({ sql: `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, args: [name] });
     return (res.rows as Row[]).length > 0;
@@ -22,7 +22,7 @@ async function tableExists(name: string): Promise<boolean> {
   }
 }
 
-async function runLoggedQuery(label: string, sql: string, args: InValue[] = []): Promise<Row[]> {
+async function runLoggedQuery(db: Client, label: string, sql: string, args: InValue[] = []): Promise<Row[]> {
   const result = await db.execute({ sql, args });
   const rows = result.rows as Row[];
   console.info(`[calendar-intelligence] ${label} rows`, rows.length);
@@ -60,7 +60,7 @@ function determineRecommendationTier(
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
 
   const [settingsRes, actionsRes, res] = await Promise.all([
     db.execute({ sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_conversion','tier_high_priority_conversion','tier_worth_engaging_conversion')`, args: [] }),
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
   const avgCostRows = await db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] as Row[] }));
   const avgCostPerUnit = Number((avgCostRows as { rows: Row[] }).rows[0]?.value ?? 0) || 0;
 
-  const budgetTable = await tableExists('conference_budget') ? 'conference_budget' : (await tableExists('conference_budgets') ? 'conference_budgets' : null);
+  const budgetTable = await tableExists(db, 'conference_budget') ? 'conference_budget' : (await tableExists(db, 'conference_budgets') ? 'conference_budgets' : null);
 
   const conferences = await Promise.all((res.rows as Row[]).map(async (r) => {
     const totalCompanies = Number(r.total_companies ?? 0);
@@ -123,8 +123,8 @@ export async function GET(request: NextRequest) {
     const targetOpportunityScore: number | null = null;
 
     // --- Component 3: Engagement Capture ---
-    const meetingsRows = await runLoggedQuery('engagement-meetings', `SELECT COUNT(*) AS total_meetings FROM meetings WHERE conference_id = ?`, [conferenceId]).catch(() => []);
-    const followUpRows = await runLoggedQuery('engagement-followups', `SELECT COUNT(*) AS total_followups, SUM(CASE WHEN COALESCE(completed,0)=1 THEN 1 ELSE 0 END) AS completed_followups FROM follow_ups WHERE conference_id = ?`, [conferenceId]).catch(() => []);
+    const meetingsRows = await runLoggedQuery(db, 'engagement-meetings', `SELECT COUNT(*) AS total_meetings FROM meetings WHERE conference_id = ?`, [conferenceId]).catch(() => []);
+    const followUpRows = await runLoggedQuery(db, 'engagement-followups', `SELECT COUNT(*) AS total_followups, SUM(CASE WHEN COALESCE(completed,0)=1 THEN 1 ELSE 0 END) AS completed_followups FROM follow_ups WHERE conference_id = ?`, [conferenceId]).catch(() => []);
     const emRow = meetingsRows[0];
     const efRow = followUpRows[0];
     const totalMeetings = Number(emRow?.total_meetings ?? 0);
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     // --- Commercial Potential: projected pipeline via target WSE * avg_cost_per_unit ---
     const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
     const companyBestTier = new Map<number, { tier: string; wse: number }>();
-    const commercialByCompany = await runLoggedQuery('commercial-by-company', `
+    const commercialByCompany = await runLoggedQuery(db, 'commercial-by-company', `
       SELECT ct.tier, a.company_id, MAX(CAST(c.wse AS REAL)) AS wse
       FROM conference_targets ct
       JOIN attendees a ON a.id = ct.attendee_id
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
       : null;
 
     // --- Component 4: Cost Justification + Component 5: Commercial Potential ---
-    const budgetRows = budgetTable ? await runLoggedQuery('cost-budget', `SELECT line_items, return_on_cost, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, [conferenceId]).catch(() => []) : [];
+    const budgetRows = budgetTable ? await runLoggedQuery(db, 'cost-budget', `SELECT line_items, return_on_cost, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, [conferenceId]).catch(() => []) : [];
     const budgetRow = budgetRows[0];
     const reqPipeline = Number(budgetRow?.required_pipeline_amount ?? 0);
     const commercialPotentialScore: number | null = projectedPipeline != null && reqPipeline > 0

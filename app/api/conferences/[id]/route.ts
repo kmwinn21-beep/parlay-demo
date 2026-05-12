@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
 export async function GET(
@@ -9,8 +9,8 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const confResult = await db.execute({
       sql: `SELECT c.*, co.value AS conference_strategy_type_display_name, co.action_key AS conference_strategy_type_key
             FROM conferences c
@@ -70,8 +70,8 @@ export async function PUT(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id } = body;
 
@@ -124,8 +124,8 @@ export async function DELETE(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const existingResult = await db.execute({
       sql: 'SELECT id FROM conferences WHERE id = ?',
       args: [params.id],

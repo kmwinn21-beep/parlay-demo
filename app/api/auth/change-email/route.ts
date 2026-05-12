@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmailChangeVerification, sendEmailChangeNotification } from '@/lib/email';
 
@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const db = await getDb(user?.accountId);
 
     const { newEmail: rawNew, currentPassword } = await request.json();
     if (!rawNew || !currentPassword) {
@@ -28,7 +29,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'New email must differ from current email.' }, { status: 400 });
     }
 
-    await dbReady;
 
     const userRow = await db.execute({
       sql: 'SELECT password_hash FROM users WHERE id = ?',

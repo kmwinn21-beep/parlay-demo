@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { reweight } from '@/lib/effectiveness/salesExecution';
 
 export const dynamic = 'force-dynamic';
@@ -214,9 +214,9 @@ function computeScores(r: RawRow, ed: EffDefs) {
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
-    await dbReady;
 
     const { searchParams } = request.nextUrl;
     const startDate = searchParams.get('startDate') ?? `${new Date().getFullYear()}-01-01`;

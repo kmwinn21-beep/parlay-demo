@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 
 // POST /api/cleanup - Remove orphaned attendees and companies not linked to any conference
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
 
     // Find attendees not linked to any conference
     const orphanedAttendeesResult = await db.execute({

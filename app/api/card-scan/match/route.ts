@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
     const { first_name, last_name, company, email } = await request.json() as {
       first_name?: string; last_name?: string; company?: string; email?: string;
     };
 
-    await dbReady;
 
     const attendeeMatches: {
       id: number; first_name: string; last_name: string;

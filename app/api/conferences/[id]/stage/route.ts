@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { computeConferenceStage } from '@/lib/conference-stage';
 import type { ConferenceStage } from '@/lib/conference-stage';
 
@@ -14,13 +14,13 @@ export async function PATCH(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   if (user.role !== 'administrator') {
     return NextResponse.json({ error: 'Administrator access required.' }, { status: 403 });
   }
 
   try {
-    await dbReady;
     const conferenceId = Number(params.id);
     const body = await request.json() as {
       action: string;

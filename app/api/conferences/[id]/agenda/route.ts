@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 90;
@@ -117,9 +117,9 @@ interface ParsedAgenda {
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
-    await dbReady;
     const conferenceId = Number(params.id);
     const result = await db.execute({
       sql: `SELECT id, day_label, start_time, end_time, session_type, title, description, location
@@ -155,13 +155,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'Scan service not configured' }, { status: 503 });
   }
 
   try {
-    await dbReady;
     const conferenceId = Number(params.id);
     const { image_base64, media_type, append, url } = await request.json() as {
       image_base64?: string;
@@ -360,9 +360,9 @@ Rules:
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   try {
-    await dbReady;
     await db.execute({
       sql: 'DELETE FROM conference_agenda_items WHERE conference_id = ?',
       args: [Number(params.id)],

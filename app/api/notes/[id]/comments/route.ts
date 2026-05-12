@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, notifyNoteComment } from '@/lib/notifications';
 
 export async function GET(
@@ -10,9 +10,9 @@ export async function GET(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   try {
-    await dbReady;
     const noteId = Number(params.id);
 
     const [noteRes, commentsRes, noteReactionsRes] = await Promise.all([
@@ -97,9 +97,9 @@ export async function POST(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   try {
-    await dbReady;
     const noteId = Number(params.id);
     const { content, tagged_users } = await request.json() as { content?: string; tagged_users?: string };
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 
 /**
  * POST /api/companies/relationships
@@ -8,7 +9,8 @@ import { db, dbReady } from '@/lib/db';
  */
 export async function POST(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const { company_id_1, company_id_2 } = await request.json();
 
     if (!company_id_1 || !company_id_2) {
@@ -42,7 +44,8 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const { company_id_1, company_id_2 } = await request.json();
 
     if (!company_id_1 || !company_id_2) {

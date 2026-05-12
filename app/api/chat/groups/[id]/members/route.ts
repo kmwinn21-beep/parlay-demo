@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
 
   const groupId = parseInt(params.id, 10);
   if (isNaN(groupId)) return NextResponse.json({ error: 'Invalid group id' }, { status: 400 });
 
-  await dbReady;
 
   const membership = await db.execute({
     sql: `SELECT 1 FROM group_conversation_members WHERE group_id = ? AND user_id = ?`,

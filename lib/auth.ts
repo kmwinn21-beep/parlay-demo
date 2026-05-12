@@ -81,22 +81,26 @@ export interface SessionUser {
   email: string;
   role: UserRole;
   emailVerified: boolean;
+  accountId?: string;
 }
 
 interface AuthJWTPayload extends JWTPayload {
   email: string;
   role: UserRole;
   emailVerified: boolean;
+  accountId?: string;
 }
 
 // ─── Token signing/verification ──────────────────────────────────────────────
 
 export async function signToken(user: SessionUser): Promise<string> {
-  return new SignJWT({
+  const claims: Record<string, unknown> = {
     email: user.email,
     role: user.role,
     emailVerified: user.emailVerified,
-  })
+  };
+  if (user.accountId) claims.accountId = user.accountId;
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(String(user.id))
     .setIssuedAt()
@@ -113,6 +117,7 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
       email: payload.email,
       role: payload.role,
       emailVerified: Boolean(payload.emailVerified),
+      accountId: payload.accountId ?? undefined,
     };
   } catch {
     return null;
@@ -140,6 +145,7 @@ export async function getServerSessionUser(): Promise<SessionUser | null> {
 // ─── Cookie config ────────────────────────────────────────────────────────────
 
 export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
+  const rootDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN; // e.g. ".useparlay.app"
   return {
     name: COOKIE_NAME,
     httpOnly: true,
@@ -147,6 +153,7 @@ export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
     sameSite: 'lax' as const,
     path: '/',
     maxAge,
+    ...(rootDomain ? { domain: rootDomain } : {}),
   };
 }
 

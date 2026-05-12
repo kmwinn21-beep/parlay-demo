@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 
+// Setup uses the master DB directly — it runs before any tenant is provisioned.
 async function hasUsers(): Promise<boolean> {
   const result = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM users', args: [] });
   return Number(result.rows[0].cnt) > 0;

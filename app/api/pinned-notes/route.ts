@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, notifyCompanyAssignees, notifyForAttendee } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const entityType = searchParams.get('entity_type');
     const entityId = searchParams.get('entity_id');
@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { note_id, entity_type, entity_id, pinned_by, conference_name, attendee_name, attendee_id } = await request.json();
 
     if (!note_id || !entity_type || !entity_id || !pinned_by) {
@@ -136,8 +136,8 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { id } = await request.json();
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });

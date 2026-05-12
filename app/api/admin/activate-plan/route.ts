@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { enforceBundleDependencies, type PlanCapabilities, type PlanId } from '@/lib/capabilities';
 
 const VALID_PLAN_IDS: PlanId[] = ['essentials', 'professional', 'enterprise', 'custom'];
@@ -8,6 +8,7 @@ const VALID_PLAN_IDS: PlanId[] = ['essentials', 'professional', 'enterprise', 'c
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   let body: { planId?: string; planCapabilities?: PlanCapabilities };
   try {

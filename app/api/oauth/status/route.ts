@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest) {
   const user = await requireAuth(request);
   if (user instanceof NextResponse) return user;
 
-  await dbReady;
+  const db = await getDb(user.accountId);
   const rows = await db.execute({
     sql: 'SELECT provider, provider_email FROM oauth_connections WHERE user_id = ?',
     args: [user.id],

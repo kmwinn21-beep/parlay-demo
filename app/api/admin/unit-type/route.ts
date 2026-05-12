@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
-import { requireAdmin } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import { requireAdmin, getSessionUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 const DEFAULT_VALUE = 'Units';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const result = await db.execute({
       sql: "SELECT value FROM config_options WHERE category = 'unit_type' ORDER BY id LIMIT 1",
       args: [],
@@ -24,8 +25,8 @@ export async function GET(_request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { value } = body as { value: string };
     if (!value?.trim()) {

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey, type TitleMatchConfidence } from '@/lib/titleNormalization';
 import { applyRuleToExactTitle, ensureTitleNormalizationSchema, getRuleForTitle, resolveAttendeeTitleMetadata, upsertTitleNormalizationRule } from '@/lib/titleNormalizationRules';
+import type { Client } from '@libsql/client';
 
 function isBuyerRole(value: unknown): value is BuyerRoleKey {
   return BUYER_ROLE_OPTIONS.some(option => option.key === value);
@@ -12,7 +13,7 @@ function isConfidence(value: unknown): value is TitleMatchConfidence {
   return value === 'high' || value === 'medium' || value === 'low';
 }
 
-async function configOptionExists(id: number, category: string): Promise<boolean> {
+async function configOptionExists(db: Client, id: number, category: string): Promise<boolean> {
   const result = await db.execute({ sql: 'SELECT id FROM config_options WHERE id = ? AND category = ? LIMIT 1', args: [id, category] });
   return result.rows.length > 0;
 }
@@ -20,8 +21,8 @@ async function configOptionExists(id: number, category: string): Promise<boolean
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     await ensureTitleNormalizationSchema();
     const { searchParams } = new URL(request.url);
     const rawTitle = searchParams.get('raw_title');
@@ -49,8 +50,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const rawTitle = typeof body.raw_title === 'string' ? body.raw_title.trim() : '';
     const normalizedTitle = typeof body.normalized_title === 'string' ? body.normalized_title.trim() : '';
@@ -61,8 +62,8 @@ export async function POST(request: NextRequest) {
     const organizationId = body.organization_id == null || body.organization_id === '' ? null : Number(body.organization_id);
 
     if (!rawTitle || !normalizedTitle) return NextResponse.json({ error: 'raw_title and normalized_title are required' }, { status: 400 });
-    if (!Number.isFinite(functionId) || !(await configOptionExists(functionId, 'function'))) return NextResponse.json({ error: 'function_id must reference a function config option' }, { status: 400 });
-    if (!Number.isFinite(seniorityId) || !(await configOptionExists(seniorityId, 'seniority'))) return NextResponse.json({ error: 'seniority_id must reference a seniority config option' }, { status: 400 });
+    if (!Number.isFinite(functionId) || !(await configOptionExists(db, functionId, 'function'))) return NextResponse.json({ error: 'function_id must reference a function config option' }, { status: 400 });
+    if (!Number.isFinite(seniorityId) || !(await configOptionExists(db, seniorityId, 'seniority'))) return NextResponse.json({ error: 'seniority_id must reference a seniority config option' }, { status: 400 });
     if (!isBuyerRole(buyerRole)) return NextResponse.json({ error: 'buyer_role must be decision_maker, influencer, target_title, or ignore' }, { status: 400 });
     if (organizationId != null && !Number.isFinite(organizationId)) return NextResponse.json({ error: 'organization_id must be numeric when provided' }, { status: 400 });
 

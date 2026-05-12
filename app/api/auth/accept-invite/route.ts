@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db, dbReady } from '@/lib/db';
+import { findDbByToken } from '@/lib/getDb';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token');
   if (!token) return NextResponse.json({ error: 'Missing token.' }, { status: 400 });
 
-  await dbReady;
-  const result = await db.execute({
-    sql: 'SELECT id, email, first_name, invite_expires FROM users WHERE invite_token = ?',
-    args: [token],
-  });
-
-  if (result.rows.length === 0) {
+  const found = await findDbByToken('invite_token', token, 'id, email, first_name, invite_expires');
+  if (!found) {
     return NextResponse.json({ error: 'Invalid or already used invitation link.' }, { status: 404 });
   }
 
-  const user = result.rows[0];
+  const user = found.row;
   const expires = Number(user.invite_expires);
   if (expires && Date.now() > expires) {
     return NextResponse.json({ error: 'This invitation has expired. Ask an administrator to resend it.' }, { status: 410 });
@@ -41,17 +36,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: passwordCheck.error }, { status: 400 });
   }
 
-  await dbReady;
-  const result = await db.execute({
-    sql: 'SELECT id, email, role, first_name, last_name, config_id, invite_expires FROM users WHERE invite_token = ?',
-    args: [token],
-  });
+  const found = await findDbByToken(
+    'invite_token',
+    token,
+    'id, email, role, first_name, last_name, config_id, invite_expires'
+  );
 
-  if (result.rows.length === 0) {
+  if (!found) {
     return NextResponse.json({ error: 'Invalid or already used invitation link.' }, { status: 404 });
   }
 
-  const user = result.rows[0];
+  const { client: userDb, row: user } = found;
   const expires = Number(user.invite_expires);
   if (expires && Date.now() > expires) {
     return NextResponse.json({ error: 'This invitation has expired. Ask an administrator to resend it.' }, { status: 410 });
@@ -59,7 +54,7 @@ export async function POST(request: NextRequest) {
 
   const password_hash = await bcrypt.hash(password, 12);
 
-  await db.execute({
+  await userDb.execute({
     sql: `UPDATE users
           SET password_hash = ?, email_verified = 1, invite_token = NULL, invite_expires = NULL, active = 1
           WHERE id = ?`,
@@ -72,12 +67,12 @@ export async function POST(request: NextRequest) {
   if (user.config_id == null) {
     const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
     if (displayName) {
-      const coRes = await db.execute({
+      const coRes = await userDb.execute({
         sql: `SELECT id FROM config_options WHERE category = 'user' AND LOWER(value) = LOWER(?) LIMIT 1`,
         args: [displayName],
       });
       if (coRes.rows.length) {
-        await db.execute({
+        await userDb.execute({
           sql: 'UPDATE users SET config_id = ? WHERE id = ?',
           args: [Number(coRes.rows[0].id), Number(user.id)],
         });

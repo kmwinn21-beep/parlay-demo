@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { requireAuth } from '@/lib/auth';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get('company_id');
     const attendeeId = searchParams.get('attendee_id');
@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { company_id, rep_ids, contact_ids, relationship_status, description } = body;
 
@@ -133,8 +133,8 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) {

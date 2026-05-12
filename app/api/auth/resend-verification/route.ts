@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { sendVerificationEmail } from '@/lib/email';
 
@@ -9,12 +9,12 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const db = await getDb(user?.accountId);
 
     if (user.emailVerified) {
       return NextResponse.json({ error: 'Email is already verified.' }, { status: 400 });
     }
 
-    await dbReady;
 
     const newToken = crypto.randomUUID();
     await db.execute({

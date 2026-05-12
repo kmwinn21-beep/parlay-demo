@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady, getConfigOptionValues } from '@/lib/db';
+import { getConfigOptionValues } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import type { Client } from '@libsql/client';
 import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, classifyFunction, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
@@ -12,6 +14,7 @@ import {
 } from '@/lib/matching';
 
 async function batchInsert<T>(
+  dbClient: Client,
   items: T[],
   toStatement: (item: T) => { sql: string; args: (string | number | null)[] },
   chunkSize = 100
@@ -20,7 +23,7 @@ async function batchInsert<T>(
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize);
     const stmts = chunk.map(toStatement);
-    const results = await db.batch(stmts, 'write');
+    const results = await dbClient.batch(stmts, 'write');
     allResults.push(
       ...results.map((r) => ({ rows: r.rows as Record<string, unknown>[] }))
     );
@@ -34,10 +37,10 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   const currentUser = authResult;
 
   try {
-    await dbReady;
 
     // Check permission: non-admins can only upload if site_settings allows it
     if (currentUser.role !== 'administrator') {
@@ -413,7 +416,7 @@ export async function POST(
 
     // Apply redirected WSE values to parent companies
     if (parentWseUpdates.size > 0) {
-      await batchInsert(Array.from(parentWseUpdates.entries()), ([parentId, wseVal]) => ({
+      await batchInsert(db, Array.from(parentWseUpdates.entries()), ([parentId, wseVal]) => ({
         sql: 'UPDATE companies SET wse = COALESCE(?, wse) WHERE id = ?',
         args: [wseVal, parentId],
       }));
@@ -501,7 +504,7 @@ export async function POST(
     // Batch-insert new companies (with auto-detected company type, website, assigned_user, wse, and services)
     const newCoNames = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
     if (newCoNames.length > 0) {
-      const results = await batchInsert(newCoNames, (n) => {
+      const results = await batchInsert(db, newCoNames, (n) => {
         const entry = companyEntries.get(n)!;
         const detectedType = entry.company_type || classifyCompanyType(n, companyTypeOptions);
         const website = entry.website || null;
@@ -580,7 +583,7 @@ export async function POST(
         icpUpdates.push({ id: companyId, icp });
       }
       if (icpUpdates.length > 0) {
-        await batchInsert(icpUpdates, (u) => ({
+        await batchInsert(db, icpUpdates, (u) => ({
           sql: 'UPDATE companies SET icp = ? WHERE id = ?',
           args: [u.icp, u.id],
         }));
@@ -767,7 +770,7 @@ export async function POST(
 
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
-      const results = await batchInsert(newAttendees, (a) => ({
+      const results = await batchInsert(db, newAttendees, (a) => ({
         sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
         args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null],
       }));
@@ -787,7 +790,7 @@ export async function POST(
     const attendeeIdsToLink = Array.from(linkedIdSet);
 
     // Batch-insert conference_attendees
-    await batchInsert(attendeeIdsToLink, (aid) => ({
+    await batchInsert(db, attendeeIdsToLink, (aid) => ({
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [conferenceId, aid],
     }));

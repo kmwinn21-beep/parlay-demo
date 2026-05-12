@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
 // GET /api/attendees/[id]/touchpoints?conference_id=X
@@ -12,6 +12,7 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const attendeeId = parseInt(id, 10);
@@ -20,7 +21,6 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const conferenceIdParam = searchParams.get('conference_id');
 
-  await dbReady;
 
   // Single-conference mode
   if (conferenceIdParam) {
@@ -88,12 +88,12 @@ export async function POST(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const attendeeId = parseInt(id, 10);
   if (isNaN(attendeeId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const body = await request.json();
   const { conference_id, option_id } = body as { conference_id: number; option_id: number };
@@ -141,12 +141,12 @@ export async function DELETE(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const attendeeId = parseInt(id, 10);
   if (isNaN(attendeeId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  await dbReady;
 
   const body = await request.json();
   const { conference_id, option_id } = body as { conference_id: number; option_id: number };

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
-import type { InValue } from '@libsql/client';
+import { getDb } from '@/lib/getDb';
+import type { InValue, Client } from '@libsql/client';
 import { assembleFinalScore } from '@/lib/scoring/calendar-intelligence';
 import type { ComponentScores } from '@/lib/scoring/calendar-intelligence';
 import { getIcpConfig } from '@/lib/icpRules';
@@ -61,7 +61,7 @@ function rowDateIsRecent(raw: unknown): boolean {
   return Date.now() - t <= 1000 * 60 * 60 * 24 * 180;
 }
 
-async function tableExists(name: string): Promise<boolean> {
+async function tableExists(db: Client, name: string): Promise<boolean> {
   try {
     const res = await db.execute({ sql: `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, args: [name] });
     return (res.rows as Row[]).length > 0;
@@ -94,6 +94,7 @@ export interface TargetingAggregation {
 const ACTIONABLE_KEYS = new Set(['book_meeting', 'route_to_account_owner', 'invite_to_hosted_event', 'rep_floor_outreach']);
 
 async function runTargetingForConference(
+  db: Client,
   conferenceId: number,
   config: TargetingScoringConfig,
   prospectTypeIdValue: string | null,
@@ -313,7 +314,7 @@ export async function GET(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
-  await dbReady;
+  const db = await getDb(authResult?.accountId);
 
   const { id } = await params;
   const conferenceId = Number(id);
@@ -436,6 +437,7 @@ export async function GET(
 
   // --- Component 2: Target Opportunity (via targeting engine) ---
   const targetingAgg = await runTargetingForConference(
+    db,
     conferenceId,
     targetingConfig,
     prospectTypeIdValue,
@@ -484,7 +486,7 @@ export async function GET(
     ? Math.round((mustWse * mustConv + highWse * highConv + worthWse * worthConv) * avgCostPerUnit)
     : null;
 
-  const budgetTable = await tableExists('conference_budget') ? 'conference_budget' : (await tableExists('conference_budgets') ? 'conference_budgets' : null);
+  const budgetTable = await tableExists(db, 'conference_budget') ? 'conference_budget' : (await tableExists(db, 'conference_budgets') ? 'conference_budgets' : null);
   const budgetRows = budgetTable
     ? await db.execute({ sql: `SELECT line_items, return_on_cost, required_pipeline_amount, required_pipeline_multiple FROM ${budgetTable} WHERE conference_id = ? LIMIT 1`, args: [conferenceId] }).then(r => r.rows as Row[]).catch(() => [] as Row[])
     : [];

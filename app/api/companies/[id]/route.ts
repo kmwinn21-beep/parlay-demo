@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
+import type { Client } from '@libsql/client';
 
 function parseStatusValues(status: unknown): string[] {
   if (status == null) return [];
@@ -14,7 +15,7 @@ function parseStatusValues(status: unknown): string[] {
 /** Sync user-scoped status marks for a company after a PATCH.
  *  For each user-scoped option, inserts or deletes from company_user_statuses
  *  based on whether that option's value appears in statusPayload. */
-async function syncUserScopedStatuses(opts: {
+async function syncUserScopedStatuses(db: Client, opts: {
   companyId: string;
   actorEmail: string;
   statusPayload: unknown;
@@ -79,8 +80,8 @@ export async function GET(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const companyResult = await db.execute({
       sql: 'SELECT * FROM companies WHERE id = ?',
       args: [params.id],
@@ -248,8 +249,8 @@ export async function PUT(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp } = body;
 
@@ -319,8 +320,8 @@ export async function PATCH(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const existingResult = await db.execute({
       sql: 'SELECT id FROM companies WHERE id = ?',
@@ -389,7 +390,7 @@ export async function PATCH(
       });
 
       // Sync user-scoped status marks using the original body.status as signal
-      await syncUserScopedStatuses({
+      await syncUserScopedStatuses(db, {
         companyId: params.id,
         actorEmail: user.email,
         statusPayload: body.status,
@@ -426,8 +427,8 @@ export async function DELETE(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
 
     const existingResult = await db.execute({
       sql: 'SELECT id FROM companies WHERE id = ?',

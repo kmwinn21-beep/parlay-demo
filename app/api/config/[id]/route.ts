@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { requireAdmin } from '@/lib/auth';
 import { getCategoryFormKeys } from '@/lib/configOptionForms';
 
@@ -9,8 +9,8 @@ export async function PUT(
 ) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { value, sort_order, color, visible_forms, scope, auto_follow_up } = body as {
       value: string;
@@ -193,8 +193,8 @@ export async function DELETE(
 ) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const check = await db.execute({
       sql: 'SELECT is_system, category, value FROM config_options WHERE id = ?',
       args: [params.id],
@@ -282,8 +282,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authResult = await requireAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const { color } = body;
 

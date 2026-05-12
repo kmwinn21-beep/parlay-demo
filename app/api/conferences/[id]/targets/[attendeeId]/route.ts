@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function PUT(
   request: NextRequest,
@@ -8,6 +8,7 @@ export async function PUT(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
 
   const { id, attendeeId } = await params;
   const confId = parseInt(id, 10);
@@ -18,7 +19,6 @@ export async function PUT(
   const tier = body.tier;
   if (!tier) return NextResponse.json({ error: 'tier required' }, { status: 400 });
 
-  await dbReady;
 
   await db.execute({
     sql: 'UPDATE conference_targets SET tier = ? WHERE attendee_id = ? AND conference_id = ?',

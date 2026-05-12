@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function PATCH(
   request: NextRequest,
@@ -8,8 +8,8 @@ export async function PATCH(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { content } = await request.json();
     if (!content) return NextResponse.json({ error: 'content is required' }, { status: 400 });
     const result = await db.execute({
@@ -29,8 +29,8 @@ export async function DELETE(
 ) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     await db.execute({
       sql: 'DELETE FROM entity_notes WHERE id = ?',
       args: [params.id],

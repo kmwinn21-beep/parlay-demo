@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const result = await db.execute({
       sql: `SELECT ftp.user_config_id, co.value as display_name
             FROM form_template_permissions ftp
@@ -27,8 +27,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { user_config_id } = await request.json();
     if (!user_config_id) return NextResponse.json({ error: 'user_config_id required' }, { status: 400 });
     await db.execute({
@@ -45,8 +45,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { user_config_id } = await request.json();
     await db.execute({
       sql: `DELETE FROM form_template_permissions WHERE template_id = ? AND user_config_id = ?`,

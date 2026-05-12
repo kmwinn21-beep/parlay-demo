@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import type { Client } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const { searchParams } = new URL(request.url);
     const conferenceFormId = searchParams.get('conference_form_id');
     if (!conferenceFormId) return NextResponse.json({ error: 'conference_form_id required' }, { status: 400 });
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
+  const db = await getDb(user?.accountId);
   try {
-    await dbReady;
     const body = await request.json();
     const {
       conference_form_id,
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
     let repName = user.email;
     let repConfigId: string | null = null;
     try {
-      const configId = await getConfigIdByEmail(user.email);
+      const configId = await getConfigIdByEmail(db, user.email);
       if (configId) {
         repConfigId = String(configId);
         const nameRow = await db.execute({ sql: `SELECT value FROM config_options WHERE id = ?`, args: [configId] });
@@ -238,7 +239,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function getConfigIdByEmail(email: string): Promise<number | null> {
+async function getConfigIdByEmail(db: Client, email: string): Promise<number | null> {
   try {
     const row = await db.execute({
       sql: `SELECT u.config_id FROM users u WHERE u.email = ? AND u.config_id IS NOT NULL LIMIT 1`,

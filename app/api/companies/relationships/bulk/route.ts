@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import { getSessionUser } from '@/lib/auth';
 
 /**
  * POST /api/companies/relationships/bulk
@@ -8,7 +9,8 @@ import { db, dbReady } from '@/lib/db';
  */
 export async function POST(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const { company_ids } = await request.json();
 
     if (!Array.isArray(company_ids) || company_ids.length < 2) {

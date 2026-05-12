@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, dbReady, getConfigOptionValues } from '@/lib/db';
+import { getConfigOptionValues } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
+import type { Client } from '@libsql/client';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
@@ -15,8 +17,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     // ?nav=1 — lightweight query for the header navigation dropdown (no JOIN/COUNT)
     if (request.nextUrl.searchParams.get('nav') === '1') {
       const result = await db.execute({
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest) {
 
 // Helper to insert in chunks and return results
 async function batchInsert<T>(
+  dbClient: Client,
   items: T[],
   toStatement: (item: T) => { sql: string; args: (string | number | null)[] },
   chunkSize = 100
@@ -54,7 +57,7 @@ async function batchInsert<T>(
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize);
     const stmts = chunk.map(toStatement);
-    const results = await db.batch(stmts, 'write');
+    const results = await dbClient.batch(stmts, 'write');
     allResults.push(
       ...results.map((r) => ({ rows: r.rows as Record<string, unknown>[] }))
     );
@@ -65,8 +68,8 @@ async function batchInsert<T>(
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
   try {
-    await dbReady;
     const formData = await request.formData();
     const name = formData.get('name') as string;
     const start_date = formData.get('start_date') as string;
@@ -247,7 +250,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (parentWseUpdates.size > 0) {
-          await batchInsert(Array.from(parentWseUpdates.entries()), ([parentId, wse]) => ({
+          await batchInsert(db, Array.from(parentWseUpdates.entries()), ([parentId, wse]) => ({
             sql: 'UPDATE companies SET wse = COALESCE(?, wse) WHERE id = ?',
             args: [wse, parentId],
           }));
@@ -259,7 +262,7 @@ export async function POST(request: NextRequest) {
           return id !== undefined && id > 0 && (companyTypeMap.has(n) || companyAssignedUserMap.has(n) || companyWebsiteMap.has(n) || companyWseMap.has(n) || companyServicesMap.has(n));
         });
         if (existingToUpdate.length > 0) {
-          await batchInsert(existingToUpdate, (n) => {
+          await batchInsert(db, existingToUpdate, (n) => {
             const coId = companyIdCache.get(n)!;
             const existingCompany = existingCompanies.find((c) => c.id === coId);
             // If the company already has 2 or more assigned users in the DB, do not overwrite from the uploaded list
@@ -283,7 +286,7 @@ export async function POST(request: NextRequest) {
         // ── Step 3b: Batch-insert new companies ──
         const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
         if (newCoNames.length > 0) {
-          const results = await batchInsert(newCoNames, (n) => {
+          const results = await batchInsert(db, newCoNames, (n) => {
             const detectedType = companyTypeMap.get(n) || classifyCompanyType(n, companyTypeOptions);
             const assignedUser = companyAssignedUserMap.get(n) || null;
             const website = companyWebsiteMap.get(n) || null;
@@ -367,7 +370,7 @@ export async function POST(request: NextRequest) {
 
         // ── Step 4b: Batch-update existing matched attendees with CSV fields ──
         if (existingAttendeeUpdates.length > 0) {
-          await batchInsert(existingAttendeeUpdates, (u) => ({
+          await batchInsert(db, existingAttendeeUpdates, (u) => ({
             sql: `UPDATE attendees SET
               company_id = COALESCE(?, company_id),
               title = COALESCE(?, title),
@@ -386,7 +389,7 @@ export async function POST(request: NextRequest) {
 
         // ── Step 5: Batch-insert new attendees ──
         if (newAttendees.length > 0) {
-          const results = await batchInsert(newAttendees, (a) => ({
+          const results = await batchInsert(db, newAttendees, (a) => ({
             sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
             args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null],
           }));
@@ -406,7 +409,7 @@ export async function POST(request: NextRequest) {
         const attendeeIdsToLink = Array.from(linkedIdSet);
 
         // ── Step 7: Batch-insert conference_attendees ──
-        await batchInsert(attendeeIdsToLink, (aid) => ({
+        await batchInsert(db, attendeeIdsToLink, (aid) => ({
           sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
           args: [conferenceId, aid],
         }));

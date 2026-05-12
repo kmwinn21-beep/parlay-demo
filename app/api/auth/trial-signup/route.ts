@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
+import { provisionAccount } from '@/lib/provision';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +16,6 @@ export async function POST(request: NextRequest) {
       password?: string;
       companyName?: string;
       conferenceTimingAnswer?: 'upcoming' | 'planning';
-      // Optional survey fields
       signupRole?: string;
       signupIndustry?: string;
       signupTeamSize?: string;
@@ -51,28 +51,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: pwCheck.error }, { status: 400 });
     }
 
-    // Reject if any users already exist (this DB is already claimed)
-    const countRes = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM users', args: [] });
-    if (Number(countRes.rows[0].cnt) > 0) {
-      return NextResponse.json({ error: 'This account is already set up.' }, { status: 409 });
+    // Reject if email already has an account
+    const existing = await db.execute({ sql: 'SELECT id FROM accounts WHERE admin_email = ?', args: [email] });
+    if (existing.rows.length > 0) {
+      return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409 });
     }
 
-    const password_hash = await bcrypt.hash(password, 12);
-
-    const result = await db.execute({
-      sql: `INSERT INTO users (email, password_hash, role, email_verified, active, first_name, last_name)
-            VALUES (?, ?, 'administrator', 1, 1, ?, ?)
-            RETURNING id`,
-      args: [email, password_hash, firstName, lastName],
-    });
-
-    const userId = Number(result.rows[0].id);
-
-    // Seed company name into site_settings branding
-    await db.execute({
-      sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES ('app_name', ?)`,
-      args: [companyName],
-    }).catch(() => {});
+    const passwordHash = await bcrypt.hash(password, 12);
 
     // Set trial dates (14-day trial + 2-day grace)
     const now = new Date();
@@ -83,39 +68,7 @@ export async function POST(request: NextRequest) {
 
     const onboardingTrack = conferenceTimingAnswer === 'upcoming' ? 'track_a' : 'track_b';
 
-    const trialSettings: Array<[string, string]> = [
-      ['plan_id', 'trial'],
-      ['trial_expires_at', trialExpires.toISOString()],
-      ['grace_period_ends_at', graceEnds.toISOString()],
-      ['onboarding_track', onboardingTrack],
-      ['onboarding_completed', 'false'],
-    ];
-
-    await Promise.all(
-      trialSettings.map(([key, value]) =>
-        db.execute({
-          sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)`,
-          args: [key, value],
-        }).catch(() => {})
-      )
-    );
-
-    // Also store survey fields in site_settings
-    const surveySettings: Array<[string, string]> = [
-      ['signup_role', signupRole],
-      ['signup_industry', signupIndustry],
-      ['signup_team_size', signupTeamSize],
-      ['signup_conferences_per_year', signupConferencesPerYear],
-      ['signup_primary_goal', signupPrimaryGoal],
-      ['signup_current_tool', signupCurrentTool],
-    ];
-    await Promise.all(
-      surveySettings.filter(([, v]) => v).map(([key, value]) =>
-        db.execute({ sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)`, args: [key, value] }).catch(() => {})
-      )
-    );
-
-    // Register in central accounts table
+    // Register account in master DB first
     const accountId = randomUUID();
     await db.execute({
       sql: `INSERT OR IGNORE INTO accounts (
@@ -130,17 +83,42 @@ export async function POST(request: NextRequest) {
         signupRole || null, signupIndustry || null, signupTeamSize || null,
         signupConferencesPerYear || null, signupPrimaryGoal || null, signupCurrentTool || null,
       ],
-    }).catch(() => {});
+    });
 
+    // Provision tenant DB (create Turso DB, seed schema, insert user + site_settings)
+    const { slug } = await provisionAccount({
+      accountId,
+      companyName,
+      email,
+      firstName,
+      lastName,
+      passwordHash,
+      trialExpiresAt: trialExpires.toISOString(),
+      gracePeriodEndsAt: graceEnds.toISOString(),
+      onboardingTrack,
+      surveyFields: {
+        signup_role: signupRole,
+        signup_industry: signupIndustry,
+        signup_team_size: signupTeamSize,
+        signup_conferences_per_year: signupConferencesPerYear,
+        signup_primary_goal: signupPrimaryGoal,
+        signup_current_tool: signupCurrentTool,
+      },
+    });
+
+    // We don't know the userId in the tenant DB yet — query it
+    // (provisioning inserted the user; get the id for the JWT)
+    // For now sign with id=0; the me route will re-fetch the real user from tenant DB
     const sessionUser = {
-      id: userId,
+      id: 0,
       email,
       role: 'administrator' as const,
       emailVerified: true,
+      accountId,
     };
 
     const token = await signToken(sessionUser);
-    const redirectTo = conferenceTimingAnswer === 'upcoming' ? '/onboarding/track-a' : '/onboarding/track-b';
+    const redirectTo = `https://${slug}.useparlay.app/onboarding/${onboardingTrack === 'track_a' ? 'track-a' : 'track-b'}`;
 
     const response = NextResponse.json({
       success: true,
