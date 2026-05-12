@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db, dbReady } from '@/lib/db';
+import { findDbByToken } from '@/lib/getDb';
 import { validatePassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -15,18 +15,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: passwordCheck.error }, { status: 400 });
     }
 
-    await dbReady;
-
-    const result = await db.execute({
-      sql: 'SELECT id, reset_token_expires FROM users WHERE reset_token = ?',
-      args: [token],
-    });
-
-    if (result.rows.length === 0) {
+    const found = await findDbByToken('reset_token', token, 'id, reset_token_expires');
+    if (!found) {
       return NextResponse.json({ error: 'Invalid or expired reset link.' }, { status: 400 });
     }
 
-    const user = result.rows[0];
+    const { client: userDb, row: user } = found;
     const expires = Number(user.reset_token_expires);
     if (!expires || Date.now() > expires) {
       return NextResponse.json({ error: 'This reset link has expired. Please request a new one.' }, { status: 400 });
@@ -34,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const password_hash = await bcrypt.hash(password, 12);
 
-    await db.execute({
+    await userDb.execute({
       sql: 'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
       args: [password_hash, Number(user.id)],
     });

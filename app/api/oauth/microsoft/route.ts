@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     response_type: 'code',
     scope: 'https://graph.microsoft.com/mail.send https://graph.microsoft.com/user.read offline_access',
     response_mode: 'query',
-    state: String(user.id),
+    state: `${user.id}:${user.accountId ?? ''}`,
   });
 
   return NextResponse.redirect(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params}`);

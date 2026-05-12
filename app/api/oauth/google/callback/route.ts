@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { getGoogleCredentials } from '@/lib/oauthCredentials';
 
 export async function GET(request: NextRequest) {
@@ -13,8 +13,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${base}/auth/account?error=google_denied`);
   }
 
-  const userId = parseInt(state, 10);
+  const [stateId, stateAccountId] = state.split(':');
+  const userId = parseInt(stateId, 10);
   if (isNaN(userId)) return NextResponse.redirect(`${base}/auth/account?error=invalid_state`);
+  const accountId = stateAccountId || undefined;
 
   const { clientId, clientSecret } = await getGoogleCredentials();
   const redirectUri = `${base}/api/oauth/google/callback`;
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   const expiresAt = Date.now() + (tokens.expires_in ?? 3600) * 1000;
 
-  await dbReady;
+  const db = await getDb(accountId);
   await db.execute({
     sql: `INSERT INTO oauth_connections (user_id, provider, provider_email, access_token, refresh_token, token_expires_at)
           VALUES (?, 'google', ?, ?, ?, ?)
