@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BarChart,
@@ -99,6 +99,36 @@ interface CalendarConferenceRow {
     budget?: { line_items?: unknown; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
     commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
   };
+}
+
+interface RepConferenceScore {
+  sesScore: number | null;
+  components: {
+    meeting_execution: number | null;
+    followup_execution: number | null;
+    pipeline_influence: number | null;
+    target_account_execution: number | null;
+    rep_productivity: number | null;
+  };
+}
+
+interface RepRow {
+  repId: string;
+  repName: string;
+  role: string | null;
+  conferences: Record<number, RepConferenceScore>;
+}
+
+interface RepPerfConference {
+  id: number;
+  name: string;
+  date: string;
+}
+
+interface RepPerfData {
+  conferences: RepPerfConference[];
+  reps: RepRow[];
+  priorAvg: Record<string, number>;
 }
 
 interface ConferenceSummary {
@@ -322,6 +352,54 @@ function weakestDimLabel(components: CESComponents): string {
     }
   }
   return DIM_LABELS[worst] ?? 'unknown component';
+}
+
+// ── Rep Performance helpers ───────────────────────────────────────────────────
+
+function sesScoreColor(score: number | null): string {
+  if (score == null) return '#9ca3af';
+  if (score >= 90) return '#059669';
+  if (score >= 75) return '#10b981';
+  if (score >= 60) return '#374151';
+  if (score >= 50) return '#d97706';
+  return '#dc2626';
+}
+
+function sesCellClasses(score: number | null): string {
+  if (score == null) return 'bg-gray-50 text-gray-400';
+  if (score >= 90) return 'bg-emerald-100 text-emerald-700';
+  if (score >= 75) return 'bg-emerald-50 text-emerald-700';
+  if (score >= 60) return 'bg-white text-gray-700';
+  if (score >= 50) return 'bg-amber-50 text-amber-700';
+  return 'bg-red-50 text-red-700';
+}
+
+function sesTierLabel(score: number | null): string {
+  if (score == null) return '—';
+  if (score >= 90) return 'Exceptional';
+  if (score >= 75) return 'Strong';
+  if (score >= 60) return 'Acceptable';
+  if (score >= 50) return 'Needs Work';
+  return 'Weak';
+}
+
+function stddev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  return Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length);
+}
+
+function getLowestComponent(comps: RepConferenceScore['components']): { key: string; label: string; score: number } {
+  const map: [string, string, number | null][] = [
+    ['meeting_execution', 'Meeting Execution', comps.meeting_execution],
+    ['followup_execution', 'Follow-up Execution', comps.followup_execution],
+    ['pipeline_influence', 'Pipeline Influence', comps.pipeline_influence],
+    ['target_account_execution', 'Target Account Execution', comps.target_account_execution],
+    ['rep_productivity', 'Rep Productivity', comps.rep_productivity],
+  ];
+  const available = map.filter(([, , v]) => v != null) as [string, string, number][];
+  if (!available.length) return { key: '', label: '—', score: 0 };
+  return available.sort((a, b) => a[2] - b[2]).map(([key, label, score]) => ({ key, label, score }))[0];
 }
 
 // ── Custom Tooltip ────────────────────────────────────────────────────────────
@@ -555,6 +633,18 @@ export default function ProgramIntelligencePage() {
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
 
+  // Rep Performance state
+  const [repData, setRepData] = useState<RepPerfData | null>(null);
+  const [repLoading, setRepLoading] = useState(false);
+  const [repError, setRepError] = useState<string | null>(null);
+  const [repMinConferences, setRepMinConferences] = useState(0);
+  const [repTierFilter, setRepTierFilter] = useState('all');
+  const [repSort, setRepSort] = useState('avg_desc');
+  const [showComponents, setShowComponents] = useState(false);
+  const [selectedRep, setSelectedRep] = useState<RepRow | null>(null);
+  const [repPage, setRepPage] = useState(1);
+  const REP_PAGE_SIZE = 30;
+
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
     setIsPortrait(mql.matches);
@@ -605,6 +695,20 @@ export default function ProgramIntelligencePage() {
   }, [activeTab]);
 
   useEffect(() => { void fetchData(); }, [fetchData]);
+
+  // Rep Performance data fetch
+  useEffect(() => {
+    if (activeTab !== 'reps') return;
+    let cancelled = false;
+    setRepLoading(true);
+    setRepError(null);
+    fetch(`/api/program-intelligence/rep-performance?startDate=${startDate}&endDate=${endDate}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : r.json().then((b: { error?: string }) => { throw new Error(b.error ?? `HTTP ${r.status}`); }))
+      .then((data: RepPerfData) => { if (!cancelled) { setRepData(data); setRepPage(1); } })
+      .catch(e => { if (!cancelled) setRepError(String(e)); })
+      .finally(() => { if (!cancelled) setRepLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, startDate, endDate]);
 
   // All derived state computed before any conditional returns (rules of hooks)
 
@@ -720,6 +824,79 @@ export default function ProgramIntelligencePage() {
     return rows;
   }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarSort]);
 
+  // Rep Performance derived data
+  const repDerivedData = useMemo(() => {
+    if (!repData) return null;
+    const { conferences, reps, priorAvg } = repData;
+
+    const withStats = reps.map(rep => {
+      const scores = Object.values(rep.conferences).map(c => c.sesScore).filter((s): s is number => s != null);
+      const confCount = Object.keys(rep.conferences).length;
+      const avgSES = scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : null;
+      const sd = stddev(scores);
+      const minScore = scores.length ? Math.min(...scores) : null;
+      const maxScore = scores.length ? Math.max(...scores) : null;
+      const avgCompSum = {
+        meeting_execution: [] as number[],
+        followup_execution: [] as number[],
+        pipeline_influence: [] as number[],
+        target_account_execution: [] as number[],
+        rep_productivity: [] as number[],
+      };
+      for (const c of Object.values(rep.conferences)) {
+        if (c.components.meeting_execution != null) avgCompSum.meeting_execution.push(c.components.meeting_execution);
+        if (c.components.followup_execution != null) avgCompSum.followup_execution.push(c.components.followup_execution);
+        if (c.components.pipeline_influence != null) avgCompSum.pipeline_influence.push(c.components.pipeline_influence);
+        if (c.components.target_account_execution != null) avgCompSum.target_account_execution.push(c.components.target_account_execution);
+        if (c.components.rep_productivity != null) avgCompSum.rep_productivity.push(c.components.rep_productivity);
+      }
+      const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+      const componentAverages = {
+        meeting_execution: avg(avgCompSum.meeting_execution),
+        followup_execution: avg(avgCompSum.followup_execution),
+        pipeline_influence: avg(avgCompSum.pipeline_influence),
+        target_account_execution: avg(avgCompSum.target_account_execution),
+        rep_productivity: avg(avgCompSum.rep_productivity),
+      };
+      const priorAvgSES = priorAvg[rep.repId] ?? null;
+      const trend = avgSES != null && priorAvgSES != null
+        ? (avgSES - priorAvgSES > 3 ? 'up' : avgSES - priorAvgSES < -3 ? 'down' : 'stable')
+        : null;
+      return { ...rep, avgSES, confCount, sd, minScore, maxScore, componentAverages, trend };
+    });
+
+    const minConfFiltered = withStats.filter(r => r.confCount >= repMinConferences);
+
+    const tierFiltered = minConfFiltered.filter(r => {
+      if (repTierFilter === 'all') return true;
+      if (r.avgSES == null) return false;
+      if (repTierFilter === 'strong_above') return r.avgSES >= 75;
+      if (repTierFilter === 'acceptable_above') return r.avgSES >= 60;
+      if (repTierFilter === 'needs_work_below') return r.avgSES < 60;
+      if (repTierFilter === 'weak_only') return r.avgSES < 50;
+      return true;
+    });
+
+    const sorted = [...tierFiltered].sort((a, b) => {
+      if (repSort === 'avg_desc') return (b.avgSES ?? -1) - (a.avgSES ?? -1);
+      if (repSort === 'avg_asc') return (a.avgSES ?? 101) - (b.avgSES ?? 101);
+      if (repSort === 'name_asc') return a.repName.localeCompare(b.repName);
+      if (repSort === 'most_consistent') return a.sd - b.sd;
+      if (repSort === 'most_variable') return b.sd - a.sd;
+      return 0;
+    });
+
+    const filteredForCards = minConfFiltered;
+    const validCards = filteredForCards.filter(r => r.avgSES != null);
+    const cardAvgSES = validCards.length
+      ? Math.round(validCards.reduce((s, r) => s + (r.avgSES ?? 0), 0) / validCards.length)
+      : null;
+    const topPerformer = [...filteredForCards].sort((a, b) => (b.avgSES ?? -1) - (a.avgSES ?? -1))[0] ?? null;
+    const mostConsistent = filteredForCards.filter(r => r.confCount >= 2).sort((a, b) => a.sd - b.sd)[0] ?? null;
+
+    return { sorted, conferences, cardAvgSES, topPerformer, mostConsistent, filteredForCards };
+  }, [repData, repMinConferences, repTierFilter, repSort]);
+
   // Permission gate — after all hooks
   if (!capabilities) {
     return (
@@ -780,7 +957,7 @@ export default function ProgramIntelligencePage() {
 
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab !== 'performance' && activeTab !== 'calendar' && (
+        {activeTab !== 'performance' && activeTab !== 'calendar' && activeTab !== 'reps' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
