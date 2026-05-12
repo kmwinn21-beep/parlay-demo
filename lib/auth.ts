@@ -145,6 +145,7 @@ export async function getServerSessionUser(): Promise<SessionUser | null> {
 // ─── Cookie config ────────────────────────────────────────────────────────────
 
 export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
+  const rootDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN; // e.g. ".useparlay.app"
   return {
     name: COOKIE_NAME,
     httpOnly: true,
@@ -152,6 +153,7 @@ export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
     sameSite: 'lax' as const,
     path: '/',
     maxAge,
+    ...(rootDomain ? { domain: rootDomain } : {}),
   };
 }
 

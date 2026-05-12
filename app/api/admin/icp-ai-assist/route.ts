@@ -49,10 +49,10 @@ Return ONLY valid JSON in this exact structure — no markdown, no explanation, 
 
 const MONTHLY_LIMIT = 5;
 
-async function getUsage(): Promise<{ count: number; month: string }> {
+async function getUsage(dbClient: Awaited<ReturnType<typeof getDb>>): Promise<{ count: number; month: string }> {
   const currentMonth = new Date().toISOString().slice(0, 7);
   try {
-    const row = await db.execute({
+    const row = await dbClient.execute({
       sql: `SELECT value FROM site_settings WHERE key = 'icp_ai_usage'`,
       args: [],
     });
@@ -64,8 +64,8 @@ async function getUsage(): Promise<{ count: number; month: string }> {
   return { count: 0, month: currentMonth };
 }
 
-async function saveUsage(usage: { count: number; month: string }) {
-  await db.execute({
+async function saveUsage(dbClient: Awaited<ReturnType<typeof getDb>>, usage: { count: number; month: string }) {
+  await dbClient.execute({
     sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES ('icp_ai_usage', ?)`,
     args: [JSON.stringify(usage)],
   });
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
-  const usage = await getUsage();
+  const usage = await getUsage(db);
   return NextResponse.json({
     count: usage.count,
     limit: MONTHLY_LIMIT,
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 
-  const usage = await getUsage();
+  const usage = await getUsage(db);
   if (usage.count >= MONTHLY_LIMIT) {
     return NextResponse.json(
       { error: `Monthly limit of ${MONTHLY_LIMIT} analyses reached. Resets on the 1st of each month.` },
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
 
   // Increment usage count
   usage.count += 1;
-  await saveUsage(usage);
+  await saveUsage(db, usage);
 
   return NextResponse.json({
     painPoints,

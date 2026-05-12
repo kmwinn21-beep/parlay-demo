@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin, DEFAULT_ROLE_CAPABILITIES, resolveCapabilities, VALID_ROLES, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 
-async function getRawJson(): Promise<string | null> {
-  const row = await db.execute({
+async function getRawJson(dbClient: Awaited<ReturnType<typeof getDb>>): Promise<string | null> {
+  const row = await dbClient.execute({
     sql: `SELECT value FROM site_settings WHERE key = 'role_capabilities'`,
     args: [],
   });
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 
-  const raw = await getRawJson();
+  const raw = await getRawJson(db);
   let stored: Partial<RoleCapabilities> = {};
   try { stored = raw ? JSON.parse(raw) : {}; } catch { /* ignore */ }
 

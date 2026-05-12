@@ -7,9 +7,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     if (!user) {
-    const db = await getDb(user?.accountId);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const db = await getDb(user?.accountId);
 
     const { currentPassword, newPassword } = await request.json();
 

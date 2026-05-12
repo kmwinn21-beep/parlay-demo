@@ -6,9 +6,9 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     if (!user) {
-    const db = await getDb(user?.accountId);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const db = await getDb(user?.accountId);
 
     const { displayName, configId } = await request.json();
 

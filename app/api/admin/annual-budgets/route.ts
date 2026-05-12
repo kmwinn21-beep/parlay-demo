@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdmin, getSessionUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const result = await db.execute({
       sql: 'SELECT id, year, amount FROM annual_budgets ORDER BY year DESC',
       args: [],
