@@ -103,6 +103,7 @@ interface CalendarConferenceRow {
 
 interface RepConferenceScore {
   sesScore: number | null;
+  costEffScore: number | null;
   components: {
     meeting_execution: number | null;
     followup_execution: number | null;
@@ -123,6 +124,7 @@ interface RepPerfConference {
   id: number;
   name: string;
   date: string;
+  cesScore: number | null;
 }
 
 interface RepPerfData {
@@ -643,6 +645,8 @@ export default function ProgramIntelligencePage() {
   const [showComponents, setShowComponents] = useState(false);
   const [selectedRep, setSelectedRep] = useState<RepRow | null>(null);
   const [repPage, setRepPage] = useState(1);
+  const [repScoreView, setRepScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
+  const [drawerScoreView, setDrawerScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
   const REP_PAGE_SIZE = 30;
 
   useEffect(() => {
@@ -1020,7 +1024,23 @@ export default function ProgramIntelligencePage() {
                 </div>
 
                 {/* Filter bar */}
-                <div className="card">
+                <div className="card space-y-3">
+                  {/* Score view toggle */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-shrink-0">Score view</span>
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+                      {([['ses', 'Sales Execution'], ['ces', 'Conf. Effectiveness'], ['cost', 'Cost Efficiency']] as const).map(([view, label]) => (
+                        <button
+                          key={view}
+                          onClick={() => { setRepScoreView(view); setRepPage(1); }}
+                          className={`px-3 py-1.5 transition-colors whitespace-nowrap ${repScoreView === view ? 'bg-brand-secondary text-white font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {repScoreView === 'ces' && <span className="text-xs text-gray-400">Conference-level — same score shown for all reps per column</span>}
+                  </div>
                   <div className="flex flex-wrap gap-2 items-center">
                     <select className="input-field text-sm py-1.5" value={repMinConferences} onChange={e => { setRepMinConferences(Number(e.target.value)); setRepPage(1); }}>
                       <option value={0}>All reps</option>
@@ -1077,11 +1097,19 @@ export default function ProgramIntelligencePage() {
                           const totalConfs = repDerivedData.conferences.length;
                           const attendedConfs = rep.confCount;
                           const sparse = attendedConfs < totalConfs / 2;
+                          // Compute avg for the selected score view
+                          const viewScores = repDerivedData.conferences.map(c => {
+                            if (repScoreView === 'ces') return c.cesScore;
+                            const cell = rep.conferences[c.id];
+                            if (!cell) return null;
+                            return repScoreView === 'cost' ? cell.costEffScore : cell.sesScore;
+                          }).filter((s): s is number => s != null);
+                          const viewAvg = viewScores.length ? Math.round(viewScores.reduce((a, b) => a + b, 0) / viewScores.length) : null;
                           return (
                             <React.Fragment key={rep.repId}>
                               <tr
                                 className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer group"
-                                onClick={() => setSelectedRep(rep)}
+                                onClick={() => { setSelectedRep(rep); setDrawerScoreView('ses'); }}
                               >
                                 <td className="p-3 sticky left-0 bg-white z-10 group-hover:bg-gray-50 transition-colors border-r border-gray-100" style={{ minWidth: 160, width: 160 }}>
                                   <p className="font-medium text-brand-secondary">{rep.repName}</p>
@@ -1089,22 +1117,27 @@ export default function ProgramIntelligencePage() {
                                 </td>
                                 {repDerivedData.conferences.map(conf => {
                                   const cell = rep.conferences[conf.id];
-                                  const score = cell?.sesScore ?? null;
+                                  const score = repScoreView === 'ces'
+                                    ? conf.cesScore
+                                    : repScoreView === 'cost'
+                                      ? (cell?.costEffScore ?? null)
+                                      : (cell?.sesScore ?? null);
+                                  const notAttended = repScoreView !== 'ces' && !cell;
                                   return (
-                                    <td key={conf.id} className={`p-2 text-center font-semibold tabular-nums ${sesCellClasses(score)}`} style={{ minWidth: 72, width: 72 }}>
-                                      {score != null ? score : <span className="text-gray-300 font-normal text-xs">—</span>}
+                                    <td key={conf.id} className={`p-2 text-center font-semibold tabular-nums ${notAttended ? 'bg-gray-50 text-gray-300' : sesCellClasses(score)}`} style={{ minWidth: 72, width: 72 }}>
+                                      {score != null ? score : <span className="font-normal text-xs">—</span>}
                                     </td>
                                   );
                                 })}
                                 <td className="p-3 sticky right-0 bg-white z-10 group-hover:bg-gray-50 transition-colors border-l border-gray-100 text-right" style={{ minWidth: 96, width: 96 }}>
-                                  <div className="font-bold text-base tabular-nums" style={{ color: sesScoreColor(rep.avgSES) }}>{rep.avgSES ?? '—'}</div>
-                                  {rep.trend && (
+                                  <div className="font-bold text-base tabular-nums" style={{ color: sesScoreColor(viewAvg) }}>{viewAvg ?? '—'}</div>
+                                  {repScoreView === 'ses' && rep.trend && (
                                     <div className={`text-xs ${rep.trend === 'up' ? 'text-emerald-500' : rep.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
                                       {rep.trend === 'up' ? '↑' : rep.trend === 'down' ? '↓' : '→'}
                                     </div>
                                   )}
                                   <div className="text-xs text-gray-400">{rep.minScore}–{rep.maxScore}</div>
-                                  {sparse && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
+                                  {sparse && repScoreView !== 'ces' && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
                                 </td>
                               </tr>
                               {showComponents && (
@@ -1811,44 +1844,84 @@ export default function ProgramIntelligencePage() {
               if (componentAverages.rep_productivity != null && componentAverages.rep_productivity < 50)
                 signals.push('Company engagement breadth is below benchmark. This rep may be spending disproportionate time with a small number of contacts rather than working the full target list.');
 
-              const confScores = repDerivedData.conferences
-                .map(c => ({ conf: c, cell: selectedRep.conferences[c.id] }))
-                .filter(x => x.cell?.sesScore != null)
+              // All conferences this rep attended, sorted chronologically
+              const allConfEntries = repDerivedData.conferences
+                .map(c => ({ conf: c, cell: selectedRep.conferences[c.id] ?? null }))
+                .filter(x => x.cell != null)
                 .sort((a, b) => new Date(a.conf.date).getTime() - new Date(b.conf.date).getTime());
 
-              const allScores = confScores.map(x => x.cell!.sesScore!);
-              const bestConf = confScores.length ? confScores.reduce((b, x) => x.cell!.sesScore! > b.cell!.sesScore! ? x : b) : null;
-              const worstConf = confScores.length ? confScores.reduce((w, x) => x.cell!.sesScore! < w.cell!.sesScore! ? x : w) : null;
-              const sd2 = stddev(allScores);
+              const sesScores = allConfEntries.map(x => x.cell!.sesScore).filter((s): s is number => s != null);
+              const bestSES = sesScores.length ? allConfEntries.filter(x => x.cell!.sesScore != null).reduce((b, x) => x.cell!.sesScore! > b.cell!.sesScore! ? x : b) : null;
+              const worstSES = sesScores.length ? allConfEntries.filter(x => x.cell!.sesScore != null).reduce((w, x) => x.cell!.sesScore! < w.cell!.sesScore! ? x : w) : null;
+              const sd2 = stddev(sesScores);
               const consistencyLabel = sd2 < 8 ? 'High' : sd2 < 15 ? 'Medium' : 'Low';
               const mostCommonTier = (() => {
                 const counts: Record<string, number> = {};
-                for (const s of allScores) { const t = sesTierLabel(s); counts[t] = (counts[t] ?? 0) + 1; }
+                for (const s of sesScores) { const t = sesTierLabel(s); counts[t] = (counts[t] ?? 0) + 1; }
                 return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
               })();
 
+              // Cost efficiency averages
+              const costScores = allConfEntries.map(x => x.cell!.costEffScore).filter((s): s is number => s != null);
+              const avgCost = costScores.length ? Math.round(costScores.reduce((a, b) => a + b, 0) / costScores.length) : null;
+              // CES averages (conference-level)
+              const cesScores = repDerivedData.conferences.map(c => c.cesScore).filter((s): s is number => s != null);
+              const avgCES = cesScores.length ? Math.round(cesScores.reduce((a, b) => a + b, 0) / cesScores.length) : null;
+
+              // Score to show in header based on drawer view
+              const drawerAvg = drawerScoreView === 'ses' ? avgSES : drawerScoreView === 'ces' ? avgCES : avgCost;
+              const drawerLabel = drawerScoreView === 'ses' ? 'avg SES' : drawerScoreView === 'ces' ? 'avg Conf. Effectiveness' : 'avg Cost Efficiency';
+
               return (
                 <>
+                  {/* Drawer score view toggle */}
+                  <div className="mt-3 flex rounded-lg border border-gray-200 overflow-hidden text-xs w-fit">
+                    {([['ses', 'Sales Exec'], ['ces', 'Conf. Eff.'], ['cost', 'Cost Eff.']] as const).map(([view, label]) => (
+                      <button
+                        key={view}
+                        onClick={() => setDrawerScoreView(view)}
+                        className={`px-3 py-1.5 transition-colors ${drawerScoreView === view ? 'bg-brand-secondary text-white font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="mt-3 flex items-center gap-3">
-                    <div className="text-4xl font-bold" style={{ color: sesScoreColor(avgSES) }}>{avgSES ?? '—'}</div>
+                    <div className="text-4xl font-bold" style={{ color: sesScoreColor(drawerAvg) }}>{drawerAvg ?? '—'}</div>
                     <div>
-                      <div className="text-sm font-semibold" style={{ color: sesScoreColor(avgSES) }}>{sesTierLabel(avgSES)}</div>
-                      <div className="text-xs text-gray-400">avg SES · {stats.confCount} conference{stats.confCount !== 1 ? 's' : ''}</div>
+                      <div className="text-sm font-semibold" style={{ color: sesScoreColor(drawerAvg) }}>{sesTierLabel(drawerAvg)}</div>
+                      <div className="text-xs text-gray-400">{drawerLabel} · {stats.confCount} conference{stats.confCount !== 1 ? 's' : ''}</div>
                     </div>
-                    {stats.trend && (
+                    {drawerScoreView === 'ses' && stats.trend && (
                       <div className={`ml-auto text-lg font-bold ${stats.trend === 'up' ? 'text-emerald-500' : stats.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
                         {stats.trend === 'up' ? '↑' : stats.trend === 'down' ? '↓' : '→'}
                       </div>
                     )}
                   </div>
 
+                  {/* All three scores as mini summary row */}
+                  <div className="mt-3 flex gap-3">
+                    {([
+                      ['SES', avgSES, 'Sales Exec'],
+                      ['CES', avgCES, 'Conf. Eff.'],
+                      ['Cost', avgCost, 'Cost Eff.'],
+                    ] as [string, number | null, string][]).map(([abbr, val, title]) => (
+                      <div key={abbr} className="flex-1 rounded-lg border border-gray-100 px-3 py-2 text-center">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wide">{title}</div>
+                        <div className="text-lg font-bold tabular-nums" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</div>
+                        <div className="text-[10px] font-medium" style={{ color: sesScoreColor(val) }}>{sesTierLabel(val)}</div>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="mt-5">
                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs">Performance Summary</h4>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-400">Score range</span><span className="float-right font-medium text-gray-700">{stats.minScore}–{stats.maxScore}</span></div>
+                      <div><span className="text-gray-400">SES range</span><span className="float-right font-medium text-gray-700">{stats.minScore}–{stats.maxScore}</span></div>
                       <div><span className="text-gray-400">Consistency</span><span className="float-right font-medium text-gray-700">{consistencyLabel}</span></div>
-                      <div><span className="text-gray-400">Best conference</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{bestConf?.conf.name ?? '—'} ({bestConf?.cell?.sesScore ?? '—'})</span></div>
-                      <div><span className="text-gray-400">Worst conference</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{worstConf?.conf.name ?? '—'} ({worstConf?.cell?.sesScore ?? '—'})</span></div>
+                      <div><span className="text-gray-400">Best (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{bestSES?.conf.name ?? '—'} ({bestSES?.cell?.sesScore ?? '—'})</span></div>
+                      <div><span className="text-gray-400">Worst (SES)</span><span className="float-right font-medium text-gray-700 truncate max-w-[140px]">{worstSES?.conf.name ?? '—'} ({worstSES?.cell?.sesScore ?? '—'})</span></div>
                       <div><span className="text-gray-400">Most common tier</span><span className="float-right font-medium text-gray-700">{mostCommonTier}</span></div>
                     </div>
                   </div>
@@ -1856,44 +1929,56 @@ export default function ProgramIntelligencePage() {
                   <div className="mt-5">
                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-3">Conference Breakdown</h4>
                     <div className="space-y-3">
-                      {confScores.map(({ conf, cell }) => (
-                        <div key={conf.id} className="border border-gray-100 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-gray-800 text-sm">{conf.name}</p>
-                              <p className="text-xs text-gray-400">{new Date(conf.date).getUTCFullYear()}</p>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xl font-bold tabular-nums" style={{ color: sesScoreColor(cell!.sesScore) }}>{cell!.sesScore}</div>
-                              <div className="text-xs font-medium" style={{ color: sesScoreColor(cell!.sesScore) }}>{sesTierLabel(cell!.sesScore)}</div>
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width: `${cell!.sesScore ?? 0}%`, backgroundColor: sesScoreColor(cell!.sesScore) }} />
-                            </div>
-                          </div>
-                          <div className="mt-2 grid grid-cols-5 gap-1 text-[10px]">
-                            {([
-                              ['Mtg', cell!.components.meeting_execution],
-                              ['FU', cell!.components.followup_execution],
-                              ['PI', cell!.components.pipeline_influence],
-                              ['Tgt', cell!.components.target_account_execution],
-                              ['Prod', cell!.components.rep_productivity],
-                            ] as [string, number | null][]).map(([label, val]) => (
-                              <div key={label} className="text-center">
-                                <div className="text-gray-400">{label}</div>
-                                <div className="font-semibold" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</div>
+                      {allConfEntries.map(({ conf, cell }) => {
+                        const activeScore = drawerScoreView === 'ses' ? cell!.sesScore : drawerScoreView === 'ces' ? conf.cesScore : cell!.costEffScore;
+                        const scoreLabel = drawerScoreView === 'ses' ? 'SES' : drawerScoreView === 'ces' ? 'CES' : 'Cost';
+                        return (
+                          <div key={conf.id} className="border border-gray-100 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-gray-800 text-sm">{conf.name}</p>
+                                <p className="text-xs text-gray-400">{new Date(conf.date).getUTCFullYear()}</p>
                               </div>
-                            ))}
+                              <div className="text-right">
+                                <div className="text-xl font-bold tabular-nums" style={{ color: sesScoreColor(activeScore) }}>{activeScore ?? '—'}</div>
+                                <div className="text-[10px] text-gray-400">{scoreLabel} · {sesTierLabel(activeScore)}</div>
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${activeScore ?? 0}%`, backgroundColor: sesScoreColor(activeScore) }} />
+                              </div>
+                            </div>
+                            {/* Always show SES components */}
+                            <div className="mt-2 grid grid-cols-5 gap-1 text-[10px]">
+                              {([
+                                ['Mtg', cell!.components.meeting_execution],
+                                ['FU', cell!.components.followup_execution],
+                                ['PI', cell!.components.pipeline_influence],
+                                ['Tgt', cell!.components.target_account_execution],
+                                ['Prod', cell!.components.rep_productivity],
+                              ] as [string, number | null][]).map(([label, val]) => (
+                                <div key={label} className="text-center">
+                                  <div className="text-gray-400">{label}</div>
+                                  <div className="font-semibold" style={{ color: sesScoreColor(val) }}>{val ?? '—'}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {/* Show cost eff score if available */}
+                            {(cell!.costEffScore != null || conf.cesScore != null) && (
+                              <div className="mt-2 flex gap-3 text-[10px]">
+                                {conf.cesScore != null && <span className="text-gray-400">CES <span className="font-semibold" style={{ color: sesScoreColor(conf.cesScore) }}>{conf.cesScore}</span></span>}
+                                {cell!.costEffScore != null && <span className="text-gray-400">Cost Eff. <span className="font-semibold" style={{ color: sesScoreColor(cell!.costEffScore) }}>{cell!.costEffScore}</span></span>}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
                   <div className="mt-5">
-                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">Component Averages</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide text-xs mb-2">SES Component Averages</h4>
                     <div className="space-y-2">
                       {([
                         ['Meeting Execution', componentAverages.meeting_execution],

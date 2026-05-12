@@ -23,6 +23,14 @@ function dateMsOffset(dateStr: string, offsetMs: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function scoreLowerIsBetter(value: number, eliteMax: number, strongMax: number, healthyMax: number, weakMax: number): number {
+  if (value <= eliteMax) return Math.round(100 - (value / eliteMax) * 5);
+  if (value <= strongMax) return Math.round(94 - ((value - eliteMax) / (strongMax - eliteMax)) * 14);
+  if (value <= healthyMax) return Math.round(79 - ((value - strongMax) / (healthyMax - strongMax)) * 14);
+  if (value <= weakMax) return Math.round(64 - ((value - healthyMax) / (weakMax - healthyMax)) * 14);
+  return Math.max(35, Math.round(49 - ((value - weakMax) / weakMax) * 14));
+}
+
 interface RepConfData {
   meetingsScheduled: number;
   meetingsHeld: number;
@@ -32,6 +40,43 @@ interface RepConfData {
   followupsCompleted: number;
   targetsMet: number;
   targetsFu: number;
+}
+
+function computeSES(d: RepConfData, totalTargets: number): {
+  sesScore: number | null;
+  components: {
+    meeting_execution: number | null;
+    followup_execution: number | null;
+    pipeline_influence: number | null;
+    target_account_execution: number | null;
+    rep_productivity: number | null;
+  };
+} {
+  const holdRate = pct(d.meetingsHeld, d.meetingsScheduled);
+  const fuAttachRate = d.companiesWithMeeting > 0 ? pct(d.coWithMtgFu, d.companiesWithMeeting) : null;
+  let meeting_execution: number | null = null;
+  if (holdRate != null && fuAttachRate != null) meeting_execution = Math.round(holdRate * 0.5 + fuAttachRate * 0.5);
+  else if (holdRate != null) meeting_execution = Math.round(holdRate);
+  else if (fuAttachRate != null) meeting_execution = Math.round(fuAttachRate);
+
+  const fu = pct(d.followupsCompleted, d.followupsCreated);
+  const followup_execution = fu != null ? Math.round(fu) : null;
+
+  let target_account_execution: number | null = null;
+  if (totalTargets > 0) {
+    target_account_execution = Math.round(Math.min(100, ((d.targetsMet + d.targetsFu) / totalTargets) * 100));
+  }
+
+  const { score } = reweight([
+    { key: 'meeting_execution', score: meeting_execution, weight: 0.25 },
+    { key: 'followup_execution', score: followup_execution, weight: 0.20 },
+    { key: 'target_account_execution', score: target_account_execution, weight: 0.15 },
+  ]);
+
+  return {
+    sesScore: score,
+    components: { meeting_execution, followup_execution, pipeline_influence: null, target_account_execution, rep_productivity: null },
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -87,8 +132,10 @@ export async function GET(req: NextRequest) {
       targetMeetingRows,
       targetFuRows,
       budgetRows,
+      confTotalsRows,
+      confSpendRows,
     ] = await Promise.all([
-      // a. Meetings
+      // a. Meetings by rep
       runQuery(
         `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                 COUNT(*) AS meetings_scheduled,
@@ -101,7 +148,7 @@ export async function GET(req: NextRequest) {
          GROUP BY m.conference_id, m.scheduled_by`,
         confIds,
       ),
-      // b. Follow-up attachments (companies with meeting AND followup by rep)
+      // b. Follow-up attachments by rep
       runQuery(
         `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                 COUNT(DISTINCT CASE WHEN fu.id IS NOT NULL THEN a.company_id END) AS co_with_mtg_fu
@@ -116,7 +163,7 @@ export async function GET(req: NextRequest) {
          GROUP BY m.conference_id, m.scheduled_by`,
         confIds,
       ),
-      // c. Follow-ups
+      // c. Follow-ups by rep
       runQuery(
         `SELECT fu.conference_id, fu.assigned_rep AS rep_raw,
                 COUNT(*) AS followups_created,
@@ -128,7 +175,7 @@ export async function GET(req: NextRequest) {
          GROUP BY fu.conference_id, fu.assigned_rep`,
         confIds,
       ),
-      // d. Target totals
+      // d. Target totals per conference
       runQuery(
         `SELECT conference_id, COUNT(DISTINCT attendee_id) AS total_targets
          FROM conference_targets
@@ -159,7 +206,7 @@ export async function GET(req: NextRequest) {
          GROUP BY fu.conference_id, fu.assigned_rep`,
         confIds,
       ),
-      // g. Required pipeline (may not exist)
+      // g. Required pipeline
       runQuery(
         `SELECT conference_id, CAST(required_pipeline_amount AS REAL) AS req_pipeline
          FROM conference_budget
@@ -168,12 +215,61 @@ export async function GET(req: NextRequest) {
            AND CAST(required_pipeline_amount AS REAL) > 0`,
         confIds,
       ).catch(() => [] as Row[]),
+      // h. Total companies + companies engaged per conference (for CES breadth)
+      runQuery(
+        `SELECT ca.conference_id,
+                COUNT(DISTINCT a.company_id) AS total_companies,
+                COUNT(DISTINCT CASE WHEN m_held.company_id IS NOT NULL THEN a.company_id END) AS companies_engaged
+         FROM conference_attendees ca
+         JOIN attendees a ON ca.attendee_id=a.id AND a.company_id IS NOT NULL
+         LEFT JOIN (
+           SELECT m.conference_id, a2.company_id
+           FROM meetings m
+           JOIN attendees a2 ON m.attendee_id=a2.id
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+           WHERE LOWER(COALESCE(cop.action_key,''))='meeting_held'
+         ) m_held ON m_held.conference_id=ca.conference_id AND m_held.company_id=a.company_id
+         WHERE ca.conference_id IN (${placeholders})
+         GROUP BY ca.conference_id`,
+        confIds,
+      ).catch(() => [] as Row[]),
+      // i. Total spend per conference (for cost efficiency)
+      runQuery(
+        `SELECT cb.conference_id,
+                SUM(COALESCE(
+                  NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL), 0),
+                  CAST(json_extract(li.value, '$.budget') AS REAL), 0
+                )) AS total_spend
+         FROM conference_budget cb, json_each(cb.line_items) li
+         WHERE cb.conference_id IN (${placeholders})
+           AND cb.line_items IS NOT NULL
+           AND cb.line_items NOT IN ('', '[]', 'null')
+           AND json_valid(cb.line_items)=1
+         GROUP BY cb.conference_id`,
+        confIds,
+      ).catch(() => [] as Row[]),
     ]);
 
-    // Build target total map: confId -> totalTargets
+    // Build lookup maps
     const targetTotalMap = new Map<number, number>();
-    for (const r of targetTotalRows) {
-      targetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
+    for (const r of targetTotalRows) targetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
+
+    const confTotalsMap = new Map<number, { totalCompanies: number; companiesEngaged: number }>();
+    for (const r of confTotalsRows) {
+      confTotalsMap.set(Number(r.conference_id), {
+        totalCompanies: Number(r.total_companies ?? 0),
+        companiesEngaged: Number(r.companies_engaged ?? 0),
+      });
+    }
+
+    const confSpendMap = new Map<number, number>();
+    for (const r of confSpendRows) {
+      if (r.total_spend != null) confSpendMap.set(Number(r.conference_id), Number(r.total_spend));
+    }
+
+    const reqPipelineMap = new Map<number, number>();
+    for (const r of budgetRows) {
+      if (r.req_pipeline != null) reqPipelineMap.set(Number(r.conference_id), Number(r.req_pipeline));
     }
 
     // 4. Build repConfMap: repId -> confId -> RepConfData
@@ -183,89 +279,131 @@ export async function GET(req: NextRequest) {
       if (!repConfMap.has(repId)) repConfMap.set(repId, new Map());
       const confMap = repConfMap.get(repId)!;
       if (!confMap.has(confId)) {
-        confMap.set(confId, {
-          meetingsScheduled: 0,
-          meetingsHeld: 0,
-          companiesWithMeeting: 0,
-          coWithMtgFu: 0,
-          followupsCreated: 0,
-          followupsCompleted: 0,
-          targetsMet: 0,
-          targetsFu: 0,
-        });
+        confMap.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0 });
       }
       return confMap.get(confId)!;
-    }
+    };
 
-    // Process meeting rows
     for (const r of meetingRows) {
       const reps = resolveRepIds(r.rep_raw);
       if (!reps.length) continue;
       const confId = Number(r.conference_id);
-      const scheduled = Number(r.meetings_scheduled ?? 0) / reps.length;
-      const held = Number(r.meetings_held ?? 0) / reps.length;
-      const companiesWithMeeting = Number(r.companies_with_meeting ?? 0) / reps.length;
       for (const repId of reps) {
         const d = getOrCreate(repId, confId);
-        d.meetingsScheduled += scheduled;
-        d.meetingsHeld += held;
-        d.companiesWithMeeting += companiesWithMeeting;
+        d.meetingsScheduled += Number(r.meetings_scheduled ?? 0) / reps.length;
+        d.meetingsHeld += Number(r.meetings_held ?? 0) / reps.length;
+        d.companiesWithMeeting += Number(r.companies_with_meeting ?? 0) / reps.length;
       }
     }
-
-    // Process fu attach rows
     for (const r of fuAttachRows) {
       const reps = resolveRepIds(r.rep_raw);
       if (!reps.length) continue;
       const confId = Number(r.conference_id);
-      const coWithMtgFu = Number(r.co_with_mtg_fu ?? 0) / reps.length;
-      for (const repId of reps) {
-        const d = getOrCreate(repId, confId);
-        d.coWithMtgFu += coWithMtgFu;
-      }
+      for (const repId of reps) getOrCreate(repId, confId).coWithMtgFu += Number(r.co_with_mtg_fu ?? 0) / reps.length;
     }
-
-    // Process followup rows
     for (const r of followupRows) {
       const reps = resolveRepIds(r.rep_raw);
       if (!reps.length) continue;
       const confId = Number(r.conference_id);
-      const created = Number(r.followups_created ?? 0) / reps.length;
-      const completed = Number(r.followups_completed ?? 0) / reps.length;
       for (const repId of reps) {
         const d = getOrCreate(repId, confId);
-        d.followupsCreated += created;
-        d.followupsCompleted += completed;
+        d.followupsCreated += Number(r.followups_created ?? 0) / reps.length;
+        d.followupsCompleted += Number(r.followups_completed ?? 0) / reps.length;
       }
     }
-
-    // Process target meeting rows
     for (const r of targetMeetingRows) {
       const reps = resolveRepIds(r.rep_raw);
       if (!reps.length) continue;
       const confId = Number(r.conference_id);
-      const targetsMet = Number(r.targets_met ?? 0) / reps.length;
-      for (const repId of reps) {
-        const d = getOrCreate(repId, confId);
-        d.targetsMet += targetsMet;
-      }
+      for (const repId of reps) getOrCreate(repId, confId).targetsMet += Number(r.targets_met ?? 0) / reps.length;
     }
-
-    // Process target fu rows
     for (const r of targetFuRows) {
       const reps = resolveRepIds(r.rep_raw);
       if (!reps.length) continue;
       const confId = Number(r.conference_id);
-      const targetsFu = Number(r.targets_fu ?? 0) / reps.length;
-      for (const repId of reps) {
-        const d = getOrCreate(repId, confId);
-        d.targetsFu += targetsFu;
+      for (const repId of reps) getOrCreate(repId, confId).targetsFu += Number(r.targets_fu ?? 0) / reps.length;
+    }
+
+    // 5. Compute CES per conference by aggregating all-rep data
+    // Aggregate: sum per-rep data to conference level
+    const confAggMap = new Map<number, RepConfData>();
+    for (const [, confMap] of Array.from(repConfMap.entries())) {
+      for (const [confId, d] of Array.from(confMap.entries())) {
+        if (!confAggMap.has(confId)) {
+          confAggMap.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0 });
+        }
+        const agg = confAggMap.get(confId)!;
+        agg.meetingsScheduled += d.meetingsScheduled;
+        agg.meetingsHeld += d.meetingsHeld;
+        agg.companiesWithMeeting += d.companiesWithMeeting;
+        agg.coWithMtgFu += d.coWithMtgFu;
+        agg.followupsCreated += d.followupsCreated;
+        agg.followupsCompleted += d.followupsCompleted;
       }
     }
 
-    // 5. Compute SES scores per rep per conference
+    const confCESMap = new Map<number, number | null>();
+    for (const [confId, agg] of Array.from(confAggMap.entries())) {
+      const totals = confTotalsMap.get(confId);
+      const totalCompanies = totals?.totalCompanies ?? 0;
+      const companiesEngaged = totals?.companiesEngaged ?? agg.companiesWithMeeting;
+
+      const holdRate = pct(agg.meetingsHeld, agg.meetingsScheduled);
+      const fuAttach = agg.companiesWithMeeting > 0 ? pct(agg.coWithMtgFu, agg.companiesWithMeeting) : null;
+      const dim2 = holdRate != null && fuAttach != null ? holdRate * 0.5 + fuAttach * 0.5 : (holdRate ?? fuAttach ?? null);
+
+      const dim4 = totalCompanies > 0 ? (companiesEngaged / totalCompanies) * 100 : null;
+      const dim5 = pct(agg.followupsCompleted, agg.followupsCreated);
+
+      const { score: cesScore } = reweight([
+        { key: 'dim2_meeting_exec', score: dim2 != null ? Math.round(dim2) : null, weight: 0.20 },
+        { key: 'dim4_breadth', score: dim4 != null ? Math.round(dim4) : null, weight: 0.05 },
+        { key: 'dim5_followup', score: dim5 != null ? Math.round(dim5) : null, weight: 0.10 },
+      ]);
+      confCESMap.set(confId, cesScore);
+    }
+
+    // 6. Compute cost efficiency per rep per conference
+    // Active reps per conference = reps with at least 1 meeting held
+    const activeRepsPerConf = new Map<number, number>();
+    for (const [, confMap] of Array.from(repConfMap.entries())) {
+      for (const [confId, d] of Array.from(confMap.entries())) {
+        if (d.meetingsHeld >= 1) {
+          activeRepsPerConf.set(confId, (activeRepsPerConf.get(confId) ?? 0) + 1);
+        }
+      }
+    }
+
+    const costEffScoreMap = new Map<string, Map<number, number | null>>();
+    for (const [repId, confMap] of Array.from(repConfMap.entries())) {
+      const repCostMap = new Map<number, number | null>();
+      for (const [confId, d] of Array.from(confMap.entries())) {
+        const totalSpend = confSpendMap.get(confId) ?? 0;
+        const numReps = Math.max(activeRepsPerConf.get(confId) ?? 1, 1);
+        const repSpend = totalSpend / numReps;
+
+        let costEffScore: number | null = null;
+        if (repSpend > 0 && d.meetingsHeld >= 1) {
+          const cpm = repSpend / d.meetingsHeld; // cost per meeting
+          const cpc = d.companiesWithMeeting > 0 ? repSpend / d.companiesWithMeeting : null; // cost per company
+
+          const cpmScore = scoreLowerIsBetter(cpm, 400, 700, 1100, 1800);
+          const cpcScore = cpc != null ? scoreLowerIsBetter(cpc, 350, 650, 1000, 1600) : null;
+
+          const parts: { val: number; w: number }[] = [{ val: cpmScore, w: 0.50 }];
+          if (cpcScore != null) parts.push({ val: cpcScore, w: 0.50 });
+          const totalW = parts.reduce((s, p) => s + p.w, 0);
+          costEffScore = Math.round(parts.reduce((s, p) => s + p.val * p.w, 0) / totalW);
+        }
+        repCostMap.set(confId, costEffScore);
+      }
+      costEffScoreMap.set(repId, repCostMap);
+    }
+
+    // 7. Build rep results
     type RepConfScore = {
       sesScore: number | null;
+      costEffScore: number | null;
       components: {
         meeting_execution: number | null;
         followup_execution: number | null;
@@ -284,68 +422,25 @@ export async function GET(req: NextRequest) {
 
     for (const [repId, confMap] of Array.from(repConfMap.entries())) {
       const info = repNameMap.get(repId);
-      // Only include reps we can name
       if (!info) continue;
 
       const conferences: Record<number, RepConfScore> = {};
-
       for (const [confId, d] of Array.from(confMap.entries())) {
-        // meeting_execution: holdRate * 0.5 + fuAttachRate * 0.5
-        const holdRate = pct(d.meetingsHeld, d.meetingsScheduled);
-        const fuAttachRate = d.companiesWithMeeting > 0
-          ? pct(d.coWithMtgFu, d.companiesWithMeeting)
-          : null;
-
-        let meeting_execution: number | null = null;
-        if (holdRate != null && fuAttachRate != null) {
-          meeting_execution = Math.round(holdRate * 0.5 + fuAttachRate * 0.5);
-        } else if (holdRate != null) {
-          meeting_execution = Math.round(holdRate);
-        } else if (fuAttachRate != null) {
-          meeting_execution = Math.round(fuAttachRate);
-        }
-
-        // followup_execution
-        const followup_execution = pct(d.followupsCompleted, d.followupsCreated);
-        const followup_execution_rounded = followup_execution != null ? Math.round(followup_execution) : null;
-
-        // target_account_execution
         const totalTargets = targetTotalMap.get(confId) ?? 0;
-        let target_account_execution: number | null = null;
-        if (totalTargets > 0) {
-          const raw = ((d.targetsMet + d.targetsFu) / totalTargets) * 100;
-          target_account_execution = Math.round(Math.min(100, raw));
-        }
-
-        const { score } = reweight([
-          { key: 'meeting_execution', score: meeting_execution, weight: 0.25 },
-          { key: 'followup_execution', score: followup_execution_rounded, weight: 0.20 },
-          { key: 'target_account_execution', score: target_account_execution, weight: 0.15 },
-        ]);
-
+        const ses = computeSES(d, totalTargets);
         conferences[confId] = {
-          sesScore: score,
-          components: {
-            meeting_execution,
-            followup_execution: followup_execution_rounded,
-            pipeline_influence: null,
-            target_account_execution,
-            rep_productivity: null,
-          },
+          sesScore: ses.sesScore,
+          costEffScore: costEffScoreMap.get(repId)?.get(confId) ?? null,
+          components: ses.components,
         };
       }
 
       if (Object.keys(conferences).length > 0) {
-        repResults.push({
-          repId,
-          repName: info.name,
-          role: info.role,
-          conferences,
-        });
+        repResults.push({ repId, repName: info.name, role: info.role, conferences });
       }
     }
 
-    // 6. Prior period trend
+    // 8. Prior period trend
     const startMs = new Date(startDate).getTime();
     const endMs = new Date(endDate).getTime();
     const durationMs = endMs - startMs;
@@ -355,8 +450,7 @@ export async function GET(req: NextRequest) {
     let priorAvg: Record<string, number> = {};
     try {
       const priorConfRows = await runQuery(
-        `SELECT c.id, COALESCE(c.end_date, c.start_date) AS conf_date
-         FROM conferences c
+        `SELECT c.id FROM conferences c
          WHERE COALESCE(c.end_date, c.start_date) >= ? AND COALESCE(c.end_date, c.start_date) <= ?`,
         [priorStart, priorEnd],
       );
@@ -364,17 +458,16 @@ export async function GET(req: NextRequest) {
       if (priorConfRows.length > 0) {
         const priorConfIds = priorConfRows.map(r => Number(r.id));
         const priorPlaceholders = priorConfIds.map(() => '?').join(',');
+
         const priorTotalTargetRows = await runQuery(
           `SELECT conference_id, COUNT(DISTINCT attendee_id) AS total_targets
            FROM conference_targets WHERE conference_id IN (${priorPlaceholders}) GROUP BY conference_id`,
           priorConfIds,
         ).catch(() => [] as Row[]);
         const priorTargetTotalMap = new Map<number, number>();
-        for (const r of priorTotalTargetRows) {
-          priorTargetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
-        }
+        for (const r of priorTotalTargetRows) priorTargetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
 
-        const [priorMeetingRows, priorFuAttachRows, priorFollowupRows, priorTargetMeetingRows, priorTargetFuRows] = await Promise.all([
+        const [priorMtgRows, priorFuAttachRows, priorFuRows, priorTgtMtgRows, priorTgtFuRows] = await Promise.all([
           runQuery(
             `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                     COUNT(*) AS meetings_scheduled,
@@ -412,8 +505,7 @@ export async function GET(req: NextRequest) {
           ),
           runQuery(
             `SELECT m.conference_id, m.scheduled_by AS rep_raw, COUNT(DISTINCT m.attendee_id) AS targets_met
-             FROM meetings m
-             LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+             FROM meetings m LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
              WHERE m.conference_id IN (${priorPlaceholders})
                AND LOWER(COALESCE(cop.action_key,''))='meeting_held'
                AND m.attendee_id IN (SELECT attendee_id FROM conference_targets WHERE conference_id=m.conference_id)
@@ -433,21 +525,20 @@ export async function GET(req: NextRequest) {
           ),
         ]);
 
-        // Build prior repConfMap
         const priorRepConfMap = new Map<string, Map<number, RepConfData>>();
-        const getPriorOrCreate = (repId: string, confId: number): RepConfData => {
+        const getP = (repId: string, confId: number): RepConfData => {
           if (!priorRepConfMap.has(repId)) priorRepConfMap.set(repId, new Map());
           const cm = priorRepConfMap.get(repId)!;
           if (!cm.has(confId)) cm.set(confId, { meetingsScheduled: 0, meetingsHeld: 0, companiesWithMeeting: 0, coWithMtgFu: 0, followupsCreated: 0, followupsCompleted: 0, targetsMet: 0, targetsFu: 0 });
           return cm.get(confId)!;
-        }
+        };
 
-        for (const r of priorMeetingRows) {
+        for (const r of priorMtgRows) {
           const reps = resolveRepIds(r.rep_raw);
           if (!reps.length) continue;
           const confId = Number(r.conference_id);
           for (const repId of reps) {
-            const d = getPriorOrCreate(repId, confId);
+            const d = getP(repId, confId);
             d.meetingsScheduled += Number(r.meetings_scheduled ?? 0) / reps.length;
             d.meetingsHeld += Number(r.meetings_held ?? 0) / reps.length;
             d.companiesWithMeeting += Number(r.companies_with_meeting ?? 0) / reps.length;
@@ -456,88 +547,51 @@ export async function GET(req: NextRequest) {
         for (const r of priorFuAttachRows) {
           const reps = resolveRepIds(r.rep_raw);
           if (!reps.length) continue;
-          const confId = Number(r.conference_id);
-          for (const repId of reps) {
-            getPriorOrCreate(repId, confId).coWithMtgFu += Number(r.co_with_mtg_fu ?? 0) / reps.length;
-          }
+          for (const repId of reps) getP(repId, Number(r.conference_id)).coWithMtgFu += Number(r.co_with_mtg_fu ?? 0) / reps.length;
         }
-        for (const r of priorFollowupRows) {
+        for (const r of priorFuRows) {
           const reps = resolveRepIds(r.rep_raw);
           if (!reps.length) continue;
           const confId = Number(r.conference_id);
           for (const repId of reps) {
-            const d = getPriorOrCreate(repId, confId);
+            const d = getP(repId, confId);
             d.followupsCreated += Number(r.followups_created ?? 0) / reps.length;
             d.followupsCompleted += Number(r.followups_completed ?? 0) / reps.length;
           }
         }
-        for (const r of priorTargetMeetingRows) {
+        for (const r of priorTgtMtgRows) {
           const reps = resolveRepIds(r.rep_raw);
           if (!reps.length) continue;
-          const confId = Number(r.conference_id);
-          for (const repId of reps) {
-            getPriorOrCreate(repId, confId).targetsMet += Number(r.targets_met ?? 0) / reps.length;
-          }
+          for (const repId of reps) getP(repId, Number(r.conference_id)).targetsMet += Number(r.targets_met ?? 0) / reps.length;
         }
-        for (const r of priorTargetFuRows) {
+        for (const r of priorTgtFuRows) {
           const reps = resolveRepIds(r.rep_raw);
           if (!reps.length) continue;
-          const confId = Number(r.conference_id);
-          for (const repId of reps) {
-            getPriorOrCreate(repId, confId).targetsFu += Number(r.targets_fu ?? 0) / reps.length;
-          }
+          for (const repId of reps) getP(repId, Number(r.conference_id)).targetsFu += Number(r.targets_fu ?? 0) / reps.length;
         }
 
-        // Compute prior avg SES per rep
         for (const [repId, confMap] of Array.from(priorRepConfMap.entries())) {
           const scores: number[] = [];
           for (const [confId, d] of Array.from(confMap.entries())) {
-            const holdRate = pct(d.meetingsHeld, d.meetingsScheduled);
-            const fuAttachRate = d.companiesWithMeeting > 0 ? pct(d.coWithMtgFu, d.companiesWithMeeting) : null;
-            let meeting_execution: number | null = null;
-            if (holdRate != null && fuAttachRate != null) {
-              meeting_execution = Math.round(holdRate * 0.5 + fuAttachRate * 0.5);
-            } else if (holdRate != null) {
-              meeting_execution = Math.round(holdRate);
-            } else if (fuAttachRate != null) {
-              meeting_execution = Math.round(fuAttachRate);
-            }
-            const fuExec = pct(d.followupsCompleted, d.followupsCreated);
-            const fuExecRounded = fuExec != null ? Math.round(fuExec) : null;
-            const totalTargets = priorTargetTotalMap.get(confId) ?? 0;
-            let target_account_execution: number | null = null;
-            if (totalTargets > 0) {
-              target_account_execution = Math.round(Math.min(100, ((d.targetsMet + d.targetsFu) / totalTargets) * 100));
-            }
-            const { score } = reweight([
-              { key: 'meeting_execution', score: meeting_execution, weight: 0.25 },
-              { key: 'followup_execution', score: fuExecRounded, weight: 0.20 },
-              { key: 'target_account_execution', score: target_account_execution, weight: 0.15 },
-            ]);
-            if (score != null) scores.push(score);
+            const { sesScore } = computeSES(d, priorTargetTotalMap.get(confId) ?? 0);
+            if (sesScore != null) scores.push(sesScore);
           }
-          if (scores.length > 0) {
-            priorAvg[repId] = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
-          }
+          if (scores.length > 0) priorAvg[repId] = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
         }
       }
     } catch {
-      // Prior period computation failed — return empty priorAvg
       priorAvg = {};
     }
 
-    // 7. Build response
+    // 9. Build response
     const conferences = confRows.map(r => ({
       id: Number(r.id),
       name: String(r.name),
       date: String(r.conf_date),
+      cesScore: confCESMap.get(Number(r.id)) ?? null,
     }));
 
-    return NextResponse.json({
-      conferences,
-      reps: repResults,
-      priorAvg,
-    });
+    return NextResponse.json({ conferences, reps: repResults, priorAvg });
   } catch (err) {
     console.error('[rep-performance]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
