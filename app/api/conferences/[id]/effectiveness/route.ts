@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import type { Client } from '@libsql/client';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
@@ -210,7 +210,6 @@ function followupHealthStatus(rate: number | null, total: number): 'healthy' | '
   return 'risk';
 }
 
-import type { Client } from '@libsql/client';
 
 async function runQuery(dbClient: Client, sql: string): Promise<Record<string, unknown>[]> {
   const result = await dbClient.execute({ sql, args: [] });

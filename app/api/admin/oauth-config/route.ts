@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 
 const KEYS = [

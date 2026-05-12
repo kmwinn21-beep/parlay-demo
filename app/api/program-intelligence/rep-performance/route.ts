@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { reweight, pct } from '@/lib/effectiveness/salesExecution';
-import type { InValue } from '@libsql/client';
+import type { InValue, Client } from '@libsql/client';
 
 export const dynamic = 'force-dynamic';
 
 type Row = Record<string, unknown>;
-async function runQuery(sql: string, args: InValue[] = []): Promise<Row[]> {
-  const r = await db.execute({ sql, args });
+async function runQuery(dbClient: Client, sql: string, args: InValue[] = []): Promise<Row[]> {
+  const r = await dbClient.execute({ sql, args });
   return r.rows as Row[];
 }
 
@@ -133,7 +132,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Fetch conferences in range
-    const confRows = await runQuery(
+    const confRows = await runQuery(db, 
       `SELECT c.id, c.name, COALESCE(c.end_date, c.start_date) AS conf_date
        FROM conferences c
        WHERE COALESCE(c.end_date, c.start_date) >= ? AND COALESCE(c.end_date, c.start_date) <= ?
@@ -149,7 +148,7 @@ export async function GET(req: NextRequest) {
     const placeholders = confIds.map(() => '?').join(',');
 
     // 2. Fetch rep name map
-    const repNameRows = await runQuery(
+    const repNameRows = await runQuery(db, 
       `SELECT co.id, COALESCE(u.display_name, co.value) AS display_name, u.role
        FROM config_options co
        LEFT JOIN users u ON u.config_id = co.id
@@ -178,7 +177,7 @@ export async function GET(req: NextRequest) {
       effDefaultsRows,
     ] = await Promise.all([
       // a. Meetings by rep
-      runQuery(
+      runQuery(db, 
         `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                 COUNT(*) AS meetings_scheduled,
                 COUNT(CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN 1 END) AS meetings_held,
@@ -191,7 +190,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ),
       // b. Follow-up attachments by rep
-      runQuery(
+      runQuery(db, 
         `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                 COUNT(DISTINCT CASE WHEN fu.id IS NOT NULL THEN a.company_id END) AS co_with_mtg_fu
          FROM meetings m
@@ -206,7 +205,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ),
       // c. Follow-ups by rep
-      runQuery(
+      runQuery(db, 
         `SELECT fu.conference_id, fu.assigned_rep AS rep_raw,
                 COUNT(*) AS followups_created,
                 SUM(CASE WHEN CAST(fu.completed AS TEXT) IN ('1','true') THEN 1 ELSE 0 END) AS followups_completed
@@ -218,7 +217,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ),
       // d. Target totals per conference
-      runQuery(
+      runQuery(db, 
         `SELECT conference_id, COUNT(DISTINCT attendee_id) AS total_targets
          FROM conference_targets
          WHERE conference_id IN (${placeholders})
@@ -226,7 +225,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ),
       // e. Target meetings by rep
-      runQuery(
+      runQuery(db, 
         `SELECT m.conference_id, m.scheduled_by AS rep_raw, COUNT(DISTINCT m.attendee_id) AS targets_met
          FROM meetings m
          LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
@@ -238,7 +237,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ),
       // f. Target followups by rep
-      runQuery(
+      runQuery(db, 
         `SELECT fu.conference_id, fu.assigned_rep AS rep_raw, COUNT(DISTINCT fu.attendee_id) AS targets_fu
          FROM follow_ups fu
          WHERE fu.conference_id IN (${placeholders})
@@ -249,7 +248,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ),
       // g. Required pipeline
-      runQuery(
+      runQuery(db, 
         `SELECT conference_id, CAST(required_pipeline_amount AS REAL) AS req_pipeline
          FROM conference_budget
          WHERE conference_id IN (${placeholders})
@@ -258,7 +257,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ).catch(() => [] as Row[]),
       // h. Total companies + companies engaged per conference (for CES breadth)
-      runQuery(
+      runQuery(db, 
         `SELECT ca.conference_id,
                 COUNT(DISTINCT a.company_id) AS total_companies,
                 COUNT(DISTINCT CASE WHEN m_held.company_id IS NOT NULL THEN a.company_id END) AS companies_engaged
@@ -276,7 +275,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ).catch(() => [] as Row[]),
       // i. Total spend per conference (for cost efficiency)
-      runQuery(
+      runQuery(db, 
         `SELECT cb.conference_id,
                 SUM(COALESCE(
                   NULLIF(CAST(json_extract(li.value, '$.actual') AS REAL), 0),
@@ -291,7 +290,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ).catch(() => [] as Row[]),
       // j. Touchpoints per rep per conference (via meetings → attendees)
-      runQuery(
+      runQuery(db, 
         `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                 COUNT(DISTINCT atp.id) AS touchpoints
          FROM meetings m
@@ -303,7 +302,7 @@ export async function GET(req: NextRequest) {
         confIds,
       ).catch(() => [] as Row[]),
       // k. Effectiveness defaults for pipeline influence + productivity scoring
-      runQuery(
+      runQuery(db, 
         `SELECT key, value FROM effectiveness_defaults
          WHERE key IN (
            'follow_up_meeting_conversion_rate',
@@ -330,7 +329,7 @@ export async function GET(req: NextRequest) {
     //   - attribution to reps: proportional by held-meeting count per company
     let repPipelineRows: Row[] = [];
     try {
-      repPipelineRows = await runQuery(
+      repPipelineRows = await runQuery(db, 
         `WITH eff AS (
            SELECT
              COALESCE(MAX(CASE WHEN key='follow_up_meeting_conversion_rate' THEN CAST(value AS REAL) END), 30) / 100.0 AS fu_rate,
@@ -718,7 +717,7 @@ export async function GET(req: NextRequest) {
 
     let priorAvg: Record<string, number> = {};
     try {
-      const priorConfRows = await runQuery(
+      const priorConfRows = await runQuery(db, 
         `SELECT c.id FROM conferences c
          WHERE COALESCE(c.end_date, c.start_date) >= ? AND COALESCE(c.end_date, c.start_date) <= ?`,
         [priorStart, priorEnd],
@@ -728,7 +727,7 @@ export async function GET(req: NextRequest) {
         const priorConfIds = priorConfRows.map(r => Number(r.id));
         const priorPlaceholders = priorConfIds.map(() => '?').join(',');
 
-        const priorTotalTargetRows = await runQuery(
+        const priorTotalTargetRows = await runQuery(db, 
           `SELECT conference_id, COUNT(DISTINCT attendee_id) AS total_targets
            FROM conference_targets WHERE conference_id IN (${priorPlaceholders}) GROUP BY conference_id`,
           priorConfIds,
@@ -737,7 +736,7 @@ export async function GET(req: NextRequest) {
         for (const r of priorTotalTargetRows) priorTargetTotalMap.set(Number(r.conference_id), Number(r.total_targets ?? 0));
 
         const [priorMtgRows, priorFuAttachRows, priorFuRows, priorTgtMtgRows, priorTgtFuRows] = await Promise.all([
-          runQuery(
+          runQuery(db, 
             `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                     COUNT(*) AS meetings_scheduled,
                     COUNT(CASE WHEN LOWER(COALESCE(cop.action_key,''))='meeting_held' THEN 1 END) AS meetings_held,
@@ -748,7 +747,7 @@ export async function GET(req: NextRequest) {
              GROUP BY m.conference_id, m.scheduled_by`,
             priorConfIds,
           ),
-          runQuery(
+          runQuery(db, 
             `SELECT m.conference_id, m.scheduled_by AS rep_raw,
                     COUNT(DISTINCT CASE WHEN fu.id IS NOT NULL THEN a.company_id END) AS co_with_mtg_fu
              FROM meetings m JOIN attendees a ON m.attendee_id=a.id
@@ -761,7 +760,7 @@ export async function GET(req: NextRequest) {
              GROUP BY m.conference_id, m.scheduled_by`,
             priorConfIds,
           ),
-          runQuery(
+          runQuery(db, 
             `SELECT fu.conference_id, fu.assigned_rep AS rep_raw,
                     COUNT(*) AS followups_created,
                     SUM(CASE WHEN CAST(fu.completed AS TEXT) IN ('1','true') THEN 1 ELSE 0 END) AS followups_completed
@@ -772,7 +771,7 @@ export async function GET(req: NextRequest) {
              GROUP BY fu.conference_id, fu.assigned_rep`,
             priorConfIds,
           ),
-          runQuery(
+          runQuery(db, 
             `SELECT m.conference_id, m.scheduled_by AS rep_raw, COUNT(DISTINCT m.attendee_id) AS targets_met
              FROM meetings m LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
              WHERE m.conference_id IN (${priorPlaceholders})
@@ -782,7 +781,7 @@ export async function GET(req: NextRequest) {
              GROUP BY m.conference_id, m.scheduled_by`,
             priorConfIds,
           ),
-          runQuery(
+          runQuery(db, 
             `SELECT fu.conference_id, fu.assigned_rep AS rep_raw, COUNT(DISTINCT fu.attendee_id) AS targets_fu
              FROM follow_ups fu
              WHERE fu.conference_id IN (${priorPlaceholders})

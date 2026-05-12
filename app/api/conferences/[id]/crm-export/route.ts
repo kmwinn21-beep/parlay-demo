@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
 import { requireAuth } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 
 // ─── CSV helpers ──────────────────────────────────────────────────────────────

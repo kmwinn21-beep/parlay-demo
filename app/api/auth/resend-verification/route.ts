@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { sendVerificationEmail } from '@/lib/email';

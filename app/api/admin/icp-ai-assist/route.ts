@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAdmin } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 
 const AI_PROMPT = `You are a Chief Marketing Officer analyzing a company's public-facing presence to identify sales intelligence.

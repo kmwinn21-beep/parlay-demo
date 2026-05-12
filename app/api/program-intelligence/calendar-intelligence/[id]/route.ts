@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import type { InValue } from '@libsql/client';
 import { assembleFinalScore } from '@/lib/scoring/calendar-intelligence';

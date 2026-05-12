@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey, type TitleMatchConfidence } from '@/lib/titleNormalization';
 import { applyRuleToExactTitle, ensureTitleNormalizationSchema, getRuleForTitle, resolveAttendeeTitleMetadata, upsertTitleNormalizationRule } from '@/lib/titleNormalizationRules';

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, getConfigOptionValues } from '@/lib/db';
+import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { parseFile, parseFileWithMapping, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { SYSTEM_FIELD_LABELS } from '@/lib/columnMapping';

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser, validatePassword } from '@/lib/auth';
 

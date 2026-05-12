@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin, DEFAULT_ROLE_CAPABILITIES, resolveCapabilities, VALID_ROLES, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities } from '@/lib/auth';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 
 async function getRawJson(): Promise<string | null> {

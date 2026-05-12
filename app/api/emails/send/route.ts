@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getValidToken, sendViaGoogle, sendViaMicrosoft, type OAuthProvider } from '@/lib/oauthEmail';
-import { db } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 
 export async function POST(request: NextRequest) {
