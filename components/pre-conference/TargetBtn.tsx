@@ -4,17 +4,21 @@ export function TargetBtn({
   isTarget,
   onClick,
   size = 'sm',
+  disabled = false,
 }: {
   isTarget: boolean;
   onClick: (e: React.MouseEvent) => void;
   size?: 'sm' | 'md';
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(e); }}
-      title={isTarget ? 'Remove target' : 'Mark as target'}
+      onClick={(e) => { if (disabled) return; e.preventDefault(); e.stopPropagation(); onClick(e); }}
+      title={disabled ? 'Targeting is locked for closed conferences' : isTarget ? 'Remove target' : 'Mark as target'}
+      disabled={disabled}
       className={`flex-shrink-0 transition-colors rounded ${
+        disabled ? 'opacity-30 cursor-not-allowed' :
         isTarget ? 'text-red-500 hover:text-red-600' : 'text-gray-300 hover:text-gray-500'
       }`}
     >

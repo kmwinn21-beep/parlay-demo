@@ -111,13 +111,6 @@ const GREEN_DARK = '#064e3b';
 const GREEN_ACTIVE = '#059669';
 const TAB_ORDER = ['summary', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'events_touchpoints', 'action_items'];
 
-function fmtDate(d: string) {
-  try {
-    const [y, m, day] = d.split('-').map(Number);
-    return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  } catch { return d; }
-}
-
 // ── Stat pill in header ────────────────────────────────────────────────────────
 function StatPill({ label, value }: { label: string; value: number | string }) {
   return (
@@ -132,11 +125,9 @@ function StatPill({ label, value }: { label: string; value: number | string }) {
 interface Props {
   conferenceId: number;
   conferenceName: string;
-  endDate: string;
-  userRole: string;
 }
 
-export function PostConferenceReview({ conferenceId, conferenceName, endDate, userRole }: Props) {
+export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<PostConferenceData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -146,12 +137,7 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
   const tabConfig = useSectionConfig('post_conference_review');
   const visibleTabs = TAB_ORDER.filter(k => tabConfig.orderedKeys.includes(k) && tabConfig.isVisible(k));
 
-  const today = new Date();
-  const end = new Date(endDate + 'T00:00:00');
-  const isAccessible = userRole === 'administrator' || today >= end;
-
   const handleOpen = async () => {
-    if (!isAccessible) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/post-conference`);
@@ -174,36 +160,23 @@ export function PostConferenceReview({ conferenceId, conferenceName, endDate, us
 
   // ── Trigger button ──────────────────────────────────────────────────────────
   const triggerBtn = (
-    <div className="relative group inline-block">
-      <button
-        type="button"
-        disabled={!isAccessible}
-        onClick={handleOpen}
-        className={`flex items-center gap-1 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap
-          ${isAccessible
-            ? `text-gray-500 hover:text-brand-accent ${loading ? 'cursor-wait' : 'cursor-pointer'}`
-            : 'text-gray-400 cursor-not-allowed opacity-40'}`}
-      >
-        {loading ? (
-          <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        ) : (
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-        )}
-        <span>Post-Conference</span>
-      </button>
-      {!isAccessible && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap
-          bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100
-          transition-opacity pointer-events-none z-10">
-          Available on {fmtDate(endDate)}
-        </div>
+    <button
+      type="button"
+      onClick={handleOpen}
+      className={`flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap ${loading ? 'cursor-wait' : 'cursor-pointer'}`}
+    >
+      {loading ? (
+        <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
       )}
-    </div>
+      <span>Post-Conference</span>
+    </button>
   );
 
   if (!open || !data) return triggerBtn;

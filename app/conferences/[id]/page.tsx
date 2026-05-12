@@ -1195,6 +1195,15 @@ export default function ConferenceDetailPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
                 <div className="flex items-center gap-6 border-l border-gray-200 pl-3 overflow-x-auto flex-nowrap hide-scrollbar">
+                  <PreConferenceReview
+                    conferenceId={conference.id}
+                    conferenceName={conference.name}
+                    targetsReadOnly={conferenceStage === 'closed'}
+                  />
+                  <PostConferenceReview
+                    conferenceId={conference.id}
+                    conferenceName={conference.name}
+                  />
                   <ConferenceEffectivenessModal
                     conferenceId={conference.id}
                     conferenceName={conference.name}
