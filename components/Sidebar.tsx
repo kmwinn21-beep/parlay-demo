@@ -203,7 +203,7 @@ export function Sidebar() {
       </aside>
 
       {/* Onboarding checklist — only for trial users */}
-      <div className="fixed left-4 bottom-4 z-40 w-56">
+      <div className="fixed left-[calc(16rem+1rem)] bottom-4 z-40 w-56">
         <OnboardingChecklist />
       </div>
     </>
