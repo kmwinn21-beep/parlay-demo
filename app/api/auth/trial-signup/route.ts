@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     };
 
     const token = await signToken(sessionUser);
-    const redirectTo = `https://${slug}.useparlay.app/onboarding/${onboardingTrack === 'track_a' ? 'track-a' : 'track-b'}`;
+    const redirectTo = `https://work.useparlay.app/onboarding/${onboardingTrack === 'track_a' ? 'track-a' : 'track-b'}`;
 
     const response = NextResponse.json({
       success: true,
