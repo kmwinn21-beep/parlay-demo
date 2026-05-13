@@ -21,8 +21,8 @@ const PLANS: {
   {
     id: 'essentials',
     name: 'Essentials',
-    monthlyPrice: 99,
-    annualPrice: 79,
+    monthlyPrice: 299,
+    annualPrice: 239,
     description: 'Core conference tracking for growing teams.',
     highlights: [
       'Conference & attendee management',
@@ -34,8 +34,8 @@ const PLANS: {
   {
     id: 'professional',
     name: 'Professional',
-    monthlyPrice: 249,
-    annualPrice: 199,
+    monthlyPrice: 699,
+    annualPrice: 559,
     description: 'Full intelligence suite for serious conference programs.',
     highlights: [
       'Everything in Essentials',
@@ -49,8 +49,8 @@ const PLANS: {
   {
     id: 'enterprise',
     name: 'Enterprise',
-    monthlyPrice: 499,
-    annualPrice: 399,
+    monthlyPrice: 1399,
+    annualPrice: 1119,
     description: 'Program-level intelligence across your entire org.',
     highlights: [
       'Everything in Professional',
