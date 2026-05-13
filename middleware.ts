@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
+import type { UserRole } from '@/lib/auth';
+
+const COOKIE_NAME = 'auth_token';
+const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-CHANGE-IN-PRODUCTION-minimum-32-chars!!';
 
 // Paths that don't require a session
 const PUBLIC_PREFIXES = ['/auth/', '/api/auth/', '/api/logo-config', '/api/tagline', '/api/app-name', '/signup'];
@@ -14,6 +17,64 @@ function isPublic(pathname: string): boolean {
 
 function isAdminOnly(pathname: string): boolean {
   return ADMIN_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+type MiddlewareSessionUser = {
+  id: number;
+  email: string;
+  role: UserRole;
+  emailVerified: boolean;
+};
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function verifyTokenEdge(token: string): Promise<MiddlewareSessionUser | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(JWT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const signingInput = `${headerB64}.${payloadB64}`;
+    const expectedSig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(signingInput)));
+    const tokenSig = base64UrlToBytes(sigB64);
+    if (!timingSafeEqual(expectedSig, tokenSig)) return null;
+
+    const payloadJson = new TextDecoder().decode(base64UrlToBytes(payloadB64));
+    const payload = JSON.parse(payloadJson) as {
+      sub?: string; email?: string; role?: UserRole; emailVerified?: boolean; exp?: number;
+    };
+    if (!payload.sub || !payload.email || !payload.role) return null;
+    if (payload.exp && Date.now() >= payload.exp * 1000) return null;
+    return {
+      id: Number(payload.sub),
+      email: payload.email,
+      role: payload.role,
+      emailVerified: Boolean(payload.emailVerified),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -40,7 +101,7 @@ export async function middleware(request: NextRequest) {
 
   // Verify session token from cookie
   const token = request.cookies.get(COOKIE_NAME)?.value;
-  const user = token ? await verifyToken(token) : null;
+  const user = token ? await verifyTokenEdge(token) : null;
 
   // /ops routes: redirect unauthenticated to /auth/login (no error, no params)
   // is_admin check happens per-route-handler (requires DB, unavailable in Edge Runtime)
