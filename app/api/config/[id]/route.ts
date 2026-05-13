@@ -39,8 +39,9 @@ export async function PUT(
     const category = String(existing.rows[0].category);
     const isSystem = Number(existing.rows[0].is_system) === 1;
 
-    // Prevent renaming system-seeded options (value is locked; other fields like color are still editable)
-    if (isSystem && value !== oldValue) {
+    // Company type display names are always editable (identified stably by action_key, not value).
+    // For all other system-seeded categories, the value is locked.
+    if (isSystem && value !== oldValue && category !== 'company_type') {
       return NextResponse.json({ error: 'System options cannot be renamed.' }, { status: 403 });
     }
 
@@ -87,6 +88,13 @@ export async function PUT(
             sql: 'UPDATE companies SET company_type = ? WHERE company_type = ?',
             args: [value, oldValue],
           });
+          // Cascade to ICP rule conditions that reference this company type by display name
+          await db.execute({
+            sql: `UPDATE icp_rule_conditions SET option_value = ?
+                  WHERE option_value = ?
+                  AND rule_id IN (SELECT id FROM icp_rules WHERE category = 'company_type')`,
+            args: [value, oldValue],
+          }).catch(() => {});
         } else if (category === 'profit_type') {
           await db.execute({
             sql: 'UPDATE companies SET profit_type = ? WHERE profit_type = ?',

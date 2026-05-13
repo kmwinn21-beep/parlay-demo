@@ -1390,6 +1390,9 @@ export async function seedFreshDb(client: Client): Promise<void> {
     { category: 'next_steps', value: 'Schedule Follow Up Meeting', sort_order: 1 },
     { category: 'next_steps', value: 'General Follow Up', sort_order: 2 },
     { category: 'next_steps', value: 'Other', sort_order: 3 },
+    // ICP boolean type options — system values, cannot be removed by users
+    { category: 'icp', value: 'Yes', sort_order: 1 },
+    { category: 'icp', value: 'No', sort_order: 2 },
   ];
   const categorySeeds: Array<{ category: string; value: string; sort_order: number }> = [
     { category: 'seniority', value: 'C-Suite', sort_order: 1 },
@@ -1512,6 +1515,9 @@ export async function seedFreshDb(client: Client): Promise<void> {
     { category: 'touchpoints', value: 'Breakfast/Lunch' },
     { category: 'touchpoints', value: 'Other' },
     { category: 'attendee_conference_status', value: 'Target' },
+    // ICP boolean values — locked so users can't delete them
+    { category: 'icp', value: 'Yes' },
+    { category: 'icp', value: 'No' },
   ];
   await Promise.all(systemSeeds.map(seed =>
     client.execute({
@@ -1519,6 +1525,12 @@ export async function seedFreshDb(client: Client): Promise<void> {
       args: [seed.category, seed.value],
     }).catch(() => {})
   ));
+
+  // Remove erroneous "Prospect Company Type" seed entry if it exists from a previous provisioning bug
+  await client.execute({
+    sql: "DELETE FROM config_options WHERE category = 'company_type' AND value = 'Prospect Company Type'",
+    args: [],
+  }).catch(() => {});
 
   // Seed default Lead Capture form template
   try {

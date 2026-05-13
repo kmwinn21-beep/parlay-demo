@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useOnboarding } from '@/lib/OnboardingContext';
 
+// Steps 1 and 2 are manually completed; steps 3–7 auto-detect once unlocked
+type StepCompletionMode = 'manual' | 'auto';
+
 interface StepDef {
   id: string;
   label: string;
@@ -11,19 +14,42 @@ interface StepDef {
   actionLabel: string;
   getHref: (state: CheckState) => string;
   allowSkip?: boolean;
+  mode: StepCompletionMode;
 }
 
 interface CheckState {
   firstConferenceId: number | null;
 }
 
+// Steps 1–2: identical for both tracks
+const SETUP_STEPS: StepDef[] = [
+  {
+    id: 'set_primary_company_type',
+    label: 'Set your primary company type',
+    description: "Tell Parlay which company type represents your primary target. If you'd like to use a custom name instead of Prospect, edit the display name first, then click Confirm Primary.",
+    actionLabel: 'Go to Company Types',
+    getHref: () => '/admin?tab=types',
+    mode: 'manual',
+  },
+  {
+    id: 'set_service_types',
+    label: 'Set your service type(s)',
+    description: 'Add or edit the service types your target prospects provide. These feed directly into your ICP configuration and improve scoring accuracy.',
+    actionLabel: 'Go to Service Types',
+    getHref: () => '/admin?tab=types',
+    mode: 'manual',
+  },
+];
+
 const TRACK_A_STEPS: StepDef[] = [
+  ...SETUP_STEPS,
   {
     id: 'icp_configured',
     label: 'Configure your ICP profile',
     description: 'Your target scores will improve significantly after you configure your ICP profile.',
     actionLabel: 'Go to ICP settings',
     getHref: () => '/admin?tab=icp',
+    mode: 'auto',
   },
   {
     id: 'conference_created',
@@ -31,6 +57,7 @@ const TRACK_A_STEPS: StepDef[] = [
     description: 'Add your upcoming conference — name, dates, and location.',
     actionLabel: 'Create conference',
     getHref: () => '/conferences/new',
+    mode: 'auto',
   },
   {
     id: 'attendees_uploaded',
@@ -38,6 +65,7 @@ const TRACK_A_STEPS: StepDef[] = [
     description: 'Upload the attendee CSV from your upcoming conference.',
     actionLabel: 'Upload attendees',
     getHref: ({ firstConferenceId }) => firstConferenceId ? `/conferences/${firstConferenceId}` : '/conferences',
+    mode: 'auto',
   },
   {
     id: 'preconf_visited',
@@ -45,6 +73,7 @@ const TRACK_A_STEPS: StepDef[] = [
     description: 'See your target priority scores, strategy assessment, and recommended actions.',
     actionLabel: 'View pre-conference review',
     getHref: ({ firstConferenceId }) => firstConferenceId ? `/conferences/${firstConferenceId}` : '/conferences',
+    mode: 'auto',
   },
   {
     id: 'team_invited',
@@ -53,16 +82,19 @@ const TRACK_A_STEPS: StepDef[] = [
     actionLabel: 'Invite team',
     getHref: () => '/admin?tab=users',
     allowSkip: true,
+    mode: 'auto',
   },
 ];
 
 const TRACK_B_STEPS: StepDef[] = [
+  ...SETUP_STEPS,
   {
     id: 'icp_configured',
     label: 'Configure your ICP profile',
     description: 'Before uploading past conference lists, configure your ICP profile. Every list you upload will be scored against these settings.',
     actionLabel: 'Go to ICP settings',
     getHref: () => '/admin?tab=icp',
+    mode: 'auto',
   },
   {
     id: 'conferences_uploaded',
@@ -70,6 +102,7 @@ const TRACK_B_STEPS: StepDef[] = [
     description: 'Upload attendee lists from up to 5 past conferences.',
     actionLabel: 'Add past conference',
     getHref: () => '/conferences/new',
+    mode: 'auto',
   },
   {
     id: 'calendar_intel_visited',
@@ -77,13 +110,15 @@ const TRACK_B_STEPS: StepDef[] = [
     description: 'See which conferences had the highest ICP density and pipeline potential.',
     actionLabel: 'View Calendar Intelligence',
     getHref: () => '/program-intelligence?tab=calendar',
+    mode: 'auto',
   },
   {
     id: 'performance_visited',
     label: 'Compare conferences side by side',
-    description: 'See all past conferences scored and ranked for next year\'s calendar decisions.',
+    description: "See all past conferences scored and ranked for next year's calendar decisions.",
     actionLabel: 'View Performance Overview',
     getHref: () => '/program-intelligence?tab=performance',
+    mode: 'auto',
   },
   {
     id: 'team_invited',
@@ -92,6 +127,7 @@ const TRACK_B_STEPS: StepDef[] = [
     actionLabel: 'Invite team',
     getHref: () => '/admin?tab=users',
     allowSkip: true,
+    mode: 'auto',
   },
 ];
 
@@ -105,7 +141,7 @@ interface IcpConfigResponse {
   rules: unknown[];
 }
 
-async function checkCompletionConditions(completedSteps: string[]): Promise<{
+async function checkAutoCompletionConditions(completedSteps: string[]): Promise<{
   newSteps: string[];
   firstConferenceId: number | null;
 }> {
@@ -162,6 +198,14 @@ async function checkCompletionConditions(completedSteps: string[]): Promise<{
   return { newSteps, firstConferenceId: firstFutureConfId };
 }
 
+function LockIcon() {
+  return (
+    <svg className="w-3 h-3 text-white/30 flex-shrink-0 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  );
+}
+
 export function OnboardingChecklist() {
   const router = useRouter();
   const pathname = usePathname();
@@ -170,13 +214,20 @@ export function OnboardingChecklist() {
   const [checkState, setCheckState] = useState<CheckState>({ firstConferenceId: null });
   const [showDismissConfirm, setShowDismissConfirm] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
+  const [markingStep, setMarkingStep] = useState<string | null>(null);
   const checkedRef = useRef(false);
 
   const steps = onboardingTrack === 'track_b' ? TRACK_B_STEPS : TRACK_A_STEPS;
 
-  const runCompletionCheck = useCallback(async () => {
+  const stepsOneAndTwoComplete = !!(
+    onboardingProgress?.completed_steps.includes('set_primary_company_type') &&
+    onboardingProgress?.completed_steps.includes('set_service_types')
+  );
+
+  const runAutoCompletionCheck = useCallback(async () => {
     if (!onboardingProgress) return;
-    const { newSteps, firstConferenceId } = await checkCompletionConditions(onboardingProgress.completed_steps);
+    if (!stepsOneAndTwoComplete) return; // auto-check only runs once steps 1 & 2 are done
+    const { newSteps, firstConferenceId } = await checkAutoCompletionConditions(onboardingProgress.completed_steps);
     setCheckState({ firstConferenceId });
 
     const allCurrentSteps = [...onboardingProgress.completed_steps];
@@ -203,14 +254,14 @@ export function OnboardingChecklist() {
         setTimeout(() => setShowComplete(false), 3000);
       }
     }
-  }, [onboardingProgress, steps]);
+  }, [onboardingProgress, steps, stepsOneAndTwoComplete]);
 
   // Check on mount and route changes
   useEffect(() => {
     if (!onboardingProgress || !isEligible) return;
-    runCompletionCheck();
+    runAutoCompletionCheck();
     checkedRef.current = true;
-  }, [pathname, onboardingProgress, isEligible, runCompletionCheck]);
+  }, [pathname, onboardingProgress, isEligible, runAutoCompletionCheck]);
 
   if (loading || !isEligible || !onboardingProgress || onboardingProgress.dismissed) return null;
   if (onboardingProgress.completed_at && !showComplete) return null;
@@ -226,6 +277,15 @@ export function OnboardingChecklist() {
 
   const handleSkipStep = async (stepId: string) => {
     await markStepComplete(stepId);
+  };
+
+  const handleManualComplete = async (stepId: string) => {
+    setMarkingStep(stepId);
+    try {
+      await markStepComplete(stepId);
+    } finally {
+      setMarkingStep(null);
+    }
   };
 
   const handleStepClick = (step: StepDef) => {
@@ -318,6 +378,9 @@ export function OnboardingChecklist() {
         {steps.map((step, idx) => {
           const isComplete = completedIds.has(step.id);
           const isNext = !isComplete && steps.slice(0, idx).every(s => completedIds.has(s.id));
+          // Steps 3–7 (index 2+) are locked until steps 1 & 2 are both done
+          const isLocked = idx >= 2 && !stepsOneAndTwoComplete && !isComplete;
+
           return (
             <div key={step.id} className="px-3 py-2">
               <div className="flex items-start gap-2">
@@ -330,34 +393,57 @@ export function OnboardingChecklist() {
                       </svg>
                     </div>
                   ) : (
-                    <div className={`w-4 h-4 rounded-full border-2 ${isNext ? 'border-white/60' : 'border-white/25'}`} />
+                    <div className={`w-4 h-4 rounded-full border-2 ${isLocked ? 'border-white/15' : isNext ? 'border-white/60' : 'border-white/25'}`} />
                   )}
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-medium leading-tight ${isComplete ? 'text-white/40 line-through' : 'text-white/90'}`}>
+                  <p className={`text-xs font-medium leading-tight flex items-center gap-1 ${isComplete ? 'text-white/40 line-through' : isLocked ? 'text-white/30' : 'text-white/90'}`}>
                     {step.label}
+                    {isLocked && <LockIcon />}
                   </p>
                   {!isComplete && (
                     <>
-                      <p className="text-white/50 text-[10px] leading-tight mt-0.5">{step.description}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <button
-                          onClick={() => handleStepClick(step)}
-                          className="text-[10px] font-medium text-brand-highlight hover:underline"
-                        >
-                          {step.actionLabel} →
-                        </button>
-                        {step.allowSkip && (
-                          <button
-                            onClick={() => handleSkipStep(step.id)}
-                            className="text-[10px] text-white/40 hover:text-white/60"
-                          >
-                            Skip
-                          </button>
-                        )}
-                      </div>
+                      <p className={`text-[10px] leading-tight mt-0.5 ${isLocked ? 'text-white/25' : 'text-white/50'}`}>
+                        {isLocked ? 'Complete Steps 1 and 2 first to unlock' : step.description}
+                      </p>
+                      {!isLocked && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                          {step.mode === 'manual' ? (
+                            <button
+                              onClick={() => handleManualComplete(step.id)}
+                              disabled={markingStep === step.id}
+                              className="text-[10px] font-medium text-brand-highlight hover:underline disabled:opacity-50"
+                            >
+                              {markingStep === step.id ? 'Saving…' : 'Mark as complete'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStepClick(step)}
+                              className="text-[10px] font-medium text-brand-highlight hover:underline"
+                            >
+                              {step.actionLabel}
+                            </button>
+                          )}
+                          {step.mode === 'manual' && (
+                            <button
+                              onClick={() => handleStepClick(step)}
+                              className="text-[10px] text-white/40 hover:text-white/60"
+                            >
+                              {step.actionLabel}
+                            </button>
+                          )}
+                          {step.allowSkip && step.mode !== 'manual' && (
+                            <button
+                              onClick={() => handleSkipStep(step.id)}
+                              className="text-[10px] text-white/40 hover:text-white/60"
+                            >
+                              Skip
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

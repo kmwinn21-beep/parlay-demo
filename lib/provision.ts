@@ -58,11 +58,19 @@ async function seedTenantDb(
   const client = createTenantDb(tursoDbUrl, tursoAuthToken);
   await seedFreshDb(client);
 
-  // Insert the admin user
+  // Seed the admin's full name as a 'user' config_option (drives the Rep Profile dropdown)
+  const fullName = `${params.firstName} ${params.lastName}`.trim();
+  const userOptionResult = await client.execute({
+    sql: `INSERT INTO config_options (category, value, sort_order) VALUES ('user', ?, 1) RETURNING id`,
+    args: [fullName],
+  });
+  const userConfigId = userOptionResult.rows[0]?.id ? Number(userOptionResult.rows[0].id) : null;
+
+  // Insert the admin user and link their config_id to the user config_option just created
   await client.execute({
-    sql: `INSERT INTO users (email, password_hash, role, email_verified, active, first_name, last_name)
-          VALUES (?, ?, 'administrator', 1, 1, ?, ?)`,
-    args: [params.email, params.passwordHash, params.firstName, params.lastName],
+    sql: `INSERT INTO users (email, password_hash, role, email_verified, active, first_name, last_name, config_id)
+          VALUES (?, ?, 'administrator', 1, 1, ?, ?, ?)`,
+    args: [params.email, params.passwordHash, params.firstName, params.lastName, userConfigId],
   });
 
   // Seed site_settings with account-specific values
@@ -81,6 +89,47 @@ async function seedTenantDb(
       args: [key, value],
     }).catch(() => {})
   ));
+
+  // ── Provisioning verification checks ──────────────────────────────────────
+  // Verify erroneous "Prospect Company Type" entry is absent
+  try {
+    const companyTypes = await client.execute({
+      sql: "SELECT display_name FROM config_options WHERE category = 'company_type' ORDER BY value",
+      args: [],
+    });
+    const hasProspectCompanyType = companyTypes.rows.some(
+      r => String(r.display_name ?? '') === 'Prospect Company Type'
+    );
+    // Also check the value column (the actual display field)
+    const companyTypeValues = await client.execute({
+      sql: "SELECT value FROM config_options WHERE category = 'company_type' ORDER BY value",
+      args: [],
+    });
+    const hasProspectCompanyTypeValue = companyTypeValues.rows.some(
+      r => String(r.value ?? '') === 'Prospect Company Type'
+    );
+    if (hasProspectCompanyType || hasProspectCompanyTypeValue) {
+      console.error('[provision] SEED ERROR: "Prospect Company Type" found in new tenant DB — should have been removed');
+    } else {
+      console.log('[provision] Verified: "Prospect Company Type" not present in new tenant DB');
+    }
+  } catch (e) {
+    console.warn('[provision] Could not verify company types:', e);
+  }
+
+  // Verify Yes/No ICP types are seeded with is_system=1
+  try {
+    const icpTypes = await client.execute({
+      sql: "SELECT value, is_system FROM config_options WHERE category = 'icp' AND value IN ('Yes', 'No')",
+      args: [],
+    });
+    console.log('[provision] ICP system types seeded:', icpTypes.rows.map(r => ({ value: r.value, is_system: r.is_system })));
+    if (icpTypes.rows.length < 2) {
+      console.error('[provision] SEED ERROR: Yes/No ICP types not fully seeded — expected 2 rows, got', icpTypes.rows.length);
+    }
+  } catch (e) {
+    console.warn('[provision] Could not verify ICP types:', e);
+  }
 
   const conferenceCount = await client.execute('SELECT COUNT(*) as count FROM conferences');
   const count = Number(conferenceCount.rows[0]?.count ?? 0);
