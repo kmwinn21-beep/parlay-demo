@@ -272,7 +272,7 @@ export function OnboardingChecklist() {
   }
 
   return (
-    <div className="mx-4 mb-2 bg-white/10 rounded-xl overflow-hidden">
+    <div className="mx-4 mb-2 bg-brand-primary/75 rounded-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
         <span className="text-white text-xs font-semibold">Setup guide</span>
