@@ -6,6 +6,25 @@ export const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN!,
 });
 
+async function ensureConfigOptionsColumns(client: Client): Promise<void> {
+  const configCols = await client.execute({ sql: 'PRAGMA table_info(config_options)', args: [] });
+  const configColNames = new Set(configCols.rows.map(r => String(r.name)));
+  const requiredConfigColumns: Array<[string, string]> = [
+    ['color', 'ALTER TABLE config_options ADD COLUMN color TEXT'],
+    ['action_key', 'ALTER TABLE config_options ADD COLUMN action_key TEXT'],
+    ['status_key', 'ALTER TABLE config_options ADD COLUMN status_key TEXT'],
+    ['scope', "ALTER TABLE config_options ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'"],
+    ['auto_follow_up', 'ALTER TABLE config_options ADD COLUMN auto_follow_up INTEGER NOT NULL DEFAULT 1'],
+    ['is_system', 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0'],
+    ['is_primary', 'ALTER TABLE config_options ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0'],
+  ];
+  await Promise.all(
+    requiredConfigColumns
+      .filter(([col]) => !configColNames.has(col))
+      .map(([, sql]) => client.execute({ sql, args: [] }).catch(() => {}))
+  );
+}
+
 export async function initDb(): Promise<void> {
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS conferences (
@@ -386,7 +405,7 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Add to Nurture', 6, 'add_to_nurture')`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
      VALUES ('company_type', 'Prospect', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'prospect')`,
-    `UPDATE config_options SET action_key = 'prospect' WHERE category = 'company_type' AND value = 'Prospect' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'prospect' WHERE category = 'company_type' AND value IN ('Prospect', 'Prospect Company Type') AND action_key IS NULL`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Do Not Prioritize', 7, 'do_not_prioritize')`,
     // Form Builder tables
     `CREATE TABLE IF NOT EXISTS form_templates (
@@ -849,11 +868,7 @@ export async function initDb(): Promise<void> {
     if (!companyColNames.has('products')) {
       await db.execute({ sql: 'ALTER TABLE companies ADD COLUMN products TEXT', args: [] }).catch(() => {});
     }
-    const configCols = await db.execute({ sql: 'PRAGMA table_info(config_options)', args: [] });
-    const configColNames = new Set(configCols.rows.map(r => String(r.name)));
-    if (!configColNames.has('is_system')) {
-      await db.execute({ sql: 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0', args: [] }).catch(() => {});
-    }
+    await ensureConfigOptionsColumns(db);
     // Ensure accounts table has multi-tenant columns (added after initial schema deployment)
     try {
       const accountCols = await db.execute({ sql: 'PRAGMA table_info(accounts)', args: [] });
@@ -918,8 +933,8 @@ export async function initDb(): Promise<void> {
   const configCount = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM config_options', args: [] });
   if (Number(configCount.rows[0].cnt) === 0) {
     const seeds: Array<{ category: string; value: string; sort_order: number }> = [
-      { category: 'company_type', value: '3rd Party Operator', sort_order: 1 },
-      { category: 'company_type', value: 'Owner/Operator', sort_order: 2 },
+      { category: 'company_type', value: 'Prospect Company Type', sort_order: 1 },
+      { category: 'company_type', value: 'Owner', sort_order: 2 },
       { category: 'company_type', value: 'Capital Partner', sort_order: 3 },
       { category: 'company_type', value: 'Vendor', sort_order: 4 },
       { category: 'company_type', value: 'Partner', sort_order: 5 },
@@ -1044,8 +1059,8 @@ export async function initDb(): Promise<void> {
 
   // Mark all system-seeded config_options as protected from deletion (runs every startup; safe)
   const systemSeeds: Array<{ category: string; value: string }> = [
-    { category: 'company_type', value: '3rd Party Operator' },
-    { category: 'company_type', value: 'Owner/Operator' },
+    { category: 'company_type', value: 'Prospect Company Type' },
+    { category: 'company_type', value: 'Owner' },
     { category: 'company_type', value: 'Capital Partner' },
     { category: 'company_type', value: 'Vendor' },
     { category: 'company_type', value: 'Partner' },
@@ -1339,13 +1354,12 @@ export async function seedFreshDb(client: Client): Promise<void> {
     args: [],
   });
 
-  // Run CREATE TABLE IF NOT EXISTS and CREATE INDEX IF NOT EXISTS from migrations
-  const ddl = migrations.filter(sql => /^\s*(CREATE\s+(TABLE|UNIQUE\s+INDEX|INDEX))/i.test(sql));
+  // Run schema/data migrations in order groups so seeded inserts cannot race ahead of column creation.
+  const ddl = migrations.filter(sql => /^\s*(CREATE|ALTER)/i.test(sql));
   await Promise.all(ddl.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
-
-  // Run DML seeds (INSERT/UPDATE) from migrations — ALTER TABLE fails silently (no-op on fresh DB)
   const dml = migrations.filter(sql => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql));
   await Promise.all(dml.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
+  await ensureConfigOptionsColumns(client);
 
   // Unit type seed
   const utCheck = await client.execute({ sql: "SELECT id FROM config_options WHERE category = 'unit_type' ORDER BY id", args: [] });
@@ -1355,8 +1369,8 @@ export async function seedFreshDb(client: Client): Promise<void> {
 
   // Base config seeds — always INSERT OR IGNORE (fresh DB may have some rows from migrations)
   const baseSeeds: Array<{ category: string; value: string; sort_order: number }> = [
-    { category: 'company_type', value: '3rd Party Operator', sort_order: 1 },
-    { category: 'company_type', value: 'Owner/Operator', sort_order: 2 },
+    { category: 'company_type', value: 'Prospect Company Type', sort_order: 1 },
+    { category: 'company_type', value: 'Owner', sort_order: 2 },
     { category: 'company_type', value: 'Capital Partner', sort_order: 3 },
     { category: 'company_type', value: 'Vendor', sort_order: 4 },
     { category: 'company_type', value: 'Partner', sort_order: 5 },
@@ -1446,8 +1460,8 @@ export async function seedFreshDb(client: Client): Promise<void> {
 
   // Mark system-seeded options as protected
   const systemSeeds: Array<{ category: string; value: string }> = [
-    { category: 'company_type', value: '3rd Party Operator' },
-    { category: 'company_type', value: 'Owner/Operator' },
+    { category: 'company_type', value: 'Prospect Company Type' },
+    { category: 'company_type', value: 'Owner' },
     { category: 'company_type', value: 'Capital Partner' },
     { category: 'company_type', value: 'Vendor' },
     { category: 'company_type', value: 'Partner' },
