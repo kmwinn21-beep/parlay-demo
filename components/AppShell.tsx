@@ -14,19 +14,14 @@ import { TrialBanner } from './TrialBanner';
 import ImpersonationBanner from './ImpersonationBanner';
 import { OnboardingProvider } from '@/lib/OnboardingContext';
 import { WelcomeInterstitial } from './onboarding/WelcomeInterstitial';
+import { UpgradeModalProvider } from '@/lib/UpgradeModalContext';
+import { PlanSelectionModal } from './PlanSelectionModal';
+import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
-  // Auth pages render without the shell (no sidebar/header/nav)
-  // Exception: /auth/account is a protected app page that needs the full shell
-  if (pathname.startsWith('/auth/') && pathname !== '/auth/account') {
-    return <>{children}</>;
-  }
-
+function AppShellInner({ children }: { children: React.ReactNode }) {
+  const { isOpen, defaultPlan, closeUpgradeModal } = useUpgradeModal();
   return (
-    <UserProvider>
-      <OnboardingProvider>
+    <>
       <ChatPanelProvider>
       <FloatingNavHiddenProvider>
       <BottomNavProvider>
@@ -62,6 +57,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Suspense fallback={null}>
         <WelcomeInterstitial />
       </Suspense>
+
+      {/* Plan selection modal — single instance, controlled via UpgradeModalContext */}
+      <PlanSelectionModal isOpen={isOpen} onClose={closeUpgradeModal} defaultPlan={defaultPlan} />
+    </>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  // Auth pages render without the shell (no sidebar/header/nav)
+  // Exception: /auth/account is a protected app page that needs the full shell
+  if (pathname.startsWith('/auth/') && pathname !== '/auth/account') {
+    return <>{children}</>;
+  }
+
+  return (
+    <UserProvider>
+      <OnboardingProvider>
+      <UpgradeModalProvider>
+        <AppShellInner>{children}</AppShellInner>
+      </UpgradeModalProvider>
       </OnboardingProvider>
     </UserProvider>
   );

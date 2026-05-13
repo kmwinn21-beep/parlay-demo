@@ -8,6 +8,7 @@ import { DashboardBanner } from '@/components/DashboardBanner';
 import { RecentSection, type DashboardConference } from '@/components/RecentSection';
 import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 import { DashboardActionCard } from '@/components/DashboardActionCard';
+import { UpgradeSuccessBanner } from '@/components/UpgradeSuccessBanner';
 export const dynamic = 'force-dynamic';
 
 interface RecentConference {
@@ -345,6 +346,11 @@ async function TargetsAndRecentSection() {
 export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      {/* Post-checkout success/cancel banner — useSearchParams requires Suspense */}
+      <Suspense fallback={null}>
+        <UpgradeSuccessBanner />
+      </Suspense>
+
       {/* Overview stats + Conference Tracking banner */}
       <Suspense fallback={<StatsSkeleton />}>
         <StatsSection />

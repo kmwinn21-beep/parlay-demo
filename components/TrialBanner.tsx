@@ -1,9 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 
 export function TrialBanner() {
   const { trialState, daysRemaining } = useCapabilities();
+  const { openUpgradeModal } = useUpgradeModal();
   const [dismissed, setDismissed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -14,8 +16,6 @@ export function TrialBanner() {
       setDismissed(sessionStorage.getItem(key) === 'true');
     }
   }, [daysRemaining]);
-
-  const upgradeUrl = process.env.NEXT_PUBLIC_PRICING_URL ?? '/pricing';
 
   const handleDismiss = () => {
     if (daysRemaining != null) {
@@ -40,12 +40,12 @@ export function TrialBanner() {
           <p className="text-gray-500 text-sm mb-6">
             Your 14-day free trial has expired. Upgrade to a paid plan to continue using Parlay. Your data is safe and will be restored when you upgrade.
           </p>
-          <a
-            href={upgradeUrl}
+          <button
+            onClick={() => openUpgradeModal()}
             className="inline-block w-full py-3 px-6 bg-brand-primary text-white font-semibold rounded-xl text-center hover:opacity-90 transition-opacity"
           >
             View Plans &amp; Pricing
-          </a>
+          </button>
           <p className="text-xs text-gray-400 mt-4">
             Need help? Contact us at{' '}
             <a href="mailto:support@useparlay.com" className="underline">support@useparlay.com</a>
@@ -63,12 +63,12 @@ export function TrialBanner() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <span>Your trial has ended — the app is now <strong>read-only</strong>. Upgrade to restore full access.</span>
-        <a
-          href={upgradeUrl}
-          className="ml-2 underline font-semibold hover:no-underline flex-shrink-0"
+        <button
+          onClick={() => openUpgradeModal()}
+          className="ml-2 underline font-semibold hover:no-underline flex-shrink-0 bg-transparent border-0 cursor-pointer text-white"
         >
           Upgrade now →
-        </a>
+        </button>
       </div>
     );
   }
@@ -89,9 +89,12 @@ export function TrialBanner() {
         </svg>
         <span>
           Your free trial ends in <strong>{daysRemaining} {dayWord}</strong>.{' '}
-          <a href={upgradeUrl} className="underline font-semibold hover:no-underline">
+          <button
+            onClick={() => openUpgradeModal()}
+            className="underline font-semibold hover:no-underline bg-transparent border-0 cursor-pointer text-amber-800 p-0"
+          >
             Upgrade now →
-          </a>
+          </button>
         </span>
       </div>
       <button

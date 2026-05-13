@@ -130,6 +130,76 @@ const ORG_ALL_FALSE = { brand_customization: false, white_label: false, form_bui
 const CUSTOM_ONLY_ALL_TRUE = { native_crm_integration: true, multi_team_architecture: true, multi_org_architecture: true, api_access: true, custom_sla: true, custom_data_migration: true, dedicated_onboarding: true };
 const CUSTOM_ONLY_ALL_FALSE = { native_crm_integration: false, multi_team_architecture: false, multi_org_architecture: false, api_access: false, custom_sla: false, custom_data_migration: false, dedicated_onboarding: false };
 
+// Builds a capability map for a custom bundle plan.
+// Starts with Essentials as the base and layers on each bundle's capabilities.
+export function buildCustomPlanCapabilities(
+  purchasedBundles: string[]
+): PlanCapabilities {
+  const resolvedBundles = new Set(purchasedBundles);
+
+  // Enforce dependencies: program_intelligence requires revenue_intelligence
+  if (resolvedBundles.has('program_intelligence')) {
+    resolvedBundles.add('revenue_intelligence');
+  }
+
+  const capabilities = structuredClone(PLAN_CAPABILITIES.essentials);
+
+  for (const bundle of Array.from(resolvedBundles)) {
+    switch (bundle) {
+      case 'intelligence_core':
+        capabilities.intelligence_core.icp_rules_engine = true;
+        capabilities.intelligence_core.target_priority_scoring = true;
+        capabilities.intelligence_core.prospect_recommendations = true;
+        capabilities.intelligence_core.internal_relationship_mapping = true;
+        break;
+      case 'floor_capture':
+        capabilities.floor_capture.ai_card_scanning = true;
+        capabilities.floor_capture.ai_batch_card_scanning = true;
+        capabilities.floor_capture.floor_notes = true;
+        capabilities.floor_capture.auto_followup_triggers = true;
+        break;
+      case 'team_collaboration':
+        capabilities.team_collaboration.direct_messaging = true;
+        capabilities.team_collaboration.group_messaging = true;
+        capabilities.team_collaboration.rich_notes_mentions = true;
+        capabilities.team_collaboration.rich_notes_comments = true;
+        capabilities.team_collaboration.rich_notes_reactions = true;
+        break;
+      case 'revenue_intelligence':
+        capabilities.revenue_intelligence.effectiveness_analytics = true;
+        capabilities.revenue_intelligence.effectiveness_tab_summary = true;
+        capabilities.revenue_intelligence.effectiveness_tab_sales_execution = true;
+        capabilities.revenue_intelligence.effectiveness_tab_audience_messaging = true;
+        capabilities.revenue_intelligence.effectiveness_tab_cost_efficiency = true;
+        capabilities.revenue_intelligence.effectiveness_tab_definitions = true;
+        capabilities.revenue_intelligence.budget_tracking = true;
+        capabilities.revenue_intelligence.roi_modeling = true;
+        capabilities.revenue_intelligence.effectiveness_benchmarks = true;
+        capabilities.revenue.crm_export = true;
+        capabilities.revenue.email_integration_google = true;
+        capabilities.revenue.email_integration_microsoft = true;
+        break;
+      case 'program_intelligence':
+        capabilities.program_intelligence.global_reporting = true;
+        capabilities.program_intelligence.cross_conference_trends = true;
+        capabilities.program_intelligence.configurable_benchmarks = true;
+        break;
+      case 'org_infrastructure':
+        capabilities.org_infrastructure.brand_customization = true;
+        capabilities.org_infrastructure.white_label = true;
+        capabilities.org_infrastructure.form_builder = true;
+        capabilities.org_infrastructure.lead_capture = true;
+        capabilities.org_infrastructure.role_scope_matrix = true;
+        break;
+      case 'crm_export':
+        capabilities.revenue.crm_export = true;
+        break;
+    }
+  }
+
+  return capabilities;
+}
+
 export const PLAN_CAPABILITIES: Record<PlanId, PlanCapabilities> = {
   trial: {
     core: CORE_ALL_TRUE,
