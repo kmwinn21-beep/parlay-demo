@@ -33,6 +33,7 @@ interface ConfigOption {
   auto_follow_up?: number; // 1 = yes, 0 = no — only meaningful for touchpoints category
   is_system?: number; // 1 = seeded system value, cannot be deleted
   is_primary?: number; // 1 = primary designation for this category
+  action_key?: string | null; // stable identifier; company_type uses 'prospect' to mark the primary target type
 }
 
 const CATEGORIES = [
@@ -352,17 +353,18 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
                         )}
                       </span>
-                      {category === 'company_type' && (
+                      {category === 'company_type' && opt.action_key === 'prospect' && (
                         opt.is_primary
                           ? <span className="flex items-center gap-1 text-xs font-medium text-amber-600 px-2 py-1">
                               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                               Primary
                             </span>
-                          : <button type="button" onClick={() => handleMakePrimary(opt.id)} className="text-gray-400 hover:text-amber-600 text-xs font-medium px-2 py-1 transition-colors">Make Primary</button>
+                          : <button type="button" onClick={() => handleMakePrimary(opt.id)} className="text-gray-400 hover:text-amber-600 text-xs font-medium px-2 py-1 transition-colors">Confirm Primary</button>
                       )}
-                      {opt.is_system
-                        ? <span className="text-xs text-gray-400 px-2 py-1 italic">System</span>
-                        : <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
+                      {/* Company type display names are always editable, even for system entries */}
+                      {(category === 'company_type' || !opt.is_system)
+                        ? <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
+                        : <span className="text-xs text-gray-400 px-2 py-1 italic">System</span>
                       }
                       {!opt.is_system && (
                         <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
@@ -372,7 +374,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
-                          {opt.is_system ? (
+                          {opt.is_system && category !== 'company_type' ? (
                             <div className="input-field w-full text-sm bg-gray-50 text-gray-500 flex items-center justify-between">
                               <span>{opt.value}</span>
                               <span className="text-[10px] text-gray-400 italic ml-2">locked</span>
@@ -466,7 +468,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          {!opt.is_system && <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>}
+                          {(!opt.is_system || category === 'company_type') && <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>}
                           <button
                             type="button"
                             onClick={() => {
@@ -2451,18 +2453,27 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             {/* ICP onboarding banner — trial users who haven't configured ICP yet */}
-            {planId === 'trial' && onboardingProgress !== null && !onboardingProgress.completed_steps.includes('icp_configured') && icpRules.length === 0 && (
-              <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p>
-                  {onboardingTrack === 'track_b'
-                    ? 'Before you upload your past conference lists, configure your ICP profile. The more specific you are, the more accurate your retroactive scores will be.'
-                    : 'This is the most important setup step. Every company and attendee Parlay scores will be evaluated against the profile you configure here.'}
-                </p>
-              </div>
-            )}
+            {planId === 'trial' && onboardingProgress !== null && !onboardingProgress.completed_steps.includes('icp_configured') && icpRules.length === 0 && (() => {
+              const prereqsDone =
+                onboardingProgress.completed_steps.includes('set_primary_company_type') &&
+                onboardingProgress.completed_steps.includes('set_service_types');
+              return (
+                <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p>
+                    {!prereqsDone
+                      ? (onboardingTrack === 'track_b'
+                        ? "Before configuring your ICP profile, make sure you've set your primary company type and service types — these determine how every past conference list will be scored."
+                        : "Before configuring your ICP profile, make sure you've set your primary company type and service types in Admin Settings — these directly affect how your ICP rules are applied.")
+                      : (onboardingTrack === 'track_b'
+                        ? 'Before you upload your past conference lists, configure your ICP profile. The more specific you are, the more accurate your retroactive scores will be.'
+                        : 'This is the most important setup step. Every company and attendee Parlay scores will be evaluated against the profile you configure here.')}
+                  </p>
+                </div>
+              );
+            })()}
             <IcpSettingsSection
               title="Basic ICP Settings"
               description="Define your core ICP, buyer persona, pain points, and use case."
