@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import type { BudgetCompletionStatus } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
@@ -781,6 +782,7 @@ function BudgetStatusCell({ row, onOpenModal }: { row: CalendarConferenceRow; on
 export default function ProgramIntelligencePage() {
   const router = useRouter();
   const capabilities = useCapabilities();
+  const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
 
   const [activeTab, setActiveTab] = useState<TabId>('performance');
   const [preset, setPreset] = useState<DatePreset>('this_year');
@@ -878,6 +880,18 @@ export default function ProgramIntelligencePage() {
       .finally(() => { if (!cancelled) setRepLoading(false); });
     return () => { cancelled = true; };
   }, [activeTab, startDate, endDate]);
+
+  // Track B onboarding: mark step complete when user visits calendar or performance tabs
+  useEffect(() => {
+    if (onboardingTrack !== 'track_b' || !onboardingProgress) return;
+    if (activeTab === 'calendar' && !onboardingProgress.completed_steps.includes('calendar_intel_visited')) {
+      markStepComplete('calendar_intel_visited');
+    }
+    if ((activeTab === 'performance' || activeTab === 'budget' || activeTab === 'pipeline') &&
+        !onboardingProgress.completed_steps.includes('performance_visited')) {
+      markStepComplete('performance_visited');
+    }
+  }, [activeTab, onboardingTrack, onboardingProgress, markStepComplete]);
 
   // All derived state computed before any conditional returns (rules of hooks)
 

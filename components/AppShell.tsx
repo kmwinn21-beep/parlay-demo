@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -11,6 +12,8 @@ import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
 import { UserProvider } from './UserContext';
 import { TrialBanner } from './TrialBanner';
 import ImpersonationBanner from './ImpersonationBanner';
+import { OnboardingProvider } from '@/lib/OnboardingContext';
+import { WelcomeInterstitial } from './onboarding/WelcomeInterstitial';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -23,6 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <UserProvider>
+      <OnboardingProvider>
       <ChatPanelProvider>
       <FloatingNavHiddenProvider>
       <BottomNavProvider>
@@ -53,6 +57,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </BottomNavProvider>
       </FloatingNavHiddenProvider>
       </ChatPanelProvider>
+
+      {/* Onboarding overlays — useSearchParams requires Suspense boundary */}
+      <Suspense fallback={null}>
+        <WelcomeInterstitial />
+      </Suspense>
+      </OnboardingProvider>
     </UserProvider>
   );
 }

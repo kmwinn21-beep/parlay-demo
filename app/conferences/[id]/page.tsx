@@ -29,6 +29,7 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
 import { useUser } from '@/components/UserContext';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { useOnboarding } from '@/lib/OnboardingContext';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { BatchCardScanModal } from '@/components/BatchCardScanModal';
 import { CrmExportModal } from '@/components/CrmExportModal';
@@ -266,6 +267,7 @@ export default function ConferenceDetailPage() {
   const { user: currentUser } = useUser();
   const capabilities = useCapabilities();
   const logoConfig = useLogoConfig();
+  const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
   const isAdminUser = currentUser?.role === 'administrator';
 
   const [conference, setConference] = useState<Conference | null>(null);
@@ -577,6 +579,14 @@ export default function ConferenceDetailPage() {
       loadCompanies();
     }
   }, [visibleConferenceTabs, loadCompanies]);
+
+  // Track A onboarding: mark pre-conference review visited when this page loads for track A users
+  useEffect(() => {
+    if (onboardingTrack !== 'track_a' || !onboardingProgress) return;
+    if (!onboardingProgress.completed_steps.includes('preconf_visited')) {
+      markStepComplete('preconf_visited');
+    }
+  }, [onboardingTrack, onboardingProgress, markStepComplete]);
 
   const handleSave = async () => {
     if (!editData.name || !editData.start_date || !editData.end_date || !editData.location) {
