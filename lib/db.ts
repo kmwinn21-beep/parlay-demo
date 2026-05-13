@@ -873,6 +873,11 @@ export async function initDb(): Promise<void> {
         ['signup_primary_goal', 'ALTER TABLE accounts ADD COLUMN signup_primary_goal TEXT'],
         ['signup_current_tool', 'ALTER TABLE accounts ADD COLUMN signup_current_tool TEXT'],
         ['onboarding_progress', 'ALTER TABLE accounts ADD COLUMN onboarding_progress TEXT'],
+        ['stripe_customer_id', 'ALTER TABLE accounts ADD COLUMN stripe_customer_id TEXT'],
+        ['stripe_subscription_id', 'ALTER TABLE accounts ADD COLUMN stripe_subscription_id TEXT'],
+        ['stripe_price_id', 'ALTER TABLE accounts ADD COLUMN stripe_price_id TEXT'],
+        ['billing_interval', 'ALTER TABLE accounts ADD COLUMN billing_interval TEXT'],
+        ['purchased_bundles', 'ALTER TABLE accounts ADD COLUMN purchased_bundles TEXT'],
       ];
       await Promise.all(accountMigrations
         .filter(([col]) => !accountColNames.has(col))
