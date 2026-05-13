@@ -80,7 +80,7 @@ export async function POST(
       getConfigOptionValues('company_type'),
       getConfigOptionValues('services'),
       getConfigOptionValues('icp'),
-      getIcpConfig(),
+      getIcpConfig(db),
       db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
       db.execute({ sql: 'SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL', args: [] }),
       getConfigOptionValues('function'),

@@ -249,7 +249,7 @@ export async function POST(
             ORDER BY c.name, a.last_name, a.first_name`,
       args: [confId],
     }),
-    getIcpConfig(),
+    getIcpConfig(db),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] }),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'rep_relationship_type'`, args: [] }),
     db.execute({

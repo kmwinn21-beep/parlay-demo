@@ -98,7 +98,7 @@ export async function GET(
     const prospectTypeIdValue = prospectTypeId == null || !Number.isFinite(prospectTypeId) ? null : String(prospectTypeId);
     const prospectTypeValue = prospectTypeRes.rows.length > 0 ? String(prospectTypeRes.rows[0].value ?? '') : '';
 
-    const icpConfig = await getIcpConfig();
+    const icpConfig = await getIcpConfig(db);
     const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
 
     // Build tier config from saved settings; only use it when at least one operator is explicitly saved

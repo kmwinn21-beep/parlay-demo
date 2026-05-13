@@ -81,7 +81,7 @@ export async function GET(
             WHERE f.conference_id = ?`,
       args: [confId],
     }),
-    getIcpConfig(),
+    getIcpConfig(db),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
     db.execute({ sql: `SELECT line_items, required_pipeline_amount FROM conference_budget WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [] })),

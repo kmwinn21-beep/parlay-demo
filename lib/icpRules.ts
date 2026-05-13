@@ -1,14 +1,16 @@
 import { db, dbReady } from './db';
+import type { Client } from '@libsql/client';
 export type { IcpRuleCondition, IcpRule, IcpUnitTypeOperator, IcpUnitTypeReq, IcpConfig } from './icpRulesEval';
 export { evaluateIcpRules } from './icpRulesEval';
 import type { IcpRule, IcpRuleCondition, IcpUnitTypeOperator, IcpConfig } from './icpRulesEval';
 
-export async function getIcpConfig(): Promise<IcpConfig> {
+export async function getIcpConfig(client?: Client): Promise<IcpConfig> {
   await dbReady;
+  const c = client ?? db;
 
   const [rulesResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT id, category, sort_order FROM icp_rules ORDER BY sort_order, id', args: [] }),
-    db.execute({
+    c.execute({ sql: 'SELECT id, category, sort_order FROM icp_rules ORDER BY sort_order, id', args: [] }),
+    c.execute({
       sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_unit_type_operator','icp_unit_type_value1','icp_unit_type_value2','icp_unit_type_connector')",
       args: [],
     }),
@@ -18,7 +20,7 @@ export async function getIcpConfig(): Promise<IcpConfig> {
   if (rulesResult.rows.length > 0) {
     const ruleIds = rulesResult.rows.map(r => Number(r.id));
     const placeholders = ruleIds.map(() => '?').join(',');
-    const condResult = await db.execute({
+    const condResult = await c.execute({
       sql: `SELECT id, rule_id, option_value, operator FROM icp_rule_conditions WHERE rule_id IN (${placeholders}) ORDER BY id`,
       args: ruleIds,
     });

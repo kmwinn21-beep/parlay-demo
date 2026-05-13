@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const db = await getDb(auth?.accountId);
   try {
-    const config = await getIcpConfig();
+    const config = await getIcpConfig(db);
     return NextResponse.json(config);
   } catch (e) {
     console.error('GET /api/admin/icp-rules error:', e);

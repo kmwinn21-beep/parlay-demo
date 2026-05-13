@@ -400,7 +400,7 @@ export async function GET(
     worthEngagingConversion: settings['tier_worth_engaging_conversion'] ? Number(settings['tier_worth_engaging_conversion']) / 100 : defaultCfg.worthEngagingConversion,
   };
 
-  const icpConfig = await getIcpConfig();
+  const icpConfig = await getIcpConfig(db);
   const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
   const targetingConfig = buildTargetingScoringConfig({
     target_priority_weights: weights,
