@@ -1,6 +1,8 @@
 import { Suspense } from 'react';
+import type { Client } from '@libsql/client';
 import Link from 'next/link';
-import { db, dbReady } from '@/lib/db';
+import { dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import AttendeesTooltip from '@/components/AttendeesTooltip';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { getServerSessionUser } from '@/lib/auth';
@@ -21,10 +23,10 @@ interface RecentConference {
   attendee_count: number;
 }
 
-async function getDashboardTitle(): Promise<string> {
+async function getDashboardTitle(tenantDb: Client): Promise<string> {
   await dbReady;
   try {
-    const row = await db.execute({
+    const row = await tenantDb.execute({
       sql: "SELECT value FROM site_settings WHERE key = 'dashboard_title'",
       args: [],
     });
@@ -34,10 +36,11 @@ async function getDashboardTitle(): Promise<string> {
   }
 }
 
-async function getRecentConferences(): Promise<RecentConference[]> {
+async function getRecentConferences(tenantDb: Client): Promise<RecentConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await db.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -47,21 +50,25 @@ async function getRecentConferences(): Promise<RecentConference[]> {
           LIMIT 5`,
     args: [today],
   });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    start_date: String(r.start_date ?? ''),
-    end_date: String(r.end_date ?? ''),
-    location: String(r.location ?? ''),
-    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
+    return result.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: String(r.start_date ?? ''),
+      end_date: String(r.end_date ?? ''),
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
 }
 
-async function getUpcomingConferences(): Promise<RecentConference[]> {
+async function getUpcomingConferences(tenantDb: Client): Promise<RecentConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await db.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -70,21 +77,25 @@ async function getUpcomingConferences(): Promise<RecentConference[]> {
           ORDER BY c.end_date ASC`,
     args: [today],
   });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    start_date: String(r.start_date ?? ''),
-    end_date: String(r.end_date ?? ''),
-    location: String(r.location ?? ''),
-    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
+    return result.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: String(r.start_date ?? ''),
+      end_date: String(r.end_date ?? ''),
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
 }
 
-async function getAwaitingUploadConferences(): Promise<RecentConference[]> {
+async function getAwaitingUploadConferences(tenantDb: Client): Promise<RecentConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await db.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -93,21 +104,25 @@ async function getAwaitingUploadConferences(): Promise<RecentConference[]> {
           ORDER BY c.start_date ASC`,
     args: [today],
   });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    start_date: String(r.start_date ?? ''),
-    end_date: String(r.end_date ?? ''),
-    location: String(r.location ?? ''),
-    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
+    return result.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: String(r.start_date ?? ''),
+      end_date: String(r.end_date ?? ''),
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
 }
 
-async function getAllConferences(): Promise<DashboardConference[]> {
+async function getAllConferences(tenantDb: Client): Promise<DashboardConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await db.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -115,7 +130,7 @@ async function getAllConferences(): Promise<DashboardConference[]> {
           ORDER BY c.start_date DESC`,
     args: [],
   });
-  return result.rows.map((r) => {
+    return result.rows.map((r) => {
     const startDate = String(r.start_date ?? '');
     const endDate = String(r.end_date ?? '');
     const status: 'in_progress' | 'upcoming' | 'past' =
@@ -131,7 +146,10 @@ async function getAllConferences(): Promise<DashboardConference[]> {
       attendee_count: Number(r.attendee_count ?? 0),
       status,
     };
-  });
+    });
+  } catch {
+    return [];
+  }
 }
 
 function formatMonthDay(dateStr: string) {
@@ -219,10 +237,9 @@ function TargetsAndUpcomingSkeleton() {
 /* ---------- Async section components for Suspense ---------- */
 
 async function StatsSection() {
-  const [dashboardTitle, sessionUser] = await Promise.all([
-    getDashboardTitle(),
-    getServerSessionUser(),
-  ]);
+  const sessionUser = await getServerSessionUser();
+  const tenantDb = await getDb(sessionUser?.accountId);
+  const dashboardTitle = await getDashboardTitle(tenantDb);
   const isAdmin = sessionUser?.role === 'administrator';
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
@@ -242,28 +259,33 @@ async function StatsSection() {
 }
 
 async function RecentAgendaWrapper() {
+  const sessionUser = await getServerSessionUser();
+  const tenantDb = await getDb(sessionUser?.accountId);
   const [allConferences, awaitingUploadConferences] = await Promise.all([
-    getAllConferences(),
-    getAwaitingUploadConferences(),
+    getAllConferences(tenantDb),
+    getAwaitingUploadConferences(tenantDb),
   ]);
 
   let defaultConferenceId: number | null = null;
   const inProgress = allConferences.filter(c => c.status === 'in_progress');
   if (inProgress.length > 0) {
-    const sessionUser = await getServerSessionUser();
     if (sessionUser) {
-      const configResult = await db.execute({
-        sql: 'SELECT co.value FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
-        args: [sessionUser.id],
-      });
-      if (configResult.rows.length > 0) {
-        const displayName = String(configResult.rows[0].value ?? '').trim().toLowerCase();
-        for (const conf of inProgress) {
-          if (conf.internal_attendees.some(a => a.toLowerCase() === displayName)) {
-            defaultConferenceId = conf.id;
-            break;
+      try {
+        const configResult = await tenantDb.execute({
+          sql: 'SELECT co.value FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
+          args: [sessionUser.id],
+        });
+        if (configResult.rows.length > 0) {
+          const displayName = String(configResult.rows[0].value ?? '').trim().toLowerCase();
+          for (const conf of inProgress) {
+            if (conf.internal_attendees.some(a => a.toLowerCase() === displayName)) {
+              defaultConferenceId = conf.id;
+              break;
+            }
           }
         }
+      } catch {
+        defaultConferenceId = null;
       }
     }
   }
@@ -287,9 +309,11 @@ async function RecentAgendaWrapper() {
 }
 
 async function TargetsAndRecentSection() {
+  const sessionUser = await getServerSessionUser();
+  const tenantDb = await getDb(sessionUser?.accountId);
   const [recentConferences, allConferences] = await Promise.all([
-    getRecentConferences(),
-    getAllConferences(),
+    getRecentConferences(tenantDb),
+    getAllConferences(tenantDb),
   ]);
 
   return (

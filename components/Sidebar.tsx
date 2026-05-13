@@ -109,7 +109,8 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
+    <>
+      <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
       {/* Logo area */}
       <div className="p-5 border-b border-white/20">
         <div className="flex items-center gap-3">
@@ -161,9 +162,6 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Onboarding checklist — only for trial users */}
-      <OnboardingChecklist />
-
       {/* Footer — user info + logout */}
       <div className="p-4 border-t border-white/20 space-y-3">
         {user && (
@@ -202,6 +200,12 @@ export function Sidebar() {
           </div>
         </div>
       </div>
-    </aside>
+      </aside>
+
+      {/* Onboarding checklist — only for trial users */}
+      <div className="fixed left-[calc(16rem+1rem)] bottom-4 z-40 w-56">
+        <OnboardingChecklist />
+      </div>
+    </>
   );
 }
