@@ -13,7 +13,8 @@ import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 import { DEFAULT_ROLE_CAPABILITIES, CAPABILITY_LABELS, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities, type CapabilityKey } from '@/lib/auth';
-import { invalidateCapabilitiesCache } from '@/lib/useCapabilities';
+import { useCapabilities, invalidateCapabilitiesCache } from '@/lib/useCapabilities';
+import { useOnboarding } from '@/lib/OnboardingContext';
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
 import { invalidateTagline } from '@/lib/useTagline';
@@ -732,6 +733,8 @@ function AddColumnModal({ tableName, existingKeys, onClose, onAdd }: {
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('types');
+  const { planId } = useCapabilities();
+  const { onboardingTrack, onboardingProgress } = useOnboarding();
 
   // Types tab
   const [optionsByCategory, setOptionsByCategory] = useState<Record<string, ConfigOption[]>>({});
@@ -2447,6 +2450,19 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* ICP onboarding banner — trial users who haven't configured ICP yet */}
+            {planId === 'trial' && onboardingProgress !== null && !onboardingProgress.completed_steps.includes('icp_configured') && icpRules.length === 0 && (
+              <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p>
+                  {onboardingTrack === 'track_b'
+                    ? 'Before you upload your past conference lists, configure your ICP profile. The more specific you are, the more accurate your retroactive scores will be.'
+                    : 'This is the most important setup step. Every company and attendee Parlay scores will be evaluated against the profile you configure here.'}
+                </p>
+              </div>
+            )}
             <IcpSettingsSection
               title="Basic ICP Settings"
               description="Define your core ICP, buyer persona, pain points, and use case."

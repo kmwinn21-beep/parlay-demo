@@ -9,6 +9,7 @@ import { useAppName } from '@/lib/useAppName';
 import { useTagline } from '@/lib/useTagline';
 import { LogoImage } from './LogoImage';
 import { useLogoConfig } from '@/lib/useLogoConfig';
+import { OnboardingChecklist } from './onboarding/OnboardingChecklist';
 
 const navItems = [
   {
@@ -159,6 +160,9 @@ export function Sidebar() {
           </Link>
         )}
       </nav>
+
+      {/* Onboarding checklist — only for trial users */}
+      <OnboardingChecklist />
 
       {/* Footer — user info + logout */}
       <div className="p-4 border-t border-white/20 space-y-3">

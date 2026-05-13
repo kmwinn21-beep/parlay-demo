@@ -872,6 +872,7 @@ export async function initDb(): Promise<void> {
         ['signup_conferences_per_year', 'ALTER TABLE accounts ADD COLUMN signup_conferences_per_year TEXT'],
         ['signup_primary_goal', 'ALTER TABLE accounts ADD COLUMN signup_primary_goal TEXT'],
         ['signup_current_tool', 'ALTER TABLE accounts ADD COLUMN signup_current_tool TEXT'],
+        ['onboarding_progress', 'ALTER TABLE accounts ADD COLUMN onboarding_progress TEXT'],
       ];
       await Promise.all(accountMigrations
         .filter(([col]) => !accountColNames.has(col))

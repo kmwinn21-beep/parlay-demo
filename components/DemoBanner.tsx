@@ -1,7 +1,7 @@
 'use client';
 
 export function DemoBanner() {
-  const ctaUrl = process.env.NEXT_PUBLIC_DEMO_CTA_URL ?? '#';
+  const ctaUrl = process.env.NEXT_PUBLIC_DEMO_CTA_URL ?? 'https://useparlay.app';
   return (
     <div className="w-full bg-brand-secondary text-white text-center text-sm py-2 px-4 flex items-center justify-center gap-3 flex-shrink-0 z-50">
       <span>

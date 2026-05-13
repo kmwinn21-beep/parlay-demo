@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     const tenantDb = await getDb(user.accountId);
     const [r, capsRow, planState] = await Promise.all([
       tenantDb.execute({
-        sql: `SELECT u.config_id, u.display_name, co.value as rep_name, u.created_at
+        sql: `SELECT u.config_id, u.display_name, co.value as rep_name, u.created_at, u.first_name
               FROM users u
               LEFT JOIN config_options co ON u.config_id = co.id
               WHERE u.id = ?`,
@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
     const displayName = r.rows[0]?.display_name != null ? String(r.rows[0].display_name) : null;
     const repName = r.rows[0]?.rep_name != null ? String(r.rows[0].rep_name) : null;
     const createdAt = r.rows[0]?.created_at != null ? String(r.rows[0].created_at) : null;
+    const firstName = r.rows[0]?.first_name != null ? String(r.rows[0].first_name) : null;
 
     let stored = {};
     try { stored = capsRow.rows[0]?.value ? JSON.parse(String(capsRow.rows[0].value)) : {}; } catch { /* ignore */ }
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user: {
         ...user,
-        configId, displayName, repName, createdAt,
+        configId, displayName, repName, createdAt, firstName,
         capabilities, demoVisitor,
         planId: planState.planId,
         trialState: planState.trialState,
