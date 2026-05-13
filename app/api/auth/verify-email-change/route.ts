@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       email: newEmail,
       role: String(row.role) as 'user' | 'administrator',
       emailVerified: Boolean(row.email_verified),
+      accountId: found.accountId,
     });
 
     const response = NextResponse.json({ message: 'Email address updated successfully.' });
