@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOpsAdmin } from '@/lib/opsAuth';
 import { sendWelcomeEmail, sendTrialReminderEmail, sendInviteEmail } from '@/lib/email';
 
-const UPGRADE_URL = process.env.NEXT_PUBLIC_PRICING_URL ?? 'https://useparlay.app/pricing';
+const UPGRADE_URL = `${process.env.NEXT_PUBLIC_BASE_URL ?? 'https://work.useparlay.app'}/?upgrade=true`;
 
 export async function POST(request: NextRequest) {
   const auth = await requireOpsAdmin(request);
