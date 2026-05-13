@@ -6,6 +6,25 @@ export const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN!,
 });
 
+async function ensureConfigOptionsColumns(client: Client): Promise<void> {
+  const configCols = await client.execute({ sql: 'PRAGMA table_info(config_options)', args: [] });
+  const configColNames = new Set(configCols.rows.map(r => String(r.name)));
+  const requiredConfigColumns: Array<[string, string]> = [
+    ['color', 'ALTER TABLE config_options ADD COLUMN color TEXT'],
+    ['action_key', 'ALTER TABLE config_options ADD COLUMN action_key TEXT'],
+    ['status_key', 'ALTER TABLE config_options ADD COLUMN status_key TEXT'],
+    ['scope', "ALTER TABLE config_options ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'"],
+    ['auto_follow_up', 'ALTER TABLE config_options ADD COLUMN auto_follow_up INTEGER NOT NULL DEFAULT 1'],
+    ['is_system', 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0'],
+    ['is_primary', 'ALTER TABLE config_options ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0'],
+  ];
+  await Promise.all(
+    requiredConfigColumns
+      .filter(([col]) => !configColNames.has(col))
+      .map(([, sql]) => client.execute({ sql, args: [] }).catch(() => {}))
+  );
+}
+
 export async function initDb(): Promise<void> {
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS conferences (
@@ -849,11 +868,7 @@ export async function initDb(): Promise<void> {
     if (!companyColNames.has('products')) {
       await db.execute({ sql: 'ALTER TABLE companies ADD COLUMN products TEXT', args: [] }).catch(() => {});
     }
-    const configCols = await db.execute({ sql: 'PRAGMA table_info(config_options)', args: [] });
-    const configColNames = new Set(configCols.rows.map(r => String(r.name)));
-    if (!configColNames.has('is_system')) {
-      await db.execute({ sql: 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0', args: [] }).catch(() => {});
-    }
+    await ensureConfigOptionsColumns(db);
     // Ensure accounts table has multi-tenant columns (added after initial schema deployment)
     try {
       const accountCols = await db.execute({ sql: 'PRAGMA table_info(accounts)', args: [] });
@@ -1339,13 +1354,12 @@ export async function seedFreshDb(client: Client): Promise<void> {
     args: [],
   });
 
-  // Run CREATE TABLE IF NOT EXISTS and CREATE INDEX IF NOT EXISTS from migrations
-  const ddl = migrations.filter(sql => /^\s*(CREATE\s+(TABLE|UNIQUE\s+INDEX|INDEX))/i.test(sql));
+  // Run schema/data migrations in order groups so seeded inserts cannot race ahead of column creation.
+  const ddl = migrations.filter(sql => /^\s*(CREATE|ALTER)/i.test(sql));
   await Promise.all(ddl.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
-
-  // Run DML seeds (INSERT/UPDATE) from migrations — ALTER TABLE fails silently (no-op on fresh DB)
   const dml = migrations.filter(sql => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql));
   await Promise.all(dml.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
+  await ensureConfigOptionsColumns(client);
 
   // Unit type seed
   const utCheck = await client.execute({ sql: "SELECT id FROM config_options WHERE category = 'unit_type' ORDER BY id", args: [] });
