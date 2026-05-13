@@ -120,7 +120,7 @@ export async function provisionAccount(params: TenantParams): Promise<{
   await db.execute({
     sql: `UPDATE accounts SET turso_db_url = ?, turso_auth_token = ?, deployment_url = ?, updated_at = datetime('now') WHERE id = ?`,
     args: [tursoDbUrl, tursoAuthToken, deploymentUrl, params.accountId],
-  }).catch(() => {});
+  });
 
   return { tursoDbUrl, tursoAuthToken, deploymentUrl, slug };
 }
