@@ -240,7 +240,7 @@ export function OnboardingChecklist() {
       <div className="mx-4 mb-2">
         <button
           onClick={() => setExpanded(true)}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-left"
+          className="w-full flex items-center gap-2 px-3 py-2 bg-brand-primary/75 hover:bg-brand-primary/85 rounded-lg transition-colors text-left"
         >
           <div className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-white/40 flex items-center justify-center">
             <span className="text-white text-[9px] font-bold">{completedCount}</span>
