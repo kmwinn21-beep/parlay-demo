@@ -157,6 +157,48 @@ export async function sendEmailChangeNotification(
   ).catch(() => {}); // best-effort — don't fail the flow if old-email notification fails
 }
 
+export async function sendWelcomeEmail({
+  to,
+  firstName,
+  onboardingTrack,
+}: {
+  to: string;
+  firstName: string;
+  onboardingTrack: 'track_a' | 'track_b' | string;
+}): Promise<void> {
+  const isTrackA = onboardingTrack === 'track_a' || onboardingTrack === 'upcoming';
+  const icpUrl = `${BASE_URL}/admin?tab=icp`;
+
+  const subject = isTrackA
+    ? `Your Parlay trial is live — here's where to start`
+    : `Your Parlay trial is ready — let's evaluate your conference season`;
+
+  const bodyText = isTrackA
+    ? `Welcome to ${APP_NAME}, ${firstName}. Your 14-day free trial is active and ready to go. Your most important first step is configuring your ICP profile — it determines how Parlay scores every company and attendee at your upcoming conference.`
+    : `Welcome to ${APP_NAME}, ${firstName}. Your 14-day free trial is active and ready. Your most important first step is configuring your ICP profile — every past conference list you upload will be scored against these settings.`;
+
+  const transport = createTransport();
+  if (!transport) {
+    console.log(
+      `\n📧 [DEV EMAIL — configure SMTP_HOST to send real emails]\n` +
+      `  To: ${to}\n  Subject: ${subject}\n  Link: ${icpUrl}\n`
+    );
+    return;
+  }
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? `"${APP_NAME}" <noreply@example.com>`,
+    replyTo: 'support@useparlay.com',
+    to,
+    subject,
+    html: `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">Welcome to ${APP_NAME}</h2>
+      <p>${bodyText}</p>
+      <p style="margin:24px 0"><a href="${icpUrl}" style="${btnStyle}">Configure your ICP profile →</a></p>
+      <p style="${footerStyle}">Questions? Reply to this email.</p>
+    </div>`,
+  });
+}
+
 export async function sendTrialReminderEmail(
   to: string,
   firstName: string,

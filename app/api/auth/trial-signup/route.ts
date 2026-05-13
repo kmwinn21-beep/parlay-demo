@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 import { provisionAccount } from '@/lib/provision';
+import { sendWelcomeEmail } from '@/lib/email';
 
 const CORS_ORIGIN = 'https://useparlay.app';
 
@@ -131,6 +132,11 @@ export async function POST(request: NextRequest) {
     };
 
     const token = await signToken(sessionUser);
+
+    sendWelcomeEmail({ to: email, firstName, onboardingTrack }).catch(err => {
+      console.error('[trial-signup] Welcome email failed:', err);
+    });
+
     const redirectTo = `https://work.useparlay.app/?welcome=true`;
 
     const response = NextResponse.json({
