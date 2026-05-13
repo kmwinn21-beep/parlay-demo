@@ -4,7 +4,7 @@ import { db, dbReady } from '@/lib/db';
 const tenantCache = new Map<string, Client>();
 
 export async function getDb(accountId: string | undefined): Promise<Client> {
-  if (!accountId) return db;
+  if (!accountId) return db; // ops admin — no tenant, uses master DB directly
   const cached = tenantCache.get(accountId);
   if (cached) return cached;
   await dbReady;
@@ -13,7 +13,9 @@ export async function getDb(accountId: string | undefined): Promise<Client> {
     args: [accountId],
   });
   const r = row.rows[0];
-  if (!r?.turso_db_url) return db; // fallback for legacy rows without tenant DB
+  if (!r?.turso_db_url) {
+    throw new Error(`[getDb] No turso_db_url found for account ${accountId} — tenant database not provisioned correctly`);
+  }
   const client = createClient({
     url: String(r.turso_db_url),
     authToken: String(r.turso_auth_token),
@@ -32,7 +34,7 @@ export async function findDbByToken(
   tokenColumn: string,
   tokenValue: string,
   selectColumns = 'id'
-): Promise<{ client: Client; row: Record<string, unknown> } | null> {
+): Promise<{ client: Client; row: Record<string, unknown>; accountId?: string } | null> {
   await dbReady;
 
   // Try master DB first (covers ops/single-tenant users)
@@ -66,7 +68,7 @@ export async function findDbByToken(
         args: [tokenValue],
       });
       if (result.rows.length > 0) {
-        return { client: tenantClient, row: result.rows[0] as Record<string, unknown> };
+        return { client: tenantClient, row: result.rows[0] as Record<string, unknown>, accountId };
       }
     } catch {
       // Skip unreachable tenant DBs

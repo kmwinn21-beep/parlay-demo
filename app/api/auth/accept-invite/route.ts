@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
     email: String(user.email),
     role: String(user.role) as 'user' | 'administrator',
     emailVerified: true,
+    accountId: found.accountId,
   };
 
   const sessionToken = await signToken(sessionUser);
