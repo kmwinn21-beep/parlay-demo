@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUser } from './UserContext';
 import { QA_TEST_EMAIL, type CheckoutPlanId, type BillingInterval } from '@/lib/constants';
 
@@ -69,6 +70,7 @@ export function PlanSelectionModal({ isOpen, onClose, defaultPlan }: Props) {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   if (!isOpen) return null;
 
@@ -229,14 +231,12 @@ export function PlanSelectionModal({ isOpen, onClose, defaultPlan }: Props) {
 
         {/* Custom plan link */}
         <div className="text-center pb-6 px-6">
-          <a
-            href="https://useparlay.app/pricing#bundle-builder"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-brand-primary hover:underline font-medium"
+          <button
+            onClick={() => { onClose(); router.push('/upgrade'); }}
+            className="text-sm text-brand-primary hover:underline font-medium bg-transparent border-0 cursor-pointer p-0"
           >
             Need a custom plan? Build your own →
-          </a>
+          </button>
         </div>
       </div>
     </div>
