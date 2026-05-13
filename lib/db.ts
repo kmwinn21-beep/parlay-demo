@@ -405,7 +405,7 @@ export async function initDb(): Promise<void> {
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Add to Nurture', 6, 'add_to_nurture')`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
      VALUES ('company_type', 'Prospect', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'prospect')`,
-    `UPDATE config_options SET action_key = 'prospect' WHERE category = 'company_type' AND value = 'Prospect' AND action_key IS NULL`,
+    `UPDATE config_options SET action_key = 'prospect' WHERE category = 'company_type' AND value IN ('Prospect', 'Prospect Company Type') AND action_key IS NULL`,
     `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key) VALUES ('target_recommended_action', 'Do Not Prioritize', 7, 'do_not_prioritize')`,
     // Form Builder tables
     `CREATE TABLE IF NOT EXISTS form_templates (
@@ -933,8 +933,8 @@ export async function initDb(): Promise<void> {
   const configCount = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM config_options', args: [] });
   if (Number(configCount.rows[0].cnt) === 0) {
     const seeds: Array<{ category: string; value: string; sort_order: number }> = [
-      { category: 'company_type', value: '3rd Party Operator', sort_order: 1 },
-      { category: 'company_type', value: 'Owner/Operator', sort_order: 2 },
+      { category: 'company_type', value: 'Prospect Company Type', sort_order: 1 },
+      { category: 'company_type', value: 'Owner', sort_order: 2 },
       { category: 'company_type', value: 'Capital Partner', sort_order: 3 },
       { category: 'company_type', value: 'Vendor', sort_order: 4 },
       { category: 'company_type', value: 'Partner', sort_order: 5 },
@@ -1059,8 +1059,8 @@ export async function initDb(): Promise<void> {
 
   // Mark all system-seeded config_options as protected from deletion (runs every startup; safe)
   const systemSeeds: Array<{ category: string; value: string }> = [
-    { category: 'company_type', value: '3rd Party Operator' },
-    { category: 'company_type', value: 'Owner/Operator' },
+    { category: 'company_type', value: 'Prospect Company Type' },
+    { category: 'company_type', value: 'Owner' },
     { category: 'company_type', value: 'Capital Partner' },
     { category: 'company_type', value: 'Vendor' },
     { category: 'company_type', value: 'Partner' },
@@ -1369,8 +1369,8 @@ export async function seedFreshDb(client: Client): Promise<void> {
 
   // Base config seeds — always INSERT OR IGNORE (fresh DB may have some rows from migrations)
   const baseSeeds: Array<{ category: string; value: string; sort_order: number }> = [
-    { category: 'company_type', value: '3rd Party Operator', sort_order: 1 },
-    { category: 'company_type', value: 'Owner/Operator', sort_order: 2 },
+    { category: 'company_type', value: 'Prospect Company Type', sort_order: 1 },
+    { category: 'company_type', value: 'Owner', sort_order: 2 },
     { category: 'company_type', value: 'Capital Partner', sort_order: 3 },
     { category: 'company_type', value: 'Vendor', sort_order: 4 },
     { category: 'company_type', value: 'Partner', sort_order: 5 },
@@ -1460,8 +1460,8 @@ export async function seedFreshDb(client: Client): Promise<void> {
 
   // Mark system-seeded options as protected
   const systemSeeds: Array<{ category: string; value: string }> = [
-    { category: 'company_type', value: '3rd Party Operator' },
-    { category: 'company_type', value: 'Owner/Operator' },
+    { category: 'company_type', value: 'Prospect Company Type' },
+    { category: 'company_type', value: 'Owner' },
     { category: 'company_type', value: 'Capital Partner' },
     { category: 'company_type', value: 'Vendor' },
     { category: 'company_type', value: 'Partner' },
