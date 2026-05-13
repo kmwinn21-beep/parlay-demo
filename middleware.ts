@@ -22,10 +22,12 @@ export async function middleware(request: NextRequest) {
   // Handle CORS preflight for trial signup — must be resolved at the edge
   // before Vercel's routing layer can interfere.
   if (request.method === 'OPTIONS' && pathname === '/api/auth/trial-signup') {
+    const origin = request.headers.get('origin') ?? '';
+    const allowed = origin === 'https://useparlay.app' || origin === 'https://www.useparlay.app';
     return new NextResponse(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': 'https://useparlay.app',
+        'Access-Control-Allow-Origin': allowed ? origin : 'https://useparlay.app',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Credentials': 'true',
