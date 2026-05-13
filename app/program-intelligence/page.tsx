@@ -627,6 +627,16 @@ function startCalendarScoring(force = false) {
   })().finally(() => { _calendarScoringPromise = null; });
 }
 
+async function refreshConferenceScore(conferenceId: number) {
+  try {
+    const r = await fetch(`/api/program-intelligence/calendar-intelligence/${conferenceId}`, { cache: 'no-store' });
+    if (r.ok) {
+      const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
+      setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
+    }
+  } catch { /* non-fatal */ }
+}
+
 // ── Budget Status Cell ────────────────────────────────────────────────────────
 
 function BudgetStatusCell({ row, onOpenModal }: { row: CalendarConferenceRow; onOpenModal: () => void }) {
@@ -2338,6 +2348,18 @@ export default function ProgramIntelligencePage() {
           conferenceId={budgetModalConf.id}
           conferenceName={budgetModalConf.name}
           onClose={() => setBudgetModalConf(null)}
+          onSaved={(budgetData) => {
+            const id = budgetModalConf.id;
+            setCalendarStore({
+              rows: _calendarStore.rows.map(r =>
+                r.conferenceId === id
+                  ? { ...r, diagnostics: { ...r.diagnostics, budget: budgetData as CalendarConferenceRow['diagnostics'] extends { budget?: infer B } ? NonNullable<B> : never } }
+                  : r
+              ),
+            });
+            setBudgetModalConf(null);
+            void refreshConferenceScore(id);
+          }}
         />
       )}
       {selectedCalendarRow && (

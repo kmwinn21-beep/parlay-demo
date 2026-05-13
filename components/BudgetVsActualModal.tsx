@@ -10,10 +10,18 @@ interface LineItem {
   actual: string;
 }
 
+interface SavedBudgetData {
+  line_items: LineItem[];
+  return_on_cost: string | null;
+  required_pipeline_amount: number | null;
+  required_pipeline_multiple: string;
+}
+
 interface BudgetVsActualModalProps {
   conferenceId: number;
   conferenceName: string;
   onClose: () => void;
+  onSaved?: (data: SavedBudgetData) => void;
   readOnly?: boolean;
 }
 
@@ -48,7 +56,7 @@ function VariancePill({ variance }: { variance: number | null }) {
   );
 }
 
-export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, readOnly = false }: BudgetVsActualModalProps) {
+export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onSaved, readOnly = false }: BudgetVsActualModalProps) {
   const [items, setItems] = useState<LineItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -169,6 +177,14 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, rea
       });
       if (!res.ok) throw new Error();
       toast.success('Budget saved successfully.');
+      if (onSaved) {
+        const budgetTotal = items.reduce((sum, it) => sum + (parseDollar(it.budget) ?? 0), 0);
+        const returnOnCostNum = parseDollar(returnOnCost) ?? 0;
+        const expectedReturn = returnOnCostNum > 0 ? budgetTotal * returnOnCostNum : 0;
+        const mult = parseDollar(requiredPipelineMultiple) ?? 3.5;
+        const requiredPipelineAmount = expectedReturn > 0 ? expectedReturn * mult : null;
+        onSaved({ line_items: items, return_on_cost: returnOnCost.trim() || null, required_pipeline_amount: requiredPipelineAmount, required_pipeline_multiple: requiredPipelineMultiple.trim() || '3.5' });
+      }
       onClose();
     } catch {
       toast.error('Failed to save budget.');
