@@ -74,13 +74,14 @@ export async function POST(request: NextRequest) {
         customer: customerId,
         mode: 'subscription',
         payment_method_types: ['card'],
+        // TODO: Switch to optional_items once enabled by Stripe support.
         line_items: [
           {
             price: STRIPE_TIER_PRICES.essentials[billingInterval],
             quantity: 1,
           },
+          ...optionalItems,
         ],
-        optional_items: optionalItems,
         metadata: {
           account_id: user.accountId,
           plan_id: 'custom',
