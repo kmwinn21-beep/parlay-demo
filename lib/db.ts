@@ -854,6 +854,29 @@ export async function initDb(): Promise<void> {
     if (!configColNames.has('is_system')) {
       await db.execute({ sql: 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0', args: [] }).catch(() => {});
     }
+    // Ensure accounts table has multi-tenant columns (added after initial schema deployment)
+    try {
+      const accountCols = await db.execute({ sql: 'PRAGMA table_info(accounts)', args: [] });
+      const accountColNames = new Set(accountCols.rows.map(r => String(r.name)));
+      const accountMigrations: Array<[string, string]> = [
+        ['turso_db_url', 'ALTER TABLE accounts ADD COLUMN turso_db_url TEXT'],
+        ['turso_auth_token', 'ALTER TABLE accounts ADD COLUMN turso_auth_token TEXT'],
+        ['deployment_url', 'ALTER TABLE accounts ADD COLUMN deployment_url TEXT'],
+        ['updated_at', "ALTER TABLE accounts ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))"],
+        ['last_active_at', 'ALTER TABLE accounts ADD COLUMN last_active_at TEXT'],
+        ['onboarding_completed', 'ALTER TABLE accounts ADD COLUMN onboarding_completed INTEGER DEFAULT 0'],
+        ['activated_plan_at', 'ALTER TABLE accounts ADD COLUMN activated_plan_at TEXT'],
+        ['signup_role', 'ALTER TABLE accounts ADD COLUMN signup_role TEXT'],
+        ['signup_industry', 'ALTER TABLE accounts ADD COLUMN signup_industry TEXT'],
+        ['signup_team_size', 'ALTER TABLE accounts ADD COLUMN signup_team_size TEXT'],
+        ['signup_conferences_per_year', 'ALTER TABLE accounts ADD COLUMN signup_conferences_per_year TEXT'],
+        ['signup_primary_goal', 'ALTER TABLE accounts ADD COLUMN signup_primary_goal TEXT'],
+        ['signup_current_tool', 'ALTER TABLE accounts ADD COLUMN signup_current_tool TEXT'],
+      ];
+      await Promise.all(accountMigrations
+        .filter(([col]) => !accountColNames.has(col))
+        .map(([, sql]) => db.execute({ sql, args: [] }).catch(() => {})));
+    } catch { /* accounts table may not exist yet */ }
   } catch { /* PRAGMA not supported — skip */ }
 
   // Ensure exactly one unit_type row exists; seed with 'Units' for new installs
