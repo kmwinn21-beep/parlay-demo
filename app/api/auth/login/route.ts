@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
           }).catch(() => ({ rows: [] }));
           const alreadySent = String(sentRes.rows[0]?.value ?? 'false') === 'true';
           if (!alreadySent) {
-            const upgradeUrl = process.env.NEXT_PUBLIC_PRICING_URL ?? `${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/pricing`;
+            const upgradeUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? 'https://work.useparlay.app'}/?upgrade=true`;
             sendTrialReminderEmail(email, String(user.first_name ?? email.split('@')[0]), planState.daysRemaining, upgradeUrl).catch(() => {});
             userDb.execute({ sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, 'true')`, args: [sentKey] }).catch(() => {});
           }

@@ -17,6 +17,7 @@ import { WelcomeInterstitial } from './onboarding/WelcomeInterstitial';
 import { UpgradeModalProvider } from '@/lib/UpgradeModalContext';
 import { PlanSelectionModal } from './PlanSelectionModal';
 import { useUpgradeModal } from '@/lib/UpgradeModalContext';
+import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const { isOpen, defaultPlan, closeUpgradeModal } = useUpgradeModal();
@@ -56,6 +57,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {/* Onboarding overlays — useSearchParams requires Suspense boundary */}
       <Suspense fallback={null}>
         <WelcomeInterstitial />
+      </Suspense>
+
+      {/* Opens upgrade modal when ?upgrade=true is present in URL */}
+      <Suspense fallback={null}>
+        <UpgradeQueryTrigger />
       </Suspense>
 
       {/* Plan selection modal — single instance, controlled via UpgradeModalContext */}
