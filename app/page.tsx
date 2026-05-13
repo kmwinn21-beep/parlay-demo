@@ -38,8 +38,9 @@ async function getDashboardTitle(tenantDb: Client): Promise<string> {
 
 async function getRecentConferences(tenantDb: Client): Promise<RecentConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await tenantDb.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -49,21 +50,25 @@ async function getRecentConferences(tenantDb: Client): Promise<RecentConference[
           LIMIT 5`,
     args: [today],
   });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    start_date: String(r.start_date ?? ''),
-    end_date: String(r.end_date ?? ''),
-    location: String(r.location ?? ''),
-    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
+    return result.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: String(r.start_date ?? ''),
+      end_date: String(r.end_date ?? ''),
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function getUpcomingConferences(tenantDb: Client): Promise<RecentConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await tenantDb.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -72,21 +77,25 @@ async function getUpcomingConferences(tenantDb: Client): Promise<RecentConferenc
           ORDER BY c.end_date ASC`,
     args: [today],
   });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    start_date: String(r.start_date ?? ''),
-    end_date: String(r.end_date ?? ''),
-    location: String(r.location ?? ''),
-    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
+    return result.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: String(r.start_date ?? ''),
+      end_date: String(r.end_date ?? ''),
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function getAwaitingUploadConferences(tenantDb: Client): Promise<RecentConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await tenantDb.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -95,21 +104,25 @@ async function getAwaitingUploadConferences(tenantDb: Client): Promise<RecentCon
           ORDER BY c.start_date ASC`,
     args: [today],
   });
-  return result.rows.map((r) => ({
-    id: Number(r.id),
-    name: String(r.name ?? ''),
-    start_date: String(r.start_date ?? ''),
-    end_date: String(r.end_date ?? ''),
-    location: String(r.location ?? ''),
-    internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-    attendee_count: Number(r.attendee_count ?? 0),
-  }));
+    return result.rows.map((r) => ({
+      id: Number(r.id),
+      name: String(r.name ?? ''),
+      start_date: String(r.start_date ?? ''),
+      end_date: String(r.end_date ?? ''),
+      location: String(r.location ?? ''),
+      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
+      attendee_count: Number(r.attendee_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function getAllConferences(tenantDb: Client): Promise<DashboardConference[]> {
   await dbReady;
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await tenantDb.execute({
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await tenantDb.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
             (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
           FROM conferences c
@@ -117,7 +130,7 @@ async function getAllConferences(tenantDb: Client): Promise<DashboardConference[
           ORDER BY c.start_date DESC`,
     args: [],
   });
-  return result.rows.map((r) => {
+    return result.rows.map((r) => {
     const startDate = String(r.start_date ?? '');
     const endDate = String(r.end_date ?? '');
     const status: 'in_progress' | 'upcoming' | 'past' =
@@ -133,7 +146,10 @@ async function getAllConferences(tenantDb: Client): Promise<DashboardConference[
       attendee_count: Number(r.attendee_count ?? 0),
       status,
     };
-  });
+    });
+  } catch {
+    return [];
+  }
 }
 
 function formatMonthDay(dateStr: string) {
@@ -254,18 +270,22 @@ async function RecentAgendaWrapper() {
   const inProgress = allConferences.filter(c => c.status === 'in_progress');
   if (inProgress.length > 0) {
     if (sessionUser) {
-      const configResult = await tenantDb.execute({
-        sql: 'SELECT co.value FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
-        args: [sessionUser.id],
-      });
-      if (configResult.rows.length > 0) {
-        const displayName = String(configResult.rows[0].value ?? '').trim().toLowerCase();
-        for (const conf of inProgress) {
-          if (conf.internal_attendees.some(a => a.toLowerCase() === displayName)) {
-            defaultConferenceId = conf.id;
-            break;
+      try {
+        const configResult = await tenantDb.execute({
+          sql: 'SELECT co.value FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
+          args: [sessionUser.id],
+        });
+        if (configResult.rows.length > 0) {
+          const displayName = String(configResult.rows[0].value ?? '').trim().toLowerCase();
+          for (const conf of inProgress) {
+            if (conf.internal_attendees.some(a => a.toLowerCase() === displayName)) {
+              defaultConferenceId = conf.id;
+              break;
+            }
           }
         }
+      } catch {
+        defaultConferenceId = null;
       }
     }
   }
