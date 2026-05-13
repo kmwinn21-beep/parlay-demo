@@ -106,6 +106,14 @@ export default function AccountDetailPage() {
   const [expireConfirming, setExpireConfirming] = useState(false);
   const [expireWorking, setExpireWorking] = useState(false);
 
+  // Test email state
+  const [testTemplate, setTestTemplate] = useState<'welcome' | 'trial_reminder' | 'invite'>('welcome');
+  const [testTo, setTestTo] = useState('');
+  const [testTrack, setTestTrack] = useState<'track_a' | 'track_b'>('track_a');
+  const [testDays, setTestDays] = useState(3);
+  const [testWorking, setTestWorking] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+
   // User deactivate/reactivate
   const [userWorking, setUserWorking] = useState<Record<number, boolean>>({});
   const [userConfirm, setUserConfirm] = useState<Record<number, boolean>>({});
@@ -120,6 +128,8 @@ export default function AccountDetailPage() {
         setAccount(data.account);
         setUsers(data.users ?? []);
         setTimeline(data.timeline ?? []);
+        if (data.account?.admin_email) setTestTo(data.account.admin_email);
+        if (data.account?.onboarding_track === 'track_b') setTestTrack('track_b');
         setLoading(false);
       })
       .catch(() => { setError('Failed to load.'); setLoading(false); });
@@ -391,6 +401,88 @@ export default function AccountDetailPage() {
               </div>
             ))}
           </dl>
+        </div>
+
+        {/* Test email card */}
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Send test email</h2>
+          <div className="space-y-3 text-sm">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Template</label>
+              <select
+                value={testTemplate}
+                onChange={e => { setTestTemplate(e.target.value as typeof testTemplate); setTestMsg(null); }}
+                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+              >
+                <option value="welcome">Welcome email</option>
+                <option value="trial_reminder">Trial reminder</option>
+                <option value="invite">Team invite</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">To</label>
+              <input
+                type="email"
+                value={testTo}
+                onChange={e => setTestTo(e.target.value)}
+                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+              />
+            </div>
+            {testTemplate === 'welcome' && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Track</label>
+                <select
+                  value={testTrack}
+                  onChange={e => setTestTrack(e.target.value as 'track_a' | 'track_b')}
+                  className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+                >
+                  <option value="track_a">Track A — upcoming conference</option>
+                  <option value="track_b">Track B — planning calendar</option>
+                </select>
+              </div>
+            )}
+            {testTemplate === 'trial_reminder' && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Days remaining (1–3)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={3}
+                  value={testDays}
+                  onChange={e => setTestDays(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+                />
+              </div>
+            )}
+            <button
+              disabled={testWorking || !testTo}
+              onClick={async () => {
+                setTestWorking(true);
+                setTestMsg(null);
+                try {
+                  const res = await fetch(`/api/ops/accounts/${id}/test-email`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template: testTemplate, to: testTo, track: testTrack, days: testDays }),
+                  });
+                  const data = await res.json() as { success?: boolean; error?: string };
+                  setTestMsg(data.success ? '✓ Sent — check your inbox' : `Error: ${data.error ?? 'Unknown'}`);
+                } catch {
+                  setTestMsg('Error: request failed');
+                } finally {
+                  setTestWorking(false);
+                }
+              }}
+              className="w-full py-1.5 bg-gray-700 text-white text-sm rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {testWorking ? 'Sending…' : 'Send test email'}
+            </button>
+            {testMsg && (
+              <p className={`text-xs ${testMsg.startsWith('✓') ? 'text-green-700' : 'text-red-600'}`}>
+                {testMsg}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Users card */}
