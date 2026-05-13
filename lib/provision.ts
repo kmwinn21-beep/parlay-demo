@@ -81,6 +81,17 @@ async function seedTenantDb(
       args: [key, value],
     }).catch(() => {})
   ));
+
+  const conferenceCount = await client.execute('SELECT COUNT(*) as count FROM conferences');
+  const count = Number(conferenceCount.rows[0]?.count ?? 0);
+  if (count > 0) {
+    console.error('[provision] CRITICAL: New tenant database contains conferences after seeding. This should be zero.', {
+      tursoDbUrl,
+      count,
+    });
+  } else {
+    console.log('[provision] Verified: New tenant database is empty of conferences', { tursoDbUrl });
+  }
 }
 
 export async function provisionAccount(params: TenantParams): Promise<{
