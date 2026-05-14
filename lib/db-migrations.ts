@@ -764,5 +764,6 @@ export const migrations: string[] = [
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     )`,
-  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('company_type', 'Competitor', 999, 1, 'red')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('company_type', 'Competitor', 999, 1, '#dc2626')`,
+  `UPDATE config_options SET color = '#dc2626' WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor' AND (color = 'red' OR color IS NULL)`,
 ];
