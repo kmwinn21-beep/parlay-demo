@@ -397,7 +397,16 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {activeTab === 'landscape' && (
-                <LandscapeTab data={data.landscape} targetMap={targetMap} onToggleTarget={toggleTarget} strategyAssessment={data.strategyAssessment ?? null} />
+                <LandscapeTab
+                  data={data.landscape}
+                  targetMap={targetMap}
+                  onToggleTarget={toggleTarget}
+                  strategyAssessment={data.strategyAssessment ?? null}
+                  meetingAttendeeIds={meetingAttendeeIds}
+                  conferenceId={conferenceId}
+                  byRep={data.byRep}
+                  icpCompanies={data.icpCompanies}
+                />
               )}
               {activeTab === 'icp' && (
                 <IcpCompaniesTab companies={data.icpCompanies} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />

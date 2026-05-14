@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
-import type { LandscapeData, TargetEntry, ClientCompanyEntry } from '../PreConferenceReview';
+import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany } from '../PreConferenceReview';
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
+import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -479,6 +480,548 @@ function CompanyPanel({
   );
 }
 
+// ─── Pipeline Charts Panel ─────────────────────────────────────────────────────
+
+const TIER_DATA = [
+  { key: '1', label: 'Must Target', hex: '#dc2626' },
+  { key: '2', label: 'High Priority', hex: '#1B76BC' },
+  { key: '3', label: 'Worth Engaging', hex: '#059669' },
+  { key: 'unassigned', label: 'Monitor', hex: '#9ca3af' },
+] as const;
+
+const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
+
+function PipelineChartsPanel({
+  conferenceId,
+  targetMap,
+  meetingAttendeeIds,
+}: {
+  conferenceId: number;
+  targetMap: Map<number, TargetEntry>;
+  meetingAttendeeIds: Set<number>;
+}) {
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const [conversionPct, setConversionPct] = useState(60);
+  const [meetingsConvPct, setMeetingsConvPct] = useState(60);
+  const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/conferences/${conferenceId}/budget`).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/effectiveness').then(r => r.ok ? r.json() : null),
+    ]).then(([budgetData, effectivenessData]) => {
+      const val = (budgetData as { required_pipeline_amount?: number | null } | null)?.required_pipeline_amount;
+      if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
+      const mhRate = (effectivenessData as Record<string, string> | null)?.meetings_held_conversion_rate;
+      if (mhRate != null) {
+        const pct = parseFloat(mhRate);
+        if (!isNaN(pct) && pct > 0) setMeetingsConvPct(pct);
+      }
+    }).catch(() => {});
+  }, [conferenceId]);
+
+  // Targeted pipeline: deduplicate by company, best tier wins
+  const companyBestTier = useMemo(() => {
+    const map = new Map<number, { tier: string; wse: number }>();
+    for (const t of Array.from(targetMap.values())) {
+      if (t.companyId == null || t.companyWse == null) continue;
+      const existing = map.get(t.companyId);
+      if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+        map.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+      }
+    }
+    return map;
+  }, [targetMap]);
+
+  const tierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of Array.from(companyBestTier.values())) {
+    tierValueSum[tier] = (tierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const hasValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
+  const totalTargetValue = Object.values(tierValueSum).reduce((a, b) => a + b, 0);
+  const convertedValue = Math.round(totalTargetValue * conversionPct / 100);
+  const coverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedValue / requiredPipeline : null;
+  const maxTierValue = Math.max(1, ...Object.values(tierValueSum));
+
+  // Meetings pipeline
+  const meetingCompanyBestTier = useMemo(() => {
+    const map = new Map<number, { tier: string; wse: number }>();
+    for (const t of Array.from(targetMap.values())) {
+      if (!meetingAttendeeIds.has(t.attendeeId)) continue;
+      if (t.companyId == null || t.companyWse == null) continue;
+      const existing = map.get(t.companyId);
+      if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+        map.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+      }
+    }
+    return map;
+  }, [targetMap, meetingAttendeeIds]);
+
+  const meetingTierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of Array.from(meetingCompanyBestTier.values())) {
+    meetingTierValueSum[tier] = (meetingTierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const totalMeetingValue = Object.values(meetingTierValueSum).reduce((a, b) => a + b, 0);
+  const convertedMeetingValue = Math.round(totalMeetingValue * meetingsConvPct / 100);
+  const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
+  const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
+  const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
+
+  return (
+    <div className="flex flex-col gap-4 h-full">
+      {/* Targeted Pipeline Value */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
+          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+            <input
+              type="number" min={0} max={100} value={conversionPct}
+              onChange={e => { const v = Math.max(0, Math.min(100, Number(e.target.value))); if (!isNaN(v)) setConversionPct(v); }}
+              className="w-10 text-xs text-center border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-brand-primary"
+            />
+            <span className="text-xs text-gray-400">% conv.</span>
+          </div>
+        </div>
+
+        {requiredPipeline != null && (
+          <div className="mb-3 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+              <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+            </div>
+            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-2.5 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
+                  backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-xs text-gray-400">
+                Projected: <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+              </span>
+              {coverageRatio != null && (
+                <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                  ({Math.round((coverageRatio ?? 0) * 100)}%)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasValues ? (
+          <div className="space-y-2">
+            {TIER_DATA.map(tier => {
+              const val = tierValueSum[tier.key] ?? 0;
+              return (
+                <div key={tier.key} className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{
+                        width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
+                        backgroundColor: tier.hex,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                    {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+        )}
+      </div>
+
+      {/* Meetings Pipeline Value */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
+          <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{meetingsConvPct}% conv.</span>
+        </div>
+
+        {requiredPipeline != null && (
+          <div className="mb-3 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+              <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+            </div>
+            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-2.5 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
+                  backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-xs text-gray-400">
+                Projected: <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
+              </span>
+              {meetingsCoverageRatio != null && (
+                <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                  ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasMeetingValues ? (
+          <div className="space-y-2">
+            {TIER_DATA.map(tier => {
+              const val = meetingTierValueSum[tier.key] ?? 0;
+              return (
+                <div key={tier.key} className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{
+                        width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
+                        backgroundColor: tier.hex,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                    {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">
+            {avgCostPerUnit > 0
+              ? meetingAttendeeIds.size === 0
+                ? 'No meetings scheduled yet.'
+                : 'No target companies with meetings.'
+              : 'Set avg. cost per unit in Admin Settings to see values.'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Relationship Heatmap Panel ────────────────────────────────────────────────
+
+const HEALTH_BANDS = ['76–100', '51–75', '26–50', '0–25'] as const;
+const COVERAGE_TIERS = ['1', '2', '3', 'unassigned'] as const;
+const COVERAGE_TIER_LABELS: Record<string, string> = {
+  '1': 'Must Target', '2': 'High Priority', '3': 'Worth Engaging', 'unassigned': 'Not Targeted',
+};
+
+type DrillInternalState = {
+  repName: string;
+  relType: string;
+  companies: Array<{ id: number; name: string; status: string }>;
+};
+
+function RelationshipHeatmapPanel({
+  byRep,
+  icpCompanies,
+  targetMap,
+}: {
+  byRep: ByRepEntry[];
+  icpCompanies: IcpCompany[];
+  targetMap: Map<number, TargetEntry>;
+}) {
+  const [view, setView] = useState<'internal' | 'coverage'>('internal');
+  const [drillInternal, setDrillInternal] = useState<DrillInternalState | null>(null);
+  const [drillCoverage, setDrillCoverage] = useState<IcpCompany | null>(null);
+
+  // ── Internal relationships matrix ──────────────────────────────────────────
+  const { reps, relTypes, matrix, repRelMap } = useMemo(() => {
+    const reps: string[] = byRep.map(r => r.rep);
+    const relTypeSet = new Set<string>();
+    const repRelMap = new Map<string, Map<string, Array<{ id: number; name: string; status: string }>>>();
+
+    for (const repEntry of byRep) {
+      const relMap = new Map<string, Array<{ id: number; name: string; status: string }>>();
+      for (const co of repEntry.companies) {
+        for (const rel of co.internal_relationships) {
+          const types = rel.relationship_status.split(',').map(s => s.trim()).filter(Boolean);
+          for (const t of types) {
+            relTypeSet.add(t);
+            if (!relMap.has(t)) relMap.set(t, []);
+            const arr = relMap.get(t)!;
+            if (!arr.some(c => c.id === co.company_id)) {
+              arr.push({ id: co.company_id, name: co.company_name, status: rel.relationship_status });
+            }
+          }
+        }
+      }
+      repRelMap.set(repEntry.rep, relMap);
+    }
+
+    const relTypes = Array.from(relTypeSet).sort();
+    const matrix: number[][] = reps.map(rep =>
+      relTypes.map(relType => repRelMap.get(rep)?.get(relType)?.length ?? 0)
+    );
+
+    return { reps, relTypes, matrix, repRelMap };
+  }, [byRep]);
+
+  const maxCell = Math.max(1, ...matrix.flat());
+
+  // ── Company tier lookup (by companyId) ─────────────────────────────────────
+  const companyTierMap = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const entry of Array.from(targetMap.values())) {
+      if (entry.companyId == null) continue;
+      const current = map.get(entry.companyId);
+      if (!current || (TIER_PRIORITY[entry.tier] ?? 99) < (TIER_PRIORITY[current] ?? 99)) {
+        map.set(entry.companyId, entry.tier);
+      }
+    }
+    return map;
+  }, [targetMap]);
+
+  // ── Coverage grid: health band × target tier ───────────────────────────────
+  const coverageGrid = useMemo(() => {
+    const grid: IcpCompany[][][] = HEALTH_BANDS.map(() => COVERAGE_TIERS.map(() => []));
+    for (const co of icpCompanies) {
+      const health = co.avgHealth;
+      const bandIdx = health >= 76 ? 0 : health >= 51 ? 1 : health >= 26 ? 2 : 3;
+      const rawTier = companyTierMap.get(co.id) ?? 'unassigned';
+      const tierIdx = COVERAGE_TIERS.indexOf(rawTier as typeof COVERAGE_TIERS[number]);
+      if (tierIdx < 0) continue;
+      grid[bandIdx][tierIdx].push(co);
+    }
+    return grid;
+  }, [icpCompanies, companyTierMap]);
+
+  const handleToggle = (next: 'internal' | 'coverage') => {
+    setView(next);
+    setDrillInternal(null);
+    setDrillCoverage(null);
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
+      {/* Toggle header */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+        <button
+          onClick={() => handleToggle('internal')}
+          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${view === 'internal' ? 'bg-brand-primary text-white' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Internal Relationships
+        </button>
+        <button
+          onClick={() => handleToggle('coverage')}
+          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${view === 'coverage' ? 'bg-brand-primary text-white' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Relationship Coverage
+        </button>
+      </div>
+
+      {/* Fixed-height content — no resize on toggle */}
+      <div className="flex-1 overflow-hidden relative">
+        {/* ── Internal relationships view ── */}
+        {view === 'internal' && (
+          drillInternal ? (
+            <div className="absolute inset-0 p-4 overflow-y-auto">
+              <button
+                onClick={() => setDrillInternal(null)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-brand-primary mb-3 font-medium"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              <p className="text-xs font-semibold text-gray-700 mb-0.5">{drillInternal.repName}</p>
+              <p className="text-xs text-gray-400 mb-3">
+                {drillInternal.relType} · {drillInternal.companies.length} compan{drillInternal.companies.length === 1 ? 'y' : 'ies'}
+              </p>
+              <div className="space-y-1.5">
+                {drillInternal.companies.map(co => (
+                  <div key={co.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                    <span className="text-xs font-medium text-gray-700">{co.name}</span>
+                    <span className="text-xs text-gray-400 truncate ml-2 max-w-[120px]">{co.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 p-4 overflow-auto">
+              {byRep.length === 0 || relTypes.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">No internal relationship data available.</p>
+              ) : (
+                <table className="text-xs border-collapse" style={{ minWidth: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th className="text-left text-gray-400 font-medium pb-2 pr-3 sticky left-0 bg-white" style={{ minWidth: '6rem' }}>Rep</th>
+                      {relTypes.map(rt => (
+                        <th key={rt} className="text-center text-gray-400 font-medium pb-2 px-1" style={{ minWidth: '3.5rem', maxWidth: '5rem' }}>
+                          <span className="block truncate" title={rt}>{rt}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reps.map((rep, ri) => (
+                      <tr key={rep}>
+                        <td className="text-gray-600 font-medium pr-3 py-1 sticky left-0 bg-white" style={{ minWidth: '6rem', maxWidth: '8rem' }}>
+                          <span className="block truncate" title={rep}>{rep}</span>
+                        </td>
+                        {relTypes.map((relType, ci) => {
+                          const count = matrix[ri][ci];
+                          const intensity = count / maxCell;
+                          const coList = repRelMap.get(rep)?.get(relType) ?? [];
+                          return (
+                            <td key={relType} className="px-1 py-1 text-center">
+                              {count > 0 ? (
+                                <button
+                                  onClick={() => setDrillInternal({ repName: rep, relType, companies: coList })}
+                                  className="w-8 h-7 rounded-md text-xs font-bold transition-all hover:scale-110 hover:ring-2 hover:ring-brand-secondary/50"
+                                  style={{
+                                    backgroundColor: `rgba(27,118,188,${Math.max(0.12, intensity * 0.85)})`,
+                                    color: intensity > 0.5 ? '#fff' : '#1B76BC',
+                                  }}
+                                  title={`${rep} · ${relType}: ${count} compan${count === 1 ? 'y' : 'ies'}`}
+                                >
+                                  {count}
+                                </button>
+                              ) : (
+                                <div className="w-8 h-7 rounded-md bg-gray-50 mx-auto" />
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )
+        )}
+
+        {/* ── Relationship Coverage view ── */}
+        {view === 'coverage' && (
+          drillCoverage ? (
+            <div className="absolute inset-0 p-4 overflow-y-auto">
+              <button
+                onClick={() => setDrillCoverage(null)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-brand-primary mb-3 font-medium"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              <p className="text-xs font-semibold text-gray-700 mb-0.5">{drillCoverage.name}</p>
+              <p className="text-xs text-gray-400 mb-3">
+                Avg health: {drillCoverage.avgHealth} · {drillCoverage.attendees.length} attendee{drillCoverage.attendees.length !== 1 ? 's' : ''}
+              </p>
+              <div className="space-y-1.5">
+                {drillCoverage.attendees.map((a, idx) => (
+                  <div key={idx} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/attendees/${a.id}`}
+                        className="text-xs font-medium text-gray-700 hover:text-brand-secondary block truncate"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {String(a.first_name)} {String(a.last_name)}
+                      </Link>
+                      {a.title && <p className="text-xs text-gray-400 truncate">{String(a.title)}</p>}
+                    </div>
+                    <div className="text-xs font-bold ml-2 flex-shrink-0" style={{ color: scoreColor(a.health) }}>{a.health}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 p-4 overflow-auto">
+              {icpCompanies.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">No ICP companies identified.</p>
+              ) : (
+                <div>
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-3 mb-3">
+                    {COVERAGE_TIERS.map(tier => (
+                      <div key={tier} className="flex items-center gap-1">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: TIER_DATA.find(t => t.key === tier)?.hex ?? '#9ca3af' }}
+                        />
+                        <span className="text-xs text-gray-500">{COVERAGE_TIER_LABELS[tier]}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Grid */}
+                  <div
+                    className="grid gap-1"
+                    style={{ gridTemplateColumns: `4.5rem repeat(${COVERAGE_TIERS.length}, 1fr)` }}
+                  >
+                    {/* Column headers */}
+                    <div />
+                    {COVERAGE_TIERS.map(tier => (
+                      <div key={tier} className="text-center text-xs text-gray-400 font-medium pb-1 px-1 truncate" title={COVERAGE_TIER_LABELS[tier]}>
+                        {COVERAGE_TIER_LABELS[tier]}
+                      </div>
+                    ))}
+                    {/* Data rows */}
+                    {HEALTH_BANDS.map((band, bi) => (
+                      <>
+                        <div key={`label-${bi}`} className="flex items-start pt-1 text-xs text-gray-400 font-medium pr-1 leading-tight">
+                          {band}
+                        </div>
+                        {COVERAGE_TIERS.map((tier, ti) => {
+                          const tierHex = TIER_DATA.find(t => t.key === tier)?.hex ?? '#9ca3af';
+                          const companies = coverageGrid[bi][ti];
+                          return (
+                            <div
+                              key={`${bi}-${ti}`}
+                              className="rounded-lg p-1 flex flex-wrap gap-1 items-start content-start"
+                              style={{
+                                minHeight: 52,
+                                backgroundColor: companies.length > 0 ? hexAlpha(tierHex, 0.05) : '#f9fafb',
+                              }}
+                            >
+                              {companies.map(co => (
+                                <button
+                                  key={co.id}
+                                  onClick={() => setDrillCoverage(co)}
+                                  title={`${co.name} (Health: ${co.avgHealth})`}
+                                  className="rounded-full text-white flex items-center justify-center hover:scale-110 transition-transform flex-shrink-0 font-bold leading-none"
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    fontSize: 9,
+                                    backgroundColor: tierHex,
+                                    opacity: 0.45 + 0.55 * (co.avgHealth / 100),
+                                  }}
+                                >
+                                  {co.name.slice(0, 2).toUpperCase()}
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main export ───────────────────────────────────────────────────────────────
 
 export function LandscapeTab({
@@ -486,18 +1029,26 @@ export function LandscapeTab({
   targetMap,
   onToggleTarget,
   strategyAssessment,
+  meetingAttendeeIds,
+  conferenceId,
+  byRep,
+  icpCompanies,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   strategyAssessment: StrategyAssessment | null;
+  meetingAttendeeIds: Set<number>;
+  conferenceId: number;
+  byRep: ByRepEntry[];
+  icpCompanies: IcpCompany[];
 }) {
   return (
     <div className="space-y-8">
       {/* Strategy Assessment (above existing charts) */}
       {strategyAssessment && <StrategyAssessmentSection sa={strategyAssessment} />}
 
-      {/* 5-column layout: client attendees | charts (×3) | competitors */}
+      {/* 5-column layout: client | pipeline charts | relationship heatmap | competitors */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
         {/* Col 1: Client Attendees */}
         <CompanyPanel
@@ -507,16 +1058,22 @@ export function LandscapeTab({
           emptyText="No client companies attending"
         />
 
-        {/* Cols 2-4: stacked charts */}
-        <div className="md:col-span-3 flex flex-col gap-6 justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Company Type Breakdown</h3>
-            <BarChart items={data.companyTypeBreakdown} total={data.totalAttendees} colorClass="bg-brand-secondary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Seniority Breakdown</h3>
-            <BarChart items={data.seniorityBreakdown} total={data.totalAttendees} colorClass="bg-brand-highlight" />
-          </div>
+        {/* Col 2: Pipeline Charts */}
+        <div className="md:col-span-1">
+          <PipelineChartsPanel
+            conferenceId={conferenceId}
+            targetMap={targetMap}
+            meetingAttendeeIds={meetingAttendeeIds}
+          />
+        </div>
+
+        {/* Cols 3-4: Relationship Heatmap */}
+        <div className="md:col-span-2">
+          <RelationshipHeatmapPanel
+            byRep={byRep}
+            icpCompanies={icpCompanies}
+            targetMap={targetMap}
+          />
         </div>
 
         {/* Col 5: Competitors Attending */}
