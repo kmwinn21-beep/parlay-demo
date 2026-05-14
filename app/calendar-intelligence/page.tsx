@@ -383,17 +383,17 @@ export default function CalendarIntelligencePage() {
     return rows;
   }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarBudgetFilter, calendarSort]);
 
-  // Capability gate
-  if (user && !user.capabilities?.view_calendar_intelligence) {
-    router.replace('/');
-    return null;
-  }
-
   const closeDrawer = useCallback(() => {
     setSelectedCalendarRow(null);
     setPathToTierOpen(false);
     setStrategicLensOpen(false);
   }, []);
+
+  // Capability gate — must be after all hooks
+  if (user && !user.capabilities?.view_calendar_intelligence) {
+    router.replace('/');
+    return null;
+  }
 
   // ── Score drawer left panel content ─────────────────────────────────────────
   function ScoreDrawerContent({ row }: { row: CalendarConferenceRow }) {

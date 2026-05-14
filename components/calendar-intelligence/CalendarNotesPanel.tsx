@@ -62,6 +62,7 @@ export function CalendarNotesPanel({ conferenceId, onClose }: Props) {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadNotes(); }, [conferenceId]);
 
   const postNote = async (content: string, parentNoteId?: number) => {
