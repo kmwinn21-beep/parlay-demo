@@ -20,6 +20,7 @@ interface Note extends NoteReply {
 interface Props {
   conferenceId: number;
   onClose: () => void;
+  variant?: 'sidebar' | 'sheet';
 }
 
 const DECISION_COLORS: Record<string, string> = {
@@ -45,7 +46,7 @@ function Avatar({ name }: { name: string }) {
   );
 }
 
-export function CalendarNotesPanel({ conferenceId, onClose }: Props) {
+export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
@@ -103,7 +104,7 @@ export function CalendarNotesPanel({ conferenceId, onClose }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full w-[360px] border-l bg-white">
+    <div className={`flex flex-col h-full bg-white ${variant === 'sheet' ? 'w-full' : 'w-[360px] border-l'}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="font-semibold text-gray-900 text-sm">Notes</h3>
