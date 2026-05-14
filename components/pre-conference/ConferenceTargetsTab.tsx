@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
 import type { TargetEntry } from '../PreConferenceReview';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
 
 export interface AddableAttendee {
   id: number;
@@ -98,6 +99,7 @@ function TargetCard({
   avgCostPerUnit,
   onDragStart,
   onToggleTarget,
+  onScheduleMeeting,
   readOnly = false,
 }: {
   entry: TargetEntry;
@@ -106,6 +108,7 @@ function TargetCard({
   avgCostPerUnit: number;
   onDragStart?: () => void;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  onScheduleMeeting: (entry: TargetEntry) => void;
   readOnly?: boolean;
 }) {
   const valuePill = (entry.companyWse != null && avgCostPerUnit > 0)
@@ -134,22 +137,35 @@ function TargetCard({
             <p className="text-xs text-gray-400 truncate mt-0.5">{entry.companyName}</p>
           )}
         </div>
-        <TargetBtn
-          isTarget={true}
-          size="sm"
-          disabled={readOnly}
-          onClick={() => onToggleTarget({
-            attendeeId: entry.attendeeId,
-            firstName: entry.firstName,
-            lastName: entry.lastName,
-            title: entry.title,
-            seniority: entry.seniority,
-            companyName: entry.companyName,
-            companyId: entry.companyId,
-            companyWse: entry.companyWse,
-            assignedUserNames: entry.assignedUserNames,
-          })}
-        />
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            title="Schedule meeting"
+            onClick={e => { e.stopPropagation(); onScheduleMeeting(entry); }}
+            className="p-1 rounded text-gray-400 hover:text-brand-secondary hover:bg-brand-secondary/10 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+          <TargetBtn
+            isTarget={true}
+            size="sm"
+            disabled={readOnly}
+            onClick={() => onToggleTarget({
+              attendeeId: entry.attendeeId,
+              firstName: entry.firstName,
+              lastName: entry.lastName,
+              title: entry.title,
+              seniority: entry.seniority,
+              companyName: entry.companyName,
+              companyId: entry.companyId,
+              companyWse: entry.companyWse,
+              assignedUserNames: entry.assignedUserNames,
+            })}
+          />
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-1 mt-1">
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
@@ -209,6 +225,11 @@ export function ConferenceTargetsTab({
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
 
+  // Schedule meeting modal state
+  const [schedulingEntry, setSchedulingEntry] = useState<TargetEntry | null>(null);
+  // Optimistic meeting attendee ids — merged with the parent's meetingAttendeeIds
+  const [optimisticMeetingIds, setOptimisticMeetingIds] = useState<Set<number>>(new Set());
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/conferences/${conferenceId}/budget`).then(r => r.ok ? r.json() : null),
@@ -266,6 +287,7 @@ export function ConferenceTargetsTab({
   }, [onAddTargets, selectedIds, addableGroups]);
 
   const targets = Array.from(targetMap.values());
+  const effectiveMeetingIds = new Set([...Array.from(meetingAttendeeIds), ...Array.from(optimisticMeetingIds)]);
 
   // Distinct-company value sums per tier.
   // Each company is attributed only to the highest tier any of its attendees belongs to,
@@ -294,7 +316,7 @@ export function ConferenceTargetsTab({
   // Meetings pipeline — same dedup logic but filtered to targets with meetings scheduled
   const meetingCompanyBestTier = new Map<number, { tier: string; wse: number }>();
   for (const t of targets) {
-    if (!meetingAttendeeIds.has(t.attendeeId)) continue;
+    if (!effectiveMeetingIds.has(t.attendeeId)) continue;
     if (t.companyId == null || t.companyWse == null) continue;
     const existing = meetingCompanyBestTier.get(t.companyId);
     if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
@@ -310,6 +332,10 @@ export function ConferenceTargetsTab({
   const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
   const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
+
+  function handleScheduleMeeting(entry: TargetEntry) {
+    setSchedulingEntry(entry);
+  }
 
   async function handleDrop(tier: string) {
     if (draggingId === null) return;
@@ -498,7 +524,7 @@ export function ConferenceTargetsTab({
           ) : (
             <p className="text-xs text-gray-400">
               {avgCostPerUnit > 0
-                ? meetingAttendeeIds.size === 0
+                ? effectiveMeetingIds.size === 0
                   ? 'No meetings scheduled yet.'
                   : 'No target companies with scheduled meetings.'
                 : 'Set avg. cost per unit in Admin Settings to see values.'}
@@ -696,11 +722,12 @@ export function ConferenceTargetsTab({
                     <TargetCard
                       key={entry.attendeeId}
                       entry={entry}
-                      hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
+                      hasMeeting={effectiveMeetingIds.has(entry.attendeeId)}
                       isDragging={draggingId === entry.attendeeId}
                       avgCostPerUnit={avgCostPerUnit}
                       onDragStart={readOnly ? undefined : () => setDraggingId(entry.attendeeId)}
                       onToggleTarget={onToggleTarget}
+                      onScheduleMeeting={handleScheduleMeeting}
                       readOnly={readOnly}
                     />
                   ))}
@@ -713,6 +740,20 @@ export function ConferenceTargetsTab({
           })}
         </div>
       </div>
+
+      {schedulingEntry && (
+        <NewMeetingModal
+          isOpen={true}
+          onClose={() => setSchedulingEntry(null)}
+          defaultConferenceId={conferenceId}
+          prefillCompanyId={schedulingEntry.companyId ?? undefined}
+          prefillAttendeeId={schedulingEntry.attendeeId}
+          onSuccess={() => {
+            setOptimisticMeetingIds(prev => new Set([...Array.from(prev), schedulingEntry.attendeeId]));
+            setSchedulingEntry(null);
+          }}
+        />
+      )}
     </div>
   );
 }
