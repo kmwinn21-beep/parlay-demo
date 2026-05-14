@@ -200,7 +200,7 @@ function strategyReasons(
   switch (strategy) {
     case 'Pipeline Generation':
       if (input.icpCount > 0) reasons.push(`${input.icpCount} ICP companies attending`);
-      if (mustProxy + highProxy > 0) reasons.push(`${mustProxy + highProxy} high-priority target companies identified`);
+      if (mustProxy + highProxy > 0) reasons.push(`${mustProxy + highProxy} high-value ICP target companies identified`);
       if (realisticGoal > 0) reasons.push(`Realistic pipeline goal: ${fmt$(realisticGoal)} (${coverageRate.toFixed(1)}% of required)`);
       break;
     case 'Pipeline Acceleration':
@@ -209,8 +209,8 @@ function strategyReasons(
       if (input.clientCompanyCount > 0) reasons.push(`${input.clientCompanyCount} client companies attending`);
       break;
     case 'Strategic Account Relationship Building':
-      if (mustProxy > 0) reasons.push(`${mustProxy} must-target companies attending`);
-      if (highProxy > 0) reasons.push(`${highProxy} high-priority companies attending`);
+      if (mustProxy > 0) reasons.push(`${mustProxy} enterprise-value ICP accounts attending`);
+      if (highProxy > 0) reasons.push(`${highProxy} high-value ICP companies attending`);
       if (input.internalRelationshipCount > 0) reasons.push(`Strong relationship leverage with ${input.internalRelationshipCount} known accounts`);
       break;
     case 'Customer Retention / Customer Nurture':
