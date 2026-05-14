@@ -739,35 +739,34 @@ function AttendeeRelCard({
   rels: RelationshipRow[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const hasNotes = rels.some(r => r.description && r.description.trim());
+  const hasRels = rels.length > 0;
+
+  // Deduplicated rep list for collapsed rep-pills-only row
+  const uniqueReps = Array.from(new Set(rels.flatMap(r => r.rep_names)));
 
   return (
-    <div className="rounded-lg border border-gray-100 overflow-hidden">
-      <button
-        onClick={() => hasNotes && setExpanded(v => !v)}
-        className={`w-full text-left px-3 py-2.5 transition-colors ${hasNotes ? 'hover:bg-gray-50' : 'cursor-default'}`}
+    <div className="rounded-lg border border-gray-200 overflow-hidden">
+      {/* Clickable header — always visible */}
+      <div
+        role={hasRels ? 'button' : undefined}
+        onClick={() => hasRels && setExpanded(v => !v)}
+        className={`px-3 py-2.5 select-none ${hasRels ? 'cursor-pointer hover:bg-gray-50' : ''} transition-colors`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/attendees/${attendee.id}`}
-                className="text-xs font-medium text-gray-700 hover:text-brand-secondary"
-                onClick={e => e.stopPropagation()}
-              >
-                {String(attendee.first_name)} {String(attendee.last_name)}
-              </Link>
-              <span className="text-xs font-bold" style={{ color: scoreColor(attendee.health) }}>
-                {attendee.health}
-              </span>
-            </div>
-            {attendee.title && (
-              <p className="text-xs text-gray-400 mt-0.5 truncate">{String(attendee.title)}</p>
-            )}
-          </div>
-          {hasNotes && (
+        {/* Row 1: name + health score + chevron */}
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/attendees/${attendee.id}`}
+            className="text-xs font-medium text-gray-800 hover:text-brand-secondary flex-1 min-w-0 truncate"
+            onClick={e => e.stopPropagation()}
+          >
+            {String(attendee.first_name)} {String(attendee.last_name)}
+          </Link>
+          <span className="text-xs font-bold flex-shrink-0" style={{ color: scoreColor(attendee.health) }}>
+            {attendee.health}
+          </span>
+          {hasRels && (
             <svg
-              className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -775,31 +774,37 @@ function AttendeeRelCard({
           )}
         </div>
 
-        {rels.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5 items-center">
-            {rels.map((rel, i) => (
-              <span key={i} className="inline-flex items-center gap-1 flex-wrap">
-                {rel.rep_names.map(rep => <RepInitialChip key={rep} name={rep} />)}
-                <RelTypePill status={rel.relationship_status} />
-              </span>
-            ))}
+        {/* Row 2: title */}
+        {attendee.title && (
+          <p className="text-xs text-gray-400 mt-0.5 truncate">{String(attendee.title)}</p>
+        )}
+
+        {/* Row 3: rep initial pills only — collapsed state */}
+        {hasRels && !expanded && uniqueReps.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {uniqueReps.map(rep => <RepInitialChip key={rep} name={rep} />)}
           </div>
         )}
-      </button>
+      </div>
 
+      {/* Expanded: one block per relationship record */}
       {expanded && (
         <div className="border-t border-gray-100 px-3 py-2 space-y-3">
-          {rels
-            .filter(r => r.description && r.description.trim())
-            .map((rel, i) => (
-              <div key={i} className="text-xs">
-                <div className="flex items-center gap-1 mb-1 flex-wrap">
-                  {rel.rep_names.map(rep => <RepInitialChip key={rep} name={rep} />)}
-                  <RelTypePill status={rel.relationship_status} />
-                </div>
-                <p className="text-gray-600 leading-relaxed">{rel.description}</p>
+          {rels.map((rel, i) => (
+            <div key={i}>
+              {/* Rep pill(s) + relationship type pill(s) on same row */}
+              <div className="flex items-center flex-wrap gap-1 mb-1">
+                {rel.rep_names.map(rep => <RepInitialChip key={rep} name={rep} />)}
+                {rel.relationship_status.split(',').map(s => s.trim()).filter(Boolean).map(s => (
+                  <RelTypePill key={s} status={s} />
+                ))}
               </div>
-            ))}
+              {/* Note — only if present */}
+              {rel.description && rel.description.trim() && (
+                <p className="text-xs text-gray-600 leading-relaxed pl-1">{rel.description}</p>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -809,9 +814,9 @@ function AttendeeRelCard({
 // ─── Relationship Heatmap Panel ────────────────────────────────────────────────
 
 const HEALTH_BANDS = ['76–100', '51–75', '26–50', '0–25'] as const;
-const COVERAGE_TIERS = ['1', '2', '3', 'unassigned'] as const;
+const COVERAGE_TIERS = ['1', '2', '3'] as const;
 const COVERAGE_TIER_LABELS: Record<string, string> = {
-  '1': 'Must Target', '2': 'High Priority', '3': 'Worth Engaging', 'unassigned': 'Not Targeted',
+  '1': 'Must Target', '2': 'High Priority', '3': 'Worth Engaging',
 };
 
 type DrillInternalState = {
@@ -859,10 +864,12 @@ function RelationshipHeatmapPanel({
       repRelMap.set(repEntry.rep, relMap);
     }
 
-    // Exclude values that are not genuine relationship types
-    const EXCLUDED_TYPES = new Set(['not targeted', 'no relationship', 'none']);
+    // Exclude "Not Targeted" and non-relationship-type values unconditionally
     const relTypes = Array.from(relTypeSet)
-      .filter(rt => !EXCLUDED_TYPES.has(rt.toLowerCase().trim()))
+      .filter(rt => {
+        const lower = rt.toLowerCase().trim();
+        return lower !== 'not targeted' && !lower.startsWith('not target') && lower !== 'none' && lower !== 'no relationship';
+      })
       .sort();
 
     const fullMatrix: number[][] = allReps.map(rep =>
@@ -956,9 +963,13 @@ function RelationshipHeatmapPanel({
               </p>
               <div className="space-y-1.5">
                 {drillInternal.companies.map(co => (
-                  <div key={co.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-                    <span className="text-xs font-medium text-gray-700">{co.name}</span>
-                    <span className="text-xs text-gray-400 truncate ml-2 max-w-[120px]">{co.status}</span>
+                  <div key={co.id} className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                    <p className="text-xs font-medium text-gray-700 mb-1.5">{co.name}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {co.status.split(',').map(s => s.trim()).filter(Boolean).map(s => (
+                        <RelTypePill key={s} status={s} />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
