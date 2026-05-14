@@ -470,7 +470,7 @@ export default function CalendarIntelligencePage() {
       : 'Do Not Attend';
 
     return (
-      <OverlayPanel className="w-[360px] flex-shrink-0">
+      <div className="w-[420px] flex-shrink-0 self-start bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="p-5 space-y-6">
           {/* Calendar Recommendation section */}
           <div>
@@ -486,7 +486,7 @@ export default function CalendarIntelligencePage() {
             <DecisionTag conferenceId={row.conferenceId} isAdmin={isAdmin} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
           </div>
         </div>
-      </OverlayPanel>
+      </div>
     );
   }
 
@@ -523,7 +523,7 @@ export default function CalendarIntelligencePage() {
     ];
 
     return (
-      <div className="p-5 overflow-y-auto h-full">
+      <div className="p-5">
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
           <div>
