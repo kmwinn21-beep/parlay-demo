@@ -761,9 +761,10 @@ export default function CalendarIntelligencePage() {
           conferenceId={budgetModalConf.id}
           conferenceName={budgetModalConf.name}
           onClose={() => setBudgetModalConf(null)}
-          onSaved={async ({ id }) => {
+          onSaved={async () => {
+            const confId = budgetModalConf.id;
             setBudgetModalConf(null);
-            void refreshConferenceScore(id);
+            void refreshConferenceScore(confId);
           }}
         />
       )}
