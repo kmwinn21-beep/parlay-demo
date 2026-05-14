@@ -66,12 +66,21 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
   const [showScoreByRepInfo, setShowScoreByRepInfo] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
-  const [cardRank, setCardRank] = useState<number | null>(sx?.sales_execution_rank ?? null);
+  const normalizeRank = (value: unknown): number | null => {
+    if (value == null) return null;
+    const rank = Number(value);
+    if (!Number.isFinite(rank)) return null;
+    if (rank === 0) return 1;
+    if (rank < 0) return null;
+    return Math.round(rank);
+  };
+  const [cardRank, setCardRank] = useState<number | null>(normalizeRank(sx?.sales_execution_rank));
   const [cardTotal, setCardTotal] = useState<number | null>(sx?.sales_execution_rank_total ?? null);
 
   useEffect(() => {
     let cancelled = false;
     const currentId = Number((data as any)?.conference?.id ?? 0);
+    const currentScore = Number((data as any)?.sales_execution?.sales_effectiveness_score ?? 0);
     fetch('/api/conferences?nav=1')
       .then(r => r.ok ? r.json() : [])
       .then(async (confs: Array<{ id: number }>) => {
@@ -82,16 +91,20 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           const score = Number(eff?.sales_execution?.sales_effectiveness_score ?? 0);
           return score > 0 ? { id: c.id, score } : null;
         }));
-        const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
-        const idx = ranked.findIndex((r: any) => r.id === currentId);
+        const ranked = scored.filter(Boolean).map((r: any) => ({ id: Number(r.id), score: Number(r.score) }));
+        if (currentId > 0 && currentScore > 0 && !ranked.some((r) => r.id === currentId)) {
+          ranked.push({ id: currentId, score: currentScore });
+        }
+        ranked.sort((a, b) => b.score - a.score);
+        const idx = ranked.findIndex((r) => r.id === currentId);
         if (!cancelled) {
-          setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
-          setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setCardTotal(idx >= 0 ? ranked.length : null);
+          setCardRank(idx >= 0 ? idx + 1 : normalizeRank(sx?.sales_execution_rank));
         }
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [data, cardRank, cardTotal]);
+  }, [data, sx?.sales_execution_rank]);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
 
   const repPlot = reps.map((r) => {
@@ -274,7 +287,7 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       </div>
       <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group">
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
-        {cardRank ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
+        {cardRank != null ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal ?? '—'} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
       <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4 overflow-x-auto flex flex-col">
         <div className="flex items-center justify-between gap-2">
