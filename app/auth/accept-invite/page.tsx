@@ -40,10 +40,10 @@ export default function AcceptInvitePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),
       });
-      const data = await res.json();
+      const data = await res.json() as { error?: string; redirectTo?: string };
       if (!res.ok) { setErrorMsg(data.error ?? 'Something went wrong.'); return; }
       setStatus('done');
-      setTimeout(() => { window.location.href = '/'; }, 1500);
+      setTimeout(() => { window.location.href = data.redirectTo ?? '/'; }, 1500);
     } catch {
       setErrorMsg('Network error. Please try again.');
     } finally {

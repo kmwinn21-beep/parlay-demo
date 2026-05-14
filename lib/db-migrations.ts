@@ -712,4 +712,44 @@ export const migrations: string[] = [
       reason TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+  // Calendar Intelligence — account-level and user-level conference decisions
+  `CREATE TABLE IF NOT EXISTS conference_decisions (
+      conference_id INTEGER PRIMARY KEY REFERENCES conferences(id) ON DELETE CASCADE,
+      decision TEXT NOT NULL DEFAULT 'pending_approval',
+      updated_by INTEGER REFERENCES users(id),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE TABLE IF NOT EXISTS user_conference_decisions (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      decision TEXT NOT NULL,
+      note TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, conference_id)
+    )`,
+  // Calendar notes — separate from entity_notes, conference-scoped, threaded, immutable
+  `CREATE TABLE IF NOT EXISTS calendar_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      author_user_id INTEGER NOT NULL REFERENCES users(id),
+      content TEXT NOT NULL,
+      decision_state TEXT,
+      parent_note_id INTEGER REFERENCES calendar_notes(id) ON DELETE CASCADE,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_calendar_notes_conference ON calendar_notes(conference_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_calendar_notes_parent ON calendar_notes(parent_note_id)`,
+  // Strategic Lens saved weight presets
+  `CREATE TABLE IF NOT EXISTS calendar_lenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      weights TEXT NOT NULL,
+      created_by_user_id INTEGER REFERENCES users(id),
+      is_account_default INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE TABLE IF NOT EXISTS user_lens_preferences (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      default_lens_id INTEGER REFERENCES calendar_lenses(id) ON DELETE SET NULL
+    )`,
 ];

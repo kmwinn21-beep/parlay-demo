@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 export interface AuthUser {
   id: number;
   email: string;
-  role: 'user' | 'administrator';
+  role: 'user' | 'administrator' | 'sales_rep' | 'manager' | 'analyst' | 'conference_coordinator' | 'stakeholder';
   emailVerified: boolean;
   configId: number | null;
   displayName: string | null;
@@ -13,6 +13,7 @@ export interface AuthUser {
   createdAt: string | null;
   firstName: string | null;
   demoVisitor?: boolean;
+  capabilities?: Record<string, boolean>;
 }
 
 interface UserContextValue {

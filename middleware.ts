@@ -126,6 +126,9 @@ export async function middleware(request: NextRequest) {
     const loginUrl = new URL('/auth/login', request.url);
     const search = request.nextUrl.search;
     loginUrl.searchParams.set('next', pathname + (search || ''));
+    // Forward Vercel preview bypass token so the login page is not blocked by deployment protection
+    const vToken = request.nextUrl.searchParams.get('_v');
+    if (vToken) loginUrl.searchParams.set('_v', vToken);
     return NextResponse.redirect(loginUrl);
   }
 

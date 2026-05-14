@@ -38,15 +38,15 @@ const defaultState: OnboardingState = {
 const OnboardingContext = createContext<OnboardingState>(defaultState);
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
-  const { planId, isImpersonating } = useCapabilities();
+  const { planId, isImpersonating, role } = useCapabilities();
   const [onboardingTrack, setOnboardingTrack] = useState<OnboardingTrack | null>(null);
   const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
   const [firstName, setFirstName] = useState('');
   const [loading, setLoading] = useState(true);
   const fetchedRef = useRef(false);
 
-  // Only show onboarding UI for trial users who are not impersonating
-  const isEligible = planId === 'trial' && !isImpersonating;
+  // Only show onboarding UI for trial users who are not impersonating, and not stakeholders
+  const isEligible = planId === 'trial' && !isImpersonating && role !== 'stakeholder';
 
   const fetchProgress = useCallback(async () => {
     if (!isEligible) { setLoading(false); return; }
