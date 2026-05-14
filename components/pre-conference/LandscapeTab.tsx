@@ -360,12 +360,18 @@ function UserPill({ name }: { name: string }) {
   );
 }
 
+const NAMED_COLORS: Record<string, string> = {
+  red: '#dc2626', blue: '#1d4ed8', green: '#16a34a', yellow: '#ca8a04',
+  orange: '#ea580c', purple: '#9333ea', pink: '#db2777', gray: '#6b7280',
+};
+
 function hexAlpha(hex: string, alpha: number): string {
-  // Returns hex color with alpha as a CSS rgba string
-  const h = hex.replace('#', '');
+  const resolved = NAMED_COLORS[hex.toLowerCase()] ?? hex;
+  const h = resolved.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(156,163,175,${alpha})`; // gray fallback
   return `rgba(${r},${g},${b},${alpha})`;
 }
 

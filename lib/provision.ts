@@ -135,7 +135,7 @@ async function seedTenantDb(
   try {
     await client.execute({
       sql: `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color)
-            VALUES ('company_type', 'Competitor', 999, 1, 'red')`,
+            VALUES ('company_type', 'Competitor', 999, 1, '#dc2626')`,
       args: [],
     });
   } catch (e) {
