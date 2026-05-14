@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
   const conferences = (confsRes.rows as Row[]).map(r => {
     const conferenceId = Number(r.id);
-    const accountDecision = accountDecisionMap.get(conferenceId) ?? 'pending_approval';
+    const accountDecision = accountDecisionMap.get(conferenceId) ?? null;
     const userDecisions = userDecisionsByConf.get(conferenceId) ?? [];
     const endDate = new Date(String(r.end_date));
 
