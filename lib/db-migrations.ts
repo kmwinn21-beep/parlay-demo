@@ -754,4 +754,15 @@ export const migrations: string[] = [
     )`,
   `DROP TABLE IF EXISTS user_lens_preferences`,
   `DROP TABLE IF EXISTS calendar_lenses`,
+  // Competitor company type (system-locked) + per-company competitor_type field
+  `ALTER TABLE companies ADD COLUMN competitor_type TEXT`,
+  `CREATE TABLE IF NOT EXISTS competitor_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_name TEXT NOT NULL,
+      website TEXT NOT NULL,
+      competitor_type TEXT NOT NULL DEFAULT 'Unknown',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('company_type', 'Competitor', 999, 1, 'red')`,
 ];

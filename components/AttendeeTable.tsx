@@ -16,6 +16,14 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 
+const COMPETITOR_TYPE_DEFS: Record<string, string> = {
+  'Direct': 'Offers the same core product or service to the same buyer profile.',
+  'Adjacent': 'Overlaps in one area but does not offer the full solution.',
+  'Market alternative': 'Competes for the same buyer budget or decision-making attention.',
+  'Emerging': 'A newer entrant moving into your space. Lower threat weight today but worth tracking.',
+  'Unknown': 'Competitor type undetermined. Treated as Direct for scoring purposes.',
+};
+
 interface Attendee {
   id: number;
   first_name: string;
@@ -23,6 +31,7 @@ interface Attendee {
   title?: string;
   company_name?: string;
   company_type?: string;
+  company_competitor_type?: string;
   company_id?: number;
   company_wse?: number;
   company_icp?: string;
@@ -44,6 +53,24 @@ interface Attendee {
   pinned_notes_count?: number;
   updated_at?: string;
   created_at?: string;
+}
+
+function CompetitorBadge({ type, competitorType, colorMaps }: { type: string; competitorType?: string; colorMaps: Record<string, Record<string, string | null>> }) {
+  const [show, setShow] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const ctype = competitorType || 'Unknown';
+  const def = COMPETITOR_TYPE_DEFS[ctype] ?? COMPETITOR_TYPE_DEFS['Unknown'];
+  return (
+    <span ref={ref} className={`${getBadgeClass(type, colorMaps.company_type || {})} text-xs relative cursor-default`} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {type}
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-52 bg-gray-900 text-white text-xs rounded-lg px-2.5 py-2 pointer-events-none shadow-lg whitespace-normal">
+          <span className="block font-semibold">{ctype}</span>
+          <span className="block text-gray-300 mt-0.5">{def}</span>
+        </span>
+      )}
+    </span>
+  );
 }
 
 interface Company { id: number; name: string; }
@@ -567,7 +594,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     ) : (
                       <span className="text-xs text-gray-700">{attendee.company_name}</span>
                     )}
-                    {attendee.company_type && <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>}
+                    {attendee.company_type && (attendee.company_type === 'Competitor'
+                      ? <CompetitorBadge type={attendee.company_type} competitorType={attendee.company_competitor_type} colorMaps={colorMaps} />
+                      : <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                    )}
                   </div>
                 )}
                 <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">

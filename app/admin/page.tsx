@@ -361,10 +361,12 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                             </span>
                           : <button type="button" onClick={() => handleMakePrimary(opt.id)} className="text-gray-400 hover:text-amber-600 text-xs font-medium px-2 py-1 transition-colors">Confirm Primary</button>
                       )}
-                      {/* Company type display names are always editable, even for system entries */}
-                      {(category === 'company_type' || !opt.is_system)
-                        ? <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
-                        : <span className="text-xs text-gray-400 px-2 py-1 italic">System</span>
+                      {opt.is_system
+                        ? <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            System
+                          </span>
+                        : <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
                       }
                       {!opt.is_system && (
                         <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
@@ -854,6 +856,23 @@ export default function AdminPage() {
   const [savingTargetPriorityWeights, setSavingTargetPriorityWeights] = useState(false);
   const [basicIcpOpen, setBasicIcpOpen] = useState(true);
   const [advancedIcpOpen, setAdvancedIcpOpen] = useState(false);
+  const [competitorsOpen, setCompetitorsOpen] = useState(false);
+
+  // ── Competitor settings ───────────────────────────────────────────────────
+  type CompetitorEntry = { id: number | null; company_name: string; website: string; competitor_type: string; _key: string };
+  const COMPETITOR_TYPES = ['Direct', 'Adjacent', 'Market alternative', 'Emerging', 'Unknown'] as const;
+  const COMPETITOR_TYPE_DEFS: Record<string, string> = {
+    'Direct': 'Offers the same core product or service to the same buyer profile. The most relevant competitive signal.',
+    'Adjacent': 'Overlaps in one area but does not offer the full solution. Competes for partial budget or attention.',
+    'Market alternative': 'Does not offer the same solution but competes for the same buyer budget or decision-making attention.',
+    'Emerging': 'A newer entrant moving into your space. Lower threat weight today but worth tracking.',
+    'Unknown': 'Competitor type has not been determined. Treated as Direct for scoring and classification purposes.',
+  };
+  const [competitors, setCompetitors] = useState<CompetitorEntry[]>([]);
+  const [competitorsLoading, setCompetitorsLoading] = useState(false);
+  const [savingCompetitors, setSavingCompetitors] = useState(false);
+  const [competitorErrors, setCompetitorErrors] = useState<Record<string, string>>({});
+  const [competitorInfoOpen, setCompetitorInfoOpen] = useState(false);
 
   // ── Target Classification tiers ───────────────────────────────────────────
   const [tierMustOp, setTierMustOp] = useState<IcpUnitTypeOperator | ''>('');
@@ -990,7 +1009,75 @@ export default function AdminPage() {
     finally { setIcpLoading(false); }
   };
 
-  useEffect(() => { if (tab === 'icp') fetchIcpConfig(); }, [tab]);
+  useEffect(() => { if (tab === 'icp') { fetchIcpConfig(); fetchCompetitors(); } }, [tab]);
+
+  const fetchCompetitors = async () => {
+    setCompetitorsLoading(true);
+    try {
+      const res = await fetch('/api/admin/competitors');
+      if (res.ok) {
+        const data = await res.json() as Array<{ id: number; company_name: string; website: string; competitor_type: string }>;
+        setCompetitors(data.map(c => ({ ...c, _key: String(c.id) })));
+      }
+    } catch { /* ignore */ }
+    setCompetitorsLoading(false);
+  };
+
+  const addCompetitorRow = () => {
+    setCompetitors(prev => [...prev, { id: null, company_name: '', website: '', competitor_type: 'Unknown', _key: `new-${Date.now()}` }]);
+  };
+
+  const removeCompetitor = async (idx: number) => {
+    const entry = competitors[idx];
+    if (entry.id) {
+      await fetch(`/api/admin/competitors/${entry.id}`, { method: 'DELETE' });
+    }
+    setCompetitors(prev => prev.filter((_, i) => i !== idx));
+    setCompetitorErrors(prev => { const n = { ...prev }; delete n[String(idx)]; return n; });
+  };
+
+  const saveCompetitors = async () => {
+    const errors: Record<string, string> = {};
+    const seen = new Set<string>();
+    competitors.forEach((c, i) => {
+      if (!c.company_name.trim()) errors[String(i)] = 'Company name is required';
+      else if (!c.website.trim()) errors[String(i)] = 'Website is required';
+      else {
+        const domain = c.website.trim().toLowerCase().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '');
+        if (seen.has(domain)) errors[String(i)] = 'Duplicate domain';
+        else seen.add(domain);
+      }
+    });
+    setCompetitorErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSavingCompetitors(true);
+    const updated: CompetitorEntry[] = [];
+    for (const c of competitors) {
+      try {
+        if (c.id) {
+          await fetch(`/api/admin/competitors/${c.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ company_name: c.company_name, website: c.website, competitor_type: c.competitor_type }),
+          });
+          updated.push(c);
+        } else {
+          const res = await fetch('/api/admin/competitors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ company_name: c.company_name, website: c.website, competitor_type: c.competitor_type }),
+          });
+          if (res.ok) {
+            const created = await res.json() as { id: number; company_name: string; website: string; competitor_type: string };
+            updated.push({ ...c, id: created.id, _key: String(created.id) });
+          }
+        }
+      } catch { updated.push(c); }
+    }
+    setCompetitors(updated);
+    setSavingCompetitors(false);
+  };
 
   const targetPriorityWeightError = validateTargetPriorityWeights(targetPriorityWeights);
   const targetPriorityWeightTotal = Object.values(targetPriorityWeights).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
@@ -3455,6 +3542,106 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+            </IcpSettingsSection>
+
+            <IcpSettingsSection
+              title="Competitors"
+              description="Maintain your known competitor list for automatic company classification during attendee list uploads."
+              open={competitorsOpen}
+              onToggle={() => setCompetitorsOpen(open => !open)}
+            >
+              {/* Type definitions popover */}
+              <div className="relative inline-block mb-2">
+                <button
+                  type="button"
+                  onClick={() => setCompetitorInfoOpen(o => !o)}
+                  className="inline-flex items-center gap-1 text-xs text-brand-secondary hover:text-brand-primary font-medium"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Competitor type definitions
+                </button>
+                {competitorInfoOpen && (
+                  <div className="absolute z-20 top-6 left-0 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 space-y-2">
+                    {Object.entries(COMPETITOR_TYPE_DEFS).map(([type, def]) => (
+                      <div key={type}>
+                        <p className="text-xs font-semibold text-gray-800">{type}</p>
+                        <p className="text-xs text-gray-500">{def}</p>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setCompetitorInfoOpen(false)} className="text-xs text-gray-400 hover:text-gray-600 pt-1">Close</button>
+                  </div>
+                )}
+              </div>
+
+              {competitorsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400 py-4"><div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />Loading…</div>
+              ) : (
+                <>
+                  {competitors.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {competitors.map((c, idx) => (
+                        <div key={c._key} className="flex items-start gap-2">
+                          <div className="flex-1 grid grid-cols-3 gap-2">
+                            <div>
+                              {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Company Name *</label>}
+                              <input
+                                type="text"
+                                value={c.company_name}
+                                onChange={e => setCompetitors(prev => prev.map((x, i) => i === idx ? { ...x, company_name: e.target.value } : x))}
+                                placeholder="Acme Corp"
+                                className={`input-field text-sm w-full ${competitorErrors[String(idx)] ? 'border-red-300' : ''}`}
+                              />
+                            </div>
+                            <div>
+                              {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Website *</label>}
+                              <input
+                                type="text"
+                                value={c.website}
+                                onChange={e => setCompetitors(prev => prev.map((x, i) => i === idx ? { ...x, website: e.target.value } : x))}
+                                placeholder="acmecorp.com"
+                                className={`input-field text-sm w-full ${competitorErrors[String(idx)] ? 'border-red-300' : ''}`}
+                              />
+                            </div>
+                            <div>
+                              {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Competitor Type</label>}
+                              <select
+                                value={c.competitor_type}
+                                onChange={e => setCompetitors(prev => prev.map((x, i) => i === idx ? { ...x, competitor_type: e.target.value } : x))}
+                                className="input-field text-sm w-full"
+                              >
+                                {COMPETITOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeCompetitor(idx)}
+                            className={`text-red-400 hover:text-red-600 flex-shrink-0 ${idx === 0 ? 'mt-5' : ''}`}
+                            title="Remove"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                          {competitorErrors[String(idx)] && (
+                            <p className="text-xs text-red-500 col-span-3 mt-0.5">{competitorErrors[String(idx)]}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {competitors.length === 0 && (
+                    <p className="text-sm text-gray-400 mb-3">No competitors added yet. Add competitors to enable automatic classification during attendee list uploads.</p>
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <button type="button" onClick={addCompetitorRow} className="text-sm text-brand-secondary hover:text-brand-primary font-medium flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                      Add Competitor
+                    </button>
+                    <button type="button" onClick={saveCompetitors} disabled={savingCompetitors} className="btn-primary text-sm">
+                      {savingCompetitors ? 'Saving…' : 'Save Competitors'}
+                    </button>
+                  </div>
+                </>
+              )}
             </IcpSettingsSection>
           </div>
         )

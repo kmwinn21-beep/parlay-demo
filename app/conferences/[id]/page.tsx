@@ -949,6 +949,12 @@ export default function ConferenceDetailPage() {
         if (result.skipped_count > 0) parts.push(`${result.skipped_count} unchanged`);
         toast.success(parts.join('. ') + '.');
       }
+      const cc = result.competitor_classification;
+      if (cc) {
+        if (cc.auto_classified > 0) toast.success(`${cc.auto_classified} company/companies auto-classified as Competitor.`);
+        if (cc.probable_matches > 0) toast(`${cc.probable_matches} companies may be competitors — review before confirming.`, { icon: '⚠️' });
+        if (cc.skipped_type_conflict > 0) toast(`${cc.skipped_type_conflict} competitor match(es) skipped — existing type conflict. Review manually.`, { icon: '⚠️' });
+      }
       fetchConference();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to upload attendees');
@@ -2204,7 +2210,7 @@ export default function ConferenceDetailPage() {
       <NewMeetingModal
         isOpen={newMeetingOpen}
         onClose={() => setNewMeetingOpen(false)}
-        availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date }] : []}
+        availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date }] : []}
         defaultConferenceId={conference?.id}
         onSuccess={m => setConfMeetings(prev => [m, ...prev])}
       />

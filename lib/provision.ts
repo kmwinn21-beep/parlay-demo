@@ -131,6 +131,17 @@ async function seedTenantDb(
     console.warn('[provision] Could not verify ICP types:', e);
   }
 
+  // Ensure Competitor is seeded as a system-locked company type
+  try {
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color)
+            VALUES ('company_type', 'Competitor', 999, 1, 'red')`,
+      args: [],
+    });
+  } catch (e) {
+    console.warn('[provision] Could not seed Competitor company type:', e);
+  }
+
   const conferenceCount = await client.execute('SELECT COUNT(*) as count FROM conferences');
   const count = Number(conferenceCount.rows[0]?.count ?? 0);
   if (count > 0) {

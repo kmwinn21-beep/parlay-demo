@@ -29,6 +29,31 @@ export interface SocialEvent {
   rsvps: Array<{ attendee_id: number; rsvp_status: string }>;
 }
 
+const COMPETITOR_TYPE_DEFS: Record<string, string> = {
+  'Direct': 'Offers the same core product or service to the same buyer profile.',
+  'Adjacent': 'Overlaps in one area but does not offer the full solution.',
+  'Market alternative': 'Competes for the same buyer budget or decision-making attention.',
+  'Emerging': 'A newer entrant moving into your space. Lower threat weight today but worth tracking.',
+  'Unknown': 'Competitor type undetermined. Treated as Direct for scoring purposes.',
+};
+
+function CompetitorBadgeSE({ type, competitorType, badgeClass }: { type: string; competitorType?: string; badgeClass: string }) {
+  const [show, setShow] = useState(false);
+  const ctype = competitorType || 'Unknown';
+  const def = COMPETITOR_TYPE_DEFS[ctype] ?? COMPETITOR_TYPE_DEFS['Unknown'];
+  return (
+    <span className={`${badgeClass} text-[10px] relative cursor-default`} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {type}
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-48 bg-gray-900 text-white text-xs rounded-lg px-2.5 py-2 pointer-events-none shadow-lg whitespace-normal">
+          <span className="block font-semibold">{ctype}</span>
+          <span className="block text-gray-300 mt-0.5">{def}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
 interface Attendee {
   id: number;
   first_name: string;
@@ -37,6 +62,7 @@ interface Attendee {
   company_id?: number;
   company_name?: string;
   company_type?: string;
+  company_competitor_type?: string;
 }
 
 interface CompanyOption {
@@ -311,7 +337,9 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
             )}
             <div className="flex flex-wrap items-center gap-1 mt-1.5">
               {attendee.company_type && (
-                <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-[10px]`}>{attendee.company_type}</span>
+                attendee.company_type === 'Competitor'
+                  ? <CompetitorBadgeSE type={attendee.company_type} competitorType={attendee.company_competitor_type} badgeClass={getBadgeClass(attendee.company_type, colorMaps.company_type || {})} />
+                  : <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-[10px]`}>{attendee.company_type}</span>
               )}
               <AssignedUserPill assignedUser={company?.assigned_user} userOptionsFull={userOptionsFull} />
             </div>
@@ -458,7 +486,9 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
                     <td className="py-2 pr-3 whitespace-nowrap">{att.company_id ? <Link href={`/companies/${att.company_id}`} className="text-brand-primary hover:underline">{att.company_name}</Link> : <span className="text-gray-700">{att.company_name || '—'}</span>}</td>
                     <td className="py-2 pr-3">
                       {att.company_type
-                        ? <span className={`${getBadgeClass(att.company_type, colorMaps.company_type || {})} text-[10px]`}>{att.company_type}</span>
+                        ? (att.company_type === 'Competitor'
+                          ? <CompetitorBadgeSE type={att.company_type} competitorType={att.company_competitor_type} badgeClass={getBadgeClass(att.company_type, colorMaps.company_type || {})} />
+                          : <span className={`${getBadgeClass(att.company_type, colorMaps.company_type || {})} text-[10px]`}>{att.company_type}</span>)
                         : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="py-2 pr-3"><AssignedUserPill assignedUser={co?.assigned_user} userOptionsFull={userOptionsFull} /></td>
