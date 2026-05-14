@@ -170,6 +170,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
   const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string }>({});
+  const [showExportPicker, setShowExportPicker] = useState(false);
+  const [exportCols, setExportCols] = useState<Set<string>>(new Set(['name', 'title', 'company', 'company_type', 'email', 'status', 'seniority', 'conferences', 'conference_names', 'updated_on', 'date_added']));
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
@@ -385,6 +387,64 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     }
   };
 
+  const EXPORT_COLUMNS = [
+    { key: 'name', label: 'Full Name' },
+    { key: 'first_name', label: 'First Name' },
+    { key: 'last_name', label: 'Last Name' },
+    { key: 'title', label: 'Title' },
+    { key: 'company', label: 'Company' },
+    { key: 'company_type', label: 'Company Type' },
+    { key: 'email', label: 'Email' },
+    { key: 'status', label: 'Status' },
+    { key: 'seniority', label: 'Seniority' },
+    { key: 'conferences', label: '# Conferences' },
+    { key: 'conference_names', label: 'Conference Names' },
+    { key: 'updated_on', label: 'Updated On' },
+    { key: 'date_added', label: 'Date Added' },
+  ] as const;
+
+  const csvEscape = (val: string) => {
+    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+      return `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  };
+
+  const handleExportCsv = () => {
+    const cols = EXPORT_COLUMNS.filter(c => exportCols.has(c.key));
+    const headers = cols.map(c => csvEscape(c.label)).join(',');
+    const rows = selectedAttendees.map(a => {
+      return cols.map(c => {
+        let val = '';
+        switch (c.key) {
+          case 'name': val = `${a.first_name} ${a.last_name}`; break;
+          case 'first_name': val = a.first_name || ''; break;
+          case 'last_name': val = a.last_name || ''; break;
+          case 'title': val = a.title || ''; break;
+          case 'company': val = a.company_name || ''; break;
+          case 'company_type': val = a.company_type || ''; break;
+          case 'email': val = a.email || ''; break;
+          case 'status': val = a.status || ''; break;
+          case 'seniority': val = effectiveSeniority(a.seniority, a.title); break;
+          case 'conferences': val = String(a.conference_count || 0); break;
+          case 'conference_names': val = a.conference_names || ''; break;
+          case 'updated_on': val = fmtDate(a.updated_at); break;
+          case 'date_added': val = fmtDate(a.created_at); break;
+        }
+        return csvEscape(val);
+      }).join(',');
+    });
+    const csv = [headers, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendees-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setShowExportPicker(false);
+  };
+
   const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-brand-primary whitespace-nowrap relative';
 
   const ResizeHandle = ({ col }: { col: string }) => (
@@ -437,6 +497,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             <button onClick={() => setShowAddToConf(true)} className="btn-secondary flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               Add to Conference
+            </button>
+            <button onClick={() => setShowExportPicker(v => !v)} className="btn-secondary flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Export ({selectedIds.size})
             </button>
           </>
         )}
@@ -550,6 +614,50 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
             </div>
             <button onClick={handleMassEdit} disabled={isApplying} className="btn-primary text-sm">{isApplying ? 'Applying...' : `Apply to ${selectedIds.size}`}</button>
             <button onClick={() => setShowMassEdit(false)} className="btn-secondary text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Column Picker */}
+      {showExportPicker && (
+        <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-brand-primary">Choose columns to export ({selectedIds.size} attendee{selectedIds.size !== 1 ? 's' : ''})</p>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setExportCols(new Set(EXPORT_COLUMNS.map(c => c.key)))} className="text-xs text-brand-secondary hover:underline">Select All</button>
+              <button type="button" onClick={() => setExportCols(new Set())} className="text-xs text-gray-500 hover:underline">Deselect All</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
+            {EXPORT_COLUMNS.map(col => (
+              <label key={col.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-gray-900">
+                <input
+                  type="checkbox"
+                  checked={exportCols.has(col.key)}
+                  onChange={() => {
+                    setExportCols(prev => {
+                      const next = new Set(prev);
+                      next.has(col.key) ? next.delete(col.key) : next.add(col.key);
+                      return next;
+                    });
+                  }}
+                  className="accent-brand-secondary"
+                />
+                {col.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={exportCols.size === 0}
+              className="btn-primary text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Download CSV
+            </button>
+            <button type="button" onClick={() => setShowExportPicker(false)} className="btn-secondary text-sm">Cancel</button>
           </div>
         </div>
       )}
