@@ -116,16 +116,46 @@ export function PathToTier({ score, conferenceId: _conferenceId }: Props) {
         </div>
       </div>
 
-      {/* Overall gap */}
-      <div className={`rounded-lg p-3 border ${alreadyMeetsAll ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
-        <p className="text-sm font-semibold text-gray-800 mb-1">Overall Score</p>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="font-bold text-gray-900">{score.calendarRecommendationScore ?? '—'}/100</span>
-          <span className="text-gray-500">→ need</span>
-          <span className="font-bold text-gray-900">{requirements.overallScore}/100</span>
-          {alreadyMeetsOverall
-            ? <span className="text-emerald-600 font-medium">✓ Met</span>
-            : <span className="text-amber-700 font-medium">+{overallGap} points needed</span>
+      {/* Overall gap + component threshold checklist */}
+      <div className={`rounded-lg border ${alreadyMeetsAll ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+        {/* Overall score row */}
+        <div className="p-3">
+          <p className="text-sm font-semibold text-gray-800 mb-1">Overall Score</p>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="font-bold text-gray-900">{score.calendarRecommendationScore ?? '—'}/100</span>
+            <span className="text-gray-500">→ need</span>
+            <span className="font-bold text-gray-900">{requirements.overallScore}/100</span>
+            {alreadyMeetsOverall
+              ? <span className="text-emerald-600 font-medium">✓ Met</span>
+              : <span className="text-amber-700 font-medium">+{overallGap} points needed</span>
+            }
+          </div>
+        </div>
+
+        {/* Divider + component threshold rows */}
+        <div className="border-t border-current/10 px-3 pb-3 pt-2 space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Component Thresholds</p>
+          {(Object.entries(requirements) as [string, number][])
+            .filter(([key]) => key !== 'overallScore')
+            .map(([key, required]) => {
+              const k = key as keyof ComponentScores;
+              const actual = cs[k];
+              const met = actual != null && actual >= required;
+              const missing = actual == null;
+              return (
+                <div key={k} className="flex items-center gap-2 text-xs">
+                  <span className="flex-1 text-gray-700 font-medium">{COMPONENT_LABELS[k]}</span>
+                  <span className="text-gray-400">need ≥ {required}</span>
+                  <span className="text-gray-600 font-semibold w-8 text-right">{actual != null ? Math.round(actual) : '—'}</span>
+                  {missing
+                    ? <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">— N/A</span>
+                    : met
+                      ? <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">✓</span>
+                      : <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">✗</span>
+                  }
+                </div>
+              );
+            })
           }
         </div>
       </div>
