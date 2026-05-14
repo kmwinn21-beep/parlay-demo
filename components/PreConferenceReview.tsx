@@ -406,6 +406,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                   conferenceId={conferenceId}
                   byRep={data.byRep}
                   icpCompanies={data.icpCompanies}
+                  relationships={data.relationships}
                 />
               )}
               {activeTab === 'icp' && (

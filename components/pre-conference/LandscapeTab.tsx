@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
-import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany } from '../PreConferenceReview';
+import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany, RelationshipRow } from '../PreConferenceReview';
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 
@@ -501,9 +501,11 @@ function PipelineChartsPanel({
   meetingAttendeeIds: Set<number>;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
-  const [conversionPct, setConversionPct] = useState(60);
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+
+  // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
+  const conversionPct = 60;
 
   useEffect(() => {
     Promise.all([
@@ -573,14 +575,6 @@ function PipelineChartsPanel({
       <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
-          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-            <input
-              type="number" min={0} max={100} value={conversionPct}
-              onChange={e => { const v = Math.max(0, Math.min(100, Number(e.target.value))); if (!isNaN(v)) setConversionPct(v); }}
-              className="w-10 text-xs text-center border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-brand-primary"
-            />
-            <span className="text-xs text-gray-400">% conv.</span>
-          </div>
         </div>
 
         {requiredPipeline != null && (
@@ -643,7 +637,6 @@ function PipelineChartsPanel({
       <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
-          <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{meetingsConvPct}% conv.</span>
         </div>
 
         {requiredPipeline != null && (
@@ -711,6 +704,108 @@ function PipelineChartsPanel({
   );
 }
 
+// ─── Relationship Heatmap helpers ─────────────────────────────────────────────
+
+function repInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.trim().substring(0, 2).toUpperCase();
+}
+
+function RepInitialChip({ name }: { name: string }) {
+  return (
+    <span
+      title={name}
+      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300 flex-shrink-0"
+    >
+      {repInitials(name)}
+    </span>
+  );
+}
+
+function RelTypePill({ status }: { status: string }) {
+  return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+      {status}
+    </span>
+  );
+}
+
+function AttendeeRelCard({
+  attendee,
+  rels,
+}: {
+  attendee: IcpCompany['attendees'][0];
+  rels: RelationshipRow[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasNotes = rels.some(r => r.description && r.description.trim());
+
+  return (
+    <div className="rounded-lg border border-gray-100 overflow-hidden">
+      <button
+        onClick={() => hasNotes && setExpanded(v => !v)}
+        className={`w-full text-left px-3 py-2.5 transition-colors ${hasNotes ? 'hover:bg-gray-50' : 'cursor-default'}`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href={`/attendees/${attendee.id}`}
+                className="text-xs font-medium text-gray-700 hover:text-brand-secondary"
+                onClick={e => e.stopPropagation()}
+              >
+                {String(attendee.first_name)} {String(attendee.last_name)}
+              </Link>
+              <span className="text-xs font-bold" style={{ color: scoreColor(attendee.health) }}>
+                {attendee.health}
+              </span>
+            </div>
+            {attendee.title && (
+              <p className="text-xs text-gray-400 mt-0.5 truncate">{String(attendee.title)}</p>
+            )}
+          </div>
+          {hasNotes && (
+            <svg
+              className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
+        </div>
+
+        {rels.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+            {rels.map((rel, i) => (
+              <span key={i} className="inline-flex items-center gap-1 flex-wrap">
+                {rel.rep_names.map(rep => <RepInitialChip key={rep} name={rep} />)}
+                <RelTypePill status={rel.relationship_status} />
+              </span>
+            ))}
+          </div>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-gray-100 px-3 py-2 space-y-3">
+          {rels
+            .filter(r => r.description && r.description.trim())
+            .map((rel, i) => (
+              <div key={i} className="text-xs">
+                <div className="flex items-center gap-1 mb-1 flex-wrap">
+                  {rel.rep_names.map(rep => <RepInitialChip key={rep} name={rep} />)}
+                  <RelTypePill status={rel.relationship_status} />
+                </div>
+                <p className="text-gray-600 leading-relaxed">{rel.description}</p>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Relationship Heatmap Panel ────────────────────────────────────────────────
 
 const HEALTH_BANDS = ['76–100', '51–75', '26–50', '0–25'] as const;
@@ -729,10 +824,12 @@ function RelationshipHeatmapPanel({
   byRep,
   icpCompanies,
   targetMap,
+  relationships,
 }: {
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   targetMap: Map<number, TargetEntry>;
+  relationships: RelationshipRow[];
 }) {
   const [view, setView] = useState<'internal' | 'coverage'>('internal');
   const [drillInternal, setDrillInternal] = useState<DrillInternalState | null>(null);
@@ -740,7 +837,7 @@ function RelationshipHeatmapPanel({
 
   // ── Internal relationships matrix ──────────────────────────────────────────
   const { reps, relTypes, matrix, repRelMap } = useMemo(() => {
-    const reps: string[] = byRep.map(r => r.rep);
+    const allReps: string[] = byRep.map(r => r.rep);
     const relTypeSet = new Set<string>();
     const repRelMap = new Map<string, Map<string, Array<{ id: number; name: string; status: string }>>>();
 
@@ -762,10 +859,25 @@ function RelationshipHeatmapPanel({
       repRelMap.set(repEntry.rep, relMap);
     }
 
-    const relTypes = Array.from(relTypeSet).sort();
-    const matrix: number[][] = reps.map(rep =>
+    // Exclude values that are not genuine relationship types
+    const EXCLUDED_TYPES = new Set(['not targeted', 'no relationship', 'none']);
+    const relTypes = Array.from(relTypeSet)
+      .filter(rt => !EXCLUDED_TYPES.has(rt.toLowerCase().trim()))
+      .sort();
+
+    const fullMatrix: number[][] = allReps.map(rep =>
       relTypes.map(relType => repRelMap.get(rep)?.get(relType)?.length ?? 0)
     );
+
+    // Only include reps who have at least one relationship in this conference
+    const reps: string[] = [];
+    const matrix: number[][] = [];
+    allReps.forEach((rep, i) => {
+      if (fullMatrix[i].some(v => v > 0)) {
+        reps.push(rep);
+        matrix.push(fullMatrix[i]);
+      }
+    });
 
     return { reps, relTypes, matrix, repRelMap };
   }, [byRep]);
@@ -924,21 +1036,19 @@ function RelationshipHeatmapPanel({
                 Avg health: {drillCoverage.avgHealth} · {drillCoverage.attendees.length} attendee{drillCoverage.attendees.length !== 1 ? 's' : ''}
               </p>
               <div className="space-y-1.5">
-                {drillCoverage.attendees.map((a, idx) => (
-                  <div key={idx} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/attendees/${a.id}`}
-                        className="text-xs font-medium text-gray-700 hover:text-brand-secondary block truncate"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {String(a.first_name)} {String(a.last_name)}
-                      </Link>
-                      {a.title && <p className="text-xs text-gray-400 truncate">{String(a.title)}</p>}
-                    </div>
-                    <div className="text-xs font-bold ml-2 flex-shrink-0" style={{ color: scoreColor(a.health) }}>{a.health}</div>
-                  </div>
-                ))}
+                {drillCoverage.attendees.map((a, idx) => {
+                  const fullName = `${String(a.first_name)} ${String(a.last_name)}`;
+                  const attendeeRels = relationships.filter(r =>
+                    r.company_id === drillCoverage.id &&
+                    (
+                      r.contact_names.length === 0 ||
+                      r.contact_names.some(cn => cn.toLowerCase() === fullName.toLowerCase())
+                    )
+                  );
+                  return (
+                    <AttendeeRelCard key={idx} attendee={a} rels={attendeeRels} />
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -1033,6 +1143,7 @@ export function LandscapeTab({
   conferenceId,
   byRep,
   icpCompanies,
+  relationships,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
@@ -1042,6 +1153,7 @@ export function LandscapeTab({
   conferenceId: number;
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
+  relationships: RelationshipRow[];
 }) {
   return (
     <div className="space-y-8">
@@ -1073,6 +1185,7 @@ export function LandscapeTab({
             byRep={byRep}
             icpCompanies={icpCompanies}
             targetMap={targetMap}
+            relationships={relationships}
           />
         </div>
 
