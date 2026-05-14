@@ -884,7 +884,7 @@ export default function ProgramIntelligencePage() {
   // Track B onboarding: mark step complete when user visits calendar or performance tabs
   useEffect(() => {
     if (onboardingTrack !== 'track_b' || !onboardingProgress) return;
-    if (activeTab === 'calendar' && !onboardingProgress.completed_steps.includes('calendar_intel_visited')) {
+    if ((activeTab as string) === 'calendar' && !onboardingProgress.completed_steps.includes('calendar_intel_visited')) {
       markStepComplete('calendar_intel_visited');
     }
     if ((activeTab === 'performance' || activeTab === 'budget' || activeTab === 'pipeline') &&
@@ -1185,7 +1185,7 @@ export default function ProgramIntelligencePage() {
 
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab !== 'performance' && activeTab !== 'calendar' && activeTab !== 'reps' && (
+        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
