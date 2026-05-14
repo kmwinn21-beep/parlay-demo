@@ -93,6 +93,12 @@ export interface TargetingAggregation {
   mustTargetIcpCount: number;
   highPriorityIcpCount: number;
   worthEngagingIcpCount: number;
+  // Strategic Value sub-components — new formula (internal 45%, prior 30%, known 15%, client 10%)
+  svBaseScore: number;
+  svInternalRelCount: number;
+  svPriorEngagementCount: number;
+  svKnownProspectCount: number;
+  svClientCount: number;
   // First 5 scored companies for debug logging
   debugSample: Array<{ companyName: string; wse: number | null; tier: string }>;
 }
@@ -238,6 +244,8 @@ async function runTargetingForConference(
   let sumPriorityScore = 0, sumBuyerAccessScore = 0, sumRelationshipScore = 0;
   let mustTargetWse = 0, highPriorityWse = 0, worthEngagingWse = 0;
   let mustTargetIcpCount = 0, highPriorityIcpCount = 0, worthEngagingIcpCount = 0;
+  // Strategic Value Layer 1: new per-company formula (internal 45%, prior 30%, known 15%, client 10%)
+  let sumSvScore = 0, svInternalRelCount = 0, svPriorEngagementCount = 0, svKnownProspectCount = 0, svClientCount = 0;
   const debugSample: Array<{ companyName: string; wse: number | null; tier: string }> = [];
 
   for (const s of scores) {
@@ -259,6 +267,19 @@ async function runTargetingForConference(
     sumBuyerAccessScore += s.buyer_access_score;
     sumRelationshipScore += s.relationship_leverage_score;
     if (debugSample.length < 5) debugSample.push({ companyName: s.company_name, wse: s.wse, tier: s.target_priority_tier_key });
+
+    // Strategic Value signals (binary — 0 or 100 per company, averaged across all)
+    const co = companyMap.get(s.company_id)?.company;
+    const sig = signalsByCompany.get(s.company_id) ?? {};
+    const svInternal = sig.internal_relationship_count ? 1 : 0;
+    const svPrior = (sig.prior_meeting_count ?? 0) + (sig.prior_conference_overlap_count ?? 0) > 0 ? 1 : 0;
+    const svKnown = sig.is_known_prospect || sig.has_existing_status || svInternal > 0 ? 1 : 0;
+    const svClient = co?.status?.trim().toLowerCase() === 'client' ? 1 : 0;
+    sumSvScore += svInternal * 45 + svPrior * 30 + svKnown * 15 + svClient * 10;
+    if (svInternal) svInternalRelCount++;
+    if (svPrior) svPriorEngagementCount++;
+    if (svKnown) svKnownProspectCount++;
+    if (svClient) svClientCount++;
   }
 
   // Only ICP-flagged companies are eligible for realistic pipeline — mirrors the pre-conference modal formula
@@ -290,6 +311,11 @@ async function runTargetingForConference(
     mustTargetIcpCount,
     highPriorityIcpCount,
     worthEngagingIcpCount,
+    svBaseScore: totalScoredCompanies > 0 ? Math.round(sumSvScore / totalScoredCompanies) : 0,
+    svInternalRelCount,
+    svPriorEngagementCount,
+    svKnownProspectCount,
+    svClientCount,
     debugSample,
   };
 }
@@ -555,9 +581,18 @@ export async function GET(
     ? Math.min(Math.round((realisticPipeline ?? 0) / reqPipeline * 100), 100)
     : (budgetRow != null ? 50 : null);
 
-  // --- Component 6: Strategic Value (from relationship leverage) ---
+  // --- Component 5: Strategic Value (Layer 1: per-company signals avg + Layer 2: competitor bonus) ---
+  // Layer 2: conference-level competitor presence check (+5 pts if any competitor-type company is attending)
+  const hasCompetitor = await db.execute({
+    sql: `SELECT 1 FROM conference_attendees ca
+          JOIN attendees a ON a.id = ca.attendee_id
+          JOIN companies c ON c.id = a.company_id
+          WHERE ca.conference_id = ? AND LOWER(TRIM(c.company_type)) = 'competitor' LIMIT 1`,
+    args: [conferenceId],
+  }).then(r => (r.rows as Row[]).length > 0).catch(() => false);
+  const competitorBonus = hasCompetitor ? 5 : 0;
   const strategicValueScore: number | null = targetingAgg != null
-    ? Math.round(targetingAgg.avgRelationshipLeverageScore)
+    ? Math.min(targetingAgg.svBaseScore + competitorBonus, 100)
     : null;
 
   const componentScores: ComponentScores = {
@@ -610,6 +645,16 @@ export async function GET(
       targetingEngine: targetingAgg,
       budget: budgetRow ?? null,
       commercialPotential: projectedPipeline != null ? { projected_pipeline: projectedPipeline, realistic_pipeline: realisticPipeline ?? 0, must_wse: mustWse, high_wse: highWse, worth_wse: worthWse, avg_cost_per_unit: avgCostPerUnit } : null,
+      strategicValue: targetingAgg != null ? {
+        base_score: targetingAgg.svBaseScore,
+        competitor_bonus: competitorBonus,
+        has_competitor: hasCompetitor,
+        internal_rel_count: targetingAgg.svInternalRelCount,
+        prior_engagement_count: targetingAgg.svPriorEngagementCount,
+        known_prospect_count: targetingAgg.svKnownProspectCount,
+        client_count: targetingAgg.svClientCount,
+        total_scored: targetingAgg.totalScoredCompanies,
+      } : null,
     },
   };
 

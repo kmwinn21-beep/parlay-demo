@@ -61,6 +61,16 @@ interface CalendarConferenceRow {
     } | null;
     budget?: { line_items?: unknown; return_on_cost?: string | null; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
     commercialPotential?: { projected_pipeline?: number; realistic_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
+    strategicValue?: {
+      base_score: number;
+      competitor_bonus: number;
+      has_competitor: boolean;
+      internal_rel_count: number;
+      prior_engagement_count: number;
+      known_prospect_count: number;
+      client_count: number;
+      total_scored: number;
+    } | null;
   };
 }
 
@@ -522,7 +532,18 @@ export default function CalendarIntelligencePage() {
         `Required ROI multiple: ${reqMultiple}x`,
         ...(cp != null && reqPipeline > 0 ? [`Attainable Pipeline: $${realisticPipeline > 0 ? realisticPipeline.toLocaleString() : projectedPipeline.toLocaleString()} (${(((realisticPipeline > 0 ? realisticPipeline : projectedPipeline) / reqPipeline) * 100).toFixed(0)}%)`] : []),
       ] : ['Budget not entered.', 'Add budget in conference settings. This would add up to 18 points to your score.'] },
-      { key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue, unavailable: te == null ? 'Prospect company type not configured.' : undefined, bullets: te != null ? [`Avg relationship leverage: ${te.avgRelationshipLeverageScore.toFixed(0)}/100`] : ['Prospect company type not configured.', 'This would add up to 10 points to your score.'] },
+      { key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue, unavailable: te == null ? 'Prospect company type not configured.' : undefined, bullets: (() => {
+        const sv = d.strategicValue;
+        if (!sv) return ['Prospect company type not configured.', 'This would add up to 10 points to your score.'];
+        return [
+          `Avg relationship leverage: ${sv.base_score}/100 (across ${sv.total_scored} prospect companies)`,
+          `Companies with internal relationships: ${sv.internal_rel_count}`,
+          `Companies with prior engagement: ${sv.prior_engagement_count}`,
+          `Known prospects attending: ${sv.known_prospect_count}`,
+          sv.client_count > 0 ? `Clients attending: ${sv.client_count} ↩ retention/expansion signal` : `Clients attending: 0`,
+          sv.has_competitor ? `Competitor presence: Yes (+${sv.competitor_bonus} pts applied)` : 'Competitor presence: No',
+        ];
+      })() },
     ];
 
     return (
