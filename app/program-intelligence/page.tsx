@@ -798,6 +798,7 @@ export default function ProgramIntelligencePage() {
   const [calendarTypeFilter, setCalendarTypeFilter] = useState<'all'|'historical'|'active'>('all');
   const [calendarConfidenceFilter, setCalendarConfidenceFilter] = useState<'all'|'high'|'medium'|'low'>('all');
   const [calendarBudgetFilter, setCalendarBudgetFilter] = useState<'all'|'complete'|'partial'|'missing'|'needs_attention'>('all');
+  const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
   const [budgetModalConf, setBudgetModalConf] = useState<{ id: number; name: string } | null>(null);
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
   const [isPortrait, setIsPortrait] = useState(true);
@@ -1523,9 +1524,10 @@ export default function ProgramIntelligencePage() {
               }).length;
               const budgetCardActive = calendarBudgetFilter === 'needs_attention';
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
                   <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
                   <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
+                  <div className="card border-l-4 border-emerald-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend & Maintain</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_maintain').length}</p></div>
                   <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format','evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
                   <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar','do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
                   <button
@@ -1562,12 +1564,41 @@ export default function ProgramIntelligencePage() {
               </div>
             )}
             <div className="card">
-              <div className="flex flex-wrap gap-2 mb-3">
-                <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend & Invest</option><option value="attend_maintain">Attend & Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
-                <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as any)}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
-                <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as any)}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
-                <select className="input-field text-sm py-1.5" value={calendarBudgetFilter} onChange={(e) => setCalendarBudgetFilter(e.target.value as typeof calendarBudgetFilter)}><option value="all">All Budget Status</option><option value="complete">Complete</option><option value="partial">Partial</option><option value="missing">No Budget</option><option value="needs_attention">Needs Attention</option></select>
-              </div>
+              {(() => {
+                const calendarActiveFilterCount = [
+                  calendarRecommendationFilter !== 'all',
+                  calendarTypeFilter !== 'all',
+                  calendarConfidenceFilter !== 'all',
+                  calendarBudgetFilter !== 'all',
+                ].filter(Boolean).length;
+                return (
+                  <>
+                    <div className="flex items-center mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setCalendarFiltersOpen(o => !o)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${calendarActiveFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                        Filters
+                        {calendarActiveFilterCount > 0 && (
+                          <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">{calendarActiveFilterCount}</span>
+                        )}
+                        <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${calendarFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                    </div>
+                    {calendarFiltersOpen && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend & Invest</option><option value="attend_maintain">Attend & Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
+                        <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as any)}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
+                        <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as any)}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+                        <select className="input-field text-sm py-1.5" value={calendarBudgetFilter} onChange={(e) => setCalendarBudgetFilter(e.target.value as typeof calendarBudgetFilter)}><option value="all">All Budget Status</option><option value="complete">Complete</option><option value="partial">Partial</option><option value="missing">No Budget</option><option value="needs_attention">Needs Attention</option></select>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
               {calendarRowsFiltered.length === 0 ? (
                 <div className="text-center py-10">
                   <p className="font-medium text-gray-700">No conferences to score yet</p>
