@@ -6,6 +6,9 @@ import { PRICE_ID_TO_PLAN, PRICE_ID_TO_BUNDLE, type BundleId } from '@/lib/const
 import type Stripe from 'stripe';
 
 export async function POST(request: Request) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return new Response('Stripe is not configured on this deployment.', { status: 501 });
+  }
   const body = await request.text();
   const signature = request.headers.get('stripe-signature');
 
