@@ -13,6 +13,9 @@ import {
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
 export async function POST(request: NextRequest) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: 'Stripe is not configured on this deployment.' }, { status: 501 });
+  }
   const user = await requireAuth(request);
   if (user instanceof NextResponse) return user;
 
