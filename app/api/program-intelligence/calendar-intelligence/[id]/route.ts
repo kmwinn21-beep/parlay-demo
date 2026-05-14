@@ -289,7 +289,6 @@ function determineRecommendationTier(
   componentScores: ComponentScores,
   confidenceMultiplier: number,
   dataAge: number,
-  hasEngagementData: boolean,
 ): string {
   if (score === null) return 'evaluate_before_committing';
   if (dataAge > 3) return 'evaluate_before_committing';
@@ -303,7 +302,7 @@ function determineRecommendationTier(
   if (score >= 70 && af >= 65 && to >= 60) return 'attend_maintain';
   if (af >= 65 && to >= 60 && cj < 60) return 'attend_reconsider_format';
   if (score < 40 || ((componentScores.audienceFit ?? 100) < 45 && (componentScores.targetOpportunity ?? 100) < 45)) {
-    return hasEngagementData ? 'remove_from_calendar' : 'do_not_prioritize';
+    return 'do_not_prioritize';
   }
   return 'evaluate_before_committing';
 }
@@ -449,23 +448,7 @@ export async function GET(
     ? computeTargetOpportunityScore(targetingAgg)
     : null;
 
-  // --- Component 3: Engagement Capture ---
-  const [meetingsRows, followUpRows] = await Promise.all([
-    db.execute({ sql: `SELECT COUNT(*) AS total_meetings FROM meetings WHERE conference_id = ?`, args: [conferenceId] }).then(r => r.rows as Row[]).catch(() => [] as Row[]),
-    db.execute({ sql: `SELECT COUNT(*) AS total_followups, SUM(CASE WHEN COALESCE(completed,0)=1 THEN 1 ELSE 0 END) AS completed_followups FROM follow_ups WHERE conference_id = ?`, args: [conferenceId] }).then(r => r.rows as Row[]).catch(() => [] as Row[]),
-  ]);
-  const emRow = meetingsRows[0];
-  const efRow = followUpRows[0];
-  const totalMeetings = Number(emRow?.total_meetings ?? 0);
-  const totalFollowups = Number(efRow?.total_followups ?? 0);
-  const completedFollowups = Number(efRow?.completed_followups ?? 0);
-  const meetingRate = attendeeCount > 0 ? totalMeetings / attendeeCount : 0;
-  const followupRate = totalFollowups > 0 ? completedFollowups / totalFollowups : null;
-  const engagementCaptureScore: number | null = emRow != null
-    ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 0)), 100)
-    : null;
-
-  // --- Component 4 & 5: Commercial Potential + Cost Justification ---
+  // --- Component 3 & 4: Commercial Potential + Cost Justification ---
   // WSE sums come from the scoring engine (same source as Target Recommendations tab),
   // not from conference_targets which is often empty for future conferences.
   const mustWse  = targetingAgg?.mustTargetWse  ?? 0;
@@ -507,7 +490,6 @@ export async function GET(
   const componentScores: ComponentScores = {
     audienceFit: audienceFitScore,
     targetOpportunity: targetOpportunityScore,
-    engagementCapture: engagementCaptureScore,
     commercialPotential: commercialPotentialScore,
     costJustification: costJustificationScore,
     strategicValue: strategicValueScore,
@@ -516,13 +498,11 @@ export async function GET(
   const { score: finalScore, confidenceMultiplier, availableComponentCount, totalComponentCount, maxPossibleScore } =
     assembleFinalScore(componentScores);
 
-  const hasEngagementData = emRow != null && totalMeetings > 0;
   const recommendationTier = determineRecommendationTier(
     finalScore,
     componentScores,
     confidenceMultiplier,
     dataAge,
-    hasEngagementData,
   );
 
   const conference = {
@@ -548,15 +528,13 @@ export async function GET(
     ],
     confidenceFactors: [
       ...(attendeeCount < 50 ? ['Attendee sample under 50 lowers confidence.'] : []),
-      ...(availableComponentCount < 4 ? [`Score based on ${availableComponentCount} of 6 components — insufficient data for a high-confidence recommendation.`] : []),
+      ...(availableComponentCount < 4 ? [`Score based on ${availableComponentCount} of 5 components — insufficient data for a high-confidence recommendation.`] : []),
     ],
     tierProbabilityFactors: { must: mustConv, high: highConv, worth: worthConv },
     actionableActionTypesConfigured: actionableCount,
     targetingScored: true,
     diagnostics: {
       targetingEngine: targetingAgg,
-      engagementMeetings: emRow ?? null,
-      engagementFollowUps: efRow ?? null,
       budget: budgetRow ?? null,
       commercialPotential: projectedPipeline != null ? { projected_pipeline: projectedPipeline, must_wse: mustWse, high_wse: highWse, worth_wse: worthWse, avg_cost_per_unit: avgCostPerUnit } : null,
     },

@@ -29,7 +29,6 @@ interface CalendarConferenceRow {
   componentScores?: {
     audienceFit: number | null;
     targetOpportunity: number | null;
-    engagementCapture: number | null;
     commercialPotential: number | null;
     costJustification: number | null;
     strategicValue: number | null;
@@ -60,8 +59,6 @@ interface CalendarConferenceRow {
       actionableCount: number;
       isLargeConference: boolean;
     } | null;
-    engagementMeetings?: { total_meetings?: number } | null;
-    engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
     budget?: { line_items?: unknown; return_on_cost?: string | null; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
     commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
   };
@@ -261,7 +258,7 @@ function BudgetStatusCell({ row, onOpenModal }: { row: CalendarConferenceRow; on
           <p className="text-sm font-semibold text-gray-900 mb-1">{isPartial ? 'Budget data incomplete' : 'No budget data entered'}</p>
           {isPartial
             ? <p className="text-xs text-gray-500 mb-3">Missing budget fields are limiting the accuracy of your Cost Justification and Commercial Potential scores.</p>
-            : <p className="text-xs text-gray-500 mb-3">Without budget data, Parlay cannot calculate Cost Justification or Commercial Potential scores. These two components represent 30% of the Calendar Recommendation Score.</p>
+            : <p className="text-xs text-gray-500 mb-3">Without budget data, Parlay cannot calculate Cost Justification or Commercial Potential scores. These two components represent 36% of the Calendar Recommendation Score.</p>
           }
           <div className="space-y-1 mb-3">
             {status.missingFields.map(f => (
@@ -498,12 +495,6 @@ export default function CalendarIntelligencePage() {
     const d = row.diagnostics ?? {};
     const cs = row.componentScores;
     const te = d.targetingEngine;
-    const em = d.engagementMeetings;
-    const ef = d.engagementFollowUps;
-    const totalMeetings = Number(em?.total_meetings ?? 0);
-    const totalFollowups = Number(ef?.total_followups ?? 0);
-    const completedFollowups = Number(ef?.completed_followups ?? 0);
-    const meetingRate = row.attendeeCount > 0 ? totalMeetings / row.attendeeCount : 0;
     const cp = d.commercialPotential;
     const projectedPipeline = Number(cp?.projected_pipeline ?? 0);
     const bud = d.budget;
@@ -511,14 +502,13 @@ export default function CalendarIntelligencePage() {
     const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
     const teBenchmarks = te != null ? (te.isLargeConference ? { must: '15%', high: '30%', worth: '25%' } : { must: '10%', high: '20%', worth: '20%' }) : null;
     const teActionableRate = te != null && te.totalScoredCompanies > 0 ? (te.actionableCount / te.totalScoredCompanies * 100).toFixed(0) + '%' : null;
-    const W = { audienceFit: 25, targetOpportunity: 20, engagementCapture: 15, commercialPotential: 15, costJustification: 15, strategicValue: 10 };
+    const W = { audienceFit: 30, targetOpportunity: 24, commercialPotential: 18, costJustification: 18, strategicValue: 10 };
 
     const components = [
       { key: 'Audience Fit', score: cs?.audienceFit ?? null, weight: W.audienceFit, bullets: [`${row.icpCompanies} ICP companies out of ${row.totalCompanies} total (${row.icpDensityPct.toFixed(1)}% density — benchmark 15%)`, ...(te != null ? [`Avg buyer access score: ${te.avgBuyerAccessScore.toFixed(0)}/100`] : [])] },
       { key: 'Target Opportunity', score: cs?.targetOpportunity ?? null, weight: W.targetOpportunity, unavailable: te == null ? 'Prospect company type not configured.' : undefined, bullets: te != null ? [`${te.totalScoredCompanies} companies scored`, `Must Target: ${te.mustTargetCount} (benchmark ${teBenchmarks!.must})`, `High Priority: ${te.highPriorityCount} (benchmark ${teBenchmarks!.high})`, `Worth Engaging: ${te.worthEngagingCount} (benchmark ${teBenchmarks!.worth})`, `Actionable rate: ${teActionableRate}`] : ['Target scoring not run.', 'Ensure the prospect company type is configured.'] },
-      { key: 'Engagement Capture', score: cs?.engagementCapture ?? null, weight: W.engagementCapture, unavailable: em == null ? (row.conferenceType === 'historical' ? 'Not applicable for historical conferences.' : 'No engagement data available.') : undefined, bullets: em != null ? [`Meetings: ${totalMeetings} (${(meetingRate * 100).toFixed(0)}% of attendees)`, ...(ef != null ? [`Follow-ups: ${completedFollowups} of ${totalFollowups} completed`] : [])] : row.conferenceType === 'historical' ? ['Not applicable — Historical Conference.'] : ['No meetings recorded.', 'This would add up to 15 points to your score.'] },
       { key: 'Commercial Potential', score: cs?.commercialPotential ?? null, weight: W.commercialPotential, unavailable: cp == null ? 'Commercial inputs unavailable.' : undefined, bullets: cp != null ? [`Available pipeline: $${projectedPipeline.toLocaleString()}`, ...(reqPipeline > 0 ? [`Required: $${reqPipeline.toLocaleString()}`, `Coverage: ${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%`] : ['No budget entered.'])] : ['No target WSE or avg cost data available.'] },
-      { key: 'Cost Justification', score: cs?.costJustification ?? null, weight: W.costJustification, unavailable: bud == null ? 'No budget data available.' : undefined, bullets: bud != null ? [`Required pipeline: $${reqPipeline.toLocaleString()}`, `Required ROI multiple: ${reqMultiple}x`, ...(cp != null && reqPipeline > 0 ? [`Projected: $${projectedPipeline.toLocaleString()} (${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%)`] : [])] : ['Budget not entered.', 'Add budget in conference settings. This would add up to 15 points to your score.'] },
+      { key: 'Cost Justification', score: cs?.costJustification ?? null, weight: W.costJustification, unavailable: bud == null ? 'No budget data available.' : undefined, bullets: bud != null ? [`Required pipeline: $${reqPipeline.toLocaleString()}`, `Required ROI multiple: ${reqMultiple}x`, ...(cp != null && reqPipeline > 0 ? [`Projected: $${projectedPipeline.toLocaleString()} (${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%)`] : [])] : ['Budget not entered.', 'Add budget in conference settings. This would add up to 18 points to your score.'] },
       { key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue, unavailable: te == null ? 'Prospect company type not configured.' : undefined, bullets: te != null ? [`Avg relationship leverage: ${te.avgRelationshipLeverageScore.toFixed(0)}/100`] : ['Prospect company type not configured.', 'This would add up to 10 points to your score.'] },
     ];
 
@@ -543,7 +533,7 @@ export default function CalendarIntelligencePage() {
             {row.calendarRecommendationScore != null && <span className="text-sm font-normal text-gray-400 mb-0.5">/100</span>}
           </div>
           <p className="text-xs font-semibold mt-1" style={{ color: scoreColor }}>{tierInfo.label}</p>
-          <p className="text-xs text-gray-400 mt-1">Based on {row.availableComponentCount ?? '?'} of 6 components · max possible {row.maxPossibleScore ?? '—'}/100</p>
+          <p className="text-xs text-gray-400 mt-1">Based on {row.availableComponentCount ?? '?'} of 5 components · max possible {row.maxPossibleScore ?? '—'}/100</p>
           {/* Budget summary inside score card */}
           {(() => {
             const budRaw = row.diagnostics?.budget;

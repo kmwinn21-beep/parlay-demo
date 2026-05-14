@@ -35,7 +35,6 @@ function determineRecommendationTier(
   componentScores: ComponentScores,
   confidenceMultiplier: number,
   dataAge: number,
-  hasEngagementData: boolean,
 ): string {
   if (score === null) return 'evaluate_before_committing';
   if (dataAge > 3) return 'evaluate_before_committing';
@@ -52,7 +51,7 @@ function determineRecommendationTier(
   if (score >= 70 && af >= 65 && to >= 60) return 'attend_maintain';
   if (af >= 65 && to >= 60 && cj < 60) return 'attend_reconsider_format';
   if (score < 40 || ((componentScores.audienceFit ?? 100) < 45 && (componentScores.targetOpportunity ?? 100) < 45)) {
-    return hasEngagementData ? 'remove_from_calendar' : 'do_not_prioritize';
+    return 'do_not_prioritize';
   }
   return 'evaluate_before_committing';
 }
@@ -122,20 +121,6 @@ export async function GET(request: NextRequest) {
     // --- Component 2: Target Opportunity — computed by per-conference scoring endpoint ---
     const targetOpportunityScore: number | null = null;
 
-    // --- Component 3: Engagement Capture ---
-    const meetingsRows = await runLoggedQuery(db, 'engagement-meetings', `SELECT COUNT(*) AS total_meetings FROM meetings WHERE conference_id = ?`, [conferenceId]).catch(() => []);
-    const followUpRows = await runLoggedQuery(db, 'engagement-followups', `SELECT COUNT(*) AS total_followups, SUM(CASE WHEN COALESCE(completed,0)=1 THEN 1 ELSE 0 END) AS completed_followups FROM follow_ups WHERE conference_id = ?`, [conferenceId]).catch(() => []);
-    const emRow = meetingsRows[0];
-    const efRow = followUpRows[0];
-    const totalMeetings = Number(emRow?.total_meetings ?? 0);
-    const totalFollowups = Number(efRow?.total_followups ?? 0);
-    const completedFollowups = Number(efRow?.completed_followups ?? 0);
-    const meetingRate = attendeeCount > 0 ? totalMeetings / attendeeCount : 0;
-    const followupRate = totalFollowups > 0 ? completedFollowups / totalFollowups : null;
-    const engagementCaptureScore: number | null = emRow != null
-      ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 0)), 100)
-      : null;
-
     // --- Commercial Potential: projected pipeline via target WSE * avg_cost_per_unit ---
     const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
     const companyBestTier = new Map<number, { tier: string; wse: number }>();
@@ -176,13 +161,12 @@ export async function GET(request: NextRequest) {
       ? Math.min(Math.round((projectedPipeline ?? 0) / reqPipeline * 100), 100)
       : (budgetRow != null ? 50 : null);
 
-    // --- Component 6: Strategic Value — computed by per-conference scoring endpoint ---
+    // --- Component 5: Strategic Value — computed by per-conference scoring endpoint ---
     const strategicValueScore: number | null = null;
 
     const componentScores: ComponentScores = {
       audienceFit: audienceFitScore,
       targetOpportunity: targetOpportunityScore,
-      engagementCapture: engagementCaptureScore,
       commercialPotential: commercialPotentialScore,
       costJustification: costJustificationScore,
       strategicValue: strategicValueScore,
@@ -191,13 +175,11 @@ export async function GET(request: NextRequest) {
     const { score: finalScore, confidenceMultiplier, availableComponentCount, totalComponentCount, maxPossibleScore } =
       assembleFinalScore(componentScores);
 
-    const hasEngagementData = emRow != null && totalMeetings > 0;
     const recommendationTier = determineRecommendationTier(
       finalScore,
       componentScores,
       confidenceMultiplier,
       dataAge,
-      hasEngagementData,
     );
 
     return {
@@ -223,7 +205,7 @@ export async function GET(request: NextRequest) {
       ],
       confidenceFactors: [
         ...(attendeeCount < 50 ? ['Attendee sample under 50 lowers confidence.'] : []),
-        ...(availableComponentCount < 4 ? [`Score based on ${availableComponentCount} of 6 components — insufficient data for a high-confidence recommendation.`] : []),
+        ...(availableComponentCount < 4 ? [`Score based on ${availableComponentCount} of 5 components — insufficient data for a high-confidence recommendation.`] : []),
       ],
       tierProbabilityFactors: { must: mustConv, high: highConv, worth: worthConv },
       actionableActionTypesConfigured: actionableCount,
@@ -231,8 +213,6 @@ export async function GET(request: NextRequest) {
       targetingScored: false,
       diagnostics: {
         targetingEngine: null,
-        engagementMeetings: meetingsRows[0] ?? null,
-        engagementFollowUps: followUpRows[0] ?? null,
         budget: budgetRows[0] ?? null,
         commercialPotential: projectedPipeline != null ? { projected_pipeline: projectedPipeline, must_wse: mustWse, high_wse: highWse, worth_wse: worthWse, avg_cost_per_unit: avgCostPerUnit } : null,
       },

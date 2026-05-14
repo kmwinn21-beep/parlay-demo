@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
 interface ComponentScores {
   audienceFit: number | null;
   targetOpportunity: number | null;
-  engagementCapture: number | null;
   commercialPotential: number | null;
   costJustification: number | null;
   strategicValue: number | null;
@@ -100,10 +99,6 @@ function gapNote(
       if (gap > 15) return `Audience Fit scored ${ciScore} going in — ICP & Target Quality came in at ${cesScore}. Targeting execution delivered beyond the opportunity.`;
       if (gap < -15) return `Audience Fit scored ${ciScore} going in — but ICP & Target Quality came in at ${cesScore}. The right companies were there but targeting broke down in execution.`;
       return 'Audience Fit and ICP & Target Quality are closely aligned — targeting execution matched the opportunity assessment.';
-    case 'engagementCapture':
-      if (gap > 15) return `Engagement Capture scored ${ciScore} going in — actual meeting execution came in at ${cesScore}. Execution outperformed the opportunity assessment.`;
-      if (gap < -15) return `Engagement Capture scored ${ciScore} going in — actual execution was ${cesScore}. Next time, prioritize pre-conference scheduling to convert the attendance opportunity.`;
-      return 'Engagement Capture and meeting execution are well-matched — the team extracted close to the expected value from attendance.';
     case 'targetOpportunity':
       if (gap > 15) return `Target Opportunity assessed at ${ciScore} — ICP engagement came in at ${cesScore}. Prioritization drove above-average targeting outcomes.`;
       if (gap < -15) return `Target Opportunity assessed at ${ciScore} — ICP engagement landed at ${cesScore}. Tighten target list preparation before the next event.`;
@@ -206,12 +201,6 @@ export function ExecutionComparison({ score, conferenceId }: Props) {
     mappedRows.push({ key: 'audienceFit', ciLabel: 'Audience Fit', cesLabel: 'ICP & Target Quality', ciScore: ci, cesScore: cesVal, gap: cesVal - ci });
   }
 
-  if (cs?.engagementCapture != null) {
-    const ci = Math.round(cs.engagementCapture);
-    const cesVal = Math.round((ces.dim2_meeting_exec + ces.dim4_breadth) / 2);
-    mappedRows.push({ key: 'engagementCapture', ciLabel: 'Engagement Capture', cesLabel: 'Meeting Exec + Breadth', ciScore: ci, cesScore: cesVal, gap: cesVal - ci });
-  }
-
   if (cs?.targetOpportunity != null) {
     const ci = Math.round(cs.targetOpportunity);
     const cesVal = Math.round(ces.dim1_icp_target);
@@ -240,6 +229,11 @@ export function ExecutionComparison({ score, conferenceId }: Props) {
 
   return (
     <div className="p-5 space-y-5">
+      {/* Contextual note */}
+      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
+        <p className="text-xs text-blue-700 leading-relaxed">Engagement execution is evaluated post-conference via Conference Effectiveness Score, not pre-conference. Use the CES comparison below to assess execution quality.</p>
+      </div>
+
       {/* Tier comparison */}
       <div>
         <div className="flex items-center gap-3 mb-2">

@@ -5,7 +5,6 @@ import { useState } from 'react';
 interface ComponentScores {
   audienceFit: number | null;
   targetOpportunity: number | null;
-  engagementCapture: number | null;
   commercialPotential: number | null;
   costJustification: number | null;
   strategicValue: number | null;
@@ -30,25 +29,22 @@ const TIER_REQUIREMENTS: Record<TargetTier, Partial<Record<keyof ComponentScores
 const COMPONENT_LABELS: Record<keyof ComponentScores, string> = {
   audienceFit:        'Audience Fit',
   targetOpportunity:  'Target Opportunity',
-  engagementCapture:  'Engagement Capture',
   commercialPotential:'Commercial Potential',
   costJustification:  'Cost Justification',
   strategicValue:     'Strategic Value',
 };
 
 const COMPONENT_WEIGHTS: Record<keyof ComponentScores, number> = {
-  audienceFit: 25,
-  targetOpportunity: 20,
-  engagementCapture: 15,
-  commercialPotential: 15,
-  costJustification: 15,
+  audienceFit: 30,
+  targetOpportunity: 24,
+  commercialPotential: 18,
+  costJustification: 18,
   strategicValue: 10,
 };
 
 const IMPROVEMENT_NOTES: Record<keyof ComponentScores, string> = {
   audienceFit: 'More ICP-matching companies in the attendee list, or a higher buyer access score.',
   targetOpportunity: 'More high-priority companies need a recommended action; increase the actionable rate among scored companies.',
-  engagementCapture: 'Higher meeting rate and completed follow-ups relative to total attendees.',
   commercialPotential: 'Increase projected pipeline by assigning more targets or raising WSE values.',
   costJustification: 'Reduce conference cost or increase projected pipeline conversion.',
   strategicValue: 'Improve relationship leverage scores by increasing rep coverage and prior engagement.',
@@ -71,7 +67,7 @@ function computeWhatIfScore(
 export function PathToTier({ score, conferenceId: _conferenceId }: Props) {
   const [targetTier, setTargetTier] = useState<TargetTier>('attend_invest_more');
   const cs = score.componentScores ?? {
-    audienceFit: null, targetOpportunity: null, engagementCapture: null,
+    audienceFit: null, targetOpportunity: null,
     commercialPotential: null, costJustification: null, strategicValue: null,
   };
   const requirements = TIER_REQUIREMENTS[targetTier];

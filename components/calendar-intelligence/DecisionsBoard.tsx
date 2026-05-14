@@ -32,8 +32,8 @@ interface ScoreData {
   componentScores?: {
     audienceFit: number | null;
     targetOpportunity: number | null;
-    engagementCapture: number | null;
     commercialPotential: number | null;
+    costJustification: number | null;
   };
 }
 
@@ -181,7 +181,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
             <div className="flex flex-wrap gap-1">
               <ScoreChip label="Aud. Fit" value={sd.componentScores.audienceFit} />
               <ScoreChip label="Target Opp" value={sd.componentScores.targetOpportunity} />
-              <ScoreChip label="Engagement" value={sd.componentScores.engagementCapture} />
+              <ScoreChip label="Cost Just." value={sd.componentScores.costJustification} />
               <ScoreChip label="Commercial" value={sd.componentScores.commercialPotential} />
             </div>
           )}
@@ -270,7 +270,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                         <div className="flex flex-wrap gap-1">
                           <ScoreChip label="Aud. Fit" value={sd.componentScores.audienceFit} />
                           <ScoreChip label="Target Opp" value={sd.componentScores.targetOpportunity} />
-                          <ScoreChip label="Engagement" value={sd.componentScores.engagementCapture} />
+                          <ScoreChip label="Cost Just." value={sd.componentScores.costJustification} />
                           <ScoreChip label="Commercial" value={sd.componentScores.commercialPotential} />
                         </div>
                       )}
@@ -425,7 +425,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                       <div className="flex flex-wrap gap-1">
                         <ScoreChip label="Aud. Fit" value={sd.componentScores.audienceFit} />
                         <ScoreChip label="Target Opp" value={sd.componentScores.targetOpportunity} />
-                        <ScoreChip label="Engagement" value={sd.componentScores.engagementCapture} />
+                        <ScoreChip label="Cost Just." value={sd.componentScores.costJustification} />
                         <ScoreChip label="Commercial" value={sd.componentScores.commercialPotential} />
                       </div>
                     )}
