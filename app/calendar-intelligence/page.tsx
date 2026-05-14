@@ -7,7 +7,7 @@ import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { PathToTier } from '@/components/calendar-intelligence/PathToTier';
-// StrategicLens removed — replaced by ExecutionGap (in progress)
+import { ExecutionGap } from '@/components/calendar-intelligence/ExecutionGap';
 import { DecisionsBoard } from '@/components/calendar-intelligence/DecisionsBoard';
 import { CalendarNotesPanel } from '@/components/calendar-intelligence/CalendarNotesPanel';
 import { DecisionTag } from '@/components/calendar-intelligence/DecisionTag';
@@ -26,6 +26,8 @@ interface CalendarConferenceRow {
   icpCompanies: number;
   icpDensityPct: number;
   calendarRecommendationScore: number | null;
+  cesScore?: number | null;
+  cesTier?: string | null;
   componentScores?: {
     audienceFit: number | null;
     targetOpportunity: number | null;
@@ -117,6 +119,14 @@ function icpDensityPillClasses(pct: number): string {
 
 function tierLabel(tier: string): string {
   return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function cesTierClasses(tier: string): string {
+  if (tier === 'Exceptional') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (tier === 'Strong') return 'bg-green-50 text-green-700 border-green-200';
+  if (tier === 'Acceptable') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (tier === 'Weak') return 'bg-orange-50 text-orange-700 border-orange-200';
+  return 'bg-red-50 text-red-700 border-red-200';
 }
 
 // ── Module-level scoring store (survives navigation) ──────────────────────────
@@ -309,11 +319,23 @@ export default function CalendarIntelligencePage() {
   const [budgetModalConf, setBudgetModalConf] = useState<{ id: number; name: string } | null>(null);
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
 
+  // CES data
+  const [cesMap, setCesMap] = useState<Record<number, { score: number; tier: string }>>({});
+  useEffect(() => {
+    fetch('/api/calendar-intelligence/ces')
+      .then(r => r.ok ? r.json() : { ces: {} })
+      .then((data: { ces: Record<number, { score: number; tier: string }> }) => setCesMap(data.ces ?? {}))
+      .catch(() => {});
+  }, []);
+
   // Drawer tool state
   const [pathToTierOpen, setPathToTierOpen] = useState(false);
-  const [strategicLensOpen, setStrategicLensOpen] = useState(false);
+  const [executionGapOpen, setExecutionGapOpen] = useState(false);
 
-  const drawerExpanded = pathToTierOpen || strategicLensOpen;
+  // Board refresh
+  const [boardRefreshKey, setBoardRefreshKey] = useState(0);
+
+  const drawerExpanded = pathToTierOpen || executionGapOpen;
   const canUseTools = user?.capabilities?.use_calendar_tools ?? false;
 
   // Subscribe to module-level store
@@ -386,7 +408,8 @@ export default function CalendarIntelligencePage() {
   const closeDrawer = useCallback(() => {
     setSelectedCalendarRow(null);
     setPathToTierOpen(false);
-    setStrategicLensOpen(false);
+    setExecutionGapOpen(false);
+    setBoardRefreshKey(k => k + 1);
   }, []);
 
   // Capability gate — must be after all hooks
@@ -449,6 +472,44 @@ export default function CalendarIntelligencePage() {
           </div>
           <p className="text-xs font-semibold mt-1" style={{ color: scoreColor }}>{tierInfo.label}</p>
           <p className="text-xs text-gray-400 mt-1">Based on {row.availableComponentCount ?? '?'} of 6 components · max possible {row.maxPossibleScore ?? '—'}/100</p>
+          {/* Budget summary inside score card */}
+          {(() => {
+            const budRaw = row.diagnostics?.budget;
+            if (!budRaw) {
+              return (
+                <div className="mt-2 pt-2 border-t border-current/10 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">No budget data</span>
+                  <button type="button" onClick={() => setBudgetModalConf({ id: row.conferenceId, name: row.conferenceName })} className="text-xs font-medium underline" style={{ color: scoreColor }}>Add Budget →</button>
+                </div>
+              );
+            }
+            let items: Array<{ budget?: string | number | null; actual?: string | number | null }> = [];
+            if (typeof budRaw.line_items === 'string') {
+              try { items = JSON.parse(budRaw.line_items); } catch { items = []; }
+            } else if (Array.isArray(budRaw.line_items)) {
+              items = budRaw.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }>;
+            }
+            const totalBudget = items.reduce((s, i) => s + (Number(i?.budget) || 0), 0);
+            const totalActual = items.reduce((s, i) => s + (Number(i?.actual) || 0), 0);
+            const hasSpend = totalBudget > 0 || totalActual > 0;
+            if (!hasSpend) {
+              return (
+                <div className="mt-2 pt-2 border-t border-current/10 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">No budget data</span>
+                  <button type="button" onClick={() => setBudgetModalConf({ id: row.conferenceId, name: row.conferenceName })} className="text-xs font-medium underline" style={{ color: scoreColor }}>Add Budget →</button>
+                </div>
+              );
+            }
+            const variance = totalBudget - totalActual;
+            const varStr = variance === 0 ? 'on budget' : variance > 0 ? `$${Math.abs(variance).toLocaleString()} under` : `$${Math.abs(variance).toLocaleString()} over`;
+            return (
+              <div className="mt-2 pt-2 border-t border-current/10">
+                <p className="text-xs text-gray-500">
+                  ${totalBudget.toLocaleString()} budgeted · ${totalActual.toLocaleString()} actual · <span className={variance < 0 ? 'text-red-500' : 'text-gray-600'}>{varStr}</span>
+                </p>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Tool buttons — only shown if user has use_calendar_tools capability */}
@@ -461,13 +522,15 @@ export default function CalendarIntelligencePage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
               Path to Tier
             </button>
-            <button
-              onClick={() => { setStrategicLensOpen(v => !v); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${strategicLensOpen ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:border-purple-600 hover:text-purple-600'}`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>
-              Strategic Lens
-            </button>
+            {row.conferenceType === 'historical' && (
+              <button
+                onClick={() => { setExecutionGapOpen(v => !v); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${executionGapOpen ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Execution Gap
+              </button>
+            )}
           </div>
         )}
 
@@ -656,6 +719,8 @@ export default function CalendarIntelligencePage() {
                             <th className="p-2 text-center">Budget Set?</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>Score</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
+                            <th className="p-2">CES Score</th>
+                            <th className="p-2">CES Tier</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
                           </tr>
@@ -674,6 +739,15 @@ export default function CalendarIntelligencePage() {
                                 <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}><BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} /></td>
                                 <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
                                 <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
+                                <td className="p-2 tabular-nums text-gray-600">
+                                  {cesMap[r.conferenceId] != null ? cesMap[r.conferenceId].score : <span className="text-gray-300">—</span>}
+                                </td>
+                                <td className="p-2">
+                                  {cesMap[r.conferenceId] != null
+                                    ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${cesTierClasses(cesMap[r.conferenceId].tier)}`}>{cesMap[r.conferenceId].tier}</span>
+                                    : <span className="text-gray-300">—</span>
+                                  }
+                                </td>
                                 <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
                                 <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
                               </tr>
@@ -692,7 +766,10 @@ export default function CalendarIntelligencePage() {
 
       {/* ── Tab: Decisions Board ───────────────────────────────────────────── */}
       {activeTab === 'decisions' && (
-        <DecisionsBoard />
+        <DecisionsBoard
+          onOpenDrawer={(confId) => { const r = calendarRows.find(x => x.conferenceId === confId); if (r) setSelectedCalendarRow(r); }}
+          refreshKey={boardRefreshKey}
+        />
       )}
 
       {/* ── Tab: Budget Planner ────────────────────────────────────────────── */}
@@ -721,7 +798,7 @@ export default function CalendarIntelligencePage() {
               {/* Right area — tools */}
               <div className="flex flex-1 overflow-hidden divide-x divide-gray-100">
                 {pathToTierOpen && (
-                  <div className={`overflow-y-auto ${strategicLensOpen ? 'w-1/2' : 'flex-1'}`}>
+                  <div className={`overflow-y-auto ${executionGapOpen ? 'w-1/2' : 'flex-1'}`}>
                     <div className="p-5 border-b border-gray-100 flex items-center justify-between">
                       <h3 className="font-semibold text-gray-900">Path to Tier</h3>
                       <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -731,15 +808,15 @@ export default function CalendarIntelligencePage() {
                     <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
                   </div>
                 )}
-                {strategicLensOpen && (
+                {executionGapOpen && (
                   <div className={`overflow-y-auto ${pathToTierOpen ? 'w-1/2' : 'flex-1'}`}>
                     <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900">Strategic Lens</h3>
-                      <button onClick={() => setStrategicLensOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <h3 className="font-semibold text-gray-900">Execution Gap</h3>
+                      <button onClick={() => setExecutionGapOpen(false)} className="text-gray-400 hover:text-gray-600">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                       </button>
                     </div>
-                    {/* ExecutionGap will replace this — component swap in progress */}
+                    <ExecutionGap score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
                   </div>
                 )}
               </div>

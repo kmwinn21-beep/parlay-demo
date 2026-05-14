@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
 
-  const [confsRes, decisionsRes, userDecisionsRes] = await Promise.all([
+  const [confsRes, decisionsRes, userDecisionsRes, noteCountsRes] = await Promise.all([
     db.execute({
       sql: `SELECT c.id, c.name, c.end_date,
                    COUNT(ca.attendee_id) AS attendee_count
@@ -31,6 +31,10 @@ export async function GET(request: NextRequest) {
             JOIN users u ON u.id = ucd.user_id`,
       args: [],
     }),
+    db.execute({
+      sql: `SELECT conference_id, COUNT(*) as note_count FROM calendar_notes GROUP BY conference_id`,
+      args: [],
+    }),
   ]);
 
   type Row = Record<string, unknown>;
@@ -47,6 +51,11 @@ export async function GET(request: NextRequest) {
     userDecisionsByConf.get(cid)!.push(row);
   }
 
+  const noteCountMap = new Map<number, number>();
+  for (const row of noteCountsRes.rows as Row[]) {
+    noteCountMap.set(Number(row.conference_id), Number(row.note_count));
+  }
+
   const conferences = (confsRes.rows as Row[]).map(r => {
     const conferenceId = Number(r.id);
     const accountDecision = accountDecisionMap.get(conferenceId) ?? null;
@@ -59,6 +68,7 @@ export async function GET(request: NextRequest) {
       year: endDate.getUTCFullYear(),
       attendeeCount: Number(r.attendee_count ?? 0),
       accountDecision,
+      noteCount: noteCountMap.get(conferenceId) ?? 0,
       userDecisions: userDecisions.map(ud => ({
         userId: Number(ud.user_id),
         displayName: ud.display_name ? String(ud.display_name) : [ud.first_name, ud.last_name].filter(Boolean).join(' ') || String(ud.email),
