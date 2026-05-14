@@ -188,7 +188,10 @@ export function Sidebar() {
           </>
         )}
 
-        {/* Admin link — only for administrators */}
+      </nav>
+
+      {/* Footer — admin settings + logout + app version */}
+      <div className="p-4 border-t border-white/20 space-y-3">
         {user?.role === 'administrator' && (
           <Link
             href="/admin"
@@ -201,10 +204,6 @@ export function Sidebar() {
             Admin Settings
           </Link>
         )}
-      </nav>
-
-      {/* Footer — logout + app version */}
-      <div className="p-4 border-t border-white/20 space-y-3">
         <button
           onClick={handleLogout}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors text-xs"

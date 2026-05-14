@@ -83,10 +83,12 @@ export interface TargetingAggregation {
   avgRelationshipLeverageScore: number;
   actionableCount: number;
   isLargeConference: boolean;
-  // WSE sums by tier — used for Commercial Potential pipeline projection
+  // WSE sums by tier — used for available pipeline projection
   mustTargetWse: number;
   highPriorityWse: number;
   worthEngagingWse: number;
+  // All scored company WSEs sorted descending — used for realistic pipeline
+  sortedIcpWses: number[];
   // First 5 scored companies for debug logging
   debugSample: Array<{ companyName: string; wse: number | null; tier: string }>;
 }
@@ -250,6 +252,8 @@ async function runTargetingForConference(
     if (debugSample.length < 5) debugSample.push({ companyName: s.company_name, wse: s.wse, tier: s.target_priority_tier_key });
   }
 
+  const sortedIcpWses = scores.map(s => s.wse ?? 0).sort((a, b) => b - a);
+
   return {
     mustTargetCount,
     highPriorityCount,
@@ -266,6 +270,7 @@ async function runTargetingForConference(
     mustTargetWse,
     highPriorityWse,
     worthEngagingWse,
+    sortedIcpWses,
     debugSample,
   };
 }
@@ -305,6 +310,37 @@ function determineRecommendationTier(
     return 'do_not_prioritize';
   }
   return 'evaluate_before_committing';
+}
+
+function computeRealisticPipeline(
+  sortedWses: number[],
+  mustCount: number,
+  highCount: number,
+  worthCount: number,
+  avgCostPerUnit: number,
+  buyerAccess: number,
+  relLeverage: number,
+  mustConv: number,
+  highConv: number,
+  worthConv: number,
+): number {
+  if (avgCostPerUnit <= 0 || sortedWses.length === 0) return 0;
+  let goal = 0;
+  let mustRemaining = mustCount;
+  let highRemaining = highCount;
+  let worthRemaining = worthCount;
+  for (const wse of sortedWses) {
+    let prob: number;
+    if (mustRemaining > 0) { prob = mustConv; mustRemaining--; }
+    else if (highRemaining > 0) { prob = highConv; highRemaining--; }
+    else if (worthRemaining > 0) { prob = worthConv; worthRemaining--; }
+    else { prob = 0.025; }
+    goal += wse * avgCostPerUnit * prob;
+  }
+  if (buyerAccess >= 80) goal *= 1.05;
+  else if (buyerAccess < 40) goal *= 0.95;
+  if (relLeverage >= 80) goal *= 1.05;
+  return Math.round(goal);
 }
 
 export async function GET(
@@ -465,8 +501,26 @@ export async function GET(
     }
   }
 
+  // Available pipeline: aggregate tier WSE × conversion (ceiling estimate)
   const projectedPipeline = targetingAgg != null && avgCostPerUnit > 0
     ? Math.round((mustWse * mustConv + highWse * highConv + worthWse * worthConv) * avgCostPerUnit)
+    : null;
+
+  // Realistic pipeline: sorts individual company WSEs and applies graduated probabilities
+  // with buyer access and relationship leverage multipliers (same formula as pre-conference)
+  const realisticPipeline = targetingAgg != null && avgCostPerUnit > 0
+    ? computeRealisticPipeline(
+        targetingAgg.sortedIcpWses,
+        targetingAgg.mustTargetCount,
+        targetingAgg.highPriorityCount,
+        targetingAgg.worthEngagingCount,
+        avgCostPerUnit,
+        targetingAgg.avgBuyerAccessScore,
+        targetingAgg.avgRelationshipLeverageScore,
+        mustConv,
+        highConv,
+        worthConv,
+      )
     : null;
 
   const budgetTable = await tableExists(db, 'conference_budget') ? 'conference_budget' : (await tableExists(db, 'conference_budgets') ? 'conference_budgets' : null);
@@ -475,11 +529,11 @@ export async function GET(
     : [];
   const budgetRow = budgetRows[0];
   const reqPipeline = Number(budgetRow?.required_pipeline_amount ?? 0);
-  const commercialPotentialScore: number | null = projectedPipeline != null && reqPipeline > 0
-    ? Math.min(Math.round((projectedPipeline / reqPipeline) * 100), 100)
+  const commercialPotentialScore: number | null = realisticPipeline != null && reqPipeline > 0
+    ? Math.min(Math.round((realisticPipeline / reqPipeline) * 100), 100)
     : null;
   const costJustificationScore: number | null = budgetRow != null && reqPipeline > 0
-    ? Math.min(Math.round((projectedPipeline ?? 0) / reqPipeline * 100), 100)
+    ? Math.min(Math.round((realisticPipeline ?? 0) / reqPipeline * 100), 100)
     : (budgetRow != null ? 50 : null);
 
   // --- Component 6: Strategic Value (from relationship leverage) ---
@@ -536,7 +590,7 @@ export async function GET(
     diagnostics: {
       targetingEngine: targetingAgg,
       budget: budgetRow ?? null,
-      commercialPotential: projectedPipeline != null ? { projected_pipeline: projectedPipeline, must_wse: mustWse, high_wse: highWse, worth_wse: worthWse, avg_cost_per_unit: avgCostPerUnit } : null,
+      commercialPotential: projectedPipeline != null ? { projected_pipeline: projectedPipeline, realistic_pipeline: realisticPipeline ?? 0, must_wse: mustWse, high_wse: highWse, worth_wse: worthWse, avg_cost_per_unit: avgCostPerUnit } : null,
     },
   };
 
