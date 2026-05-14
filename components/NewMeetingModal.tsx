@@ -13,6 +13,7 @@ interface ConferenceOption {
   id: number;
   name: string;
   start_date: string;
+  end_date?: string;
 }
 
 interface AttendeeOption {
@@ -30,6 +31,34 @@ interface CompanyOption {
   company_type?: string | null;
 }
 
+/** Returns every date (YYYY-MM-DD) between start and end inclusive, capped at 14 days. */
+function getConferenceDateRange(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const startMs = new Date(start + 'T00:00:00').getTime();
+  const endMs = new Date(end + 'T00:00:00').getTime();
+  let cur = startMs;
+  while (cur <= endMs && dates.length < 14) {
+    const d = new Date(cur);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    dates.push(`${yyyy}-${mm}-${dd}`);
+    cur += 86400000;
+  }
+  return dates;
+}
+
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatChipDate(ymd: string): { short: string; full: string } {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const short = `${DAY_ABBR[date.getDay()]} ${MONTH_ABBR[m - 1]} ${d}`;
+  const full = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return { short, full };
+}
+
 interface NewMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,7 +69,7 @@ interface NewMeetingModalProps {
   /** Called with the newly created Meeting object for optimistic UI updates */
   onSuccess?: (meeting: Meeting) => void;
   /** When provided, restrict the conference dropdown to only these conferences (skips global fetch) */
-  availableConferences?: Array<{ id: number; name: string; start_date: string }>;
+  availableConferences?: Array<{ id: number; name: string; start_date: string; end_date?: string }>;
   /** Auto-select this conference id when the modal opens */
   defaultConferenceId?: number;
 }
@@ -73,6 +102,7 @@ export function NewMeetingModal({
   const [additionalAttendees, setAdditionalAttendees] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
+  const [showFullCalendar, setShowFullCalendar] = useState(false);
 
   // Used to skip the "reset attendee on company change" effect when we set
   // the company programmatically from the prefill logic.
@@ -188,6 +218,13 @@ export function NewMeetingModal({
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
   }, [attendees, selectedCompanyId]);
 
+  // Conference date range chips
+  const selectedConference = conferences.find(c => c.id === Number(selectedConferenceId));
+  const conferenceDates: string[] = useMemo(() => {
+    if (!selectedConference?.end_date) return [];
+    return getConferenceDateRange(selectedConference.start_date, selectedConference.end_date);
+  }, [selectedConference]);
+
   function resetForm() {
     setSelectedRepIds([]);
     setSelectedConferenceId('');
@@ -198,6 +235,7 @@ export function NewMeetingModal({
     setMeetingType('');
     setLocation('');
     setAdditionalAttendees('');
+    setShowFullCalendar(false);
     isPrefilling.current = false;
   }
 
@@ -346,16 +384,75 @@ export function NewMeetingModal({
             </select>
           </div>
 
-          {/* Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Date *</label>
-              <input type="date" className={inputClass} value={meetingDate} onChange={e => setMeetingDate(e.target.value)} required />
-            </div>
-            <div>
-              <label className={labelClass}>Time *</label>
-              <input type="time" className={inputClass} value={meetingTime} onChange={e => setMeetingTime(e.target.value)} required />
-            </div>
+          {/* Date */}
+          <div>
+            <label className={labelClass}>Date *</label>
+            {conferenceDates.length > 0 && !showFullCalendar ? (
+              <div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {conferenceDates.map(ymd => {
+                    const { short, full } = formatChipDate(ymd);
+                    const selected = meetingDate === ymd;
+                    return (
+                      <button
+                        key={ymd}
+                        type="button"
+                        title={full}
+                        onClick={() => setMeetingDate(ymd)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
+                          selected
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-brand-primary hover:text-brand-primary'
+                        }`}
+                      >
+                        {short}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowFullCalendar(true); setMeetingDate(''); }}
+                  className="text-xs text-brand-secondary hover:text-brand-primary transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Pick another date
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={meetingDate}
+                  min={selectedConference?.start_date}
+                  defaultValue={selectedConference?.start_date ?? undefined}
+                  onChange={e => setMeetingDate(e.target.value)}
+                  required
+                />
+                {conferenceDates.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowFullCalendar(false); setMeetingDate(''); }}
+                    className="mt-1.5 text-xs text-brand-secondary hover:text-brand-primary transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Back to conference dates
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Time */}
+          <div>
+            <label className={labelClass}>Time *</label>
+            <input type="time" className={inputClass} value={meetingTime} onChange={e => setMeetingTime(e.target.value)} required />
           </div>
 
           {/* Meeting Type */}

@@ -2210,7 +2210,7 @@ export default function ConferenceDetailPage() {
       <NewMeetingModal
         isOpen={newMeetingOpen}
         onClose={() => setNewMeetingOpen(false)}
-        availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date }] : []}
+        availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date }] : []}
         defaultConferenceId={conference?.id}
         onSuccess={m => setConfMeetings(prev => [m, ...prev])}
       />
