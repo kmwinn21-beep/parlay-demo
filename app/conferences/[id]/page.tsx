@@ -949,6 +949,12 @@ export default function ConferenceDetailPage() {
         if (result.skipped_count > 0) parts.push(`${result.skipped_count} unchanged`);
         toast.success(parts.join('. ') + '.');
       }
+      const cc = result.competitor_classification;
+      if (cc) {
+        if (cc.auto_classified > 0) toast.success(`${cc.auto_classified} company/companies auto-classified as Competitor.`);
+        if (cc.probable_matches > 0) toast(`${cc.probable_matches} companies may be competitors — review before confirming.`, { icon: '⚠️' });
+        if (cc.skipped_type_conflict > 0) toast(`${cc.skipped_type_conflict} competitor match(es) skipped — existing type conflict. Review manually.`, { icon: '⚠️' });
+      }
       fetchConference();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to upload attendees');

@@ -25,6 +25,7 @@ interface Company {
   website?: string;
   profit_type?: string;
   company_type?: string;
+  competitor_type?: string;
   notes?: string;
   wse?: number;
   status?: string;
@@ -41,6 +42,40 @@ interface Company {
   updated_at?: string;
   relationship_count?: number;
   my_user_status_ids?: number[];
+}
+
+const COMPETITOR_TYPE_DEFS: Record<string, string> = {
+  'Direct': 'Offers the same core product or service to the same buyer profile.',
+  'Adjacent': 'Overlaps in one area but does not offer the full solution.',
+  'Market alternative': 'Competes for the same buyer budget or decision-making attention.',
+  'Emerging': 'A newer entrant moving into your space. Lower threat weight today but worth tracking.',
+  'Unknown': 'Competitor type undetermined. Treated as Direct for scoring purposes.',
+};
+
+function CompetitorTypePill({ competitorType, badgeClass, children }: { competitorType?: string; badgeClass: string; children: React.ReactNode }) {
+  const [pos, setPos] = useState<TooltipPos | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+  const type = competitorType || 'Unknown';
+  const def = COMPETITOR_TYPE_DEFS[type] ?? COMPETITOR_TYPE_DEFS['Unknown'];
+  return (
+    <span
+      ref={ref}
+      className={`${badgeClass} inline-flex items-center gap-1 cursor-default`}
+      onMouseEnter={() => { if (ref.current) setPos(calcTooltipPos(ref.current)); }}
+      onMouseLeave={() => setPos(null)}
+    >
+      {children}
+      {pos && typeof window !== 'undefined' && (
+        <span
+          className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg px-2.5 py-2 pointer-events-none shadow-lg"
+          style={{ top: pos.above ? pos.top - 56 : pos.top, left: pos.left, width: pos.width, transform: pos.above ? 'translateY(-100%)' : undefined }}
+        >
+          <span className="block font-semibold">{type}</span>
+          <span className="block text-gray-300 mt-0.5">{def}</span>
+        </span>
+      )}
+    </span>
+  );
 }
 
 type TooltipPos = { top: number; left: number; width: number; above: boolean };
@@ -843,7 +878,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   })}
                   {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-400">—</span>}
                 </span>
-                {company.company_type && <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>}
+                {company.company_type && (company.company_type === 'Competitor'
+                  ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</CompetitorTypePill>
+                  : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
+                )}
               </div>
               {/* Bottom row: stats (left) | WSE (bottom-right) */}
               <div className="mt-2 ml-6 flex items-center justify-between gap-4">

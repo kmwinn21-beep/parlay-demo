@@ -590,6 +590,122 @@ export async function POST(
       }
     }
 
+    // ── Competitor classification ──────────────────────────────────────────────
+    // Runs after company creation/ICP, before attendee processing. Does not
+    // alter any other classification step. Only classifies companies whose
+    // type is currently null or unset — does not overwrite existing non-Competitor types.
+    let competitorAutoCount = 0;
+    let competitorFuzzyCount = 0;
+    let competitorSkippedCount = 0;
+
+    const normalizeCompanyNameCC = (name: string): string => {
+      const SUFFIXES = /\b(llc|inc|corp|ltd|co|pllc|lp|llp|pa|pc|dba)\b\.?/gi;
+      return name.toLowerCase().replace(/[.,&\-'()]/g, ' ').replace(SUFFIXES, '').replace(/\s+/g, ' ').trim();
+    };
+
+    const normalizeDomainCC = (raw: string): string => {
+      let d = raw.trim().toLowerCase();
+      d = d.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+      d = d.replace(/[/?#].*$/, '');
+      const parts = d.split('.');
+      if (parts.length > 2) d = parts.slice(-2).join('.');
+      return d;
+    };
+
+    const levenshteinSimilarity = (a: string, b: string): number => {
+      const la = a.length, lb = b.length;
+      if (la === 0 && lb === 0) return 1;
+      if (la === 0 || lb === 0) return 0;
+      const dp: number[] = Array.from({ length: lb + 1 }, (_, j) => j);
+      for (let i = 1; i <= la; i++) {
+        let prev = dp[0]; dp[0] = i;
+        for (let j = 1; j <= lb; j++) {
+          const tmp = dp[j];
+          dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(dp[j], dp[j - 1], prev);
+          prev = tmp;
+        }
+      }
+      return 1 - dp[lb] / Math.max(la, lb);
+    };
+
+    try {
+      type CompetitorRow = { id: number; company_name: string; website: string; competitor_type: string };
+      const competitorRows = await db.execute({
+        sql: 'SELECT id, company_name, website, competitor_type FROM competitor_settings ORDER BY id',
+        args: [],
+      }).then(r => r.rows as unknown as CompetitorRow[]).catch(() => [] as CompetitorRow[]);
+
+      if (competitorRows.length > 0) {
+        // Pre-normalize competitor list
+        const normalizedCompetitors = competitorRows.map(c => ({
+          ...c,
+          normName: normalizeCompanyNameCC(c.company_name),
+          normDomain: normalizeDomainCC(c.website),
+        }));
+
+        // Build set of all company IDs processed in this upload
+        const processedCompanyIds = new Set<number>();
+        for (const id of Array.from(companyIdCache.values())) {
+          if (id > 0) processedCompanyIds.add(id);
+        }
+
+        if (processedCompanyIds.size > 0) {
+          // Fetch current company data (name, website, company_type) for all affected companies
+          const idList = Array.from(processedCompanyIds);
+          const placeholders = idList.map(() => '?').join(',');
+          type CompanyRow = { id: number; name: string; website: string | null; company_type: string | null };
+          const compRows = await db.execute({
+            sql: `SELECT id, name, website, company_type FROM companies WHERE id IN (${placeholders})`,
+            args: idList,
+          }).then(r => r.rows as unknown as CompanyRow[]);
+
+          for (const comp of compRows) {
+            const normName = normalizeCompanyNameCC(comp.name);
+            const normDomain = comp.website ? normalizeDomainCC(comp.website) : null;
+
+            let matchedCompetitor: typeof normalizedCompetitors[0] | undefined;
+            let matchType: 'exact-name' | 'exact-domain' | 'fuzzy' | null = null;
+
+            // Domain match (highest confidence — auto-classify)
+            if (normDomain) {
+              const domainMatch = normalizedCompetitors.find(c => c.normDomain === normDomain);
+              if (domainMatch) { matchedCompetitor = domainMatch; matchType = 'exact-domain'; }
+            }
+
+            // Exact name match (auto-classify)
+            if (!matchedCompetitor) {
+              const nameMatch = normalizedCompetitors.find(c => c.normName === normName);
+              if (nameMatch) { matchedCompetitor = nameMatch; matchType = 'exact-name'; }
+            }
+
+            // Fuzzy name match (flag for review, no auto-classify)
+            if (!matchedCompetitor) {
+              for (const c of normalizedCompetitors) {
+                if (levenshteinSimilarity(normName, c.normName) >= 0.85) {
+                  matchType = 'fuzzy';
+                  competitorFuzzyCount++;
+                  break;
+                }
+              }
+            }
+
+            if (matchedCompetitor && (matchType === 'exact-name' || matchType === 'exact-domain')) {
+              if (comp.company_type && comp.company_type !== 'Competitor') {
+                // Conflict — existing non-Competitor type, skip
+                competitorSkippedCount++;
+              } else {
+                await db.execute({
+                  sql: `UPDATE companies SET company_type = 'Competitor', competitor_type = ? WHERE id = ?`,
+                  args: [matchedCompetitor.competitor_type, comp.id],
+                });
+                competitorAutoCount++;
+              }
+            }
+          }
+        }
+      }
+    } catch { /* competitor classification is best-effort */ }
+
     // Attendees stay with their own company — child contacts are NOT redirected to the parent
     const resolveCompanyId = (coName: string): number | null => {
       const coId = companyIdCache.get(coName);
@@ -832,6 +948,11 @@ export async function POST(
         ambiguous_count: ambiguousAssignedUsers.size,
         unmatched_values: Array.from(unmatchedAssignedUsers).slice(0, 25),
         ambiguous_values: Array.from(ambiguousAssignedUsers).slice(0, 25),
+      },
+      competitor_classification: {
+        auto_classified: competitorAutoCount,
+        probable_matches: competitorFuzzyCount,
+        skipped_type_conflict: competitorSkippedCount,
       },
     });
   } catch (error) {
