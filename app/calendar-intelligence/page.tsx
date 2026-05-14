@@ -7,7 +7,7 @@ import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { PathToTier } from '@/components/calendar-intelligence/PathToTier';
-import { StrategicLens } from '@/components/calendar-intelligence/StrategicLens';
+// StrategicLens removed — replaced by ExecutionGap (in progress)
 import { DecisionsBoard } from '@/components/calendar-intelligence/DecisionsBoard';
 import { CalendarNotesPanel } from '@/components/calendar-intelligence/CalendarNotesPanel';
 import { DecisionTag } from '@/components/calendar-intelligence/DecisionTag';
@@ -739,7 +739,7 @@ export default function CalendarIntelligencePage() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                       </button>
                     </div>
-                    <StrategicLens score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                    {/* ExecutionGap will replace this — component swap in progress */}
                   </div>
                 )}
               </div>

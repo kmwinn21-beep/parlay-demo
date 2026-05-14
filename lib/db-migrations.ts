@@ -752,4 +752,6 @@ export const migrations: string[] = [
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       default_lens_id INTEGER REFERENCES calendar_lenses(id) ON DELETE SET NULL
     )`,
+  `DROP TABLE IF EXISTS user_lens_preferences`,
+  `DROP TABLE IF EXISTS calendar_lenses`,
 ];
