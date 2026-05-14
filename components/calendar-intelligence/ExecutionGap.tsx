@@ -256,7 +256,6 @@ export function ExecutionGap({ score, conferenceId }: Props) {
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${tierBadgeClasses(cesTier.color)}`}>
                 {cesTier.label}
               </span>
-              <span className="text-xs font-bold text-gray-500">{ces.score}</span>
             </div>
           </div>
         </div>
@@ -302,7 +301,10 @@ export function ExecutionGap({ score, conferenceId }: Props) {
       {biggestGap && (
         <div className="rounded-lg bg-gray-50 border border-gray-100 p-3">
           <p className="text-xs text-gray-600 leading-relaxed">
-            Parlay recommended <span className="font-semibold">{ciTier.label}</span> — actual performance was <span className="font-semibold">{cesTier.label}</span>. The biggest execution gap was <span className="font-semibold">{biggestGap.ciLabel}</span>.
+            {aligned
+              ? <>Parlay recommended <span className="font-semibold">{ciTier.label}</span> — actual performance matched expectations. Strongest execution gap was <span className="font-semibold">{biggestGap.ciLabel}</span>.</>
+              : <>Parlay recommended <span className="font-semibold">{ciTier.label}</span> — actual performance was <span className="font-semibold">{cesTier.label}</span>. The biggest execution gap was <span className="font-semibold">{biggestGap.ciLabel}</span>.</>
+            }
           </p>
         </div>
       )}

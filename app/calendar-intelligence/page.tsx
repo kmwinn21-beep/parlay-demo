@@ -26,8 +26,6 @@ interface CalendarConferenceRow {
   icpCompanies: number;
   icpDensityPct: number;
   calendarRecommendationScore: number | null;
-  cesScore?: number | null;
-  cesTier?: string | null;
   componentScores?: {
     audienceFit: number | null;
     targetOpportunity: number | null;
@@ -119,14 +117,6 @@ function icpDensityPillClasses(pct: number): string {
 
 function tierLabel(tier: string): string {
   return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-function cesTierClasses(tier: string): string {
-  if (tier === 'Exceptional') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (tier === 'Strong') return 'bg-green-50 text-green-700 border-green-200';
-  if (tier === 'Acceptable') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (tier === 'Weak') return 'bg-orange-50 text-orange-700 border-orange-200';
-  return 'bg-red-50 text-red-700 border-red-200';
 }
 
 // ── Module-level scoring store (survives navigation) ──────────────────────────
@@ -319,12 +309,12 @@ export default function CalendarIntelligencePage() {
   const [budgetModalConf, setBudgetModalConf] = useState<{ id: number; name: string } | null>(null);
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
 
-  // CES data
-  const [cesMap, setCesMap] = useState<Record<number, { score: number; tier: string }>>({});
+  // CES availability — used to show/hide Execution Gap button
+  const [cesConferenceIds, setCesConferenceIds] = useState<Set<number>>(new Set());
   useEffect(() => {
     fetch('/api/calendar-intelligence/ces')
       .then(r => r.ok ? r.json() : { ces: {} })
-      .then((data: { ces: Record<number, { score: number; tier: string }> }) => setCesMap(data.ces ?? {}))
+      .then((data: { ces: Record<number, unknown> }) => setCesConferenceIds(new Set(Object.keys(data.ces ?? {}).map(Number))))
       .catch(() => {});
   }, []);
 
@@ -522,7 +512,7 @@ export default function CalendarIntelligencePage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
               Path to Tier
             </button>
-            {row.conferenceType === 'historical' && (
+            {cesConferenceIds.has(row.conferenceId) && (
               <button
                 onClick={() => { setExecutionGapOpen(v => !v); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${executionGapOpen ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'}`}
@@ -719,8 +709,6 @@ export default function CalendarIntelligencePage() {
                             <th className="p-2 text-center">Budget Set?</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>Score</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
-                            <th className="p-2">CES Score</th>
-                            <th className="p-2">CES Tier</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
                           </tr>
@@ -739,15 +727,6 @@ export default function CalendarIntelligencePage() {
                                 <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}><BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} /></td>
                                 <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
                                 <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
-                                <td className="p-2 tabular-nums text-gray-600">
-                                  {cesMap[r.conferenceId] != null ? cesMap[r.conferenceId].score : <span className="text-gray-300">—</span>}
-                                </td>
-                                <td className="p-2">
-                                  {cesMap[r.conferenceId] != null
-                                    ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${cesTierClasses(cesMap[r.conferenceId].tier)}`}>{cesMap[r.conferenceId].tier}</span>
-                                    : <span className="text-gray-300">—</span>
-                                  }
-                                </td>
                                 <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
                                 <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
                               </tr>

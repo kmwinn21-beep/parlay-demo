@@ -151,25 +151,28 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey }: Props) {
         onDragEnd={() => setDraggedId(null)}
         className={`rounded-lg border border-gray-100 bg-white shadow-sm overflow-hidden transition-opacity ${draggedId === conf.conferenceId ? 'opacity-50' : ''} ${isDraggable && isAdmin ? 'cursor-grab active:cursor-grabbing' : ''}`}
       >
-        {/* Clickable area */}
-        <div
-          className={`p-3 space-y-2 ${onOpenDrawer ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
-          onClick={() => onOpenDrawer?.(conf.conferenceId)}
-        >
-          {/* Title row */}
+        {/* Card body */}
+        <div className="p-3 space-y-2">
+          {/* Title row — clickable to open drawer */}
           <div>
-            <p className="font-semibold text-sm text-gray-900 leading-tight">{conf.name}</p>
+            <p
+              className={`font-semibold text-sm text-gray-900 leading-tight ${onOpenDrawer ? 'cursor-pointer hover:underline' : ''}`}
+              onClick={() => onOpenDrawer?.(conf.conferenceId)}
+            >{conf.name}</p>
             <p className="text-xs text-gray-400 mt-0.5">{conf.year} · {conf.attendeeCount} attendees</p>
           </div>
 
-          {/* Parlay score + tier */}
+          {/* Parlay score + tier — tier pill clickable to open drawer */}
           {sd && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-2xl font-bold text-gray-900">
                 {sd.calendarRecommendationScore != null ? Math.round(sd.calendarRecommendationScore) : '—'}
               </span>
               {ti && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${ti.cls}`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${ti.cls} ${onOpenDrawer ? 'cursor-pointer' : ''}`}
+                  onClick={() => onOpenDrawer?.(conf.conferenceId)}
+                >
                   {ti.label}
                 </span>
               )}
