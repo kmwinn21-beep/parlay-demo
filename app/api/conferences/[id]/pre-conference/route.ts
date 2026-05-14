@@ -112,7 +112,7 @@ export async function GET(
 
   const attendeeIds = attendees.map((a) => a.id);
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes] = await Promise.all([
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -217,6 +217,7 @@ export async function GET(
     db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'status' AND LOWER(TRIM(value)) LIKE '%client%'`, args: [] }),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'seniority'`, args: [] }),
     db.execute({ sql: `SELECT color FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor' LIMIT 1`, args: [] }),
+    db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'brand_dark_blue' LIMIT 1`, args: [] }).catch(() => ({ rows: [] })),
   ]);
 
   const internalRels = internalRelsRes.rows;
@@ -444,13 +445,10 @@ export async function GET(
     .sort((a, b) => b.attendees.length - a.attendees.length || a.companyName.localeCompare(b.companyName))
     .map(co => ({ ...co, attendeeCount: co.attendees.length }));
 
-  // Client color: first color found among client status rows, fallback null
-  const clientColor: string | null = (() => {
-    for (const r of clientStatusRes.rows) {
-      if (r.color) return String(r.color);
-    }
-    return null;
-  })();
+  // Client color: brand Primary #1 (brand_dark_blue) from site_settings, fallback to default
+  const clientColor: string = brandPrimaryRes.rows[0]?.value
+    ? String(brandPrimaryRes.rows[0].value)
+    : '#0B3C62';
 
   // Competitor companies
   const competitorColor: string | null = competitorColorRes.rows[0]?.color ? String(competitorColorRes.rows[0].color) : null;

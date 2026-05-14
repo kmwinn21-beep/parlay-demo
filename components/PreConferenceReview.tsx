@@ -42,7 +42,7 @@ export interface LandscapeData {
   seniorityBreakdown: { label: string; count: number }[];
   clientCompanies: ClientCompanyEntry[];
   competitorCompanies: ClientCompanyEntry[];
-  clientColor: string | null;
+  clientColor: string;
   competitorColor: string | null;
   unitTypeLabel: string;
 }

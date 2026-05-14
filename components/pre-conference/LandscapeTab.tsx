@@ -360,22 +360,33 @@ function UserPill({ name }: { name: string }) {
   );
 }
 
+function hexAlpha(hex: string, alpha: number): string {
+  // Returns hex color with alpha as a CSS rgba string
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor: string }) {
   const [expanded, setExpanded] = useState(false);
-  const border = accentColor ? `1px solid ${accentColor}40` : '1px solid #e5e7eb';
-  const headerBg = accentColor ? `${accentColor}12` : '#f9fafb';
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border }}>
+    <div
+      className="rounded-lg overflow-hidden bg-white"
+      style={{ border: `1px solid ${hexAlpha(accentColor, 0.3)}` }}
+    >
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left gap-2 transition-colors hover:brightness-95"
-        style={{ backgroundColor: headerBg }}
+        className="w-full flex items-center justify-between px-3 py-2 text-left gap-2 transition-colors"
+        style={{ backgroundColor: hexAlpha(accentColor, 0.07) }}
       >
         <span className="text-xs font-semibold text-gray-800 truncate flex-1">{co.companyName}</span>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs font-bold" style={{ color: accentColor || '#1B76BC' }}>{co.attendeeCount}</span>
+          <span className="text-xs font-bold" style={{ color: accentColor }}>{co.attendeeCount}</span>
           <svg
-            className={`w-3.5 h-3.5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            style={{ color: accentColor }}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -384,9 +395,12 @@ function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor:
       </button>
 
       {expanded && co.attendees.length > 0 && (
-        <div className="divide-y divide-gray-100 border-t" style={{ borderColor: accentColor ? `${accentColor}30` : '#f3f4f6' }}>
+        <div
+          className="divide-y"
+          style={{ borderTop: `1px solid ${hexAlpha(accentColor, 0.2)}`, borderColor: hexAlpha(accentColor, 0.1) }}
+        >
           {co.attendees.map(a => (
-            <div key={a.id} className="px-3 py-1.5">
+            <div key={a.id} className="px-3 py-1.5 bg-white">
               <Link
                 href={`/attendees/${a.id}`}
                 className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate"
@@ -417,19 +431,35 @@ function CompanyPanel({
   const color = accentColor || '#9ca3af';
   return (
     <div className="relative min-h-[200px] h-full">
-      <div className="absolute inset-0 flex flex-col rounded-xl overflow-hidden" style={{ border: `1.5px solid ${color}50` }}>
+      <div
+        className="absolute inset-0 flex flex-col rounded-xl overflow-hidden"
+        style={{ border: `2px solid ${hexAlpha(color, 0.5)}` }}
+      >
+        {/* Panel header — matches tier-card header style */}
         <div
           className="px-3 py-2.5 border-b flex items-center justify-between flex-shrink-0"
-          style={{ backgroundColor: `${color}18`, borderColor: `${color}40` }}
+          style={{
+            backgroundColor: hexAlpha(color, 0.12),
+            borderBottom: `1px solid ${hexAlpha(color, 0.3)}`,
+          }}
         >
-          <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color }}>
+          <h3
+            className="text-xs font-bold uppercase tracking-wider"
+            style={{ color }}
+          >
             {title}
           </h3>
           {companies.length > 0 && (
-            <span className="text-xs font-semibold" style={{ color: `${color}99` }}>{companies.length}</span>
+            <span className="text-xs font-bold" style={{ color }}>
+              {companies.length}
+            </span>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+        {/* Card list */}
+        <div
+          className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0"
+          style={{ backgroundColor: hexAlpha(color, 0.04) }}
+        >
           {companies.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-6">{emptyText}</p>
           ) : (
