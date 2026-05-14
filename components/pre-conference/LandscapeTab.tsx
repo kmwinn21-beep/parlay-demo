@@ -752,17 +752,19 @@ function AttendeeRelCard({
         onClick={() => hasRels && setExpanded(v => !v)}
         className={`px-3 py-2.5 select-none ${hasRels ? 'cursor-pointer hover:bg-gray-50' : ''} transition-colors`}
       >
-        {/* Row 1: name + health score + chevron */}
+        {/* Row 1: name (content-width link) + spacer + health score label + chevron */}
         <div className="flex items-center gap-2">
           <Link
             href={`/attendees/${attendee.id}`}
-            className="text-xs font-medium text-gray-800 hover:text-brand-secondary flex-1 min-w-0 truncate"
+            className="text-xs font-medium text-gray-800 hover:text-brand-secondary underline-offset-2 hover:underline truncate"
             onClick={e => e.stopPropagation()}
           >
             {String(attendee.first_name)} {String(attendee.last_name)}
           </Link>
-          <span className="text-xs font-bold flex-shrink-0" style={{ color: scoreColor(attendee.health) }}>
-            {attendee.health}
+          <div className="flex-1" />
+          <span className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+            Relationship Health Score:{' '}
+            <span className="font-bold" style={{ color: scoreColor(attendee.health) }}>{attendee.health}</span>
           </span>
           {hasRels && (
             <svg
@@ -1042,7 +1044,7 @@ function RelationshipHeatmapPanel({
                 </svg>
                 Back
               </button>
-              <p className="text-xs font-semibold text-gray-700 mb-0.5">{drillCoverage.name}</p>
+              <Link href={`/companies/${drillCoverage.id}`} className="text-xs font-semibold text-gray-700 hover:text-brand-secondary block mb-0.5">{drillCoverage.name}</Link>
               <p className="text-xs text-gray-400 mb-3">
                 Avg health: {drillCoverage.avgHealth} · {drillCoverage.attendees.length} attendee{drillCoverage.attendees.length !== 1 ? 's' : ''}
               </p>
