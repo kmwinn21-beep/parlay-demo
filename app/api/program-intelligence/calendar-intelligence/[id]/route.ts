@@ -462,7 +462,7 @@ export async function GET(
   const meetingRate = attendeeCount > 0 ? totalMeetings / attendeeCount : 0;
   const followupRate = totalFollowups > 0 ? completedFollowups / totalFollowups : null;
   const engagementCaptureScore: number | null = emRow != null
-    ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 15)), 100)
+    ? Math.min(Math.round((meetingRate / 0.3) * 70 + (followupRate != null ? followupRate * 30 : 0)), 100)
     : null;
 
   // --- Component 4 & 5: Commercial Potential + Cost Justification ---
