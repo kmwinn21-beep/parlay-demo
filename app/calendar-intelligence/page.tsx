@@ -642,7 +642,7 @@ export default function CalendarIntelligencePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       {/* Page header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 font-serif">Calendar Intelligence</h1>
@@ -650,24 +650,25 @@ export default function CalendarIntelligencePage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-full md:w-fit">
         {([
-          { id: 'scoring' as CITab, label: 'Scoring Table' },
-          { id: 'decisions' as CITab, label: 'Decisions Board' },
-          { id: 'budget' as CITab, label: 'Budget Planner', soon: true },
+          { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
+          { id: 'decisions' as CITab, label: 'Decisions Board', mobileLabel: 'Decisions' },
+          { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
         ]).map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === tab.id
                 ? 'bg-brand-secondary text-white'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            {tab.label}
+            <span className="md:hidden">{tab.mobileLabel}</span>
+            <span className="hidden md:inline">{tab.label}</span>
             {tab.soon && (
-              <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
                 Soon
               </span>
             )}
@@ -742,8 +743,29 @@ export default function CalendarIntelligencePage() {
                           <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${calendarFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                         </button>
                       </div>
+                      {/* Mobile filter bottom sheet */}
                       {calendarFiltersOpen && (
-                        <div className="flex flex-wrap gap-2 mb-3">
+                        <div className="md:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setCalendarFiltersOpen(false)}>
+                          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-semibold text-gray-900">Filters</h3>
+                              <button onClick={() => setCalendarFiltersOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                              </button>
+                            </div>
+                            <div className="space-y-3">
+                              <select className="input-field text-sm py-2 w-full" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend &amp; Invest</option><option value="attend_maintain">Attend &amp; Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
+                              <select className="input-field text-sm py-2 w-full" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as 'all' | 'historical' | 'active')}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
+                              <select className="input-field text-sm py-2 w-full" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+                              <select className="input-field text-sm py-2 w-full" value={calendarBudgetFilter} onChange={(e) => setCalendarBudgetFilter(e.target.value as typeof calendarBudgetFilter)}><option value="all">All Budget Status</option><option value="complete">Complete</option><option value="partial">Partial</option><option value="missing">No Budget</option><option value="needs_attention">Needs Attention</option></select>
+                            </div>
+                            <button onClick={() => setCalendarFiltersOpen(false)} className="btn-primary w-full mt-4 text-sm">Apply Filters</button>
+                          </div>
+                        </div>
+                      )}
+                      {/* Desktop inline filters */}
+                      {calendarFiltersOpen && (
+                        <div className="hidden md:flex flex-wrap gap-2 mb-3">
                           <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend &amp; Invest</option><option value="attend_maintain">Attend &amp; Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
                           <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as 'all' | 'historical' | 'active')}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
                           <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
@@ -765,19 +787,43 @@ export default function CalendarIntelligencePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="md:hidden divide-y divide-gray-100">
-                      {calendarRowsFiltered.map((r) => (
-                        <button key={r.conferenceId} className={`w-full text-left py-3 px-1 flex items-center justify-between gap-3 transition-colors ${selectedCalendarRow?.conferenceId === r.conferenceId ? 'bg-blue-50' : 'active:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
-                          <div className="min-w-0">
-                            <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpDensityPct.toFixed(0)}% ICP</p>
+                    <div className="md:hidden space-y-2">
+                      {calendarRowsFiltered.map((r) => {
+                        const ti = calendarTierInfo(r.recommendationTier);
+                        const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                        return (
+                          <div
+                            key={r.conferenceId}
+                            className={`rounded-xl border bg-white overflow-hidden cursor-pointer transition-colors ${isSelected ? 'border-brand-secondary ring-1 ring-brand-secondary' : 'border-gray-200 active:bg-gray-50'}`}
+                            onClick={() => setSelectedCalendarRow(r)}
+                          >
+                            <div className="p-4">
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-base text-gray-900 leading-tight">{r.conferenceName}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.attendeeCount} attendees</p>
+                                </div>
+                                <div className="flex-shrink-0 text-right">
+                                  <span className="text-3xl font-bold leading-none tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</span>
+                                  {r.calendarRecommendationScore != null && <span className="text-xs text-gray-400">/100</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${ti.classes}`}>{ti.label}</span>
+                                {r.conferenceType !== 'historical' && (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="px-4 py-2 border-t border-gray-50 flex items-center gap-3">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                              <span className={`text-xs ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</span>
+                            </div>
                           </div>
-                          <div className="flex-shrink-0 text-right">
-                            <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border mt-0.5 ${calendarTierInfo(r.recommendationTier).classes}`}>{calendarTierInfo(r.recommendationTier).label}</span>
-                          </div>
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
                     <div className="hidden md:block overflow-x-auto">
                       <table className="min-w-full text-sm">
@@ -849,53 +895,95 @@ export default function CalendarIntelligencePage() {
 
       {/* ── Score Drawer ───────────────────────────────────────────────────── */}
       {selectedCalendarRow && (
-        drawerExpanded ? (
-          // Full-screen overlay with tools
-          <div className="fixed inset-0 z-50 flex bg-black/50" onClick={closeDrawer}>
-            <div className="flex h-full w-full gap-3 p-3 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
-              {/* Score panel */}
-              <OverlayPanel className="w-[420px] flex-shrink-0">
-                <ScoreDrawerContent row={selectedCalendarRow} />
-              </OverlayPanel>
-
-              {/* Path to Tier panel */}
-              {pathToTierOpen && (
-                <OverlayPanel className="w-[420px] flex-shrink-0">
-                  <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                    <h3 className="font-semibold text-gray-900">Path to Tier</h3>
-                    <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                  </div>
-                  <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
-                </OverlayPanel>
-              )}
-
-              {/* Execution Comparison panel */}
-              {executionComparisonOpen && (
-                <OverlayPanel className="w-[420px] flex-shrink-0">
-                  <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                    <h3 className="font-semibold text-gray-900">Execution Comparison</h3>
-                    <button onClick={() => setExecutionComparisonOpen(false)} className="text-gray-400 hover:text-gray-600">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                  </div>
-                  <ExecutionComparison score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
-                </OverlayPanel>
-              )}
-
-              {/* Decision column — fourth panel, always visible when any tool is open */}
-              <DecisionColumn row={selectedCalendarRow} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} isAdmin={user?.role === 'administrator'} />
+        <>
+          {/* Mobile: bottom sheet (all breakpoints below md) */}
+          <div className="md:hidden">
+            <div className="fixed inset-0 z-50 bg-black/50" onClick={closeDrawer}>
+              <div
+                className="absolute bottom-0 left-0 right-0 max-h-[90vh] bg-white rounded-t-2xl flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+                  <div className="w-10 h-1 rounded-full bg-gray-300" />
+                </div>
+                <div className="flex-1 overflow-y-auto hide-scrollbar">
+                  <ScoreDrawerContent row={selectedCalendarRow} />
+                  {pathToTierOpen && (
+                    <div className="border-t border-gray-100">
+                      <div className="p-5 flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                        <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                      <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                    </div>
+                  )}
+                  {executionComparisonOpen && (
+                    <div className="border-t border-gray-100">
+                      <div className="p-5 flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">Execution Comparison</h3>
+                        <button onClick={() => setExecutionComparisonOpen(false)} className="text-gray-400 hover:text-gray-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                      <ExecutionComparison score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                    </div>
+                  )}
+                  {drawerExpanded && (
+                    <div className="border-t border-gray-100 p-5">
+                      <DecisionColumn row={selectedCalendarRow} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} isAdmin={user?.role === 'administrator'} />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        ) : (
-          // Normal right-panel drawer
-          <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={closeDrawer}>
-            <div className="h-full w-full max-w-[560px] bg-white overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <ScoreDrawerContent row={selectedCalendarRow} />
-            </div>
+
+          {/* Desktop: side panel or full-screen overlay */}
+          <div className="hidden md:block">
+            {drawerExpanded ? (
+              // Full-screen overlay with tools
+              <div className="fixed inset-0 z-50 flex bg-black/50" onClick={closeDrawer}>
+                <div className="flex h-full w-full gap-3 p-3 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+                  <OverlayPanel className="w-[420px] flex-shrink-0">
+                    <ScoreDrawerContent row={selectedCalendarRow} />
+                  </OverlayPanel>
+                  {pathToTierOpen && (
+                    <OverlayPanel className="w-[420px] flex-shrink-0">
+                      <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                        <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                        <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                      <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                    </OverlayPanel>
+                  )}
+                  {executionComparisonOpen && (
+                    <OverlayPanel className="w-[420px] flex-shrink-0">
+                      <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                        <h3 className="font-semibold text-gray-900">Execution Comparison</h3>
+                        <button onClick={() => setExecutionComparisonOpen(false)} className="text-gray-400 hover:text-gray-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                      <ExecutionComparison score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                    </OverlayPanel>
+                  )}
+                  <DecisionColumn row={selectedCalendarRow} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} isAdmin={user?.role === 'administrator'} />
+                </div>
+              </div>
+            ) : (
+              // Normal right-panel drawer
+              <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={closeDrawer}>
+                <div className="h-full w-full max-w-[560px] bg-white overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <ScoreDrawerContent row={selectedCalendarRow} />
+                </div>
+              </div>
+            )}
           </div>
-        )
+        </>
       )}
 
       {/* Budget modal */}
