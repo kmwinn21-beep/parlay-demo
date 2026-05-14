@@ -2137,6 +2137,9 @@ export default function ProgramIntelligencePage() {
               // Score to show in header based on drawer view
               const drawerAvg = drawerScoreView === 'ses' ? avgSES : drawerScoreView === 'ces' ? avgCES : avgCost;
               const drawerLabel = drawerScoreView === 'ses' ? 'avg SES' : drawerScoreView === 'ces' ? 'avg Conf. Effectiveness' : 'avg Cost Efficiency';
+              const drawerColor = drawerScoreView === 'ces' ? cesScoreColor(drawerAvg ?? 0) : sesScoreColor(drawerAvg);
+              const drawerTierLabel = drawerScoreView === 'ces' ? cesTierLabel(drawerAvg ?? 0) : sesTierLabel(drawerAvg);
+              const drawerScoreLabel = drawerScoreView === 'ses' ? 'Sales Execution Score' : drawerScoreView === 'ces' ? 'Conference Effectiveness Score' : 'Cost Efficiency Score';
 
               return (
                 <>
@@ -2153,17 +2156,26 @@ export default function ProgramIntelligencePage() {
                     ))}
                   </div>
 
-                  <div className="mt-3 flex items-center gap-3">
-                    <div className="text-4xl font-bold" style={{ color: sesScoreColor(drawerAvg) }}>{drawerAvg ?? '—'}</div>
-                    <div>
-                      <div className="text-sm font-semibold" style={{ color: sesScoreColor(drawerAvg) }}>{sesTierLabel(drawerAvg)}</div>
-                      <div className="text-xs text-gray-400">{drawerLabel} · {stats.confCount} conference{stats.confCount !== 1 ? 's' : ''}</div>
-                    </div>
-                    {drawerScoreView === 'ses' && stats.trend && (
-                      <div className={`ml-auto text-lg font-bold ${stats.trend === 'up' ? 'text-emerald-500' : stats.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
-                        {stats.trend === 'up' ? '↑' : stats.trend === 'down' ? '↓' : '→'}
+                  <div
+                    className="mt-3 rounded-xl p-4"
+                    style={{ backgroundColor: drawerColor + '15', borderLeft: `4px solid ${drawerColor}` }}
+                  >
+                    <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">{drawerScoreLabel}</div>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-end gap-1">
+                          <div className="text-4xl font-bold leading-tight" style={{ color: drawerColor }}>{drawerAvg ?? '—'}</div>
+                          {drawerAvg != null && <div className="text-sm font-normal text-gray-400 mb-0.5">/100</div>}
+                        </div>
+                        <div className="text-xs font-semibold mt-0.5" style={{ color: drawerColor }}>{drawerTierLabel}</div>
+                        <div className="text-xs text-gray-400 mt-1">{drawerLabel} · {stats.confCount} conference{stats.confCount !== 1 ? 's' : ''}</div>
                       </div>
-                    )}
+                      {drawerScoreView === 'ses' && stats.trend && (
+                        <div className={`text-lg font-bold ${stats.trend === 'up' ? 'text-emerald-500' : stats.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                          {stats.trend === 'up' ? '↑' : stats.trend === 'down' ? '↓' : '→'}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* All three scores as mini summary row */}
