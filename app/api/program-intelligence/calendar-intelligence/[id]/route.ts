@@ -87,8 +87,12 @@ export interface TargetingAggregation {
   mustTargetWse: number;
   highPriorityWse: number;
   worthEngagingWse: number;
-  // All scored company WSEs sorted descending — used for realistic pipeline
+  // ICP-company WSEs sorted descending — used for realistic pipeline (mirrors pre-conference formula)
   sortedIcpWses: number[];
+  // ICP-specific tier counts — slot assignments for realistic pipeline probability ladder
+  mustTargetIcpCount: number;
+  highPriorityIcpCount: number;
+  worthEngagingIcpCount: number;
   // First 5 scored companies for debug logging
   debugSample: Array<{ companyName: string; wse: number | null; tier: string }>;
 }
@@ -233,14 +237,19 @@ async function runTargetingForConference(
   let needsTitleReviewCount = 0, actionableCount = 0;
   let sumPriorityScore = 0, sumBuyerAccessScore = 0, sumRelationshipScore = 0;
   let mustTargetWse = 0, highPriorityWse = 0, worthEngagingWse = 0;
+  let mustTargetIcpCount = 0, highPriorityIcpCount = 0, worthEngagingIcpCount = 0;
   const debugSample: Array<{ companyName: string; wse: number | null; tier: string }> = [];
 
   for (const s of scores) {
     const wse = s.wse ?? 0;
+    const isIcp = (() => {
+      const icpVal = companyMap.get(s.company_id)?.company.icp;
+      return icpVal != null && ['yes', 'true'].includes(icpVal.trim().toLowerCase());
+    })();
     switch (s.target_priority_tier_key) {
-      case 'must_target':    mustTargetCount++;    mustTargetWse    += wse; break;
-      case 'high_priority':  highPriorityCount++;  highPriorityWse  += wse; break;
-      case 'worth_engaging': worthEngagingCount++; worthEngagingWse += wse; break;
+      case 'must_target':    mustTargetCount++;    mustTargetWse    += wse; if (isIcp) mustTargetIcpCount++;    break;
+      case 'high_priority':  highPriorityCount++;  highPriorityWse  += wse; if (isIcp) highPriorityIcpCount++;  break;
+      case 'worth_engaging': worthEngagingCount++; worthEngagingWse += wse; if (isIcp) worthEngagingIcpCount++; break;
       case 'monitor':  monitorCount++;  break;
       default:         lowPriorityCount++; break;
     }
@@ -252,7 +261,14 @@ async function runTargetingForConference(
     if (debugSample.length < 5) debugSample.push({ companyName: s.company_name, wse: s.wse, tier: s.target_priority_tier_key });
   }
 
-  const sortedIcpWses = scores.map(s => s.wse ?? 0).sort((a, b) => b - a);
+  // Only ICP-flagged companies are eligible for realistic pipeline — mirrors the pre-conference modal formula
+  const sortedIcpWses = scores
+    .filter(s => {
+      const icpVal = companyMap.get(s.company_id)?.company.icp;
+      return icpVal != null && ['yes', 'true'].includes(icpVal.trim().toLowerCase());
+    })
+    .map(s => s.wse ?? 0)
+    .sort((a, b) => b - a);
 
   return {
     mustTargetCount,
@@ -271,6 +287,9 @@ async function runTargetingForConference(
     highPriorityWse,
     worthEngagingWse,
     sortedIcpWses,
+    mustTargetIcpCount,
+    highPriorityIcpCount,
+    worthEngagingIcpCount,
     debugSample,
   };
 }
@@ -511,9 +530,9 @@ export async function GET(
   const realisticPipeline = targetingAgg != null && avgCostPerUnit > 0
     ? computeRealisticPipeline(
         targetingAgg.sortedIcpWses,
-        targetingAgg.mustTargetCount,
-        targetingAgg.highPriorityCount,
-        targetingAgg.worthEngagingCount,
+        targetingAgg.mustTargetIcpCount,
+        targetingAgg.highPriorityIcpCount,
+        targetingAgg.worthEngagingIcpCount,
         avgCostPerUnit,
         targetingAgg.avgBuyerAccessScore,
         targetingAgg.avgRelationshipLeverageScore,
