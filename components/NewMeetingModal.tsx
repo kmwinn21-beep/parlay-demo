@@ -94,6 +94,98 @@ const TIME_OPTIONS: { value: string; label: string }[] = Array.from({ length: 64
   return { value, label };
 });
 
+function SidebarContent({
+  selectedConference,
+  loadingMeetings,
+  meetingsByDay,
+  meetingDate,
+  meetingTime,
+  collapsedDays,
+  setCollapsedDays,
+  selectedRepIds,
+}: {
+  selectedConference: ConferenceOption | undefined;
+  loadingMeetings: boolean;
+  meetingsByDay: [string, ConferenceMeeting[]][];
+  meetingDate: string;
+  meetingTime: string;
+  collapsedDays: Set<string>;
+  setCollapsedDays: React.Dispatch<React.SetStateAction<Set<string>>>;
+  selectedRepIds: number[];
+}) {
+  return (
+    <>
+      <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0 hidden md:block">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scheduled Meetings</p>
+        <p className="text-xs text-gray-400 mt-0.5">{selectedConference?.name}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {loadingMeetings ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-xs">
+            <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+            Loading…
+          </div>
+        ) : meetingsByDay.length === 0 ? (
+          <p className="px-4 py-8 text-center text-xs text-gray-400">No meetings scheduled yet.</p>
+        ) : (
+          meetingsByDay.map(([day, dayMeetings]) => {
+            const { short } = formatChipDate(day);
+            const isCollapsed = collapsedDays.has(day);
+            const isSelectedDay = day === meetingDate;
+            return (
+              <div key={day} className="border-b border-gray-100 last:border-0">
+                <button
+                  type="button"
+                  onClick={() => setCollapsedDays(prev => {
+                    const next = new Set(Array.from(prev));
+                    if (next.has(day)) next.delete(day); else next.add(day);
+                    return next;
+                  })}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-100 transition-colors ${isSelectedDay ? 'bg-brand-primary/5' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold ${isSelectedDay ? 'text-brand-primary' : 'text-gray-700'}`}>{short}</span>
+                    <span className="text-xs text-gray-400 bg-gray-200 rounded-full px-1.5 py-0.5 leading-none">{dayMeetings.length}</span>
+                  </div>
+                  <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {!isCollapsed && (
+                  <div className="px-4 pb-2 space-y-1.5">
+                    {dayMeetings.map(m => {
+                      const selMins = meetingTime ? timeToMins(meetingTime) : -1;
+                      const mMins = m.meeting_time ? timeToMins(m.meeting_time) : -1;
+                      const isConflict = selMins >= 0 && mMins >= 0 && day === meetingDate && Math.abs(mMins - selMins) < 30;
+                      const isRepConflict = isConflict && m.scheduled_by
+                        ? m.scheduled_by.split(',').map(s => Number(s.trim())).some(id => selectedRepIds.includes(id))
+                        : false;
+                      return (
+                        <div key={m.id} className={`rounded-lg px-2.5 py-2 text-xs ${isRepConflict ? 'bg-red-50 border border-red-200' : isConflict ? 'bg-amber-50 border border-amber-200' : 'bg-white border border-gray-100'}`}>
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="font-medium text-gray-800 truncate">{m.first_name} {m.last_name}</span>
+                            {m.meeting_time && (
+                              <span className={`flex-shrink-0 font-semibold tabular-nums ${isRepConflict ? 'text-red-600' : isConflict ? 'text-amber-600' : 'text-brand-primary'}`}>
+                                {formatTime12(m.meeting_time)}
+                              </span>
+                            )}
+                          </div>
+                          {m.company_name && <p className="text-gray-400 truncate">{m.company_name}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </>
+  );
+}
+
 interface NewMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -138,6 +230,7 @@ export function NewMeetingModal({
   const [conferenceMeetings, setConferenceMeetings] = useState<ConferenceMeeting[]>([]);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   const isPrefilling = useRef(false);
 
@@ -309,6 +402,7 @@ export function NewMeetingModal({
     setShowFullCalendar(false);
     setConferenceMeetings([]);
     setCollapsedDays(new Set());
+    setShowMobileSidebar(false);
     isPrefilling.current = false;
   }
 
@@ -383,7 +477,7 @@ export function NewMeetingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className={`relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full mx-4 max-h-[90vh] flex flex-col transition-all duration-200 ${hasSidebar ? 'max-w-4xl' : 'max-w-lg'}`}>
+      <div className={`relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full mx-4 max-h-[90vh] flex flex-col transition-all duration-200 overflow-hidden ${hasSidebar ? 'max-w-4xl' : 'max-w-lg'}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <h2 className="text-lg font-semibold text-brand-primary font-serif">Schedule New Meeting</h2>
@@ -495,7 +589,24 @@ export function NewMeetingModal({
 
             {/* Time — 15-min increment dropdown */}
             <div>
-              <label className={labelClass}>Time *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelClass} style={{ marginBottom: 0 }}>Time *</label>
+                {hasSidebar && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileSidebar(true)}
+                    className="md:hidden flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:text-brand-primary transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {loadingMeetings ? 'Loading…' : `${conferenceMeetings.length} meeting${conferenceMeetings.length !== 1 ? 's' : ''}`}
+                    {(conflicts.repConflict || conflicts.overlapConflict) && (
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${conflicts.repConflict ? 'bg-red-500' : 'bg-amber-400'}`} />
+                    )}
+                  </button>
+                )}
+              </div>
               <select className={inputClass} value={meetingTime} onChange={e => setMeetingTime(e.target.value)} required>
                 <option value="">Select time...</option>
                 {TIME_OPTIONS.map(opt => (
@@ -547,79 +658,50 @@ export function NewMeetingModal({
             </div>
           </form>
 
-          {/* Sidebar — conference meetings */}
+          {/* Sidebar — conference meetings (desktop: always visible, mobile: hidden — use sheet) */}
           {hasSidebar && (
-            <div className="w-72 flex-shrink-0 border-l border-gray-200 flex flex-col overflow-hidden bg-gray-50">
-              <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scheduled Meetings</p>
-                <p className="text-xs text-gray-400 mt-0.5">{selectedConference?.name}</p>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                {loadingMeetings ? (
-                  <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-xs">
-                    <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-                    Loading…
-                  </div>
-                ) : meetingsByDay.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-xs text-gray-400">No meetings scheduled yet.</p>
-                ) : (
-                  meetingsByDay.map(([day, dayMeetings]) => {
-                    const { short } = formatChipDate(day);
-                    const isCollapsed = collapsedDays.has(day);
-                    const isSelectedDay = day === meetingDate;
-                    return (
-                      <div key={day} className="border-b border-gray-100 last:border-0">
-                        <button
-                          type="button"
-                          onClick={() => setCollapsedDays(prev => {
-                            const next = new Set(Array.from(prev));
-                            if (next.has(day)) next.delete(day); else next.add(day);
-                            return next;
-                          })}
-                          className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-100 transition-colors ${isSelectedDay ? 'bg-brand-primary/5' : ''}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-semibold ${isSelectedDay ? 'text-brand-primary' : 'text-gray-700'}`}>{short}</span>
-                            <span className="text-xs text-gray-400 bg-gray-200 rounded-full px-1.5 py-0.5 leading-none">{dayMeetings.length}</span>
-                          </div>
-                          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        {!isCollapsed && (
-                          <div className="px-4 pb-2 space-y-1.5">
-                            {dayMeetings.map(m => {
-                              const selMins = meetingTime ? timeToMins(meetingTime) : -1;
-                              const mMins = m.meeting_time ? timeToMins(m.meeting_time) : -1;
-                              const isConflict = selMins >= 0 && mMins >= 0 && day === meetingDate && Math.abs(mMins - selMins) < 30;
-                              const isRepConflict = isConflict && m.scheduled_by
-                                ? m.scheduled_by.split(',').map(s => Number(s.trim())).some(id => selectedRepIds.includes(id))
-                                : false;
-                              return (
-                                <div key={m.id} className={`rounded-lg px-2.5 py-2 text-xs ${isRepConflict ? 'bg-red-50 border border-red-200' : isConflict ? 'bg-amber-50 border border-amber-200' : 'bg-white border border-gray-100'}`}>
-                                  <div className="flex items-center justify-between gap-1 mb-0.5">
-                                    <span className="font-medium text-gray-800 truncate">{m.first_name} {m.last_name}</span>
-                                    {m.meeting_time && (
-                                      <span className={`flex-shrink-0 font-semibold tabular-nums ${isRepConflict ? 'text-red-600' : isConflict ? 'text-amber-600' : 'text-brand-primary'}`}>
-                                        {formatTime12(m.meeting_time)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {m.company_name && <p className="text-gray-400 truncate">{m.company_name}</p>}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+            <div className="hidden md:flex w-72 flex-shrink-0 border-l border-gray-200 flex-col overflow-hidden bg-gray-50">
+              <SidebarContent
+                selectedConference={selectedConference}
+                loadingMeetings={loadingMeetings}
+                meetingsByDay={meetingsByDay}
+                meetingDate={meetingDate}
+                meetingTime={meetingTime}
+                collapsedDays={collapsedDays}
+                setCollapsedDays={setCollapsedDays}
+                selectedRepIds={selectedRepIds}
+              />
             </div>
           )}
         </div>
+
+        {/* Mobile meetings sheet — slides over the form */}
+        {hasSidebar && showMobileSidebar && (
+          <div className="md:hidden absolute inset-0 z-20 flex flex-col bg-white rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <p className="text-sm font-semibold text-brand-primary font-serif">Scheduled Meetings</p>
+                <p className="text-xs text-gray-400 mt-0.5">{selectedConference?.name}</p>
+              </div>
+              <button type="button" onClick={() => setShowMobileSidebar(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <SidebarContent
+              selectedConference={selectedConference}
+              loadingMeetings={loadingMeetings}
+              meetingsByDay={meetingsByDay}
+              meetingDate={meetingDate}
+              meetingTime={meetingTime}
+              collapsedDays={collapsedDays}
+              setCollapsedDays={setCollapsedDays}
+              selectedRepIds={selectedRepIds}
+            />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 shrink-0">
