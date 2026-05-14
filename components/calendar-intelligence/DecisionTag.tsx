@@ -7,6 +7,8 @@ type Decision = 'confirmed' | 'watching' | 'passed' | 'pending_approval';
 interface Props {
   conferenceId: number;
   isAdmin: boolean;
+  syncKey?: number;
+  onDecisionChanged?: () => void;
 }
 
 const DECISIONS: { value: Decision; label: string; color: string; activeCls: string }[] = [
@@ -18,7 +20,7 @@ const DECISIONS: { value: Decision; label: string; color: string; activeCls: str
 
 const ghostCls = 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
 
-export function DecisionTag({ conferenceId, isAdmin }: Props) {
+export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged }: Props) {
   const [userDecision, setUserDecision] = useState<Decision | null>(null);
   const [accountDecision, setAccountDecision] = useState<Decision | null>(null);
   const [noteText, setNoteText] = useState('');
@@ -37,7 +39,8 @@ export function DecisionTag({ conferenceId, isAdmin }: Props) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [conferenceId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conferenceId, syncKey]);
 
   const selectUserDecision = async (d: Decision) => {
     const newVal = userDecision === d ? null : d;
@@ -48,6 +51,7 @@ export function DecisionTag({ conferenceId, isAdmin }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conferenceId, decision: newVal, level: 'user' }),
     });
+    onDecisionChanged?.();
   };
 
   const selectAccountDecision = async (d: Decision) => {
@@ -57,6 +61,7 @@ export function DecisionTag({ conferenceId, isAdmin }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conferenceId, decision: d, level: 'account' }),
     });
+    onDecisionChanged?.();
   };
 
   const handlePostNote = async () => {

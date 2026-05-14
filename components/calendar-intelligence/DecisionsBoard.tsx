@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useUser } from '@/components/UserContext';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
 
@@ -40,6 +40,7 @@ interface ScoreData {
 interface Props {
   onOpenDrawer?: (conferenceId: number) => void;
   refreshKey?: number;
+  scoredRows?: ScoreData[];
 }
 
 const COLUMNS: { id: Decision; label: string; headerCls: string; borderCls: string }[] = [
@@ -78,32 +79,27 @@ function ScoreChip({ label, value }: { label: string; value: number | null | und
   );
 }
 
-export function DecisionsBoard({ onOpenDrawer, refreshKey }: Props) {
+export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) {
   const { user } = useUser();
   const [conferences, setConferences] = useState<BoardConference[]>([]);
-  const [scoreMap, setScoreMap] = useState<Map<number, ScoreData>>(new Map());
   const [loading, setLoading] = useState(true);
   const [notesConferenceId, setNotesConferenceId] = useState<number | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const isAdmin = user?.role === 'administrator';
 
+  // Build score map from the parent's already-scored rows (uses full scoring engine results)
+  const scoreMap = useMemo(() => {
+    const map = new Map<number, ScoreData>();
+    for (const r of scoredRows ?? []) map.set(r.conferenceId, r);
+    return map;
+  }, [scoredRows]);
+
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      fetch('/api/calendar-intelligence/decisions/board')
-        .then(r => r.ok ? r.json() : { conferences: [] })
-        .then((data: { conferences: BoardConference[] }) => data.conferences ?? []),
-      fetch('/api/program-intelligence/calendar-intelligence')
-        .then(r => r.ok ? r.json() : { conferences: [] })
-        .then((data: { conferences: ScoreData[] }) => {
-          const map = new Map<number, ScoreData>();
-          for (const c of data.conferences ?? []) map.set(c.conferenceId, c);
-          return map;
-        }),
-    ])
-      .then(([confs, scores]) => {
-        setConferences(confs);
-        setScoreMap(scores);
+    fetch('/api/calendar-intelligence/decisions/board')
+      .then(r => r.ok ? r.json() : { conferences: [] })
+      .then((data: { conferences: BoardConference[] }) => {
+        setConferences(data.conferences ?? []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));

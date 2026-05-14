@@ -7,7 +7,7 @@ import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { PathToTier } from '@/components/calendar-intelligence/PathToTier';
-import { ExecutionGap } from '@/components/calendar-intelligence/ExecutionGap';
+import { ExecutionComparison } from '@/components/calendar-intelligence/ExecutionComparison';
 import { DecisionsBoard } from '@/components/calendar-intelligence/DecisionsBoard';
 import { CalendarNotesPanel } from '@/components/calendar-intelligence/CalendarNotesPanel';
 import { DecisionTag } from '@/components/calendar-intelligence/DecisionTag';
@@ -309,7 +309,7 @@ export default function CalendarIntelligencePage() {
   const [budgetModalConf, setBudgetModalConf] = useState<{ id: number; name: string } | null>(null);
   const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
 
-  // CES availability — used to show/hide Execution Gap button
+  // CES availability — used to show/hide Execution Comparison button
   const [cesConferenceIds, setCesConferenceIds] = useState<Set<number>>(new Set());
   useEffect(() => {
     fetch('/api/calendar-intelligence/ces')
@@ -320,12 +320,16 @@ export default function CalendarIntelligencePage() {
 
   // Drawer tool state
   const [pathToTierOpen, setPathToTierOpen] = useState(false);
-  const [executionGapOpen, setExecutionGapOpen] = useState(false);
+  const [executionComparisonOpen, setExecutionComparisonOpen] = useState(false);
+
+  // Decision sync — incremented when a decision changes in either panel or the decision column
+  const [decisionSyncKey, setDecisionSyncKey] = useState(0);
+  const bumpDecisionSync = useCallback(() => setDecisionSyncKey(k => k + 1), []);
 
   // Board refresh
   const [boardRefreshKey, setBoardRefreshKey] = useState(0);
 
-  const drawerExpanded = pathToTierOpen || executionGapOpen;
+  const drawerExpanded = pathToTierOpen || executionComparisonOpen;
   const canUseTools = user?.capabilities?.use_calendar_tools ?? false;
 
   // Subscribe to module-level store
@@ -398,7 +402,7 @@ export default function CalendarIntelligencePage() {
   const closeDrawer = useCallback(() => {
     setSelectedCalendarRow(null);
     setPathToTierOpen(false);
-    setExecutionGapOpen(false);
+    setExecutionComparisonOpen(false);
     setBoardRefreshKey(k => k + 1);
   }, []);
 
@@ -406,6 +410,84 @@ export default function CalendarIntelligencePage() {
   if (user && !user.capabilities?.view_calendar_intelligence) {
     router.replace('/');
     return null;
+  }
+
+  // ── Scrollable overlay panel with chevron indicators ──────────────────────
+  function OverlayPanel({ children, className }: { children: React.ReactNode; className?: string }) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [canUp, setCanUp] = useState(false);
+    const [canDown, setCanDown] = useState(false);
+
+    const updateArrows = useCallback(() => {
+      const el = ref.current;
+      if (!el) return;
+      setCanUp(el.scrollTop > 4);
+      setCanDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    }, []);
+
+    useEffect(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.addEventListener('scroll', updateArrows, { passive: true });
+      const ro = new ResizeObserver(updateArrows);
+      ro.observe(el);
+      updateArrows();
+      return () => { el.removeEventListener('scroll', updateArrows); ro.disconnect(); };
+    }, [updateArrows]);
+
+    return (
+      <div className={`relative flex flex-col bg-white rounded-xl shadow-sm overflow-hidden ${className ?? ''}`}>
+        {canUp && (
+          <button
+            onClick={() => ref.current?.scrollBy({ top: -(ref.current.clientHeight), behavior: 'smooth' })}
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 p-1.5 rounded-full bg-white/90 text-gray-400 hover:text-gray-600 shadow-sm transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7"/></svg>
+          </button>
+        )}
+        <div ref={ref} className="flex-1 overflow-y-auto hide-scrollbar">
+          {children}
+        </div>
+        {canDown && (
+          <button
+            onClick={() => ref.current?.scrollBy({ top: ref.current.clientHeight, behavior: 'smooth' })}
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 p-1.5 rounded-full bg-white/90 text-gray-400 hover:text-gray-600 shadow-sm transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Fourth column: Recommendation + Decision ───────────────────────────────
+  function DecisionColumn({ row, syncKey, onDecisionChanged, isAdmin }: { row: CalendarConferenceRow; syncKey: number; onDecisionChanged: () => void; isAdmin: boolean }) {
+    const tierInfo = calendarTierInfo(row.recommendationTier);
+    const investmentLabel = row.recommendationTier === 'attend_invest_more' ? 'Increase Investment'
+      : row.recommendationTier === 'attend_maintain' ? 'Maintain Investment'
+      : row.recommendationTier === 'attend_reconsider_format' ? 'Reduce Sponsorship'
+      : row.recommendationTier === 'evaluate_before_committing' ? 'Attend Only'
+      : 'Do Not Attend';
+
+    return (
+      <OverlayPanel className="w-[360px] flex-shrink-0">
+        <div className="p-5 space-y-6">
+          {/* Calendar Recommendation section */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-3">Calendar Recommendation</p>
+            <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span>
+            <p className="text-sm text-gray-700 mt-3">{row.conferenceName} scored {row.calendarRecommendationScore ?? 'N/A'}/100 with ICP density of {row.icpDensityPct.toFixed(1)}%.</p>
+            <p className="text-sm mt-2 text-gray-700"><span className="font-semibold">Investment:</span> {investmentLabel}</p>
+            <p className="text-sm mt-1 text-gray-700"><span className="font-semibold">Confidence:</span> {row.confidenceLevel}</p>
+          </div>
+
+          {/* My Decision section */}
+          <div className="pt-5 border-t">
+            <DecisionTag conferenceId={row.conferenceId} isAdmin={isAdmin} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
+          </div>
+        </div>
+      </OverlayPanel>
+    );
   }
 
   // ── Score drawer left panel content ─────────────────────────────────────────
@@ -514,11 +596,11 @@ export default function CalendarIntelligencePage() {
             </button>
             {cesConferenceIds.has(row.conferenceId) && (
               <button
-                onClick={() => { setExecutionGapOpen(v => !v); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${executionGapOpen ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'}`}
+                onClick={() => { setExecutionComparisonOpen(v => !v); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${executionComparisonOpen ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                Execution Gap
+                Execution Comparison
               </button>
             )}
           </div>
@@ -553,7 +635,7 @@ export default function CalendarIntelligencePage() {
 
         {/* Decision Tag */}
         <div className="mt-5 pt-5 border-t">
-          <DecisionTag conferenceId={row.conferenceId} isAdmin={user?.role === 'administrator'} />
+          <DecisionTag conferenceId={row.conferenceId} isAdmin={user?.role === 'administrator'} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
         </div>
       </div>
     );
@@ -748,6 +830,7 @@ export default function CalendarIntelligencePage() {
         <DecisionsBoard
           onOpenDrawer={(confId) => { const r = calendarRows.find(x => x.conferenceId === confId); if (r) setSelectedCalendarRow(r); }}
           refreshKey={boardRefreshKey}
+          scoredRows={calendarRows}
         />
       )}
 
@@ -768,37 +851,41 @@ export default function CalendarIntelligencePage() {
       {selectedCalendarRow && (
         drawerExpanded ? (
           // Full-screen overlay with tools
-          <div className="fixed inset-0 z-50 flex bg-black/40" onClick={closeDrawer}>
-            <div className="flex h-full bg-white w-full" onClick={(e) => e.stopPropagation()}>
-              {/* Left panel — score content */}
-              <div className="w-[420px] flex-shrink-0 border-r border-gray-100 overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex bg-black/50" onClick={closeDrawer}>
+            <div className="flex h-full w-full gap-3 p-3 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+              {/* Score panel */}
+              <OverlayPanel className="w-[420px] flex-shrink-0">
                 <ScoreDrawerContent row={selectedCalendarRow} />
-              </div>
-              {/* Right area — tools */}
-              <div className="flex flex-1 overflow-hidden divide-x divide-gray-100">
-                {pathToTierOpen && (
-                  <div className={`overflow-y-auto ${executionGapOpen ? 'w-1/2' : 'flex-1'}`}>
-                    <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900">Path to Tier</h3>
-                      <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                      </button>
-                    </div>
-                    <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+              </OverlayPanel>
+
+              {/* Path to Tier panel */}
+              {pathToTierOpen && (
+                <OverlayPanel className="w-[420px] flex-shrink-0">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                    <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
                   </div>
-                )}
-                {executionGapOpen && (
-                  <div className={`overflow-y-auto ${pathToTierOpen ? 'w-1/2' : 'flex-1'}`}>
-                    <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900">Execution Gap</h3>
-                      <button onClick={() => setExecutionGapOpen(false)} className="text-gray-400 hover:text-gray-600">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                      </button>
-                    </div>
-                    <ExecutionGap score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                  <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                </OverlayPanel>
+              )}
+
+              {/* Execution Comparison panel */}
+              {executionComparisonOpen && (
+                <OverlayPanel className="w-[420px] flex-shrink-0">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <h3 className="font-semibold text-gray-900">Execution Comparison</h3>
+                    <button onClick={() => setExecutionComparisonOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
                   </div>
-                )}
-              </div>
+                  <ExecutionComparison score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                </OverlayPanel>
+              )}
+
+              {/* Decision column — fourth panel, always visible when any tool is open */}
+              <DecisionColumn row={selectedCalendarRow} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} isAdmin={user?.role === 'administrator'} />
             </div>
           </div>
         ) : (
