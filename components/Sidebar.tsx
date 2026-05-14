@@ -11,7 +11,7 @@ import { LogoImage } from './LogoImage';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { OnboardingChecklist } from './onboarding/OnboardingChecklist';
 
-const navItems = [
+const operationsItems = [
   {
     href: '/',
     label: 'Dashboard',
@@ -27,15 +27,6 @@ const navItems = [
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-  {
-    href: '/program-intelligence',
-    label: 'Program Intelligence',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     ),
   },
@@ -66,7 +57,7 @@ const navItems = [
       </svg>
     ),
   },
-{
+  {
     href: '/relationships',
     label: 'Relationships',
     icon: (
@@ -85,6 +76,27 @@ const navItems = [
     ),
   },
 ];
+
+const programIntelligenceItem = {
+  href: '/program-intelligence',
+  label: 'Program Intelligence',
+  icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  ),
+};
+
+const calendarIntelligenceItem = {
+  href: '/calendar-intelligence',
+  label: 'Calendar Intelligence',
+  icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2 2 4-4" />
+    </svg>
+  ),
+};
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -108,6 +120,18 @@ export function Sidebar() {
     }
   };
 
+  const isStakeholder = user?.role === 'stakeholder';
+  const hasCalendarIntelligence = user?.capabilities?.view_calendar_intelligence ?? !isStakeholder;
+  const hasProgramIntelligence = user?.capabilities?.view_pre_post_conference || user?.capabilities?.view_effectiveness;
+  const showIntelligenceSection = hasCalendarIntelligence || (hasProgramIntelligence && !isStakeholder);
+
+  const navLinkClass = (href: string) =>
+    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+      isActive(href)
+        ? 'bg-brand-highlight text-brand-primary'
+        : 'text-white/70 hover:bg-white/10 hover:text-white'
+    }`;
+
   return (
     <>
       <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
@@ -120,45 +144,66 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              isActive(item.href)
-                ? 'bg-brand-highlight text-brand-primary'
-                : 'text-white/70 hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            {item.href === '/notifications' && unreadCount > 0 ? (
-              <span className="relative flex-shrink-0">
-                {item.icon}
-                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              </span>
-            ) : item.icon}
-            {item.label}
-          </Link>
-        ))}
+      <nav className="flex-1 p-4 overflow-y-auto">
+        {/* Operations section — only visible to non-stakeholders */}
+        {!isStakeholder && (
+          <>
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-2 pb-1">Operations</p>
+            <div className="space-y-1 mb-2">
+              {operationsItems.map((item) => (
+                <Link key={item.href} href={item.href} className={navLinkClass(item.href)}>
+                  {item.href === '/notifications' && unreadCount > 0 ? (
+                    <span className="relative flex-shrink-0">
+                      {item.icon}
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    </span>
+                  ) : item.icon}
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Intelligence section */}
+        {showIntelligenceSection && (
+          <>
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-4 pb-1">Intelligence</p>
+            <div className="space-y-1">
+              {!isStakeholder && hasProgramIntelligence && (
+                <Link href={programIntelligenceItem.href} className={navLinkClass(programIntelligenceItem.href)}>
+                  {programIntelligenceItem.icon}
+                  {programIntelligenceItem.label}
+                </Link>
+              )}
+              {hasCalendarIntelligence && (
+                <Link href={calendarIntelligenceItem.href} className={navLinkClass(calendarIntelligenceItem.href)}>
+                  {calendarIntelligenceItem.icon}
+                  {calendarIntelligenceItem.label}
+                </Link>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Admin link — only for administrators */}
         {user?.role === 'administrator' && (
-          <Link
-            href="/admin"
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-              isActive('/admin')
-                ? 'bg-brand-highlight text-brand-primary'
-                : 'text-white/70 hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Admin Settings
-          </Link>
+          <>
+            <div className="mt-2 pt-2 border-t border-white/10">
+              <Link
+                href="/admin"
+                className={navLinkClass('/admin')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Admin Settings
+              </Link>
+            </div>
+          </>
         )}
       </nav>
 

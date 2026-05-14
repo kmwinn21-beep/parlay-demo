@@ -81,18 +81,21 @@ export async function POST(request: NextRequest) {
   }
 
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || null;
+  const userRole = String(user.role) as import('@/lib/auth').UserRole;
   const sessionUser = {
     id: Number(user.id),
     email: String(user.email),
-    role: String(user.role) as 'user' | 'administrator',
+    role: userRole,
     emailVerified: true,
     accountId: found.accountId,
   };
 
   const sessionToken = await signToken(sessionUser);
+  const redirectTo = userRole === 'stakeholder' ? '/calendar-intelligence?tab=decisions' : '/';
   const response = NextResponse.json({
     message: 'Password set. Welcome!',
     user: { email: sessionUser.email, role: sessionUser.role, displayName },
+    redirectTo,
   });
   response.cookies.set({ ...authCookieOptions(), value: sessionToken });
   return response;

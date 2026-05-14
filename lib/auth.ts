@@ -8,9 +8,9 @@ const JWT_SECRET = new TextEncoder().encode(
 export const COOKIE_NAME = 'auth_token';
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-export type UserRole = 'user' | 'administrator' | 'sales_rep' | 'manager' | 'analyst' | 'conference_coordinator';
+export type UserRole = 'user' | 'administrator' | 'sales_rep' | 'manager' | 'analyst' | 'conference_coordinator' | 'stakeholder';
 
-export const ALL_ROLES: UserRole[] = ['sales_rep', 'manager', 'analyst', 'conference_coordinator', 'user', 'administrator'];
+export const ALL_ROLES: UserRole[] = ['sales_rep', 'manager', 'analyst', 'conference_coordinator', 'user', 'administrator', 'stakeholder'];
 export const VALID_ROLES = new Set<string>(ALL_ROLES);
 
 export const ROLE_DISPLAY_LABELS: Record<string, string> = {
@@ -20,6 +20,7 @@ export const ROLE_DISPLAY_LABELS: Record<string, string> = {
   conference_coordinator: 'Coordinator',
   user: 'User',
   administrator: 'Administrator',
+  stakeholder: 'Stakeholder',
 };
 
 export type CapabilityKey =
@@ -34,7 +35,9 @@ export type CapabilityKey =
   | 'delete_merge'
   | 'manage_system_config'
   | 'manage_users'
-  | 'manage_role_scope';
+  | 'manage_role_scope'
+  | 'view_calendar_intelligence'
+  | 'use_calendar_tools';
 
 export type RoleCapabilityMap = Record<CapabilityKey, boolean>;
 export type RoleCapabilities = Record<UserRole, RoleCapabilityMap>;
@@ -52,6 +55,8 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   manage_system_config: 'ICP rules, scoring config & branding',
   manage_users: 'User management & invitations',
   manage_role_scope: 'Role Scope',
+  view_calendar_intelligence: 'View Calendar Intelligence',
+  use_calendar_tools: 'Use Path to Tier & Strategic Lens tools',
 };
 
 export const LOCKED_ADMIN_CAPS: CapabilityKey[] = [
@@ -59,12 +64,13 @@ export const LOCKED_ADMIN_CAPS: CapabilityKey[] = [
 ];
 
 export const DEFAULT_ROLE_CAPABILITIES: RoleCapabilities = {
-  sales_rep:              { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false },
-  manager:                { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: false, view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false },
-  analyst:                { view_data: true,  create_activity: false, view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false },
-  conference_coordinator: { view_data: true,  create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false },
-  user:                   { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: false, manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false },
-  administrator:          { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: true,  manage_users: true,  manage_role_scope: true  },
+  sales_rep:              { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: false },
+  manager:                { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: false, view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: true  },
+  analyst:                { view_data: true,  create_activity: false, view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: true  },
+  conference_coordinator: { view_data: true,  create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: false },
+  user:                   { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: false, manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: true  },
+  administrator:          { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: true,  manage_users: true,  manage_role_scope: true,  view_calendar_intelligence: true,  use_calendar_tools: true  },
+  stakeholder:            { view_data: false, create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: false },
 };
 
 export function resolveCapabilities(role: UserRole, stored: Partial<RoleCapabilities>): RoleCapabilityMap {
@@ -146,6 +152,10 @@ export async function getServerSessionUser(): Promise<SessionUser | null> {
 
 export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
   const rootDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN; // e.g. ".useparlay.app"
+  // On Vercel preview deployments (VERCEL_ENV=preview) the host is *.vercel.app,
+  // which doesn't match the production cookie domain — omit the domain in that case
+  // so the browser accepts the cookie on the preview hostname.
+  const isPreview = process.env.VERCEL_ENV === 'preview';
   return {
     name: COOKIE_NAME,
     httpOnly: true,
@@ -153,7 +163,7 @@ export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
     sameSite: 'lax' as const,
     path: '/',
     maxAge,
-    ...(rootDomain ? { domain: rootDomain } : {}),
+    ...(!isPreview && rootDomain ? { domain: rootDomain } : {}),
   };
 }
 

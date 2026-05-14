@@ -831,12 +831,12 @@ export async function initDb(): Promise<void> {
       args: [],
     });
     const currentSql = masterRow.rows.length > 0 ? String(masterRow.rows[0].sql ?? '') : '';
-    if (!currentSql.includes('sales_rep')) {
+    if (!currentSql.includes('sales_rep') || !currentSql.includes('stakeholder')) {
       await db.execute({ sql: `CREATE TABLE IF NOT EXISTS users_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator')),
+        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator','stakeholder')),
         email_verified INTEGER NOT NULL DEFAULT 0,
         verification_token TEXT, reset_token TEXT, reset_token_expires INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
@@ -1331,7 +1331,7 @@ export async function seedFreshDb(client: Client): Promise<void> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator')),
+      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator','stakeholder')),
       email_verified INTEGER NOT NULL DEFAULT 0,
       verification_token TEXT,
       reset_token TEXT,

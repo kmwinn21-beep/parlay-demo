@@ -1,0 +1,916 @@
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useUser } from '@/components/UserContext';
+import { useOnboarding } from '@/lib/OnboardingContext';
+import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
+import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
+import { PathToTier } from '@/components/calendar-intelligence/PathToTier';
+import { ExecutionComparison } from '@/components/calendar-intelligence/ExecutionComparison';
+import { DecisionsBoard } from '@/components/calendar-intelligence/DecisionsBoard';
+import { CalendarNotesPanel } from '@/components/calendar-intelligence/CalendarNotesPanel';
+import { DecisionTag } from '@/components/calendar-intelligence/DecisionTag';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type CITab = 'scoring' | 'decisions' | 'budget';
+
+interface CalendarConferenceRow {
+  conferenceId: number;
+  conferenceName: string;
+  conferenceYear: number;
+  conferenceType: 'historical' | 'active';
+  attendeeCount: number;
+  totalCompanies: number;
+  icpCompanies: number;
+  icpDensityPct: number;
+  calendarRecommendationScore: number | null;
+  componentScores?: {
+    audienceFit: number | null;
+    targetOpportunity: number | null;
+    engagementCapture: number | null;
+    commercialPotential: number | null;
+    costJustification: number | null;
+    strategicValue: number | null;
+  };
+  confidenceMultiplier?: number;
+  availableComponentCount?: number;
+  totalComponentCount?: number;
+  maxPossibleScore?: number;
+  recommendationTier: string;
+  confidenceLevel: 'high' | 'medium' | 'low';
+  dataAge: number;
+  recommendationReason?: string[];
+  confidenceFactors?: string[];
+  tierProbabilityFactors?: { must: number; high: number; worth: number };
+  targetingScored?: boolean;
+  diagnostics?: {
+    targetingEngine?: {
+      mustTargetCount: number;
+      highPriorityCount: number;
+      worthEngagingCount: number;
+      monitorCount: number;
+      lowPriorityCount: number;
+      needsTitleReviewCount: number;
+      totalScoredCompanies: number;
+      avgTargetPriorityScore: number;
+      avgBuyerAccessScore: number;
+      avgRelationshipLeverageScore: number;
+      actionableCount: number;
+      isLargeConference: boolean;
+    } | null;
+    engagementMeetings?: { total_meetings?: number } | null;
+    engagementFollowUps?: { total_followups?: number; completed_followups?: number } | null;
+    budget?: { line_items?: unknown; return_on_cost?: string | null; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
+    commercialPotential?: { projected_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
+  };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function calendarScoreColor(score: number | null): string {
+  if (score == null) return '#9ca3af';
+  if (score >= 85) return '#059669';
+  if (score >= 70) return '#0d9488';
+  if (score >= 55) return '#d97706';
+  if (score >= 40) return '#f97316';
+  return '#dc2626';
+}
+
+const CALENDAR_TIER_INFO: Record<string, { label: string; classes: string }> = {
+  attend_invest_more:       { label: 'Attend & Invest',      classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  attend_maintain:          { label: 'Attend & Maintain',    classes: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+  attend_reconsider_format: { label: 'Reconsider Format',    classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  evaluate_before_committing:{ label: 'Evaluate First',      classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  remove_from_calendar:     { label: 'Remove from Calendar', classes: 'bg-red-50 text-red-700 border-red-200' },
+  do_not_prioritize:        { label: 'Do Not Prioritize',    classes: 'bg-red-50 text-red-600 border-red-100' },
+};
+
+function calendarTierInfo(tier: string): { label: string; classes: string } {
+  return CALENDAR_TIER_INFO[tier] ?? { label: tierLabel(tier), classes: 'bg-gray-50 text-gray-600 border-gray-200' };
+}
+
+function confidencePillClasses(level: string): string {
+  if (level === 'high') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (level === 'medium') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function formatDataAge(dataAge: number): string {
+  if (dataAge < 1) return '< 1 year';
+  const years = Math.round(dataAge);
+  return years === 1 ? '1 year' : `${years} years`;
+}
+
+function dataAgeColorClass(dataAge: number): string {
+  if (dataAge > 4) return 'text-red-600';
+  if (dataAge > 2) return 'text-amber-600';
+  return '';
+}
+
+function icpDensityPillClasses(pct: number): string {
+  if (pct >= 30) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (pct >= 15) return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function tierLabel(tier: string): string {
+  return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+// ── Module-level scoring store (survives navigation) ──────────────────────────
+
+type CalendarScoringStatus = 'idle' | 'loading_basic' | 'scoring' | 'ready';
+type CalendarStore = {
+  status: CalendarScoringStatus;
+  rows: CalendarConferenceRow[];
+  scoringProgress: { completed: number; total: number } | null;
+};
+
+let _calendarStore: CalendarStore = { status: 'idle', rows: [], scoringProgress: null };
+const _calendarListeners = new Set<() => void>();
+
+function getCalendarStore(): CalendarStore { return _calendarStore; }
+function setCalendarStore(update: Partial<CalendarStore>) {
+  _calendarStore = { ..._calendarStore, ...update };
+  _calendarListeners.forEach(l => l());
+}
+function subscribeCalendarStore(listener: () => void): () => void {
+  _calendarListeners.add(listener);
+  return () => _calendarListeners.delete(listener);
+}
+
+let _calendarScoringPromise: Promise<void> | null = null;
+
+function startCalendarScoring(force = false) {
+  const status = _calendarStore.status;
+  if (!force && (status === 'loading_basic' || status === 'scoring' || status === 'ready')) return;
+  if (_calendarScoringPromise && !force) return;
+
+  _calendarScoringPromise = (async () => {
+    setCalendarStore({ status: 'loading_basic', rows: [], scoringProgress: null });
+    try {
+      const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
+      if (!res.ok) { setCalendarStore({ status: 'idle' }); return; }
+      const data = await res.json() as { conferences: CalendarConferenceRow[] };
+      const basicRows = data.conferences ?? [];
+      setCalendarStore({ rows: basicRows });
+      if (basicRows.length === 0) { setCalendarStore({ status: 'ready' }); return; }
+
+      setCalendarStore({ status: 'scoring', scoringProgress: { completed: 0, total: basicRows.length } });
+      let completed = 0;
+      for (const row of basicRows) {
+        try {
+          const r = await fetch(`/api/program-intelligence/calendar-intelligence/${row.conferenceId}`, { cache: 'no-store' });
+          if (r.ok) {
+            const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
+            setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
+          }
+        } catch { /* skip */ }
+        completed++;
+        setCalendarStore({ scoringProgress: { completed, total: basicRows.length } });
+      }
+      setCalendarStore({ status: 'ready', scoringProgress: null });
+    } catch {
+      setCalendarStore({ status: 'idle' });
+    }
+  })().finally(() => { _calendarScoringPromise = null; });
+}
+
+async function refreshConferenceScore(conferenceId: number) {
+  try {
+    const r = await fetch(`/api/program-intelligence/calendar-intelligence/${conferenceId}`, { cache: 'no-store' });
+    if (r.ok) {
+      const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
+      setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
+    }
+  } catch { /* non-fatal */ }
+}
+
+// ── Budget Status Cell ────────────────────────────────────────────────────────
+
+function BudgetStatusCell({ row, onOpenModal }: { row: CalendarConferenceRow; onOpenModal: () => void }) {
+  const [open, setOpen] = useState(false);
+  const pillRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (pillRef.current?.contains(e.target as Node)) return;
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function handleEsc(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [open]);
+
+  if (row.conferenceType === 'historical') return <span className="text-gray-300 text-xs">—</span>;
+
+  const bud = row.diagnostics?.budget;
+  const status = evaluateBudgetCompleteness({
+    lineItems: bud?.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }> | null,
+    returnOnCost: bud?.return_on_cost,
+    requiredPipelineAmount: bud?.required_pipeline_amount,
+  });
+
+  if (status.status === 'complete') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+        Complete
+      </span>
+    );
+  }
+
+  const isPartial = status.status === 'partial';
+  const pillCls = isPartial
+    ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+    : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200';
+
+  function handleToggle() {
+    if (!open && pillRef.current) {
+      const rect = pillRef.current.getBoundingClientRect();
+      const panelW = 280;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelW - 8));
+      const above = rect.top > 300;
+      setPanelPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, above });
+    }
+    setOpen(v => !v);
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button ref={pillRef} type="button" onClick={handleToggle} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border transition-colors ${pillCls}`}>
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 0 0 3.58 20h16.84a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.42 0z"/></svg>
+        {isPartial ? 'Partial' : 'No Budget'}
+      </button>
+      {open && panelPos && (
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: panelPos.above ? panelPos.top : panelPos.top, left: panelPos.left, width: 280, zIndex: 10000, transform: panelPos.above ? 'translateY(-100%)' : 'translateY(0)' }}
+          className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-left"
+        >
+          <p className="text-sm font-semibold text-gray-900 mb-1">{isPartial ? 'Budget data incomplete' : 'No budget data entered'}</p>
+          {isPartial
+            ? <p className="text-xs text-gray-500 mb-3">Missing budget fields are limiting the accuracy of your Cost Justification and Commercial Potential scores.</p>
+            : <p className="text-xs text-gray-500 mb-3">Without budget data, Parlay cannot calculate Cost Justification or Commercial Potential scores. These two components represent 30% of the Calendar Recommendation Score.</p>
+          }
+          <div className="space-y-1 mb-3">
+            {status.missingFields.map(f => (
+              <div key={f} className="flex items-center gap-1.5 text-xs text-red-600">
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+                {f}
+              </div>
+            ))}
+            {status.presentFields.map(f => (
+              <div key={f} className="flex items-center gap-1.5 text-xs text-green-600">
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                {f}
+              </div>
+            ))}
+          </div>
+          {isPartial
+            ? <button type="button" onClick={() => { setOpen(false); onOpenModal(); }} className="text-xs text-brand-secondary hover:underline font-medium">Add budget data →</button>
+            : <button type="button" onClick={() => { setOpen(false); onOpenModal(); }} className="btn-primary text-xs w-full">Add Budget Data</button>
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function CalendarIntelligencePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useUser();
+  const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
+
+  const initialTab = (searchParams.get('tab') as CITab | null) ?? 'scoring';
+  const [activeTab, setActiveTab] = useState<CITab>(initialTab);
+
+  // Scoring tab state
+  const [calendarState, setCalendarStateLocal] = useState<CalendarStore>(getCalendarStore);
+  const [calendarSort, setCalendarSort] = useState<keyof CalendarConferenceRow | 'score'>('score');
+  const [calendarRecommendationFilter, setCalendarRecommendationFilter] = useState('all');
+  const [calendarTypeFilter, setCalendarTypeFilter] = useState<'all' | 'historical' | 'active'>('all');
+  const [calendarConfidenceFilter, setCalendarConfidenceFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [calendarBudgetFilter, setCalendarBudgetFilter] = useState<'all' | 'complete' | 'partial' | 'missing' | 'needs_attention'>('all');
+  const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
+  const [budgetModalConf, setBudgetModalConf] = useState<{ id: number; name: string } | null>(null);
+  const [selectedCalendarRow, setSelectedCalendarRow] = useState<CalendarConferenceRow | null>(null);
+
+  // CES availability — used to show/hide Execution Comparison button
+  const [cesConferenceIds, setCesConferenceIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    fetch('/api/calendar-intelligence/ces')
+      .then(r => r.ok ? r.json() : { ces: {} })
+      .then((data: { ces: Record<number, unknown> }) => setCesConferenceIds(new Set(Object.keys(data.ces ?? {}).map(Number))))
+      .catch(() => {});
+  }, []);
+
+  // Drawer tool state
+  const [pathToTierOpen, setPathToTierOpen] = useState(false);
+  const [executionComparisonOpen, setExecutionComparisonOpen] = useState(false);
+
+  // Decision sync — incremented when a decision changes in either panel or the decision column
+  const [decisionSyncKey, setDecisionSyncKey] = useState(0);
+  const bumpDecisionSync = useCallback(() => setDecisionSyncKey(k => k + 1), []);
+
+  // Board refresh
+  const [boardRefreshKey, setBoardRefreshKey] = useState(0);
+
+  const drawerExpanded = pathToTierOpen || executionComparisonOpen;
+  const canUseTools = user?.capabilities?.use_calendar_tools ?? false;
+
+  // Subscribe to module-level store
+  useEffect(() => {
+    setCalendarStateLocal(getCalendarStore());
+    return subscribeCalendarStore(() => setCalendarStateLocal(getCalendarStore()));
+  }, []);
+
+  // Trigger scoring on mount
+  useEffect(() => {
+    if (_calendarStore.status === 'idle') startCalendarScoring();
+  }, []);
+
+  // Onboarding tracking
+  useEffect(() => {
+    if (onboardingTrack !== 'track_b' || !onboardingProgress) return;
+    if (!onboardingProgress.completed_steps.includes('calendar_intel_visited')) {
+      markStepComplete('calendar_intel_visited');
+    }
+  }, [onboardingTrack, onboardingProgress, markStepComplete]);
+
+  const calendarRows = calendarState.rows;
+  const calendarLoading = calendarState.status === 'loading_basic';
+  const calendarScoringProgress = calendarState.scoringProgress;
+
+  // Keep drawer in sync when a scored row updates
+  useEffect(() => {
+    if (!selectedCalendarRow) return;
+    const updated = calendarRows.find(r => r.conferenceId === selectedCalendarRow.conferenceId);
+    if (updated && updated !== selectedCalendarRow) setSelectedCalendarRow(updated);
+  }, [calendarRows, selectedCalendarRow]);
+
+  const calendarRowsFiltered = useMemo(() => {
+    let rows = [...calendarRows];
+    if (calendarRecommendationFilter !== 'all') {
+      const m: Record<string, string[]> = {
+        attend_invest: ['attend_invest_more'],
+        attend_maintain: ['attend_maintain'],
+        reconsider: ['attend_reconsider_format'],
+        evaluate: ['evaluate_before_committing'],
+        cut_avoid: ['remove_from_calendar', 'do_not_prioritize'],
+      };
+      rows = rows.filter(r => m[calendarRecommendationFilter]?.includes(r.recommendationTier));
+    }
+    if (calendarTypeFilter !== 'all') rows = rows.filter(r => r.conferenceType === calendarTypeFilter);
+    if (calendarConfidenceFilter !== 'all') rows = rows.filter(r => r.confidenceLevel === calendarConfidenceFilter);
+    if (calendarBudgetFilter !== 'all') {
+      rows = rows.filter(r => {
+        if (r.conferenceType === 'historical') return false;
+        const bud = r.diagnostics?.budget;
+        const s = evaluateBudgetCompleteness({
+          lineItems: bud?.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }> | null,
+          returnOnCost: bud?.return_on_cost,
+          requiredPipelineAmount: bud?.required_pipeline_amount,
+        });
+        if (calendarBudgetFilter === 'needs_attention') return s.status === 'partial' || s.status === 'missing';
+        return s.status === calendarBudgetFilter;
+      });
+    }
+    rows.sort((a, b) => {
+      if (calendarSort === 'score') return (b.calendarRecommendationScore ?? -1) - (a.calendarRecommendationScore ?? -1);
+      const av = a[calendarSort as keyof CalendarConferenceRow] as unknown;
+      const bv = b[calendarSort as keyof CalendarConferenceRow] as unknown;
+      if (typeof av === 'number' && typeof bv === 'number') return bv - av;
+      return String(av ?? '').localeCompare(String(bv ?? ''));
+    });
+    return rows;
+  }, [calendarRows, calendarRecommendationFilter, calendarTypeFilter, calendarConfidenceFilter, calendarBudgetFilter, calendarSort]);
+
+  const closeDrawer = useCallback(() => {
+    setSelectedCalendarRow(null);
+    setPathToTierOpen(false);
+    setExecutionComparisonOpen(false);
+    setBoardRefreshKey(k => k + 1);
+  }, []);
+
+  // Capability gate — must be after all hooks
+  if (user && !user.capabilities?.view_calendar_intelligence) {
+    router.replace('/');
+    return null;
+  }
+
+  // ── Scrollable overlay panel with chevron indicators ──────────────────────
+  function OverlayPanel({ children, className }: { children: React.ReactNode; className?: string }) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [canUp, setCanUp] = useState(false);
+    const [canDown, setCanDown] = useState(false);
+
+    const updateArrows = useCallback(() => {
+      const el = ref.current;
+      if (!el) return;
+      setCanUp(el.scrollTop > 4);
+      setCanDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    }, []);
+
+    useEffect(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.addEventListener('scroll', updateArrows, { passive: true });
+      const ro = new ResizeObserver(updateArrows);
+      ro.observe(el);
+      updateArrows();
+      return () => { el.removeEventListener('scroll', updateArrows); ro.disconnect(); };
+    }, [updateArrows]);
+
+    return (
+      <div className={`relative flex flex-col bg-white rounded-xl shadow-sm overflow-hidden ${className ?? ''}`}>
+        {canUp && (
+          <button
+            onClick={() => ref.current?.scrollBy({ top: -(ref.current.clientHeight), behavior: 'smooth' })}
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 p-1.5 rounded-full bg-white/90 text-gray-400 hover:text-gray-600 shadow-sm transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7"/></svg>
+          </button>
+        )}
+        <div ref={ref} className="flex-1 overflow-y-auto hide-scrollbar">
+          {children}
+        </div>
+        {canDown && (
+          <button
+            onClick={() => ref.current?.scrollBy({ top: ref.current.clientHeight, behavior: 'smooth' })}
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 p-1.5 rounded-full bg-white/90 text-gray-400 hover:text-gray-600 shadow-sm transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Fourth column: Recommendation + Decision ───────────────────────────────
+  function DecisionColumn({ row, syncKey, onDecisionChanged, isAdmin }: { row: CalendarConferenceRow; syncKey: number; onDecisionChanged: () => void; isAdmin: boolean }) {
+    const tierInfo = calendarTierInfo(row.recommendationTier);
+    const investmentLabel = row.recommendationTier === 'attend_invest_more' ? 'Increase Investment'
+      : row.recommendationTier === 'attend_maintain' ? 'Maintain Investment'
+      : row.recommendationTier === 'attend_reconsider_format' ? 'Reduce Sponsorship'
+      : row.recommendationTier === 'evaluate_before_committing' ? 'Attend Only'
+      : 'Do Not Attend';
+
+    return (
+      <div className="w-[420px] flex-shrink-0 self-start bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="p-5 space-y-6">
+          {/* Calendar Recommendation section */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-3">Calendar Recommendation</p>
+            <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span>
+            <p className="text-sm text-gray-700 mt-3">{row.conferenceName} scored {row.calendarRecommendationScore ?? 'N/A'}/100 with ICP density of {row.icpDensityPct.toFixed(1)}%.</p>
+            <p className="text-sm mt-2 text-gray-700"><span className="font-semibold">Investment:</span> {investmentLabel}</p>
+            <p className="text-sm mt-1 text-gray-700"><span className="font-semibold">Confidence:</span> {row.confidenceLevel}</p>
+          </div>
+
+          {/* My Decision section */}
+          <div className="pt-5 border-t">
+            <DecisionTag conferenceId={row.conferenceId} isAdmin={isAdmin} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Score drawer left panel content ─────────────────────────────────────────
+  function ScoreDrawerContent({ row }: { row: CalendarConferenceRow }) {
+    const scoreColor = calendarScoreColor(row.calendarRecommendationScore);
+    const tierInfo = calendarTierInfo(row.recommendationTier);
+
+    const d = row.diagnostics ?? {};
+    const cs = row.componentScores;
+    const te = d.targetingEngine;
+    const em = d.engagementMeetings;
+    const ef = d.engagementFollowUps;
+    const totalMeetings = Number(em?.total_meetings ?? 0);
+    const totalFollowups = Number(ef?.total_followups ?? 0);
+    const completedFollowups = Number(ef?.completed_followups ?? 0);
+    const meetingRate = row.attendeeCount > 0 ? totalMeetings / row.attendeeCount : 0;
+    const cp = d.commercialPotential;
+    const projectedPipeline = Number(cp?.projected_pipeline ?? 0);
+    const bud = d.budget;
+    const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
+    const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
+    const teBenchmarks = te != null ? (te.isLargeConference ? { must: '15%', high: '30%', worth: '25%' } : { must: '10%', high: '20%', worth: '20%' }) : null;
+    const teActionableRate = te != null && te.totalScoredCompanies > 0 ? (te.actionableCount / te.totalScoredCompanies * 100).toFixed(0) + '%' : null;
+    const W = { audienceFit: 25, targetOpportunity: 20, engagementCapture: 15, commercialPotential: 15, costJustification: 15, strategicValue: 10 };
+
+    const components = [
+      { key: 'Audience Fit', score: cs?.audienceFit ?? null, weight: W.audienceFit, bullets: [`${row.icpCompanies} ICP companies out of ${row.totalCompanies} total (${row.icpDensityPct.toFixed(1)}% density — benchmark 15%)`, ...(te != null ? [`Avg buyer access score: ${te.avgBuyerAccessScore.toFixed(0)}/100`] : [])] },
+      { key: 'Target Opportunity', score: cs?.targetOpportunity ?? null, weight: W.targetOpportunity, unavailable: te == null ? 'Prospect company type not configured.' : undefined, bullets: te != null ? [`${te.totalScoredCompanies} companies scored`, `Must Target: ${te.mustTargetCount} (benchmark ${teBenchmarks!.must})`, `High Priority: ${te.highPriorityCount} (benchmark ${teBenchmarks!.high})`, `Worth Engaging: ${te.worthEngagingCount} (benchmark ${teBenchmarks!.worth})`, `Actionable rate: ${teActionableRate}`] : ['Target scoring not run.', 'Ensure the prospect company type is configured.'] },
+      { key: 'Engagement Capture', score: cs?.engagementCapture ?? null, weight: W.engagementCapture, unavailable: em == null ? (row.conferenceType === 'historical' ? 'Not applicable for historical conferences.' : 'No engagement data available.') : undefined, bullets: em != null ? [`Meetings: ${totalMeetings} (${(meetingRate * 100).toFixed(0)}% of attendees)`, ...(ef != null ? [`Follow-ups: ${completedFollowups} of ${totalFollowups} completed`] : [])] : row.conferenceType === 'historical' ? ['Not applicable — Historical Conference.'] : ['No meetings recorded.', 'This would add up to 15 points to your score.'] },
+      { key: 'Commercial Potential', score: cs?.commercialPotential ?? null, weight: W.commercialPotential, unavailable: cp == null ? 'Commercial inputs unavailable.' : undefined, bullets: cp != null ? [`Available pipeline: $${projectedPipeline.toLocaleString()}`, ...(reqPipeline > 0 ? [`Required: $${reqPipeline.toLocaleString()}`, `Coverage: ${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%`] : ['No budget entered.'])] : ['No target WSE or avg cost data available.'] },
+      { key: 'Cost Justification', score: cs?.costJustification ?? null, weight: W.costJustification, unavailable: bud == null ? 'No budget data available.' : undefined, bullets: bud != null ? [`Required pipeline: $${reqPipeline.toLocaleString()}`, `Required ROI multiple: ${reqMultiple}x`, ...(cp != null && reqPipeline > 0 ? [`Projected: $${projectedPipeline.toLocaleString()} (${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%)`] : [])] : ['Budget not entered.', 'Add budget in conference settings. This would add up to 15 points to your score.'] },
+      { key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue, unavailable: te == null ? 'Prospect company type not configured.' : undefined, bullets: te != null ? [`Avg relationship leverage: ${te.avgRelationshipLeverageScore.toFixed(0)}/100`] : ['Prospect company type not configured.', 'This would add up to 10 points to your score.'] },
+    ];
+
+    return (
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">{row.conferenceName} · {row.conferenceYear}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{row.conferenceType === 'historical' ? 'Historical' : 'Active'} · Data age: {row.dataAge.toFixed(1)} years</p>
+          </div>
+          <button onClick={closeDrawer} className="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* Score card */}
+        <div className="rounded-xl p-4 mb-5" style={{ backgroundColor: scoreColor + '15', borderLeft: `4px solid ${scoreColor}` }}>
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Calendar Score</p>
+          <div className="flex items-end gap-1">
+            <span className="text-4xl font-bold leading-tight" style={{ color: scoreColor }}>{row.calendarRecommendationScore ?? '—'}</span>
+            {row.calendarRecommendationScore != null && <span className="text-sm font-normal text-gray-400 mb-0.5">/100</span>}
+          </div>
+          <p className="text-xs font-semibold mt-1" style={{ color: scoreColor }}>{tierInfo.label}</p>
+          <p className="text-xs text-gray-400 mt-1">Based on {row.availableComponentCount ?? '?'} of 6 components · max possible {row.maxPossibleScore ?? '—'}/100</p>
+          {/* Budget summary inside score card */}
+          {(() => {
+            const budRaw = row.diagnostics?.budget;
+            if (!budRaw) {
+              return (
+                <div className="mt-2 pt-2 border-t border-current/10 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">No budget data</span>
+                  <button type="button" onClick={() => setBudgetModalConf({ id: row.conferenceId, name: row.conferenceName })} className="text-xs font-medium underline" style={{ color: scoreColor }}>Add Budget →</button>
+                </div>
+              );
+            }
+            let items: Array<{ budget?: string | number | null; actual?: string | number | null }> = [];
+            if (typeof budRaw.line_items === 'string') {
+              try { items = JSON.parse(budRaw.line_items); } catch { items = []; }
+            } else if (Array.isArray(budRaw.line_items)) {
+              items = budRaw.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }>;
+            }
+            const totalBudget = items.reduce((s, i) => s + (Number(i?.budget) || 0), 0);
+            const totalActual = items.reduce((s, i) => s + (Number(i?.actual) || 0), 0);
+            const hasSpend = totalBudget > 0 || totalActual > 0;
+            if (!hasSpend) {
+              return (
+                <div className="mt-2 pt-2 border-t border-current/10 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">No budget data</span>
+                  <button type="button" onClick={() => setBudgetModalConf({ id: row.conferenceId, name: row.conferenceName })} className="text-xs font-medium underline" style={{ color: scoreColor }}>Add Budget →</button>
+                </div>
+              );
+            }
+            const variance = totalBudget - totalActual;
+            const varStr = variance === 0 ? 'on budget' : variance > 0 ? `$${Math.abs(variance).toLocaleString()} under` : `$${Math.abs(variance).toLocaleString()} over`;
+            return (
+              <div className="mt-2 pt-2 border-t border-current/10">
+                <p className="text-xs text-gray-500">
+                  ${totalBudget.toLocaleString()} budgeted · ${totalActual.toLocaleString()} actual · <span className={variance < 0 ? 'text-red-500' : 'text-gray-600'}>{varStr}</span>
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Tool buttons — only shown if user has use_calendar_tools capability */}
+        {canUseTools && (
+          <div className="flex gap-2 mb-5">
+            <button
+              onClick={() => { setPathToTierOpen(v => !v); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${pathToTierOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+              Path to Tier
+            </button>
+            {cesConferenceIds.has(row.conferenceId) && (
+              <button
+                onClick={() => { setExecutionComparisonOpen(v => !v); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${executionComparisonOpen ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Execution Comparison
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Score breakdown */}
+        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Score Breakdown</h4>
+        <div className="space-y-3">
+          {components.map((c) => (
+            <div key={c.key} className="border rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <p className={`font-semibold text-sm ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
+                <p className="text-xs text-gray-500">{c.score == null ? '—' : Math.round(c.score)}/100 · {c.weight}%{c.score == null ? ' — not scored' : ''}</p>
+              </div>
+              <div className="mt-2 h-1.5 rounded bg-gray-100 overflow-hidden">
+                <div className="h-full rounded" style={{ width: `${c.score ?? 0}%`, backgroundColor: calendarScoreColor(c.score) }} />
+              </div>
+              {c.score == null && c.unavailable && <p className="text-xs text-gray-400 mt-1.5">{c.unavailable}</p>}
+              <ul className="list-disc pl-4 mt-2 text-xs text-gray-500 space-y-0.5">{c.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+            </div>
+          ))}
+        </div>
+
+        {/* Recommendation */}
+        <div className="mt-5 pt-5 border-t">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Calendar Recommendation</h4>
+          <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span>
+          <p className="text-sm text-gray-700 mt-3">{row.conferenceName} scored {row.calendarRecommendationScore ?? 'N/A'}/100 with ICP density of {row.icpDensityPct.toFixed(1)}%.</p>
+          <p className="text-sm mt-2"><span className="font-semibold">Investment Recommendation:</span> {row.recommendationTier === 'attend_invest_more' ? 'Increase Investment' : row.recommendationTier === 'attend_maintain' ? 'Maintain Investment' : row.recommendationTier === 'attend_reconsider_format' ? 'Reduce Sponsorship' : row.recommendationTier === 'evaluate_before_committing' ? 'Attend Only' : 'Do Not Attend'}</p>
+          <p className="text-sm mt-1"><span className="font-semibold">Confidence:</span> {row.confidenceLevel}</p>
+        </div>
+
+        {/* Decision Tag */}
+        <div className="mt-5 pt-5 border-t">
+          <DecisionTag conferenceId={row.conferenceId} isAdmin={user?.role === 'administrator'} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Page header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 font-serif">Calendar Intelligence</h1>
+        <p className="text-gray-500 text-sm mt-1">Data-driven conference prioritization and portfolio decisions.</p>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-fit">
+        {([
+          { id: 'scoring' as CITab, label: 'Scoring Table' },
+          { id: 'decisions' as CITab, label: 'Decisions Board' },
+          { id: 'budget' as CITab, label: 'Budget Planner', soon: true },
+        ]).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === tab.id
+                ? 'bg-brand-secondary text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {tab.label}
+            {tab.soon && (
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+                Soon
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Scoring Table ─────────────────────────────────────────────── */}
+      {activeTab === 'scoring' && (
+        <div className="space-y-4">
+          {calendarLoading && calendarRows.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
+              <p className="text-gray-500 text-sm font-medium">Loading conference data…</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              {(() => {
+                const needsBudgetCount = calendarRows.filter(r => {
+                  if (r.conferenceType === 'historical') return false;
+                  const bud = r.diagnostics?.budget;
+                  const s = evaluateBudgetCompleteness({ lineItems: bud?.line_items as Array<{ budget?: string | number | null; actual?: string | number | null }> | null, returnOnCost: bud?.return_on_cost, requiredPipelineAmount: bud?.required_pipeline_amount });
+                  return s.status === 'partial' || s.status === 'missing';
+                }).length;
+                const budgetCardActive = calendarBudgetFilter === 'needs_attention';
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
+                    <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
+                    <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend &amp; Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
+                    <div className="card border-l-4 border-emerald-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend &amp; Maintain</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_maintain').length}</p></div>
+                    <div className="card border-l-4 border-amber-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reconsider or Evaluate</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['attend_reconsider_format', 'evaluate_before_committing'].includes(r.recommendationTier)).length}</p></div>
+                    <div className="card border-l-4 border-red-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cut or Avoid</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => ['remove_from_calendar', 'do_not_prioritize'].includes(r.recommendationTier)).length}</p></div>
+                    <button type="button" onClick={() => setCalendarBudgetFilter(budgetCardActive ? 'all' : 'needs_attention')} className={`card border-l-4 border-amber-400 py-4 text-left w-full transition-colors ${budgetCardActive ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-amber-50/50'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Need Budget Data</p>
+                        <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 0 0 3.58 20h16.84a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.42 0z"/></svg>
+                      </div>
+                      <p className="text-3xl font-bold text-brand-primary">{needsBudgetCount}</p>
+                      {budgetCardActive && <p className="text-[10px] text-amber-600 mt-1 font-medium">Filter active — click to clear</p>}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Scoring progress */}
+              {calendarScoringProgress !== null && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-500 animate-spin rounded-full flex-shrink-0" />
+                    <span className="text-sm font-medium text-blue-700">Scoring conferences with Target Recommendations engine…</span>
+                    <span className="ml-auto text-sm text-blue-600 tabular-nums">{calendarScoringProgress.completed} of {calendarScoringProgress.total}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${(calendarScoringProgress.completed / calendarScoringProgress.total) * 100}%` }} />
+                  </div>
+                  <p className="text-xs text-blue-500 mt-1.5">Scores for Target Opportunity and Strategic Value are populating as each conference is processed.</p>
+                </div>
+              )}
+
+              {/* Filters + table */}
+              <div className="card">
+                {(() => {
+                  const activeFilterCount = [calendarRecommendationFilter !== 'all', calendarTypeFilter !== 'all', calendarConfidenceFilter !== 'all', calendarBudgetFilter !== 'all'].filter(Boolean).length;
+                  return (
+                    <>
+                      <div className="flex items-center mb-3">
+                        <button type="button" onClick={() => setCalendarFiltersOpen(o => !o)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                          Filters
+                          {activeFilterCount > 0 && <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">{activeFilterCount}</span>}
+                          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${calendarFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </div>
+                      {calendarFiltersOpen && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <select className="input-field text-sm py-1.5" value={calendarRecommendationFilter} onChange={(e) => setCalendarRecommendationFilter(e.target.value)}><option value="all">All Recommendations</option><option value="attend_invest">Attend &amp; Invest</option><option value="attend_maintain">Attend &amp; Maintain</option><option value="reconsider">Reconsider Format</option><option value="evaluate">Evaluate</option><option value="cut_avoid">Cut/Avoid</option></select>
+                          <select className="input-field text-sm py-1.5" value={calendarTypeFilter} onChange={(e) => setCalendarTypeFilter(e.target.value as 'all' | 'historical' | 'active')}><option value="all">All Types</option><option value="historical">Historical</option><option value="active">Active</option></select>
+                          <select className="input-field text-sm py-1.5" value={calendarConfidenceFilter} onChange={(e) => setCalendarConfidenceFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}><option value="all">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+                          <select className="input-field text-sm py-1.5" value={calendarBudgetFilter} onChange={(e) => setCalendarBudgetFilter(e.target.value as typeof calendarBudgetFilter)}><option value="all">All Budget Status</option><option value="complete">Complete</option><option value="partial">Partial</option><option value="missing">No Budget</option><option value="needs_attention">Needs Attention</option></select>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {calendarRowsFiltered.length === 0 ? (
+                  <div className="text-center py-10">
+                    <p className="font-medium text-gray-700">No conferences to score yet</p>
+                    <p className="text-sm text-gray-400 mt-1">Upload historical conference lists or complete an active conference to generate calendar recommendations.</p>
+                    <div className="mt-3 flex justify-center gap-2">
+                      <button className="btn-secondary text-sm" onClick={() => router.push('/conferences/new?mode=historical')}>Upload historical conference →</button>
+                      <button className="btn-secondary text-sm" onClick={() => router.push('/conferences')}>View conferences →</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="md:hidden divide-y divide-gray-100">
+                      {calendarRowsFiltered.map((r) => (
+                        <button key={r.conferenceId} className={`w-full text-left py-3 px-1 flex items-center justify-between gap-3 transition-colors ${selectedCalendarRow?.conferenceId === r.conferenceId ? 'bg-blue-50' : 'active:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
+                          <div className="min-w-0">
+                            <p className="font-medium text-brand-secondary truncate">{r.conferenceName}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.icpDensityPct.toFixed(0)}% ICP</p>
+                          </div>
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-lg font-bold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</p>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border mt-0.5 ${calendarTierInfo(r.recommendationTier).classes}`}>{calendarTierInfo(r.recommendationTier).label}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-gray-500">
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('conferenceName')}>Conference</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('conferenceYear')}>Year</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('conferenceType')}>Type</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('attendeeCount')}>Attendees</th>
+                            <th className="p-2 text-center cursor-pointer" onClick={() => setCalendarSort('icpCompanies')}>ICP Companies</th>
+                            <th className="p-2 text-center">Budget Set?</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>Score</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {calendarRowsFiltered.map((r) => {
+                            const tierInfo = calendarTierInfo(r.recommendationTier);
+                            const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                            return (
+                              <tr key={r.conferenceId} className={`border-t cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
+                                <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
+                                <td className="p-2 text-gray-600">{r.conferenceYear}</td>
+                                <td className="p-2 text-gray-600">{r.conferenceType === 'historical' ? 'Historical' : 'Active'}</td>
+                                <td className="p-2 text-gray-600">{r.attendeeCount}</td>
+                                <td className="p-2 text-center"><span title={`${r.icpCompanies} ICP / ${r.totalCompanies} total`} className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-xs font-semibold border ${icpDensityPillClasses(r.icpDensityPct)}`}>{r.icpDensityPct.toFixed(0)}%</span></td>
+                                <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}><BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} /></td>
+                                <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
+                                <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
+                                <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
+                                <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Decisions Board ───────────────────────────────────────────── */}
+      {activeTab === 'decisions' && (
+        <DecisionsBoard
+          onOpenDrawer={(confId) => { const r = calendarRows.find(x => x.conferenceId === confId); if (r) setSelectedCalendarRow(r); }}
+          refreshKey={boardRefreshKey}
+          scoredRows={calendarRows}
+        />
+      )}
+
+      {/* ── Tab: Budget Planner ────────────────────────────────────────────── */}
+      {activeTab === 'budget' && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Budget Planner</h3>
+          <p className="text-gray-500 text-sm max-w-sm">Coming soon — build conference budgets with projected pipeline and ROI targets all in one place.</p>
+        </div>
+      )}
+
+      {/* ── Score Drawer ───────────────────────────────────────────────────── */}
+      {selectedCalendarRow && (
+        drawerExpanded ? (
+          // Full-screen overlay with tools
+          <div className="fixed inset-0 z-50 flex bg-black/50" onClick={closeDrawer}>
+            <div className="flex h-full w-full gap-3 p-3 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+              {/* Score panel */}
+              <OverlayPanel className="w-[420px] flex-shrink-0">
+                <ScoreDrawerContent row={selectedCalendarRow} />
+              </OverlayPanel>
+
+              {/* Path to Tier panel */}
+              {pathToTierOpen && (
+                <OverlayPanel className="w-[420px] flex-shrink-0">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                    <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <PathToTier score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                </OverlayPanel>
+              )}
+
+              {/* Execution Comparison panel */}
+              {executionComparisonOpen && (
+                <OverlayPanel className="w-[420px] flex-shrink-0">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <h3 className="font-semibold text-gray-900">Execution Comparison</h3>
+                    <button onClick={() => setExecutionComparisonOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <ExecutionComparison score={selectedCalendarRow} conferenceId={selectedCalendarRow.conferenceId} />
+                </OverlayPanel>
+              )}
+
+              {/* Decision column — fourth panel, always visible when any tool is open */}
+              <DecisionColumn row={selectedCalendarRow} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} isAdmin={user?.role === 'administrator'} />
+            </div>
+          </div>
+        ) : (
+          // Normal right-panel drawer
+          <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={closeDrawer}>
+            <div className="h-full w-full max-w-[560px] bg-white overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <ScoreDrawerContent row={selectedCalendarRow} />
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Budget modal */}
+      {budgetModalConf && (
+        <BudgetVsActualModal
+          conferenceId={budgetModalConf.id}
+          conferenceName={budgetModalConf.name}
+          onClose={() => setBudgetModalConf(null)}
+          onSaved={async () => {
+            const confId = budgetModalConf.id;
+            setBudgetModalConf(null);
+            void refreshConferenceScore(confId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
