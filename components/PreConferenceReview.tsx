@@ -41,6 +41,9 @@ export interface LandscapeData {
   companyTypeBreakdown: { label: string; count: number }[];
   seniorityBreakdown: { label: string; count: number }[];
   clientCompanies: ClientCompanyEntry[];
+  competitorCompanies: ClientCompanyEntry[];
+  clientColor: string | null;
+  competitorColor: string | null;
   unitTypeLabel: string;
 }
 

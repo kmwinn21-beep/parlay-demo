@@ -112,7 +112,7 @@ export async function GET(
 
   const attendeeIds = attendees.map((a) => a.id);
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes] = await Promise.all([
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -214,8 +214,9 @@ export async function GET(
         })
       : Promise.resolve({ rows: [] }),
     db.execute({ sql: `SELECT value FROM config_options WHERE category = 'unit_type' LIMIT 1`, args: [] }),
-    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'status' AND LOWER(TRIM(value)) LIKE '%client%'`, args: [] }),
+    db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'status' AND LOWER(TRIM(value)) LIKE '%client%'`, args: [] }),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'seniority'`, args: [] }),
+    db.execute({ sql: `SELECT color FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor' LIMIT 1`, args: [] }),
   ]);
 
   const internalRels = internalRelsRes.rows;
@@ -443,11 +444,48 @@ export async function GET(
     .sort((a, b) => b.attendees.length - a.attendees.length || a.companyName.localeCompare(b.companyName))
     .map(co => ({ ...co, attendeeCount: co.attendees.length }));
 
+  // Client color: first color found among client status rows, fallback null
+  const clientColor: string | null = (() => {
+    for (const r of clientStatusRes.rows) {
+      if (r.color) return String(r.color);
+    }
+    return null;
+  })();
+
+  // Competitor companies
+  const competitorColor: string | null = competitorColorRes.rows[0]?.color ? String(competitorColorRes.rows[0].color) : null;
+  const competitorCompanyMap = new Map<number, { companyId: number; companyName: string; wse: number | null; attendees: { id: number; firstName: string; lastName: string; title: string | null }[] }>();
+  for (const a of attendees) {
+    const companyId = a.company_id as number | null;
+    if (!companyId) continue;
+    if (String(a.company_type || '').trim().toLowerCase() !== 'competitor') continue;
+    if (!competitorCompanyMap.has(companyId)) {
+      competitorCompanyMap.set(companyId, {
+        companyId,
+        companyName: String(a.company_name || ''),
+        wse: a.wse != null ? Number(a.wse) : null,
+        attendees: [],
+      });
+    }
+    competitorCompanyMap.get(companyId)!.attendees.push({
+      id: Number(a.id),
+      firstName: String(a.first_name || ''),
+      lastName: String(a.last_name || ''),
+      title: a.title ? String(a.title) : null,
+    });
+  }
+  const competitorCompanies = Array.from(competitorCompanyMap.values())
+    .sort((a, b) => b.attendees.length - a.attendees.length || a.companyName.localeCompare(b.companyName))
+    .map(co => ({ ...co, attendeeCount: co.attendees.length }));
+
   const landscape = {
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
     companyTypeBreakdown: Object.entries(companyTypeCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     seniorityBreakdown: Object.entries(seniorityCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     clientCompanies,
+    competitorCompanies,
+    clientColor,
+    competitorColor,
     unitTypeLabel,
   };
 

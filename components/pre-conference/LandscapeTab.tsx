@@ -360,17 +360,20 @@ function UserPill({ name }: { name: string }) {
   );
 }
 
-function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unitTypeLabel: string }) {
+function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor: string }) {
   const [expanded, setExpanded] = useState(false);
+  const border = accentColor ? `1px solid ${accentColor}40` : '1px solid #e5e7eb';
+  const headerBg = accentColor ? `${accentColor}12` : '#f9fafb';
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="rounded-lg overflow-hidden" style={{ border }}>
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left gap-2"
+        className="w-full flex items-center justify-between px-3 py-2 text-left gap-2 transition-colors hover:brightness-95"
+        style={{ backgroundColor: headerBg }}
       >
         <span className="text-xs font-semibold text-gray-800 truncate flex-1">{co.companyName}</span>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs font-bold text-brand-primary">{co.attendeeCount}</span>
+          <span className="text-xs font-bold" style={{ color: accentColor || '#1B76BC' }}>{co.attendeeCount}</span>
           <svg
             className={`w-3.5 h-3.5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -380,16 +383,8 @@ function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unit
         </div>
       </button>
 
-      {co.wse != null && (
-        <div className="px-3 pt-1.5 pb-1">
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20">
-            {unitTypeLabel}: {co.wse.toLocaleString()}
-          </span>
-        </div>
-      )}
-
       {expanded && co.attendees.length > 0 && (
-        <div className="divide-y divide-gray-100 border-t border-gray-100">
+        <div className="divide-y divide-gray-100 border-t" style={{ borderColor: accentColor ? `${accentColor}30` : '#f3f4f6' }}>
           {co.attendees.map(a => (
             <div key={a.id} className="px-3 py-1.5">
               <Link
@@ -404,6 +399,46 @@ function ClientCompanyCard({ co, unitTypeLabel }: { co: ClientCompanyEntry; unit
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function CompanyPanel({
+  title,
+  companies,
+  accentColor,
+  emptyText,
+}: {
+  title: string;
+  companies: ClientCompanyEntry[];
+  accentColor: string | null;
+  emptyText: string;
+}) {
+  const color = accentColor || '#9ca3af';
+  return (
+    <div className="relative min-h-[200px] h-full">
+      <div className="absolute inset-0 flex flex-col rounded-xl overflow-hidden" style={{ border: `1.5px solid ${color}50` }}>
+        <div
+          className="px-3 py-2.5 border-b flex items-center justify-between flex-shrink-0"
+          style={{ backgroundColor: `${color}18`, borderColor: `${color}40` }}
+        >
+          <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color }}>
+            {title}
+          </h3>
+          {companies.length > 0 && (
+            <span className="text-xs font-semibold" style={{ color: `${color}99` }}>{companies.length}</span>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+          {companies.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-6">{emptyText}</p>
+          ) : (
+            companies.map(co => (
+              <CompanyCard key={co.companyId} co={co} accentColor={color} />
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -426,21 +461,15 @@ export function LandscapeTab({
       {/* Strategy Assessment (above existing charts) */}
       {strategyAssessment && <StrategyAssessmentSection sa={strategyAssessment} />}
 
-      {/* 5-column layout: stat cards | charts (×3) | client attendees */}
+      {/* 5-column layout: client attendees | charts (×3) | competitors */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
-        {/* Col 1: stacked stat cards */}
-        <div className="flex flex-col gap-3">
-          {[
-            { label: 'Total Attendees', value: data.totalAttendees },
-            { label: 'Companies', value: data.totalCompanies },
-            { label: 'ICP Companies', value: data.icpCount },
-          ].map((s) => (
-            <div key={s.label} className="flex-1 bg-gray-50 rounded-xl p-4 text-center border border-gray-100 flex flex-col items-center justify-center">
-              <p className="text-2xl font-bold text-brand-primary">{s.value}</p>
-              <p className="text-xs text-gray-500 mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
+        {/* Col 1: Client Attendees */}
+        <CompanyPanel
+          title="Client Attendees"
+          companies={data.clientCompanies}
+          accentColor={data.clientColor}
+          emptyText="No client companies attending"
+        />
 
         {/* Cols 2-4: stacked charts */}
         <div className="md:col-span-3 flex flex-col gap-6 justify-between">
@@ -454,26 +483,13 @@ export function LandscapeTab({
           </div>
         </div>
 
-        {/* Col 5: Client Attendees */}
-        <div className="relative min-h-[200px]">
-          <div className="absolute inset-0 flex flex-col border border-gray-200 rounded-xl overflow-hidden">
-            <div className="px-3 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Client Attendees</h3>
-              {data.clientCompanies.length > 0 && (
-                <span className="text-xs font-semibold text-gray-400">{data.clientCompanies.length}</span>
-              )}
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
-              {data.clientCompanies.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-6">No client companies attending</p>
-              ) : (
-                data.clientCompanies.map(co => (
-                  <ClientCompanyCard key={co.companyId} co={co} unitTypeLabel={data.unitTypeLabel} />
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Col 5: Competitors Attending */}
+        <CompanyPanel
+          title="Competitors Attending"
+          companies={data.competitorCompanies}
+          accentColor={data.competitorColor}
+          emptyText="No competitor companies attending"
+        />
       </div>
     </div>
   );
