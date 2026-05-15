@@ -510,9 +510,13 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
       eligibleAttendeeCountByCompany: eligibleAttendeeCountByCompany,
     },
   );
-  const pipelinePotentialScore = input.requiredPipeline && input.requiredPipeline > 0
+  const coverageScore = input.requiredPipeline && input.requiredPipeline > 0
     ? clamp((realisticPipelineGoal / input.requiredPipeline) * 100)
     : clamp((realisticPipelineGoal / 1_000_000) * 100);
+  const buyerQualityScore = eligibleIcpCount > 0
+    ? clamp((qualifiedBuyerSum / eligibleIcpCount) * 100)
+    : 50;
+  const pipelinePotentialScore = Math.round(clamp(coverageScore * 0.6 + buyerQualityScore * 0.4));
 
   const pipelineCoverageRate = input.requiredPipeline && input.requiredPipeline > 0
     ? Math.min((realisticPipelineGoal / input.requiredPipeline) * 100, 100)
