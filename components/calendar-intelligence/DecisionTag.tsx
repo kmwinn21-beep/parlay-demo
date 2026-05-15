@@ -12,10 +12,10 @@ interface Props {
 }
 
 const DECISIONS: { value: Decision; label: string; color: string; activeCls: string }[] = [
-  { value: 'confirmed',        label: 'Confirmed',       color: 'emerald', activeCls: 'bg-emerald-600 text-white border-emerald-600' },
-  { value: 'watching',         label: 'Watching',        color: 'amber',   activeCls: 'bg-amber-500 text-white border-amber-500' },
-  { value: 'passed',           label: 'Passed',          color: 'red',     activeCls: 'bg-red-600 text-white border-red-600' },
-  { value: 'pending_approval', label: 'Pending',         color: 'blue',    activeCls: 'bg-blue-600 text-white border-blue-600' },
+  { value: 'pending_approval', label: 'Evaluating',      color: 'blue',    activeCls: 'bg-blue-600 text-white border-blue-600' },
+  { value: 'watching',         label: 'On the Fence',    color: 'amber',   activeCls: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'passed',           label: "Don't Attend",    color: 'red',     activeCls: 'bg-red-600 text-white border-red-600' },
+  { value: 'confirmed',        label: 'Attend',          color: 'emerald', activeCls: 'bg-emerald-600 text-white border-emerald-600' },
 ];
 
 const ghostCls = 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
@@ -45,7 +45,15 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
   const selectUserDecision = async (d: Decision) => {
     const newVal = userDecision === d ? null : d;
     setUserDecision(newVal);
-    if (!newVal) return;
+    if (!newVal) {
+      await fetch('/api/calendar-intelligence/decisions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, level: 'user' }),
+      });
+      onDecisionChanged?.();
+      return;
+    }
     await fetch('/api/calendar-intelligence/decisions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -55,11 +63,21 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
   };
 
   const selectAccountDecision = async (d: Decision) => {
-    setAccountDecision(d);
+    const newVal = accountDecision === d ? null : d;
+    setAccountDecision(newVal);
+    if (!newVal) {
+      await fetch('/api/calendar-intelligence/decisions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, level: 'account' }),
+      });
+      onDecisionChanged?.();
+      return;
+    }
     await fetch('/api/calendar-intelligence/decisions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conferenceId, decision: d, level: 'account' }),
+      body: JSON.stringify({ conferenceId, decision: newVal, level: 'account' }),
     });
     onDecisionChanged?.();
   };
