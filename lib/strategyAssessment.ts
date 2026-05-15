@@ -64,6 +64,7 @@ export interface StrategyAssessmentInput {
   icpCompanies: { wse: number | null }[];
   icpTierCompanies?: { company_id: number; wse: number | null }[];
   attendeesForBuyerAccess?: Array<{ title: string | null; company_id: number | null; icp: string | null; function: string | null; seniority: string | null }>;
+  titleMetadataByKey?: Record<string, { buyer_role: 'decision_maker' | 'influencer' | 'target_title' | 'ignore' | null; match_type: 'confirmed' | 'configured_alias' | 'system_alias' | 'exact' | 'fuzzy' | 'none' }>;
   functionPriorityMap?: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>;
   seniorityPriorityMap?: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>;
   organizationId?: number | null;
@@ -374,18 +375,20 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     return weightForPriority(key ? map[key] : undefined);
   };
   const buyerRows = input.attendeesForBuyerAccess ?? [];
-  const uniqueTitles = Array.from(new Set(buyerRows.map(a => normalizeTitleKey(a.title)).filter(Boolean)));
-  const titleMetaPairs = await Promise.all(uniqueTitles.map(async key => {
-    const original = buyerRows.find(a => normalizeTitleKey(a.title) === key)?.title ?? key;
-    const meta = await resolveAttendeeTitleMetadata(original, input.organizationId ?? null);
-    return [key, meta] as const;
-  }));
-  const titleMetaByKey = new Map(titleMetaPairs);
+  const normalizeTitleKeyLocal = (title: string | null | undefined): string =>
+    String(title ?? '')
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\b(the|of|and)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const titleMetaByKey = input.titleMetadataByKey ?? {};
   const icpRows = buyerRows.filter(a => String(a.icp ?? '').toLowerCase() === 'yes');
   const qualifiedByCompany = new Map<number, number>();
   let qualifiedBuyerSum = 0;
   for (const a of icpRows) {
-    const meta = titleMetaByKey.get(normalizeTitleKey(a.title));
+    const meta = titleMetaByKey[normalizeTitleKeyLocal(a.title)];
     const f = getPriority(a.function, fnPriority);
     const s = getPriority(a.seniority, senPriority);
     const base = f * s;
@@ -563,5 +566,3 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     currentRepCount: input.internalRepCount,
   };
 }
-import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
-import { normalizeTitleKey } from '@/lib/titleNormalization';

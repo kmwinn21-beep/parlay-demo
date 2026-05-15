@@ -4,6 +4,8 @@ import { getDb } from '@/lib/getDb';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
 import { computeStrategyAssessment, buildDefaultTierConfig } from '@/lib/strategyAssessment';
+import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
+import { normalizeTitleKey } from '@/lib/titleNormalization';
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -761,6 +763,13 @@ export async function GET(
   const prioritySettings = Object.fromEntries((icpPrioritySettingsRes.rows as Array<{ key: string; value: string }>).map(r => [String(r.key), String(r.value)]));
   const functionPriorityMap = (() => { try { return JSON.parse(prioritySettings['icp_function_priority'] ?? '{}'); } catch { return {}; } })();
   const seniorityPriorityMap = (() => { try { return JSON.parse(prioritySettings['icp_seniority_priority'] ?? '{}'); } catch { return {}; } })();
+  const uniqueTitles = Array.from(new Set(attendees.map(a => normalizeTitleKey(a.title as string | null)).filter(Boolean)));
+  const titleMetaPairs = await Promise.all(uniqueTitles.map(async key => {
+    const original = attendees.find(a => normalizeTitleKey(a.title as string | null) === key)?.title as string | null;
+    const meta = await resolveAttendeeTitleMetadata(original ?? key, null);
+    return [key, { buyer_role: meta.buyer_role, match_type: meta.match_type }] as const;
+  }));
+  const titleMetadataByKey = Object.fromEntries(titleMetaPairs);
 
   const strategyAssessment = await computeStrategyAssessment({
     totalAttendees,
@@ -786,6 +795,7 @@ export async function GET(
     icpTierCompanies: Array.from(icpCompanyMap.values()).map(c => ({ company_id: c.id, wse: companyDetailMap.get(c.id)?.wse ?? null })),
     functionPriorityMap,
     seniorityPriorityMap,
+    titleMetadataByKey,
     organizationId: null,
     tierConfig,
     icpCompanies: icpCompaniesForScoring,
