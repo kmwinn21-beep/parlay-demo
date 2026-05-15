@@ -17,27 +17,39 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
 
   useEffect(() => {
     let cancelled = false;
-    const currentId = Number((data as any)?.conference?.id ?? 0);
+    const currentConferenceId = Number((data as any)?.conference?.id ?? 0);
+
     fetch('/api/conferences?nav=1')
-      .then(r => r.ok ? r.json() : [])
-      .then(async (confs: Array<{ id: number }>) => {
-        const scored = await Promise.all((confs ?? []).map(async c => {
+      .then((r) => (r.ok ? r.json() : []))
+      .then(async (conferences: Array<{ id: number }>) => {
+        const scored = await Promise.all((conferences ?? []).map(async (c) => {
           const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
           if (!res.ok) return null;
           const eff = await res.json() as any;
           const score = Number(eff?.marketing_audience?.marketing_audience_signal_score ?? 0);
-          return score > 0 ? { id: c.id, score } : null;
+          if (score <= 0) return null;
+          return { id: c.id, score };
         }));
-        const ranked = scored.filter(Boolean).sort((a: any, b: any) => b.score - a.score);
-        const idx = ranked.findIndex((r: any) => r.id === currentId);
+
+        const ranked = scored
+          .filter((row): row is { id: number; score: number } => row !== null)
+          .sort((a, b) => b.score - a.score);
+
+        const idx = ranked.findIndex((row) => Number(row.id) === currentConferenceId);
         if (!cancelled) {
-          setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
-          setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setCardTotal(ranked.length || null);
+          setCardRank(idx >= 0 ? idx + 1 : (m?.audience_quality_rank ?? null));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) {
+          setCardRank(m?.audience_quality_rank ?? null);
+          setCardTotal(m?.audience_quality_rank_total ?? null);
+        }
+      });
+
     return () => { cancelled = true; };
-  }, [data, cardRank, cardTotal]);
+  }, [data, m?.audience_quality_rank, m?.audience_quality_rank_total]);
   if (!m) return <div className="p-6 text-sm text-gray-500">Audience signal data unavailable.</div>;
   return <div className="p-6 space-y-6">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
