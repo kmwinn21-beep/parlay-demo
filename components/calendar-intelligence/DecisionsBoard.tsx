@@ -44,10 +44,10 @@ interface Props {
 }
 
 const COLUMNS: { id: Decision; label: string; headerCls: string; borderCls: string }[] = [
-  { id: 'confirmed',        label: 'Confirmed',        headerCls: 'text-emerald-700 bg-emerald-50', borderCls: 'border-emerald-200' },
-  { id: 'watching',         label: 'Watching',         headerCls: 'text-amber-700 bg-amber-50',     borderCls: 'border-amber-200' },
-  { id: 'passed',           label: 'Passed',           headerCls: 'text-red-700 bg-red-50',         borderCls: 'border-red-200' },
-  { id: 'pending_approval', label: 'Pending Approval', headerCls: 'text-blue-700 bg-blue-50',       borderCls: 'border-blue-200' },
+  { id: 'confirmed',        label: 'Attend',              headerCls: 'text-emerald-700 bg-emerald-50', borderCls: 'border-emerald-200' },
+  { id: 'watching',         label: 'On the Fence',        headerCls: 'text-amber-700 bg-amber-50',     borderCls: 'border-amber-200' },
+  { id: 'passed',           label: "Don't Attend",        headerCls: 'text-red-700 bg-red-50',         borderCls: 'border-red-200' },
+  { id: 'pending_approval', label: 'Actively Evaluating', headerCls: 'text-blue-700 bg-blue-50',       borderCls: 'border-blue-200' },
 ];
 
 const DECISION_PILL: Record<Decision, string> = {
@@ -56,6 +56,13 @@ const DECISION_PILL: Record<Decision, string> = {
   passed:           'bg-red-50 text-red-700 border-red-200',
   pending_approval: 'bg-blue-50 text-blue-700 border-blue-200',
 };
+const DECISION_LABEL: Record<Decision, string> = {
+  confirmed: 'Attend',
+  watching: 'On the Fence',
+  passed: "Don't Attend",
+  pending_approval: 'Evaluating',
+};
+const DECISION_BUTTON_ORDER: Decision[] = ['pending_approval', 'watching', 'passed', 'confirmed'];
 
 const TIER_INFO: Record<string, { label: string; cls: string }> = {
   attend_invest_more:          { label: 'Attend & Invest',   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -132,8 +139,8 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
     );
   }
 
-  const decidedConferences = conferences.filter(c => c.accountDecision != null);
-  const awaitingConferences = conferences.filter(c => c.accountDecision == null);
+  const decidedConferences = conferences.filter(c => c.accountDecision != null || c.userDecisions.length > 0);
+  const awaitingConferences = conferences.filter(c => c.accountDecision == null && c.userDecisions.length === 0);
 
   function ConferenceCard({ conf, draggable: isDraggable }: { conf: BoardConference; draggable?: boolean }) {
     const sd = scoreMap.get(conf.conferenceId);
@@ -189,7 +196,12 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
           {/* Account decision pill */}
           {conf.accountDecision && (
             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${DECISION_PILL[conf.accountDecision]}`}>
-              {conf.accountDecision.replace(/_/g, ' ')}
+              {DECISION_LABEL[conf.accountDecision]}
+            </span>
+          )}
+          {!conf.accountDecision && conf.userDecisions.length > 0 && (
+            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border border-gray-200 bg-gray-50 text-gray-500">
+              No team decision set
             </span>
           )}
 
@@ -204,7 +216,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                   </div>
                   <span className="text-gray-600 truncate flex-1">{ud.displayName}</span>
                   <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${DECISION_PILL[ud.decision]}`}>
-                    {ud.decision.replace(/_/g, ' ')}
+                    {DECISION_LABEL[ud.decision]}
                   </span>
                 </div>
               ))}
@@ -237,7 +249,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
       <div className="md:hidden space-y-4">
         {[...COLUMNS.map(col => ({
           id: col.id, label: col.label, headerCls: col.headerCls, borderCls: col.borderCls,
-          confs: decidedConferences.filter(c => c.accountDecision === col.id),
+          confs: decidedConferences.filter(c => (c.accountDecision ?? 'pending_approval') === col.id),
         })).filter(g => g.confs.length > 0),
         ...(awaitingConferences.length > 0 ? [{ id: 'awaiting' as const, label: 'Awaiting Decision', headerCls: 'text-gray-700 bg-gray-100', borderCls: 'border-gray-200', confs: awaitingConferences }] : []),
         ].map(group => (
@@ -278,11 +290,11 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                         {conf.accountDecision ? (
                           isAdmin ? (
                             <button onClick={() => setMobilePicker(pickerOpen ? null : conf.conferenceId)} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${DECISION_PILL[conf.accountDecision]}`}>
-                              {conf.accountDecision.replace(/_/g, ' ')}
+                              {DECISION_LABEL[conf.accountDecision]}
                               <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
                             </button>
                           ) : (
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${DECISION_PILL[conf.accountDecision]}`}>{conf.accountDecision.replace(/_/g, ' ')}</span>
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${DECISION_PILL[conf.accountDecision]}`}>{DECISION_LABEL[conf.accountDecision]}</span>
                           )
                         ) : isAdmin ? (
                           <button onClick={() => setMobilePicker(pickerOpen ? null : conf.conferenceId)} className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 border border-dashed border-gray-300 px-2 py-0.5 rounded-full">
@@ -290,13 +302,23 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
                           </button>
                         ) : null}
+                        {!conf.accountDecision && conf.userDecisions.length > 0 && (
+                          <div className="mt-1">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border border-gray-200 bg-gray-50 text-gray-500">
+                              No team decision set
+                            </span>
+                          </div>
+                        )}
                         {pickerOpen && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
-                            {COLUMNS.map(col => (
-                              <button key={col.id} onClick={() => { void updateAccountDecision(conf.conferenceId, col.id); setMobilePicker(null); }} className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${conf.accountDecision === col.id ? DECISION_PILL[col.id] : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>
-                                {col.label}
-                              </button>
-                            ))}
+                            {DECISION_BUTTON_ORDER.map(decision => {
+                              const col = COLUMNS.find(c => c.id === decision)!;
+                              return (
+                                <button key={col.id} onClick={() => { void updateAccountDecision(conf.conferenceId, col.id); setMobilePicker(null); }} className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${conf.accountDecision === col.id ? DECISION_PILL[col.id] : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>
+                                  {col.label}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -307,7 +329,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                             <div key={ud.userId} className="flex items-center gap-1.5 text-xs">
                               <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-500 flex-shrink-0">{ud.displayName.charAt(0).toUpperCase()}</div>
                               <span className="text-gray-600 truncate flex-1">{ud.displayName}</span>
-                              <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${DECISION_PILL[ud.decision]}`}>{ud.decision.replace(/_/g, ' ')}</span>
+                              <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${DECISION_PILL[ud.decision]}`}>{DECISION_LABEL[ud.decision]}</span>
                             </div>
                           ))}
                         </div>
@@ -346,7 +368,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
       {/* Desktop Kanban columns + notes panel */}
       <div className="hidden md:flex gap-4 h-[calc(100vh-280px)] relative">
         {COLUMNS.map(col => {
-          const colConfs = decidedConferences.filter(c => c.accountDecision === col.id);
+          const colConfs = decidedConferences.filter(c => (c.accountDecision ?? 'pending_approval') === col.id);
           return (
             <div
               key={col.id}
@@ -387,7 +409,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
             <span className="font-semibold text-sm text-gray-700">Awaiting Decision</span>
             <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{awaitingConferences.length}</span>
-            <span className="text-xs text-gray-400">— No account decision has been set for these conferences.</span>
+            <span className="text-xs text-gray-400">— No account decision and no individual decisions have been set for these conferences.</span>
           </div>
           <div className="p-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {awaitingConferences.map(conf => {
@@ -435,15 +457,18 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
                       <div className="pt-1">
                         <p className="text-[9px] font-semibold text-gray-400 uppercase mb-1">Set decision</p>
                         <div className="flex flex-wrap gap-1">
-                          {COLUMNS.map(col => (
-                            <button
-                              key={col.id}
-                              onClick={(e) => { e.stopPropagation(); void updateAccountDecision(conf.conferenceId, col.id); }}
-                              className={`px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-colors bg-white text-gray-600 border-gray-200 hover:border-gray-400`}
-                            >
-                              {col.label}
-                            </button>
-                          ))}
+                          {DECISION_BUTTON_ORDER.map(decision => {
+                            const col = COLUMNS.find(c => c.id === decision)!;
+                            return (
+                              <button
+                                key={col.id}
+                                onClick={(e) => { e.stopPropagation(); void updateAccountDecision(conf.conferenceId, col.id); }}
+                                className="px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-colors bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                              >
+                                {col.label}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

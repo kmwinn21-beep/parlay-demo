@@ -12,10 +12,10 @@ interface Props {
 }
 
 const DECISIONS: { value: Decision; label: string; color: string; activeCls: string }[] = [
-  { value: 'confirmed',        label: 'Confirmed',       color: 'emerald', activeCls: 'bg-emerald-600 text-white border-emerald-600' },
-  { value: 'watching',         label: 'Watching',        color: 'amber',   activeCls: 'bg-amber-500 text-white border-amber-500' },
-  { value: 'passed',           label: 'Passed',          color: 'red',     activeCls: 'bg-red-600 text-white border-red-600' },
-  { value: 'pending_approval', label: 'Pending',         color: 'blue',    activeCls: 'bg-blue-600 text-white border-blue-600' },
+  { value: 'pending_approval', label: 'Evaluating',      color: 'blue',    activeCls: 'bg-blue-600 text-white border-blue-600' },
+  { value: 'watching',         label: 'On the Fence',    color: 'amber',   activeCls: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'passed',           label: "Don't Attend",    color: 'red',     activeCls: 'bg-red-600 text-white border-red-600' },
+  { value: 'confirmed',        label: 'Attend',          color: 'emerald', activeCls: 'bg-emerald-600 text-white border-emerald-600' },
 ];
 
 const ghostCls = 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
