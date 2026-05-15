@@ -133,22 +133,25 @@ export function buildColorMap(options: Array<{ value: string; color: string | nu
   return map;
 }
 
+const RED_PRESET = COLOR_PRESETS.find(p => p.key === 'red')!;
+
 /** Get badge class for a value, using its color from the map */
 export function getBadgeClass(value: string | undefined, colorMap: ColorMap): string {
   if (!value) return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${FALLBACK.badgeClass}`;
-  const preset = getPreset(colorMap[value]);
+  const preset = value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
   return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.badgeClass}`;
 }
 
 /** Get pill class for a value (solid bg, used on detail pages) */
 export function getPillClass(value: string | undefined, colorMap: ColorMap): string {
   if (!value) return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${FALLBACK.pillClass}`;
-  const preset = getPreset(colorMap[value]);
-  return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.pillClass}`
+  const preset = value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
+  return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.pillClass}`;
 }
 
 /** Get hex color for a value (used in charts) */
 export function getHex(value: string | undefined, colorMap: ColorMap): string {
   if (!value) return FALLBACK.hex;
+  if (value === 'Competitor') return RED_PRESET.hex;
   return getPreset(colorMap[value]).hex;
 }

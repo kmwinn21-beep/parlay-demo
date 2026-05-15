@@ -346,7 +346,10 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                   <li key={opt.id} draggable={!isOptionExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-brand-secondary ring-offset-1' : '', isOptionExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
                     <div className="flex items-center gap-2 px-1 py-1">
                       <DragHandle />
-                      <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
+                      {category === 'company_type' && opt.value === 'Competitor'
+                        ? <span className="w-5 h-5 rounded-full border-2 border-red-400 flex-shrink-0 cursor-not-allowed" style={{ backgroundColor: '#dc2626' }} title="Competitor color is locked to red" />
+                        : <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
+                      }
                       <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded flex items-center gap-2">
                         {opt.value}
                         {showScopeDropdown && opt.scope === 'user' && (
