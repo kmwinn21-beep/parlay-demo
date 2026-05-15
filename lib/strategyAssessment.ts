@@ -387,8 +387,20 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
   const icpRows = buyerRows.filter(a => String(a.icp ?? '').toLowerCase() === 'yes');
   const qualifiedByCompany = new Map<number, number>();
   let qualifiedBuyerSum = 0;
+  let eligibleIcpCount = 0;
+  let unresolvedIcpCount = 0;
+  const seniorDecisionLabels = new Set(['c-suite', 'director', 'vp/svp', 'ed', 'c suite', 'vp', 'svp']);
+  const decisionMakerCount = input.seniorityBreakdown
+    .filter(s => seniorDecisionLabels.has(s.label.toLowerCase()))
+    .reduce((sum, s) => sum + s.count, 0);
+  const decisionMakerRate = decisionMakerCount / safeTotalAtt;
   for (const a of icpRows) {
     const meta = titleMetaByKey[normalizeTitleKeyLocal(a.title)];
+    const mt = meta?.match_type ?? 'none';
+    if (mt === 'none' || mt === 'fuzzy') {
+      unresolvedIcpCount++;
+      continue;
+    }
     const f = getPriority(a.function, fnPriority);
     const s = getPriority(a.seniority, senPriority);
     const base = f * s;
@@ -397,20 +409,23 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     else if (meta?.buyer_role === 'decision_maker' && meta?.match_type === 'confirmed') score = f === 0 ? Math.min(base, 0.4) : Math.max(base, 0.75);
     else if (meta?.buyer_role === 'influencer' && meta?.match_type === 'confirmed') score = base * 0.7;
     else if (meta?.buyer_role === 'target_title' && meta?.match_type === 'confirmed') score = base * 0.5;
-    else if (meta?.match_type === 'system_alias') score = base * 0.5;
-    else if (meta?.match_type === 'fuzzy' || meta?.match_type === 'exact') score = base * 0.3;
-    else score = base * 0.15;
+    else if (meta?.match_type === 'system_alias') score = base * 0.9;
+    else if (meta?.match_type === 'exact') score = base * 0.7;
+    else score = base;
+    eligibleIcpCount++;
     qualifiedBuyerSum += score;
     if (a.company_id != null) {
       const prev = qualifiedByCompany.get(a.company_id) ?? 0;
       qualifiedByCompany.set(a.company_id, Math.max(prev, score));
     }
   }
-  const icpAttendeeCount = Math.max(icpRows.length, 1);
-  const qualifiedBuyerRate = qualifiedBuyerSum / icpAttendeeCount;
+  const useFallback = eligibleIcpCount === 0;
+  const qualifiedBuyerRate = useFallback ? decisionMakerRate : (qualifiedBuyerSum / Math.max(eligibleIcpCount, 1));
   const rawBuyerAccess = Math.min(qualifiedBuyerRate / 0.55, 1) * 100;
   const hasQualifiedPresence = Array.from(qualifiedByCompany.values()).some(v => v > 0.3);
-  const icpAlignBonus = icpCount > 0 ? (hasQualifiedPresence ? Math.min((icpCount / safeTotal) * 10, 10) : -5) : 0;
+  const icpAlignBonus = icpCount > 0
+    ? (useFallback ? 0 : (hasQualifiedPresence ? Math.min((icpCount / safeTotal) * 10, 10) : -5))
+    : 0;
   const buyerAccessScore = clamp(rawBuyerAccess + icpAlignBonus);
 
   // Apply qualified buyer presence modifier to target account opportunity
@@ -424,7 +439,7 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     })
     .map(c => c.company_id);
   const totalTierCompanies = tierCompanyIds.length;
-  if (totalTierCompanies > 0) {
+  if (totalTierCompanies > 0 && !useFallback && unresolvedIcpCount < icpRows.length) {
     const qualifiedCount = tierCompanyIds.filter(cid => (qualifiedByCompany.get(cid) ?? 0) > 0.3).length;
     const qualifiedCompanyRate = qualifiedCount / totalTierCompanies;
     const modifier = Math.max(0.5, Math.min(1.0, qualifiedCompanyRate));
