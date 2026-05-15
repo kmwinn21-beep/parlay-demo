@@ -70,7 +70,7 @@ export function DashboardBanner({ initialTitle, isAdmin }: Props) {
                 if (e.key === 'Enter') handleSave();
                 if (e.key === 'Escape') setEditing(false);
               }}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary mb-4"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-secondary mb-4"
               placeholder="Enter banner title…"
             />
             <div className="flex gap-2 justify-end">
