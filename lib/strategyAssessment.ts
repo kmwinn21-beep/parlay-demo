@@ -428,24 +428,6 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     : 0;
   const buyerAccessScore = clamp(rawBuyerAccess + icpAlignBonus);
 
-  // Apply qualified buyer presence modifier to target account opportunity
-  const tierCompanies = input.icpTierCompanies ?? [];
-  const tierCompanyIds = tierCompanies
-    .filter(c => {
-      const w = c.wse ?? 0;
-      return matchesOp(w, cfg.mustTargetOp || 'gte', cfg.mustTargetMin, cfg.mustTargetMax)
-        || matchesOp(w, cfg.highPriorityOp || 'between', cfg.highPriorityMin, cfg.highPriorityMax)
-        || matchesOp(w, cfg.worthEngagingOp || 'between', cfg.worthEngagingMin, cfg.worthEngagingMax);
-    })
-    .map(c => c.company_id);
-  const totalTierCompanies = tierCompanyIds.length;
-  if (totalTierCompanies > 0 && !useFallback && unresolvedIcpCount < icpRows.length) {
-    const qualifiedCount = tierCompanyIds.filter(cid => (qualifiedByCompany.get(cid) ?? 0) > 0.3).length;
-    const qualifiedCompanyRate = qualifiedCount / totalTierCompanies;
-    const modifier = Math.max(0.5, Math.min(1.0, qualifiedCompanyRate));
-    targetAccountOpportunityScore = clamp(targetAccountOpportunityScore * modifier);
-  }
-
   // D. Relationship Leverage Score
   const relRate = input.internalRelationshipCount / safeIcp;
   const clientRate = clientCompanyCount / safeTotal;
