@@ -62,6 +62,11 @@ export interface StrategyAssessmentInput {
   avgCostPerUnit: number;
   avgAnnualDealSize?: number;
   icpCompanies: { wse: number | null }[];
+  icpTierCompanies?: { company_id: number; wse: number | null }[];
+  attendeesForBuyerAccess?: Array<{ title: string | null; company_id: number | null; icp: string | null; function: string | null; seniority: string | null }>;
+  functionPriorityMap?: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>;
+  seniorityPriorityMap?: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>;
+  organizationId?: number | null;
   tierConfig?: TierThresholdConfig;
 }
 
@@ -325,7 +330,7 @@ function recommendSecondaryStrategy(
   return best[0];
 }
 
-export function computeStrategyAssessment(input: StrategyAssessmentInput): StrategyAssessment {
+export async function computeStrategyAssessment(input: StrategyAssessmentInput): Promise<StrategyAssessment> {
   const { totalAttendees, totalCompanies, icpCount, clientCompanyCount } = input;
 
   const safeTotal = Math.max(totalCompanies, 1);
@@ -343,22 +348,85 @@ export function computeStrategyAssessment(input: StrategyAssessmentInput): Strat
   const highDensScore = Math.min((mustProxy + highProxy) / safeTotal / 0.15, 1) * 100;
   const icpOpportunityScore = clamp(icpRateScore * 0.5 + highDensScore * 0.5);
 
-  // B. Target Account Opportunity Score
+  // B. Target Account Opportunity Score (base)
   const mustScore = Math.min(mustProxy / 10, 1) * 100;
   const highScore = Math.min(highProxy / 25, 1) * 100;
   const totalTierCount = Math.max(mustProxy + highProxy + worthProxy, 1);
   const avgTierScore = (mustProxy * 100 + highProxy * 75 + worthProxy * 50) / totalTierCount;
-  const targetAccountOpportunityScore = clamp(mustScore * 0.3 + highScore * 0.3 + avgTierScore * 0.4);
+  let targetAccountOpportunityScore = clamp(mustScore * 0.3 + highScore * 0.3 + avgTierScore * 0.4);
 
-  // C. Buyer Access Score — seniority proxy
-  const seniorDecisionLabels = new Set(['c-suite', 'director', 'vp/svp', 'ed', 'c suite', 'vp', 'svp']);
-  const decisionMakerCount = input.seniorityBreakdown
-    .filter(s => seniorDecisionLabels.has(s.label.toLowerCase()))
-    .reduce((sum, s) => sum + s.count, 0);
-  const decisionMakerRate = decisionMakerCount / safeTotalAtt;
-  const rawBuyerAccess = Math.min(decisionMakerRate / 0.55, 1) * 100;
-  const icpAlignBonus = icpCount > 0 ? Math.min((icpCount / safeTotal) * 10, 10) : 0;
+  // C. Buyer Access Score — qualified buyer model
+  const weightForPriority = (p: string | undefined): number => {
+    if (p === 'High') return 1.0;
+    if (p === 'Medium') return 0.6;
+    if (p === 'Low') return 0.2;
+    return 0.0;
+  };
+  const fnPriority = input.functionPriorityMap ?? {};
+  const senPriority = input.seniorityPriorityMap ?? {};
+  const norm = (v: string | null | undefined) => String(v ?? '').trim().toLowerCase();
+  const getPriority = (label: string | null | undefined, map: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>) => {
+    const n = norm(label);
+    if (!n) return 0;
+    const direct = map[label ?? ''] ?? map[n];
+    if (direct) return weightForPriority(direct);
+    const key = Object.keys(map).find(k => norm(k) === n);
+    return weightForPriority(key ? map[key] : undefined);
+  };
+  const buyerRows = input.attendeesForBuyerAccess ?? [];
+  const uniqueTitles = Array.from(new Set(buyerRows.map(a => normalizeTitleKey(a.title)).filter(Boolean)));
+  const titleMetaPairs = await Promise.all(uniqueTitles.map(async key => {
+    const original = buyerRows.find(a => normalizeTitleKey(a.title) === key)?.title ?? key;
+    const meta = await resolveAttendeeTitleMetadata(original, input.organizationId ?? null);
+    return [key, meta] as const;
+  }));
+  const titleMetaByKey = new Map(titleMetaPairs);
+  const icpRows = buyerRows.filter(a => String(a.icp ?? '').toLowerCase() === 'yes');
+  const qualifiedByCompany = new Map<number, number>();
+  let qualifiedBuyerSum = 0;
+  for (const a of icpRows) {
+    const meta = titleMetaByKey.get(normalizeTitleKey(a.title));
+    const f = getPriority(a.function, fnPriority);
+    const s = getPriority(a.seniority, senPriority);
+    const base = f * s;
+    let score = 0;
+    if (meta?.buyer_role === 'ignore') score = 0;
+    else if (meta?.buyer_role === 'decision_maker' && meta?.match_type === 'confirmed') score = f === 0 ? Math.min(base, 0.4) : Math.max(base, 0.75);
+    else if (meta?.buyer_role === 'influencer' && meta?.match_type === 'confirmed') score = base * 0.7;
+    else if (meta?.buyer_role === 'target_title' && meta?.match_type === 'confirmed') score = base * 0.5;
+    else if (meta?.match_type === 'system_alias') score = base * 0.5;
+    else if (meta?.match_type === 'fuzzy' || meta?.match_type === 'exact') score = base * 0.3;
+    else score = base * 0.15;
+    qualifiedBuyerSum += score;
+    if (a.company_id != null) {
+      const prev = qualifiedByCompany.get(a.company_id) ?? 0;
+      qualifiedByCompany.set(a.company_id, Math.max(prev, score));
+    }
+  }
+  const icpAttendeeCount = Math.max(icpRows.length, 1);
+  const qualifiedBuyerRate = qualifiedBuyerSum / icpAttendeeCount;
+  const rawBuyerAccess = Math.min(qualifiedBuyerRate / 0.55, 1) * 100;
+  const hasQualifiedPresence = Array.from(qualifiedByCompany.values()).some(v => v > 0.3);
+  const icpAlignBonus = icpCount > 0 ? (hasQualifiedPresence ? Math.min((icpCount / safeTotal) * 10, 10) : -5) : 0;
   const buyerAccessScore = clamp(rawBuyerAccess + icpAlignBonus);
+
+  // Apply qualified buyer presence modifier to target account opportunity
+  const tierCompanies = input.icpTierCompanies ?? [];
+  const tierCompanyIds = tierCompanies
+    .filter(c => {
+      const w = c.wse ?? 0;
+      return matchesOp(w, cfg.mustTargetOp || 'gte', cfg.mustTargetMin, cfg.mustTargetMax)
+        || matchesOp(w, cfg.highPriorityOp || 'between', cfg.highPriorityMin, cfg.highPriorityMax)
+        || matchesOp(w, cfg.worthEngagingOp || 'between', cfg.worthEngagingMin, cfg.worthEngagingMax);
+    })
+    .map(c => c.company_id);
+  const totalTierCompanies = tierCompanyIds.length;
+  if (totalTierCompanies > 0) {
+    const qualifiedCount = tierCompanyIds.filter(cid => (qualifiedByCompany.get(cid) ?? 0) > 0.3).length;
+    const qualifiedCompanyRate = qualifiedCount / totalTierCompanies;
+    const modifier = Math.max(0.5, Math.min(1.0, qualifiedCompanyRate));
+    targetAccountOpportunityScore = clamp(targetAccountOpportunityScore * modifier);
+  }
 
   // D. Relationship Leverage Score
   const relRate = input.internalRelationshipCount / safeIcp;
@@ -495,3 +563,5 @@ export function computeStrategyAssessment(input: StrategyAssessmentInput): Strat
     currentRepCount: input.internalRepCount,
   };
 }
+import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
+import { normalizeTitleKey } from '@/lib/titleNormalization';

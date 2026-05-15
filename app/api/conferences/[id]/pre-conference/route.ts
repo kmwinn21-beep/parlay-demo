@@ -39,7 +39,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes, icpPrioritySettingsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -94,6 +94,7 @@ export async function GET(
       sql: `SELECT key, value FROM site_settings WHERE key IN ('tier_must_target_op','tier_must_target_v1','tier_must_target_v2','tier_must_target_conversion','tier_high_priority_op','tier_high_priority_v1','tier_high_priority_v2','tier_high_priority_conversion','tier_worth_engaging_op','tier_worth_engaging_v1','tier_worth_engaging_v2','tier_worth_engaging_conversion')`,
       args: [],
     }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT key, value FROM site_settings WHERE key IN ('icp_function_priority','icp_seniority_priority')`, args: [] }).catch(() => ({ rows: [] })),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -757,7 +758,11 @@ export async function GET(
     worthEngagingConversion: tierSMap['tier_worth_engaging_conversion'] ? Number(tierSMap['tier_worth_engaging_conversion']) / 100 : defaultCfg.worthEngagingConversion,
   };
 
-  const strategyAssessment = computeStrategyAssessment({
+  const prioritySettings = Object.fromEntries((icpPrioritySettingsRes.rows as Array<{ key: string; value: string }>).map(r => [String(r.key), String(r.value)]));
+  const functionPriorityMap = (() => { try { return JSON.parse(prioritySettings['icp_function_priority'] ?? '{}'); } catch { return {}; } })();
+  const seniorityPriorityMap = (() => { try { return JSON.parse(prioritySettings['icp_seniority_priority'] ?? '{}'); } catch { return {}; } })();
+
+  const strategyAssessment = await computeStrategyAssessment({
     totalAttendees,
     totalCompanies,
     icpCount,
@@ -771,6 +776,17 @@ export async function GET(
     requiredPipeline,
     avgCostPerUnit,
     avgAnnualDealSize,
+    attendeesForBuyerAccess: attendees.map(a => ({
+      title: (a.title as string | null) ?? null,
+      company_id: (a.company_id as number | null) ?? null,
+      icp: (a.icp as string | null) ?? null,
+      function: (a.function as string | null) ?? null,
+      seniority: resolveSeniority((a.seniority as string | null) ?? null, (a.title as string | null) ?? null),
+    })),
+    icpTierCompanies: Array.from(icpCompanyMap.values()).map(c => ({ company_id: c.id, wse: companyDetailMap.get(c.id)?.wse ?? null })),
+    functionPriorityMap,
+    seniorityPriorityMap,
+    organizationId: null,
     tierConfig,
     icpCompanies: icpCompaniesForScoring,
   });
