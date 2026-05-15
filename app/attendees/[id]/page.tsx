@@ -722,24 +722,24 @@ export default function AttendeeDetailPage() {
                   </div>
                   <div><label className="label">LinkedIn URL</label><input type="url" value={editData.linkedin_url || ''} onChange={e => setEditData(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/…" className="input-field" /></div>
                   <div><label className="label">Phone Number</label><input type="tel" value={editData.phone || ''} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" className="input-field" /></div>
-                </div>
-                <div>
-                  <label className="label">Consent</label>
-                  <select value={editData.consent || 'Consent Not Recorded'} onChange={e => setEditData(p => ({ ...p, consent: e.target.value }))} className="input-field">
-                    <option value="Consent Not Recorded">Consent Not Recorded</option>
-                    <option value="Opted-In">Opted-In</option>
-                    <option value="Opted-Out">Opted-Out</option>
-                  </select>
-                </div>
-                {functionOptions.length > 0 && (
+                  {functionOptions.length > 0 && (
+                    <div>
+                      <label className="label">Function</label>
+                      <select value={editData.function || ''} onChange={e => setEditData(p => ({ ...p, function: e.target.value }))} className="input-field">
+                        <option value="">— No function —</option>
+                        {functionOptions.map(val => <option key={val} value={val}>{val}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div>
-                    <label className="label">Function</label>
-                    <select value={editData.function || ''} onChange={e => setEditData(p => ({ ...p, function: e.target.value }))} className="input-field">
-                      <option value="">— No function —</option>
-                      {functionOptions.map(val => <option key={val} value={val}>{val}</option>)}
+                    <label className="label">Consent</label>
+                    <select value={editData.consent || 'Consent Not Recorded'} onChange={e => setEditData(p => ({ ...p, consent: e.target.value }))} className="input-field">
+                      <option value="Consent Not Recorded">Consent Not Recorded</option>
+                      <option value="Opted-In">Opted-In</option>
+                      <option value="Opted-Out">Opted-Out</option>
                     </select>
                   </div>
-                )}
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <button onClick={handleSave} disabled={isSaving} className="btn-primary">{isSaving ? 'Saving...' : 'Save'}</button>
                   <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
