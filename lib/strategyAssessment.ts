@@ -524,11 +524,11 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
 
   // G. Event Economics Fit Score
   const costPerICP = input.budgetTotal > 0 ? input.budgetTotal / safeIcp : 0;
-  const coverageScore = input.requiredPipeline && input.requiredPipeline > 0
+  const economicsCoverageScore = input.requiredPipeline && input.requiredPipeline > 0
     ? Math.min((realisticPipelineGoal / input.requiredPipeline), 1) * 100
     : 50;
   const costScore = costPerICP > 0 ? Math.min(5000 / costPerICP, 1) * 100 : 50;
-  const eventEconomicsFitScore = clamp(coverageScore * 0.5 + costScore * 0.5);
+  const eventEconomicsFitScore = clamp(economicsCoverageScore * 0.5 + costScore * 0.5);
 
   // Final weighted score
   const strategyFitScore = Math.round(
