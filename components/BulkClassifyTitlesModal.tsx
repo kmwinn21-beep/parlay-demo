@@ -108,6 +108,47 @@ export function BulkClassifyTitlesModal({ attendees, metadataMap, functionOption
   };
 
   const savedCount = Object.values(forms).filter(f => f.saved).length;
+  const [savingAll, setSavingAll] = useState(false);
+
+  const unsavedGroups = titleGroups.filter(g => !forms[g.key]?.saved);
+  const readyGroups = unsavedGroups.filter(g => {
+    const f = forms[g.key];
+    return f?.normalized_title && f?.function_id && f?.seniority_id;
+  });
+
+  const saveAll = async () => {
+    if (readyGroups.length === 0) return;
+    setSavingAll(true);
+    setForms(prev => {
+      const next = { ...prev };
+      for (const g of readyGroups) next[g.key] = { ...next[g.key], saving: true };
+      return next;
+    });
+    await Promise.all(readyGroups.map(async group => {
+      const form = forms[group.key];
+      try {
+        const res = await fetch('/api/title-normalization-rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            raw_title: group.title,
+            normalized_title: form.normalized_title,
+            function_id: Number(form.function_id),
+            seniority_id: Number(form.seniority_id),
+            buyer_role: form.buyer_role,
+            confidence: form.confidence,
+            apply_all_exact: form.apply_all_exact,
+          }),
+        });
+        if (!res.ok) throw new Error();
+        updateForm(group.key, { saving: false, saved: true });
+      } catch {
+        updateForm(group.key, { saving: false });
+      }
+    }));
+    setSavingAll(false);
+    toast.success(`${readyGroups.length} title${readyGroups.length !== 1 ? 's' : ''} classified.`);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
@@ -204,10 +245,26 @@ export function BulkClassifyTitlesModal({ attendees, metadataMap, functionOption
             );
           })}
         </div>
-        <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4 flex-shrink-0">
-          <button onClick={() => { if (savedCount > 0) onSaved(); onClose(); }} className="btn-secondary">
-            {savedCount > 0 ? 'Done' : 'Cancel'}
-          </button>
+        <div className="flex items-center justify-between border-t border-gray-100 px-5 py-4 flex-shrink-0">
+          <p className="text-xs text-gray-400">
+            {readyGroups.length > 0
+              ? `${readyGroups.length} of ${unsavedGroups.length} title${unsavedGroups.length !== 1 ? 's' : ''} ready to save`
+              : unsavedGroups.length > 0 ? `Fill in required fields to save` : ''}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => { if (savedCount > 0) onSaved(); onClose(); }} className="btn-secondary">
+              {savedCount > 0 ? 'Done' : 'Cancel'}
+            </button>
+            {readyGroups.length > 0 && (
+              <button
+                onClick={saveAll}
+                disabled={savingAll}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingAll ? 'Saving…' : `Save All (${readyGroups.length})`}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
