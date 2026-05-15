@@ -477,7 +477,7 @@ export default function CalendarIntelligencePage() {
       : 'Do Not Attend';
 
     return (
-      <div className="w-[420px] flex-shrink-0 self-start bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="w-[460px] flex-shrink-0 self-start bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="p-5 space-y-6">
           {/* Calendar Recommendation section */}
           <div>

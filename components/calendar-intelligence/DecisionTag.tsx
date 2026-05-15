@@ -45,7 +45,15 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
   const selectUserDecision = async (d: Decision) => {
     const newVal = userDecision === d ? null : d;
     setUserDecision(newVal);
-    if (!newVal) return;
+    if (!newVal) {
+      await fetch('/api/calendar-intelligence/decisions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, level: 'user' }),
+      });
+      onDecisionChanged?.();
+      return;
+    }
     await fetch('/api/calendar-intelligence/decisions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -55,11 +63,21 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
   };
 
   const selectAccountDecision = async (d: Decision) => {
-    setAccountDecision(d);
+    const newVal = accountDecision === d ? null : d;
+    setAccountDecision(newVal);
+    if (!newVal) {
+      await fetch('/api/calendar-intelligence/decisions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, level: 'account' }),
+      });
+      onDecisionChanged?.();
+      return;
+    }
     await fetch('/api/calendar-intelligence/decisions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conferenceId, decision: d, level: 'account' }),
+      body: JSON.stringify({ conferenceId, decision: newVal, level: 'account' }),
     });
     onDecisionChanged?.();
   };

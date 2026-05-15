@@ -65,3 +65,26 @@ export async function PUT(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult.accountId);
+
+  const body = await request.json() as { conferenceId: number; level: 'account' | 'user' };
+  const { conferenceId, level } = body;
+  if (!conferenceId || !level) {
+    return NextResponse.json({ error: 'conferenceId and level are required' }, { status: 400 });
+  }
+
+  if (level === 'account') {
+    if (authResult.role !== 'administrator') {
+      return NextResponse.json({ error: 'Administrator access required for account-level decisions' }, { status: 403 });
+    }
+    await db.execute({ sql: `DELETE FROM conference_decisions WHERE conference_id = ?`, args: [conferenceId] });
+  } else {
+    await db.execute({ sql: `DELETE FROM user_conference_decisions WHERE user_id = ? AND conference_id = ?`, args: [authResult.id, conferenceId] });
+  }
+
+  return NextResponse.json({ ok: true });
+}
