@@ -61,7 +61,7 @@ export interface StrategyAssessmentInput {
   requiredPipeline: number | null;
   avgCostPerUnit: number;
   avgAnnualDealSize?: number;
-  icpCompanies: { wse: number | null }[];
+  icpCompanies: { wse: number | null; company_id?: number | null }[];
   icpTierCompanies?: { company_id: number; wse: number | null }[];
   attendeesForBuyerAccess?: Array<{ title: string | null; company_id: number | null; icp: string | null; function: string | null; seniority: string | null }>;
   titleMetadataByKey?: Record<string, { buyer_role: 'decision_maker' | 'influencer' | 'target_title' | 'ignore' | null; match_type: 'confirmed' | 'configured_alias' | 'system_alias' | 'exact' | 'fuzzy' | 'none' }>;
@@ -164,7 +164,7 @@ function classifyTiers(
 }
 
 function computeRealisticPipeline(
-  icpCompanies: { wse: number | null }[],
+  icpCompanies: { wse: number | null; company_id?: number | null }[],
   mustProxy: number,
   highProxy: number,
   worthProxy: number,
@@ -172,6 +172,11 @@ function computeRealisticPipeline(
   buyerAccess: number,
   relLeverage: number,
   cfg: TierThresholdConfig,
+  buyerQuality: {
+    bestAttendeeScoreByCompany: Map<number, number>;
+    attendeeCountByCompany: Map<number, number>;
+    eligibleAttendeeCountByCompany: Map<number, number>;
+  },
 ): number {
   if (avgCostPerUnit <= 0) return 0;
   const sorted = [...icpCompanies].sort((a, b) => (b.wse ?? 0) - (a.wse ?? 0));
@@ -181,12 +186,27 @@ function computeRealisticPipeline(
   let worthRemaining = worthProxy;
   for (const c of sorted) {
     const wse = c.wse ?? 0;
+    const companyId = c.company_id ?? null;
     let prob: number;
     if (mustRemaining > 0) { prob = cfg.mustTargetConversion; mustRemaining--; }
     else if (highRemaining > 0) { prob = cfg.highPriorityConversion; highRemaining--; }
     else if (worthRemaining > 0) { prob = cfg.worthEngagingConversion; worthRemaining--; }
     else { prob = 0.025; }
-    goal += wse * avgCostPerUnit * prob;
+    let companyModifier = 1.0;
+    if (companyId != null) {
+      const totalAtt = buyerQuality.attendeeCountByCompany.get(companyId) ?? 0;
+      const eligibleAtt = buyerQuality.eligibleAttendeeCountByCompany.get(companyId) ?? 0;
+      if (totalAtt === 0) companyModifier = 1.0;
+      else if (eligibleAtt === 0) companyModifier = 0.85;
+      else {
+        const bestAttendeeScore = buyerQuality.bestAttendeeScoreByCompany.get(companyId) ?? 0;
+        if (bestAttendeeScore >= 0.7) companyModifier = 1.0;
+        else if (bestAttendeeScore >= 0.4) companyModifier = 0.85;
+        else if (bestAttendeeScore >= 0.1) companyModifier = 0.7;
+        else companyModifier = 0.5;
+      }
+    }
+    goal += wse * avgCostPerUnit * prob * companyModifier;
   }
   if (buyerAccess >= 80) goal *= 1.05;
   else if (buyerAccess < 40) goal *= 0.95;
@@ -258,7 +278,7 @@ function recommendStrategy(
 ): StrategyLabel {
   const { icpOpp, targetAcc, buyerAccess, relLeverage, customerPresence, pipelinePotential } = scores;
 
-  if (icpOpp >= 65 && targetAcc >= 65 && buyerAccess >= 60 && customerPresence < 50)
+  if (icpOpp >= 65 && targetAcc >= 65 && buyerAccess >= 60 && customerPresence < 50 && pipelinePotential >= 40)
     return 'Pipeline Generation';
   if (relLeverage >= 65 && buyerAccess >= 60 && targetAcc >= 50 && customerPresence < 60)
     return 'Pipeline Acceleration';
@@ -274,7 +294,7 @@ function recommendStrategy(
     return 'Thought Leadership';
 
   // Fallback: pick best match by dominant score
-  if (icpOpp >= 50 && targetAcc >= 50) return 'Pipeline Generation';
+  if (icpOpp >= 50 && targetAcc >= 50 && buyerAccess >= 45) return 'Pipeline Generation';
   if (relLeverage >= 50) return 'Pipeline Acceleration';
   return 'Market Presence / Brand Visibility';
 }
@@ -484,6 +504,11 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
   const realisticPipelineGoal = computeRealisticPipeline(
     input.icpCompanies, mustProxy, highProxy, worthProxy,
     input.avgCostPerUnit, buyerAccessScore, relLeverageScore, cfg,
+    {
+      bestAttendeeScoreByCompany: qualifiedByCompany,
+      attendeeCountByCompany: icpAttendeeCountByCompany,
+      eligibleAttendeeCountByCompany: eligibleAttendeeCountByCompany,
+    },
   );
   const pipelinePotentialScore = input.requiredPipeline && input.requiredPipeline > 0
     ? clamp((realisticPipelineGoal / input.requiredPipeline) * 100)
