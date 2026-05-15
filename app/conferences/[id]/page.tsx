@@ -313,7 +313,7 @@ export default function ConferenceDetailPage() {
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
   const [showAttendeeEdit, setShowAttendeeEdit] = useState(false);
-  const [attendeeEditFields, setAttendeeEditFields] = useState<{ status?: string; seniority?: string; function?: string; company_id?: string }>({});
+  const [attendeeEditFields, setAttendeeEditFields] = useState<{ status?: string; seniority?: string; function?: string; company_id?: string; consent?: string }>({});
   const [isApplyingAttendeeEdit, setIsApplyingAttendeeEdit] = useState(false);
   const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
   const [cellDraft, setCellDraft] = useState('');
@@ -801,6 +801,7 @@ export default function ConferenceDetailPage() {
     if (attendeeEditFields.seniority) fields.seniority = attendeeEditFields.seniority;
     if (attendeeEditFields.function) fields.function = attendeeEditFields.function;
     if (attendeeEditFields.company_id) fields.company_id = parseInt(attendeeEditFields.company_id);
+    if (attendeeEditFields.consent) fields.consent = attendeeEditFields.consent;
     if (Object.keys(fields).length === 0) return;
 
     const snapshot = conference.attendees;
@@ -1618,9 +1619,18 @@ export default function ConferenceDetailPage() {
                     {conferenceCompanies.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
                   </select>
                 </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Consent</p>
+                  <select value={attendeeEditFields.consent || ''} onChange={e => setAttendeeEditFields(p => ({ ...p, consent: e.target.value }))} className="input-field w-48 text-sm">
+                    <option value="">— no change —</option>
+                    <option value="Opted-In">Opted-In</option>
+                    <option value="Opted-Out">Opted-Out</option>
+                    <option value="Consent Not Recorded">Consent Not Recorded</option>
+                  </select>
+                </div>
                 <button
                   onClick={handleAttendeeEdit}
-                  disabled={isApplyingAttendeeEdit || (!attendeeEditFields.status && !attendeeEditFields.seniority && !attendeeEditFields.function && !attendeeEditFields.company_id)}
+                  disabled={isApplyingAttendeeEdit || (!attendeeEditFields.status && !attendeeEditFields.seniority && !attendeeEditFields.function && !attendeeEditFields.company_id && !attendeeEditFields.consent)}
                   className="btn-primary text-sm disabled:opacity-50"
                 >
                   {isApplyingAttendeeEdit ? 'Applying…' : 'Apply'}

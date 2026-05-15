@@ -1647,6 +1647,7 @@ export interface ParsedAttendee {
   icp?: string;
   function?: string;
   product?: string;
+  consent?: string;
 }
 
 /**
