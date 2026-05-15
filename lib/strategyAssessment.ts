@@ -354,7 +354,7 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
   const highScore = Math.min(highProxy / 25, 1) * 100;
   const totalTierCount = Math.max(mustProxy + highProxy + worthProxy, 1);
   const avgTierScore = (mustProxy * 100 + highProxy * 75 + worthProxy * 50) / totalTierCount;
-  let targetAccountOpportunityScore = clamp(mustScore * 0.3 + highScore * 0.3 + avgTierScore * 0.4);
+  let modifiedAvgTierScore = avgTierScore;
 
   // C. Buyer Access Score — qualified buyer model
   const weightForPriority = (p: string | undefined): number => {
@@ -386,6 +386,8 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
   const titleMetaByKey = input.titleMetadataByKey ?? {};
   const icpRows = buyerRows.filter(a => String(a.icp ?? '').toLowerCase() === 'yes');
   const qualifiedByCompany = new Map<number, number>();
+  const icpAttendeeCountByCompany = new Map<number, number>();
+  const eligibleAttendeeCountByCompany = new Map<number, number>();
   let qualifiedBuyerSum = 0;
   let eligibleIcpCount = 0;
   let unresolvedIcpCount = 0;
@@ -395,6 +397,9 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     .reduce((sum, s) => sum + s.count, 0);
   const decisionMakerRate = decisionMakerCount / safeTotalAtt;
   for (const a of icpRows) {
+    if (a.company_id != null) {
+      icpAttendeeCountByCompany.set(a.company_id, (icpAttendeeCountByCompany.get(a.company_id) ?? 0) + 1);
+    }
     const meta = titleMetaByKey[normalizeTitleKeyLocal(a.title)];
     const mt = meta?.match_type ?? 'none';
     if (mt === 'none' || mt === 'fuzzy') {
@@ -413,6 +418,9 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     else if (meta?.match_type === 'exact') score = base * 0.7;
     else score = base;
     eligibleIcpCount++;
+    if (a.company_id != null) {
+      eligibleAttendeeCountByCompany.set(a.company_id, (eligibleAttendeeCountByCompany.get(a.company_id) ?? 0) + 1);
+    }
     qualifiedBuyerSum += score;
     if (a.company_id != null) {
       const prev = qualifiedByCompany.get(a.company_id) ?? 0;
@@ -427,6 +435,38 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     ? (useFallback ? 0 : (hasQualifiedPresence ? Math.min((icpCount / safeTotal) * 10, 10) : -5))
     : 0;
   const buyerAccessScore = clamp(rawBuyerAccess + icpAlignBonus);
+
+  // Apply per-company buyer-quality modifier to avgTierScore only
+  const tierCompanies = input.icpTierCompanies ?? [];
+  if (tierCompanies.length > 0) {
+    const tierEntries = tierCompanies.flatMap(c => {
+      const w = c.wse ?? 0;
+      if (matchesOp(w, cfg.mustTargetOp || 'gte', cfg.mustTargetMin, cfg.mustTargetMax)) return [{ companyId: c.company_id, base: 100 }];
+      if (matchesOp(w, cfg.highPriorityOp || 'between', cfg.highPriorityMin, cfg.highPriorityMax)) return [{ companyId: c.company_id, base: 75 }];
+      if (matchesOp(w, cfg.worthEngagingOp || 'between', cfg.worthEngagingMin, cfg.worthEngagingMax)) return [{ companyId: c.company_id, base: 50 }];
+      return [];
+    });
+    if (tierEntries.length > 0) {
+      const weighted = tierEntries.map(t => {
+        const totalAtt = icpAttendeeCountByCompany.get(t.companyId) ?? 0;
+        const eligibleAtt = eligibleAttendeeCountByCompany.get(t.companyId) ?? 0;
+        let modifier = 1.0;
+        if (totalAtt === 0) modifier = 1.0;
+        else if (eligibleAtt === 0) modifier = 0.85;
+        else {
+          const best = qualifiedByCompany.get(t.companyId) ?? 0;
+          if (best >= 0.7) modifier = 1.0;
+          else if (best >= 0.4) modifier = 0.85;
+          else if (best >= 0.1) modifier = 0.7;
+          else modifier = 0.5;
+        }
+        return t.base * modifier;
+      });
+      modifiedAvgTierScore = weighted.reduce((s, v) => s + v, 0) / tierEntries.length;
+    }
+  }
+
+  let targetAccountOpportunityScore = clamp(mustScore * 0.3 + highScore * 0.3 + modifiedAvgTierScore * 0.4);
 
   // D. Relationship Leverage Score
   const relRate = input.internalRelationshipCount / safeIcp;
