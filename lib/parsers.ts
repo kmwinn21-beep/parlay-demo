@@ -53,6 +53,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     icp:           findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp'),
     function:      findColumn(headers, 'function', 'department', 'dept', 'business_function', 'business function', 'job_function', 'job function', 'functional_area', 'functional area'),
     product:       findColumn(headers, 'product', 'products', 'product_interest', 'product interest', 'product_line', 'product line'),
+    consent:       findColumn(headers, 'consent', 'opt_in', 'opt in', 'opt_out', 'opt out', 'optin', 'optout', 'email_consent', 'email consent', 'marketing_consent', 'marketing consent', 'communication_preference', 'communication preference', 'contact_permission', 'contact permission', 'gdpr', 'permission'),
   };
 }
 
@@ -107,6 +108,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     if (mapping.icp && row[mapping.icp]) attendee.icp = String(row[mapping.icp]).trim();
     if (mapping.function && row[mapping.function]) attendee.function = String(row[mapping.function]).trim();
     if (mapping.product && row[mapping.product]) attendee.product = String(row[mapping.product]).trim();
+    if (mapping.consent && row[mapping.consent]) attendee.consent = String(row[mapping.consent]).trim();
 
     attendees.push(attendee);
   }

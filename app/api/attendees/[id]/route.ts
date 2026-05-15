@@ -54,7 +54,7 @@ export async function PUT(
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone } = body;
+    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone, consent } = body;
     const functionVal = body['function'];
 
     if (!first_name || !last_name) {
@@ -62,7 +62,7 @@ export async function PUT(
     }
 
     const existingResult = await db.execute({
-      sql: 'SELECT id, status, "function" FROM attendees WHERE id = ?',
+      sql: 'SELECT id, status, "function", consent FROM attendees WHERE id = ?',
       args: [params.id],
     });
     if (existingResult.rows.length === 0) {
@@ -70,9 +70,10 @@ export async function PUT(
     }
     const existingStatus = String(existingResult.rows[0].status ?? '');
     const existingFunction = existingResult.rows[0].function != null ? String(existingResult.rows[0].function) : null;
+    const existingConsent = existingResult.rows[0].consent != null ? String(existingResult.rows[0].consent) : 'Consent Not Recorded';
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, "function" = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, "function" = ?, consent = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [
         first_name,
         last_name,
@@ -88,6 +89,7 @@ export async function PUT(
         linkedin_url || null,
         phone || null,
         'function' in body ? (functionVal || null) : existingFunction,
+        'consent' in body ? (consent || 'Consent Not Recorded') : existingConsent,
         params.id,
       ],
     });
@@ -226,6 +228,10 @@ export async function PATCH(
     if ('products' in body) {
       setClauses.push('products = ?');
       args.push((body.products as string | undefined) || null);
+    }
+    if ('consent' in body) {
+      setClauses.push('consent = ?');
+      args.push((body.consent as string | undefined) || 'Consent Not Recorded');
     }
 
     if (setClauses.length === 0) {

@@ -169,7 +169,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
-  const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string }>({});
+  const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string; consent?: string }>({});
   const [showExportPicker, setShowExportPicker] = useState(false);
   const [exportCols, setExportCols] = useState<Set<string>>(new Set(['name', 'title', 'company', 'company_type', 'email', 'status', 'seniority', 'conferences', 'conference_names', 'updated_on', 'date_added']));
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -297,6 +297,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     if (massEditFields.status) fields.status = massEditFields.status;
     if (massEditFields.seniority) fields.seniority = massEditFields.seniority;
     if (massEditFields.company_id) fields.company_id = parseInt(massEditFields.company_id);
+    if (massEditFields.consent) fields.consent = massEditFields.consent;
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
     // Optimistic update — reflect changes immediately
@@ -610,6 +611,15 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <select value={massEditFields.company_id || ''} onChange={e => setMassEditFields(p => ({ ...p, company_id: e.target.value }))} className="input-field w-48 text-sm">
                 <option value="">— no change —</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Consent</label>
+              <select value={massEditFields.consent || ''} onChange={e => setMassEditFields(p => ({ ...p, consent: e.target.value }))} className="input-field w-48 text-sm">
+                <option value="">— no change —</option>
+                <option value="Opted-In">Opted-In</option>
+                <option value="Opted-Out">Opted-Out</option>
+                <option value="Consent Not Recorded">Consent Not Recorded</option>
               </select>
             </div>
             <button onClick={handleMassEdit} disabled={isApplying} className="btn-primary text-sm">{isApplying ? 'Applying...' : `Apply to ${selectedIds.size}`}</button>

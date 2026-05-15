@@ -13,6 +13,20 @@ import {
   confirmAttendeeMatch,
 } from '@/lib/matching';
 
+function normalizeConsentValue(raw: string | undefined | null): string {
+  if (!raw) return 'Consent Not Recorded';
+  const val = raw
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[.,'\-&()/]/g, '');
+  const optedIn = new Set(['opt in', 'opted in', 'optin', 'optedin', 'yes', 'y', 'true', '1', 'allow', 'allowed', 'agree', 'agreed', 'subscribed', 'subscribe']);
+  const optedOut = new Set(['opt out', 'opted out', 'optout', 'optedout', 'no', 'n', 'false', '0', 'do not contact', 'dnc', 'stop', 'unsubscribe', 'unsubscribed', 'remove', 'donotcontact', 'donotmail', 'do not mail', 'donotcall', 'do not call']);
+  if (optedIn.has(val)) return 'Opted-In';
+  if (optedOut.has(val)) return 'Opted-Out';
+  return 'Consent Not Recorded';
+}
+
 async function batchInsert<T>(
   dbClient: Client,
   items: T[],
@@ -741,9 +755,9 @@ export async function POST(
     };
 
     const attendeeIdCache = new Map<string, number>();
-    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string };
+    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string; consent?: string };
     const newAttendees: NewAttendee[] = [];
-    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string };
+    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string; consent?: string };
     const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
     const seen = new Set<string>();
 
@@ -766,6 +780,7 @@ export async function POST(
         const functionVal = p.function?.trim() || classifyFunction(p.title?.trim(), functionOptions) || undefined;
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
+        const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
         existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
@@ -773,6 +788,7 @@ export async function POST(
           email: p.email?.trim() || null,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
+          consent: consentVal,
         });
       } else {
         attendeeIdCache.set(key, -1);
@@ -782,6 +798,7 @@ export async function POST(
         const functionVal = p.function?.trim() || classifyFunction(p.title?.trim(), functionOptions) || undefined;
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
+        const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
         newAttendees.push({
           first_name: fname,
           last_name: lname,
@@ -790,6 +807,7 @@ export async function POST(
           email: p.email?.trim() || undefined,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
+          consent: consentVal,
         });
       }
     }
@@ -816,6 +834,7 @@ export async function POST(
         const functionVal = p.function?.trim() || classifyFunction(p.title?.trim(), functionOptions) || undefined;
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
+        const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
         existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
@@ -823,6 +842,7 @@ export async function POST(
           email: p.email?.trim() || null,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
+          consent: consentVal,
         });
       }
     }
@@ -872,6 +892,12 @@ export async function POST(
           setArgs.push(u.product);
         }
 
+        // consent: only update if file provided a mappable value
+        if (u.consent !== undefined) {
+          setClauses.push('consent = ?');
+          setArgs.push(u.consent);
+        }
+
         if (setClauses.length === 0) continue;
         setArgs.push(u.id);
         atUpdateStmts.push({
@@ -887,8 +913,8 @@ export async function POST(
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
       const results = await batchInsert(db, newAttendees, (a) => ({
-        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
-        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null],
+        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products, consent) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded'],
       }));
       for (let i = 0; i < newAttendees.length; i++) {
         const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();

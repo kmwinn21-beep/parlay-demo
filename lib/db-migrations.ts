@@ -766,4 +766,5 @@ export const migrations: string[] = [
     )`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('company_type', 'Competitor', 999, 1, '#dc2626')`,
   `UPDATE config_options SET color = '#dc2626' WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor' AND (color = 'red' OR color IS NULL)`,
+  `ALTER TABLE attendees ADD COLUMN consent TEXT NOT NULL DEFAULT 'Consent Not Recorded'`,
 ];

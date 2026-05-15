@@ -4,7 +4,7 @@
 export type SystemFieldKey =
   | 'first_name' | 'last_name' | 'full_name' | 'title' | 'company'
   | 'email' | 'website' | 'company_type' | 'assigned_user' | 'wse'
-  | 'services' | 'icp' | 'function' | 'product';
+  | 'services' | 'icp' | 'function' | 'product' | 'consent';
 
 export interface ColumnMapping {
   first_name: string | null;
@@ -21,6 +21,7 @@ export interface ColumnMapping {
   icp: string | null;
   function: string | null;
   product: string | null;
+  consent: string | null;
 }
 
 export interface SystemFieldMeta {
@@ -44,10 +45,11 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
   icp:           { label: 'ICP',                 description: 'Ideal Customer Profile — Yes / No' },
   function:      { label: 'Function',            description: 'Attendee department/function (e.g. Finance, Operations)' },
   product:       { label: 'Product',             description: 'Product(s) associated with this contact (comma-separated)' },
+  consent:       { label: 'Consent',             description: 'Opt-in / Opt-out / Consent Not Recorded' },
 };
 
 export const FIELD_ORDER: SystemFieldKey[] = [
   'first_name', 'last_name', 'full_name', 'title', 'company',
   'email', 'website', 'company_type', 'assigned_user', 'wse', 'services', 'icp',
-  'function', 'product',
+  'function', 'product', 'consent',
 ];

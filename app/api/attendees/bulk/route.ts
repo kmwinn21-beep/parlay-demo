@@ -11,7 +11,7 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { ids, fields } = body as {
       ids: number[];
-      fields: { status?: string; title?: string; seniority?: string; company_id?: number | null; notes?: string; function?: string | null };
+      fields: { status?: string; title?: string; seniority?: string; company_id?: number | null; notes?: string; function?: string | null; consent?: string };
     };
 
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -30,6 +30,7 @@ export async function PATCH(request: NextRequest) {
     if ('function' in fields) { setClauses.push('function = ?'); baseArgs.push(fields.function || null); }
     if ('company_id' in fields) { setClauses.push('company_id = ?'); baseArgs.push(fields.company_id ?? null); }
     if ('notes' in fields) { setClauses.push('notes = ?'); baseArgs.push(fields.notes || null); }
+    if ('consent' in fields) { setClauses.push('consent = ?'); baseArgs.push(fields.consent || 'Consent Not Recorded'); }
 
     if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
