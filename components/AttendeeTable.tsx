@@ -15,6 +15,9 @@ import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConf
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
+import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
+import { ClassifyTitleModal } from './ClassifyTitleModal';
+import { BulkClassifyTitlesModal } from './BulkClassifyTitlesModal';
 
 const COMPETITOR_TYPE_DEFS: Record<string, string> = {
   'Direct': 'Offers the same core product or service to the same buyer profile.',
@@ -172,6 +175,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [massEditFields, setMassEditFields] = useState<{ status?: string; seniority?: string; company_id?: string; consent?: string }>({});
   const [showExportPicker, setShowExportPicker] = useState(false);
   const [exportCols, setExportCols] = useState<Set<string>>(new Set(['name', 'title', 'company', 'company_type', 'email', 'status', 'seniority', 'conferences', 'conference_names', 'updated_on', 'date_added']));
+  const [filterNeedsReview, setFilterNeedsReview] = useState(false);
+  const [titleMetaMap, setTitleMetaMap] = useState<Record<number, TitleMatchMetadata>>({});
+  const [titleMetaLoading, setTitleMetaLoading] = useState(false);
+  const [titleMetaRefetch, setTitleMetaRefetch] = useState(0);
+  const [classifyingAttendee, setClassifyingAttendee] = useState<{ id: number; title: string } | null>(null);
+  const [showBulkClassify, setShowBulkClassify] = useState(false);
+  const [functionOptionRecords, setFunctionOptionRecords] = useState<Array<{ id: number; value: string }>>([]);
+  const [seniorityOptionRecords, setSeniorityOptionRecords] = useState<Array<{ id: number; value: string }>>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const [editingCell, setEditingCell] = useState<{ attendeeId: number; field: 'title' | 'company_type' | 'status' | 'seniority' | 'company_wse' } | null>(null);
@@ -185,9 +196,41 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     }
   }, [showMassEdit, companies.length]);
 
+  // Fetch function and seniority options for the classify modal once
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/config?category=function').then(r => r.json()),
+      fetch('/api/config?category=seniority').then(r => r.json()),
+    ]).then(([fnData, snData]) => {
+      setFunctionOptionRecords(fnData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      setSeniorityOptionRecords(snData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+    }).catch(() => {});
+  }, []);
+
+  // Batch-fetch title metadata when attendees change
+  useEffect(() => {
+    const ids = attendees.filter(a => a.title).map(a => a.id);
+    if (ids.length === 0) { setTitleMetaMap({}); return; }
+    setTitleMetaLoading(true);
+    const chunks: number[][] = [];
+    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+    Promise.all(chunks.map(chunk =>
+      fetch(`/api/attendees/title-metadata?ids=${chunk.join(',')}`).then(r => r.json())
+    )).then(results => {
+      const combined: Record<number, TitleMatchMetadata> = {};
+      for (const res of results) {
+        for (const [id, meta] of Object.entries(res)) {
+          combined[Number(id)] = meta as TitleMatchMetadata;
+        }
+      }
+      setTitleMetaMap(combined);
+    }).catch(() => {}).finally(() => setTitleMetaLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendees, titleMetaRefetch]);
+
   useEffect(() => {
     setPage(1);
-  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin]);
+  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, filterNeedsReview]);
 
   const seniorityFilterOptions = useMemo(() => {
     if (seniorityConfigOptions.length > 0) return seniorityConfigOptions;
@@ -242,7 +285,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         const updAt = String(a.updated_at);
         return new Date(updAt.endsWith('Z') || updAt.includes('+') ? updAt : updAt + 'Z').getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
       })();
-      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchUpdatedWithin;
+      const matchNeedsReview = !filterNeedsReview || (a.title ? shouldWarnForTitleMetadata(titleMetaMap[a.id]) : false);
+      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchUpdatedWithin && matchNeedsReview;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -256,7 +300,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localAttendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, sortKey, sortDir]);
+  }, [localAttendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, filterNeedsReview, titleMetaMap, sortKey, sortDir]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -452,7 +496,8 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     <div onMouseDown={e => startResize(e, col)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', userSelect: 'none', zIndex: 10 }} className="hover:bg-brand-secondary opacity-0 hover:opacity-30" />
   );
 
-  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0);
+  const activeFilterCount = (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterSeniority ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterNeedsReview ? 1 : 0);
+  const confWarnCount = !titleMetaLoading ? localAttendees.filter(a => selectedIds.has(a.id) && a.title && shouldWarnForTitleMetadata(titleMetaMap[a.id])).length : 0;
 
   return (
     <div>
@@ -503,6 +548,12 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               Export ({selectedIds.size})
             </button>
+            {confWarnCount > 0 && (
+              <button onClick={() => setShowBulkClassify(true)} className="btn-secondary flex items-center gap-2 text-sm">
+                <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                Classify Titles ({confWarnCount})
+              </button>
+            )}
           </>
         )}
         {selectedIds.size >= 1 && (
@@ -572,12 +623,20 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <option value="30days">Last 30 Days</option>
               </select>
             </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title Status</p>
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                <input type="checkbox" checked={filterNeedsReview} onChange={e => setFilterNeedsReview(e.target.checked)} className="accent-brand-secondary" />
+                Needs Title Review
+                {titleMetaLoading && <span className="text-xs text-gray-400">…</span>}
+              </label>
+            </div>
           </div>
           {activeFilterCount > 0 && (
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => { setFilterCompanyType(''); setFilterStatus(''); setFilterSeniority(''); setFilterConfCounts(new Set()); setFilterUpdatedWithin(''); }}
+                onClick={() => { setFilterCompanyType(''); setFilterStatus(''); setFilterSeniority(''); setFilterConfCounts(new Set()); setFilterUpdatedWithin(''); setFilterNeedsReview(false); }}
                 className="text-xs text-gray-500 hover:text-red-500 transition-colors"
               >
                 Clear all filters
@@ -704,7 +763,16 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                   </button>
                 </div>
-                {attendee.title && <p className="text-xs text-gray-500 mt-1 ml-6">{attendee.title}</p>}
+                {attendee.title && (
+                  <div className="flex items-center gap-1 mt-1 ml-6">
+                    <p className="text-xs text-gray-500">{attendee.title}</p>
+                    {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                      <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review" className="text-amber-500 hover:text-amber-600 flex-shrink-0">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                      </button>
+                    )}
+                  </div>
+                )}
                 {attendee.company_name && (
                   <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
                     {attendee.company_id ? (
@@ -818,9 +886,16 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                                 autoFocus
                               />
                             ) : (
-                              <button type="button" className="block text-left w-full" onClick={() => startInlineEdit(attendee, 'title')} title="Click to edit title">
-                                <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
-                              </button>
+                              <div className="flex items-start gap-1 min-w-0">
+                                <button type="button" className="block text-left flex-1 min-w-0" onClick={() => startInlineEdit(attendee, 'title')} title="Click to edit title">
+                                  <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                                </button>
+                                {!titleMetaLoading && attendee.title && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                                  <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review — click to classify" className="flex-shrink-0 text-amber-500 hover:text-amber-600 mt-0.5">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
                         );
@@ -982,6 +1057,31 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           selectedIds={selectedIds}
           onClose={() => setShowAddToConf(false)}
           onSuccess={() => { setSelectedIds(new Set()); onRefresh(); }}
+        />
+      )}
+
+      {classifyingAttendee && (
+        <ClassifyTitleModal
+          rawTitle={classifyingAttendee.title}
+          meta={titleMetaMap[classifyingAttendee.id]}
+          functionOptions={functionOptionRecords}
+          seniorityOptions={seniorityOptionRecords}
+          onClose={() => setClassifyingAttendee(null)}
+          onSaved={(savedMeta) => {
+            setTitleMetaMap(prev => ({ ...prev, [classifyingAttendee.id]: savedMeta }));
+            setClassifyingAttendee(null);
+          }}
+        />
+      )}
+
+      {showBulkClassify && (
+        <BulkClassifyTitlesModal
+          attendees={localAttendees.filter(a => selectedIds.has(a.id))}
+          metadataMap={titleMetaMap}
+          functionOptions={functionOptionRecords}
+          seniorityOptions={seniorityOptionRecords}
+          onClose={() => setShowBulkClassify(false)}
+          onSaved={() => { setShowBulkClassify(false); setTitleMetaRefetch(c => c + 1); }}
         />
       )}
     </div>

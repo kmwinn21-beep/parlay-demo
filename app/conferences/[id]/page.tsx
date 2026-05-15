@@ -42,6 +42,9 @@ import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTarge
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
 import { getConferencePermissions } from '@/lib/conference-permissions';
+import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
+import { ClassifyTitleModal } from '@/components/ClassifyTitleModal';
+import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
 
 interface Attendee {
   id: number;
@@ -320,6 +323,14 @@ export default function ConferenceDetailPage() {
   const [isSavingCell, setIsSavingCell] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [filterNeedsReview, setFilterNeedsReview] = useState(false);
+  const [titleMetaMap, setTitleMetaMap] = useState<Record<number, TitleMatchMetadata>>({});
+  const [titleMetaLoading, setTitleMetaLoading] = useState(false);
+  const [titleMetaRefetch, setTitleMetaRefetch] = useState(0);
+  const [classifyingAttendee, setClassifyingAttendee] = useState<{ id: number; title: string } | null>(null);
+  const [showBulkClassify, setShowBulkClassify] = useState(false);
+  const [classifyFunctionOptions, setClassifyFunctionOptions] = useState<Array<{ id: number; value: string }>>([]);
+  const [classifySeniorityOptions, setClassifySeniorityOptions] = useState<Array<{ id: number; value: string }>>([]);
   const [editInternalAttendees, setEditInternalAttendees] = useState<string[]>([]);
   const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
   const internalDropdownRef = useRef<HTMLDivElement>(null);
@@ -1000,7 +1011,40 @@ export default function ConferenceDetailPage() {
     await doUpload(pendingMapping, resolutions);
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType]);
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterNeedsReview]);
+
+  // Fetch function and seniority option records once for the classify modal
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/config?category=function').then(r => r.json()),
+      fetch('/api/config?category=seniority').then(r => r.json()),
+    ]).then(([fnData, snData]) => {
+      setClassifyFunctionOptions(fnData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      setClassifySeniorityOptions(snData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+    }).catch(() => {});
+  }, []);
+
+  // Batch-fetch title metadata when conference attendees change
+  useEffect(() => {
+    const attendees = conference?.attendees ?? [];
+    const ids = attendees.filter(a => a.title).map(a => a.id);
+    if (ids.length === 0) { setTitleMetaMap({}); return; }
+    setTitleMetaLoading(true);
+    const chunks: number[][] = [];
+    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+    Promise.all(chunks.map(chunk =>
+      fetch(`/api/attendees/title-metadata?ids=${chunk.join(',')}`).then(r => r.json())
+    )).then(results => {
+      const combined: Record<number, TitleMatchMetadata> = {};
+      for (const res of results) {
+        for (const [id, meta] of Object.entries(res)) {
+          combined[Number(id)] = meta as TitleMatchMetadata;
+        }
+      }
+      setTitleMetaMap(combined);
+    }).catch(() => {}).finally(() => setTitleMetaLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conference?.attendees, titleMetaRefetch]);
 
   const seniorityFilterOptions = configOptions.seniority ?? [];
   const companyTypeFilterOptions = configOptions.company_type ?? [];
@@ -1017,6 +1061,7 @@ export default function ConferenceDetailPage() {
       }
       if (filterSeniority && effectiveSeniority(a.seniority, a.title) !== filterSeniority) return false;
       if (filterCompanyType && (a.company_type || '') !== filterCompanyType) return false;
+      if (filterNeedsReview && !(a.title ? shouldWarnForTitleMetadata(titleMetaMap[a.id]) : false)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -1508,6 +1553,15 @@ export default function ConferenceDetailPage() {
                     </svg>
                     Remove ({selectedAttendeeIds.size})
                   </button>
+                  {!titleMetaLoading && (() => {
+                    const warnCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title && shouldWarnForTitleMetadata(titleMetaMap[a.id])).length;
+                    return warnCount > 0 ? (
+                      <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                        Classify Titles ({warnCount})
+                      </button>
+                    ) : null;
+                  })()}
                 </>
               )}
               <button
@@ -1664,11 +1718,19 @@ export default function ConferenceDetailPage() {
                   </select>
                 </div>
               </div>
-              {(filterSeniority || filterCompanyType) && (
-                <div className="mt-3 flex justify-end">
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title Status</p>
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                  <input type="checkbox" checked={filterNeedsReview} onChange={e => setFilterNeedsReview(e.target.checked)} className="accent-brand-secondary" />
+                  Needs Title Review
+                  {titleMetaLoading && <span className="text-xs text-gray-400">…</span>}
+                </label>
+              </div>
+              {(filterSeniority || filterCompanyType || filterNeedsReview) && (
+                <div className="mt-3 flex justify-end sm:col-span-2">
                   <button
                     type="button"
-                    onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); }}
+                    onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); setFilterNeedsReview(false); }}
                     className="text-xs text-gray-500 hover:text-red-500 transition-colors"
                   >
                     Clear all filters
@@ -1773,7 +1835,16 @@ export default function ConferenceDetailPage() {
                           </Link>
                         </div>
                       </div>
-                      {attendee.title && <p className="text-xs text-gray-500 mt-1 ml-6">{attendee.title}</p>}
+                      {attendee.title && (
+                        <div className="flex items-center gap-1 mt-1 ml-6">
+                          <p className="text-xs text-gray-500">{attendee.title}</p>
+                          {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                            <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review" className="text-amber-500 hover:text-amber-600 flex-shrink-0">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {attendee.company_name && (
                         <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
                           {attendee.company_id ? (
@@ -1869,9 +1940,16 @@ export default function ConferenceDetailPage() {
                               {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
                                 <input className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'title')} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(attendee, 'title'); if (e.key === 'Escape') setEditingCell(null); }} autoFocus />
                               ) : (
-                                <button type="button" className="text-left w-full" onClick={() => startInlineEdit(attendee, 'title')}>
-                                  <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
-                                </button>
+                                <div className="flex items-start gap-1 min-w-0">
+                                  <button type="button" className="text-left flex-1 min-w-0" onClick={() => startInlineEdit(attendee, 'title')}>
+                                    <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                                  </button>
+                                  {!titleMetaLoading && attendee.title && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                                    <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review — click to classify" className="flex-shrink-0 text-amber-500 hover:text-amber-600 mt-0.5">
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           );
@@ -2374,6 +2452,31 @@ export default function ConferenceDetailPage() {
           startDate={conference.start_date}
           endDate={conference.end_date}
           onClose={() => setShowCrmExport(false)}
+        />
+      )}
+
+      {classifyingAttendee && (
+        <ClassifyTitleModal
+          rawTitle={classifyingAttendee.title}
+          meta={titleMetaMap[classifyingAttendee.id]}
+          functionOptions={classifyFunctionOptions}
+          seniorityOptions={classifySeniorityOptions}
+          onClose={() => setClassifyingAttendee(null)}
+          onSaved={(savedMeta) => {
+            setTitleMetaMap(prev => ({ ...prev, [classifyingAttendee.id]: savedMeta }));
+            setClassifyingAttendee(null);
+          }}
+        />
+      )}
+
+      {showBulkClassify && (
+        <BulkClassifyTitlesModal
+          attendees={(conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id))}
+          metadataMap={titleMetaMap}
+          functionOptions={classifyFunctionOptions}
+          seniorityOptions={classifySeniorityOptions}
+          onClose={() => setShowBulkClassify(false)}
+          onSaved={() => { setShowBulkClassify(false); setTitleMetaRefetch(c => c + 1); }}
         />
       )}
     </div>
