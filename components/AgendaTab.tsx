@@ -117,7 +117,7 @@ function parseMinutes(time: string | null): number {
 function formatMeetingDayLabel(meetingDate: string): string {
   try {
     return new Date(`${meetingDate}T00:00:00`).toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric',
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     });
   } catch {
     return meetingDate;
@@ -628,19 +628,27 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   }
 
   function groupByDay(items: DisplayItem[]): { day_label: string; items: DisplayItem[] }[] {
-    const map = new Map<string, DisplayItem[]>();
-    const sortDate = new Map<string, string>();
+    // Key by sort_date (YYYY-MM-DD) so items on the same calendar day always merge
+    // regardless of how the display label was formatted or stored.
+    const map = new Map<string, { label: string; items: DisplayItem[] }>();
     for (const item of items) {
-      if (!map.has(item.day_label)) { map.set(item.day_label, []); sortDate.set(item.day_label, item.sort_date); }
-      map.get(item.day_label)!.push(item);
+      const key = item.sort_date;
+      if (!map.has(key)) {
+        // Prefer a well-formed label derived from the ISO date; fall back to stored label
+        const derivedLabel = key.match(/^\d{4}-\d{2}-\d{2}$/)
+          ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+          : item.day_label;
+        map.set(key, { label: derivedLabel, items: [] });
+      }
+      map.get(key)!.items.push(item);
     }
-    const days = Array.from(map.entries()).map(([day_label, dayItems]) => ({
-      day_label,
-      sort_date: sortDate.get(day_label) ?? day_label,
-      items: [...dayItems].sort((a, b) => a.sort_minutes - b.sort_minutes),
-    }));
-    days.sort((a, b) => a.sort_date.localeCompare(b.sort_date));
-    return days;
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([sort_date, { label, items: dayItems }]) => ({
+        day_label: label,
+        sort_date,
+        items: [...dayItems].sort((a, b) => a.sort_minutes - b.sort_minutes),
+      }));
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────────
