@@ -8,6 +8,8 @@ import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { getPreset } from '@/lib/colors';
+import { SetConferenceButton } from '@/components/SetConferenceButton';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -349,7 +351,7 @@ function BadgeScanResultsModal({
 
 // ── TouchpointQuickModal ──────────────────────────────────────────────────────
 
-export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
+export function TouchpointQuickModal({ onClose, defaultConferenceId }: { onClose: () => void; defaultConferenceId?: number | null }) {
   const { user } = useUser();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
@@ -389,7 +391,10 @@ export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
           (Array.isArray(optRes) ? (optRes as TouchpointOption[]) : [])
             .sort((a, b) => a.sort_order - b.sort_order)
         );
-        const active = confs.find(c => c.status === 'in_progress') ?? confs[0] ?? null;
+        const active = (defaultConferenceId != null ? confs.find(c => c.id === defaultConferenceId) : null)
+          ?? confs.find(c => c.status === 'in_progress')
+          ?? confs[0]
+          ?? null;
         if (active) {
           setSelectedConference(active);
           await loadConferenceCascade(active.id, Array.isArray(compRes) ? compRes : []);
@@ -602,6 +607,7 @@ export function TouchpointQuickModal({ onClose }: { onClose: () => void }) {
 
 export function DashboardActionCard() {
   const { user } = useUser();
+  const { activeConference } = useActiveConference();
   const [showCameraMenu, setShowCameraMenu] = useState(false);
   const [scanningBadge, setScanningBadge] = useState(false);
   const [scanningNotes, setScanningNotes] = useState(false);
@@ -725,6 +731,9 @@ export function DashboardActionCard() {
 
   return (
     <div className="card flex flex-col justify-center">
+      <div className="mb-2">
+        <SetConferenceButton />
+      </div>
       <div className="flex flex-row gap-1">
 
         {/* Left — mobile: Scan camera, desktop: Follow Up */}
@@ -845,7 +854,7 @@ export function DashboardActionCard() {
         onClose={() => setShowFollowUpModal(false)}
         onSuccess={() => setShowFollowUpModal(false)}
       />
-      {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} />}
+      {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} defaultConferenceId={activeConference?.id} />}
       {showScanModal && badgeScanCards.length > 0 && (
         <BadgeScanResultsModal
           cards={badgeScanCards}
@@ -860,6 +869,7 @@ export function DashboardActionCard() {
           initialCards={batchModalCards}
           onClose={() => setShowBatchModal(false)}
           onDone={() => setShowBatchModal(false)}
+          conferenceId={activeConference?.id}
         />
       )}
     </div>

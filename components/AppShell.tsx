@@ -18,6 +18,7 @@ import { UpgradeModalProvider } from '@/lib/UpgradeModalContext';
 import { PlanSelectionModal } from './PlanSelectionModal';
 import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
+import { ActiveConferenceProvider } from '@/components/ActiveConferenceContext';
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const { isOpen, defaultPlan, closeUpgradeModal } = useUpgradeModal();
@@ -83,7 +84,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <UserProvider>
       <OnboardingProvider>
       <UpgradeModalProvider>
+      <ActiveConferenceProvider>
         <AppShellInner>{children}</AppShellInner>
+      </ActiveConferenceProvider>
       </UpgradeModalProvider>
       </OnboardingProvider>
     </UserProvider>

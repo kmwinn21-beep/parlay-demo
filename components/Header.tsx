@@ -16,6 +16,7 @@ import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
+import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',
@@ -137,6 +138,7 @@ export function Header() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      clearActiveConferenceStorage();
       window.location.href = '/auth/login';
     } catch {
       toast.error('Logout failed.');

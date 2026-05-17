@@ -10,6 +10,7 @@ import { useTagline } from '@/lib/useTagline';
 import { LogoImage } from './LogoImage';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { OnboardingChecklist } from './onboarding/OnboardingChecklist';
+import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 
 const operationsItems = [
   {
@@ -114,6 +115,7 @@ export function Sidebar() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      clearActiveConferenceStorage();
       window.location.href = '/auth/login';
     } catch {
       toast.error('Logout failed.');
