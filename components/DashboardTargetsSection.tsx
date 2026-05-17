@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 import Link from 'next/link';
 import type { DashboardConference } from './RecentSection';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
@@ -164,7 +165,9 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const defaultConf = sortedConferences[0] ?? null;
 
   const avgCostPerUnit = useAvgCostPerUnit();
+  const { activeConference } = useActiveConference();
   const [selectedConfId, setSelectedConfId] = useState<number | null>(defaultConf?.id ?? null);
+  const [hasUserSelectedConf, setHasUserSelectedConf] = useState(false);
   const [targets, setTargets] = useState<TargetEntry[]>([]);
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -191,6 +194,13 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
       setLoading(false);
     }
   }, []);
+
+  // Pre-populate conference from active context
+  useEffect(() => {
+    if (hasUserSelectedConf || !activeConference) return;
+    const match = sortedConferences.find(c => c.id === activeConference.id);
+    if (match) setSelectedConfId(match.id);
+  }, [activeConference, hasUserSelectedConf, sortedConferences]);
 
   useEffect(() => {
     if (selectedConfId != null) {
@@ -251,6 +261,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             value={selectedConfId ?? ''}
             onChange={e => {
               setSelectedConfId(Number(e.target.value));
+              setHasUserSelectedConf(true);
               setSelectedTiers(new Set(['1']));
             }}
             className="input-field text-sm w-full col-span-1 sm:col-start-3 sm:col-span-2"

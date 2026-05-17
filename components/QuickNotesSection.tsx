@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 
 interface QuickNote {
   id: number;
@@ -152,6 +153,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
 // ── Assign Note Modal ─────────────────────────────────────────────────────────
 function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClose: () => void; onAssigned: (id: number) => void }) {
   const { user } = useUser();
+  const { activeConference } = useActiveConference();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [allAttendees, setAllAttendees] = useState<Attendee[]>([]);
@@ -191,6 +193,14 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     };
     load();
   }, []);
+
+  // Pre-populate conference from active context once data loads
+  useEffect(() => {
+    if (selConference || !activeConference || filteredConferences.length === 0) return;
+    const match = filteredConferences.find(c => c.id === activeConference.id);
+    if (match) void handleConferenceChange(match);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConference, filteredConferences.length, selConference]);
 
   const handleConferenceChange = useCallback(async (conf: Conference | null) => {
     setSelConference(conf); setSelAttendee(null);

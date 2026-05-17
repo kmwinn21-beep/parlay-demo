@@ -8,6 +8,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { MentionTextarea } from '@/components/MentionTextarea';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 
 interface ConferenceOption {
   id: number;
@@ -51,6 +52,7 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [pinOnSubmit, setPinOnSubmit] = useState(false);
   const { user } = useUser();
+  const { activeConference } = useActiveConference();
 
   // Fetch conferences, all companies, all attendees on open
   useEffect(() => {
@@ -68,6 +70,13 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       .then((data: AttendeeOption[]) => setAllAttendees(data))
       .catch(() => {});
   }, [isOpen]);
+
+  // Pre-populate conference from active context once conferences load
+  useEffect(() => {
+    if (!isOpen || !activeConference || selectedConferenceId || conferences.length === 0) return;
+    const match = conferences.find(c => c.id === activeConference.id);
+    if (match) setSelectedConferenceId(String(match.id));
+  }, [isOpen, activeConference, conferences, selectedConferenceId]);
 
   // Fetch conference attendees when conference changes
   useEffect(() => {
