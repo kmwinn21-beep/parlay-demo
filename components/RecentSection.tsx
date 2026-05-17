@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { DashboardAgendaSection } from './DashboardAgendaSection';
 import AttendeesTooltip from './AttendeesTooltip';
 import AwaitingUploadModal from './AwaitingUploadModal';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 
 export interface DashboardConference {
   id: number;
@@ -42,6 +43,7 @@ function formatMonthDay(dateStr: string) {
 export function RecentSection({ upcomingConferences, awaitingUploadConferences, allConferences, defaultConferenceId }: Props) {
   const [tab, setTab] = useState<'agenda' | 'upcoming'>('agenda');
   const [agendaView, setAgendaView] = useState<'my' | 'full'>('my');
+  const { activeConference } = useActiveConference();
 
   const firstAvailable =
     allConferences.find(c => c.status === 'in_progress')?.id ??
@@ -50,6 +52,13 @@ export function RecentSection({ upcomingConferences, awaitingUploadConferences, 
     null;
 
   const [selectedId, setSelectedId] = useState<number | null>(defaultConferenceId ?? firstAvailable);
+
+  // Sync dropdown with active conference context whenever it changes
+  useEffect(() => {
+    if (!activeConference) return;
+    const match = allConferences.find(c => c.id === activeConference.id);
+    if (match) setSelectedId(match.id);
+  }, [activeConference, allConferences]);
   const selectedConference = allConferences.find(c => c.id === selectedId);
 
   const inProgressConfs = allConferences.filter(c => c.status === 'in_progress').sort((a, b) => a.start_date.localeCompare(b.start_date));

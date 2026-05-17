@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import Link from 'next/link';
 import type { DashboardConference } from './RecentSection';
@@ -161,13 +161,12 @@ function sortConferencesForDropdown(conferences: DashboardConference[]): Dashboa
 }
 
 export function DashboardTargetsSection({ allConferences }: { allConferences: DashboardConference[] }) {
-  const sortedConferences = sortConferencesForDropdown(allConferences);
+  const sortedConferences = useMemo(() => sortConferencesForDropdown(allConferences), [allConferences]);
   const defaultConf = sortedConferences[0] ?? null;
 
   const avgCostPerUnit = useAvgCostPerUnit();
   const { activeConference } = useActiveConference();
   const [selectedConfId, setSelectedConfId] = useState<number | null>(defaultConf?.id ?? null);
-  const [hasUserSelectedConf, setHasUserSelectedConf] = useState(false);
   const [targets, setTargets] = useState<TargetEntry[]>([]);
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -195,12 +194,12 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
     }
   }, []);
 
-  // Pre-populate conference from active context
+  // Sync dropdown with active conference context whenever it changes
   useEffect(() => {
-    if (hasUserSelectedConf || !activeConference) return;
+    if (!activeConference) return;
     const match = sortedConferences.find(c => c.id === activeConference.id);
     if (match) setSelectedConfId(match.id);
-  }, [activeConference, hasUserSelectedConf, sortedConferences]);
+  }, [activeConference, sortedConferences]);
 
   useEffect(() => {
     if (selectedConfId != null) {
@@ -261,7 +260,6 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             value={selectedConfId ?? ''}
             onChange={e => {
               setSelectedConfId(Number(e.target.value));
-              setHasUserSelectedConf(true);
               setSelectedTiers(new Set(['1']));
             }}
             className="input-field text-sm w-full col-span-1 sm:col-start-3 sm:col-span-2"
