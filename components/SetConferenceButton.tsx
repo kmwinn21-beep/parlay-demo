@@ -3,7 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useUser } from '@/components/UserContext';
 import { useActiveConference, type ActiveConference } from '@/components/ActiveConferenceContext';
-import { computeConferenceStage } from '@/lib/conference-stage';
+import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
+
+function safeConferenceStage(c: ConferenceRow): ConferenceStage {
+  if (c.is_historical) return 'closed';
+  return computeConferenceStage(c);
+}
 
 interface ConferenceRow {
   id: number;
@@ -38,7 +43,7 @@ export function SetConferenceButton() {
     void (async () => {
       try {
         const data: ConferenceRow[] = await fetch('/api/conferences?nav=1').then(r => r.json());
-        const inProgress = data.filter(c => computeConferenceStage(c) === 'in_progress');
+        const inProgress = data.filter(c => safeConferenceStage(c) === 'in_progress');
         if (inProgress.length !== 1) return;
         const conf = inProgress[0];
         const internalAttendees = conf.internal_attendees
@@ -130,7 +135,7 @@ export function SetConferenceButton() {
               ) : (
                 <>
                   {(['in_progress', 'planning', 'post_conference', 'closed'] as const).map(groupStage => {
-                    const group = panelConferences.filter(c => computeConferenceStage(c) === groupStage);
+                    const group = panelConferences.filter(c => safeConferenceStage(c) === groupStage);
                     if (group.length === 0) return null;
                     const groupLabel = groupStage === 'in_progress' ? 'In Progress'
                       : groupStage === 'planning' ? 'Upcoming'
