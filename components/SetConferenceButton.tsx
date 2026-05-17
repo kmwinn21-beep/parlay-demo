@@ -3,7 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useUser } from '@/components/UserContext';
 import { useActiveConference, type ActiveConference } from '@/components/ActiveConferenceContext';
-import { computeConferenceStage } from '@/lib/conference-stage';
+import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
+
+function safeConferenceStage(c: ConferenceRow): ConferenceStage {
+  if (c.is_historical) return 'closed';
+  return computeConferenceStage(c);
+}
 
 interface ConferenceRow {
   id: number;
@@ -38,7 +43,7 @@ export function SetConferenceButton() {
     void (async () => {
       try {
         const data: ConferenceRow[] = await fetch('/api/conferences?nav=1').then(r => r.json());
-        const inProgress = data.filter(c => computeConferenceStage(c) === 'in_progress');
+        const inProgress = data.filter(c => safeConferenceStage(c) === 'in_progress');
         if (inProgress.length !== 1) return;
         const conf = inProgress[0];
         const internalAttendees = conf.internal_attendees
@@ -60,18 +65,8 @@ export function SetConferenceButton() {
     setPanelLoading(true);
     try {
       const data: ConferenceRow[] = await fetch('/api/conferences').then(r => r.json());
-      const filtered = data
-        .filter(c => {
-          const stage = computeConferenceStage(c);
-          return stage === 'in_progress' || stage === 'planning';
-        })
-        .sort((a, b) => {
-          const aIP = computeConferenceStage(a) === 'in_progress';
-          const bIP = computeConferenceStage(b) === 'in_progress';
-          if (aIP !== bIP) return aIP ? -1 : 1;
-          return a.start_date.localeCompare(b.start_date);
-        });
-      setPanelConferences(filtered);
+      const sorted = [...data].sort((a, b) => a.start_date.localeCompare(b.start_date));
+      setPanelConferences(sorted);
     } catch {}
     setPanelLoading(false);
   };
@@ -136,12 +131,20 @@ export function SetConferenceButton() {
                   <div className="w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : panelConferences.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">No upcoming conferences found.</p>
+                <p className="text-sm text-gray-400 text-center py-8">No conferences found.</p>
               ) : (
-                <ul className="space-y-1">
-                  {panelConferences.map(conf => {
-                    const stage = computeConferenceStage(conf);
-                    const isInProgress = stage === 'in_progress';
+                <>
+                  {(['in_progress', 'planning', 'post_conference', 'closed'] as const).map(groupStage => {
+                    const group = panelConferences.filter(c => safeConferenceStage(c) === groupStage);
+                    if (group.length === 0) return null;
+                    const groupLabel = groupStage === 'in_progress' ? 'In Progress'
+                      : groupStage === 'planning' ? 'Upcoming'
+                      : 'Past';
+                    return (
+                      <div key={groupStage} className="mb-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-1 mb-1">{groupLabel}</p>
+                        <ul className="space-y-0.5">
+                          {group.map(conf => {
                     const isActive = activeConference?.id === conf.id;
                     return (
                       <li key={conf.id}>
@@ -154,14 +157,7 @@ export function SetConferenceButton() {
                           ].join(' ')}
                         >
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
-                              {isInProgress && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 flex-shrink-0">
-                                  In Progress
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-sm font-medium text-gray-800 truncate block">{conf.name}</span>
                             <p className="text-xs text-gray-500 mt-0.5">{formatDateRange(conf.start_date, conf.end_date)}</p>
                             {conf.location && <p className="text-xs text-gray-400">{conf.location}</p>}
                           </div>
@@ -174,7 +170,11 @@ export function SetConferenceButton() {
                       </li>
                     );
                   })}
-                </ul>
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
 
