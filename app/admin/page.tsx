@@ -226,6 +226,13 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     setExpandedOptions(prev => new Set(prev).add(opt.id));
   };
 
+  const handleEditProspectInline = (opt: ConfigOption) => {
+    setEditingId(opt.id);
+    setEditValue(opt.value);
+    setEditVisibleForms(opt.visible_forms ?? []);
+    setFormPickerOpenId(null);
+  };
+
   const handleSaveEdit = async (id: number) => {
     if (!editValue.trim()) { toast.error('Value cannot be empty.'); return; }
     try {
@@ -343,26 +350,57 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                 const isOptionExpanded = expandedOptions.has(opt.id);
                 const isEditing = editingId === opt.id;
                 return (
-                  <li key={opt.id} draggable={!isOptionExpanded} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-brand-secondary ring-offset-1' : '', isOptionExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
+                  <li key={opt.id} draggable={!isOptionExpanded && !isEditing} onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={['rounded-lg transition-all border border-transparent', isDragging && dragIndexRef.current === index ? 'opacity-40' : '', dragOverIndex === index && dragIndexRef.current !== index ? 'ring-2 ring-brand-secondary ring-offset-1' : '', isOptionExpanded ? 'bg-gray-50 border-gray-200' : ''].join(' ')}>
                     <div className="flex items-center gap-2 px-1 py-1">
                       <DragHandle />
                       {category === 'company_type' && opt.value === 'Competitor'
                         ? <span className="w-5 h-5 rounded-full border-2 border-red-400 flex-shrink-0 cursor-not-allowed" style={{ backgroundColor: '#dc2626' }} title="Competitor color is locked to red" />
                         : <ColorPicker optionId={opt.id} currentColor={opt.color} onColorSaved={onRefresh} />
                       }
-                      <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded flex items-center gap-2">
-                        {opt.value}
-                        {showScopeDropdown && opt.scope === 'user' && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
-                        )}
-                      </span>
-                      {category === 'company_type' && opt.action_key === 'prospect' && (
+                      {category === 'company_type' && opt.action_key === 'prospect' ? (
+                        isEditing ? (
+                          <input
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(opt.id); if (e.key === 'Escape') setEditingId(null); }}
+                            className="flex-1 text-sm input-field py-1 px-2"
+                            autoFocus
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleEditProspectInline(opt)}
+                            className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded hover:bg-gray-100 text-left flex items-center gap-1.5 group"
+                          >
+                            <span>{opt.value}</span>
+                            <svg className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                        )
+                      ) : (
+                        <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded flex items-center gap-2">
+                          {opt.value}
+                          {showScopeDropdown && opt.scope === 'user' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
+                          )}
+                        </span>
+                      )}
+                      {category === 'company_type' && opt.action_key === 'prospect' && !isEditing && (
                         opt.is_primary
                           ? <span className="flex items-center gap-1 text-xs font-medium text-amber-600 px-2 py-1">
                               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                               Primary
                             </span>
                           : <button type="button" onClick={() => handleMakePrimary(opt.id)} className="text-gray-400 hover:text-amber-600 text-xs font-medium px-2 py-1 transition-colors">Confirm Primary</button>
+                      )}
+                      {category === 'company_type' && opt.action_key === 'prospect' && isEditing && (
+                        <>
+                          <button type="button" onClick={() => handleSaveEdit(opt.id)} className="flex-shrink-0 p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 transition-colors" title="Save">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          </button>
+                          <button type="button" onClick={() => setEditingId(null)} className="flex-shrink-0 p-1.5 rounded-md text-gray-400 hover:bg-gray-100 transition-colors" title="Cancel">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </>
                       )}
                       {opt.is_system
                         ? <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
@@ -375,6 +413,11 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                         <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
                       )}
                     </div>
+                    {category === 'company_type' && opt.action_key === 'prospect' && isEditing && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg mx-2 mb-2 px-3 py-2">
+                        This is your primary prospect type. Renaming it changes how it appears throughout Parlay but does not affect how the system identifies your prospects.
+                      </p>
+                    )}
                     {isOptionExpanded && (
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
                         <div>

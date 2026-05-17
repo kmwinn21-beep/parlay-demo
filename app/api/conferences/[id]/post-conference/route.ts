@@ -218,13 +218,8 @@ export async function GET(
       sql: `SELECT id, value, action_key
             FROM config_options
             WHERE category = 'company_type'
-              AND (LOWER(value) = 'prospects' OR LOWER(value) = 'prospect' OR LOWER(action_key) = 'prospect')
-            ORDER BY CASE
-              WHEN LOWER(value) = 'prospects' THEN 0
-              WHEN LOWER(value) = 'prospect' THEN 1
-              WHEN LOWER(action_key) = 'prospect' THEN 2
-              ELSE 3
-            END, id ASC
+              AND action_key = 'prospect'
+            ORDER BY id ASC
             LIMIT 1`,
       args: [],
     }),
