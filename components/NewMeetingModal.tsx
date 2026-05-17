@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
@@ -207,6 +208,7 @@ export function NewMeetingModal({
 }: NewMeetingModalProps) {
   useHideBottomNav(isOpen);
   const { user } = useUser();
+  const { activeConference } = useActiveConference();
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [attendees, setAttendees] = useState<AttendeeOption[]>([]);
@@ -255,7 +257,8 @@ export function NewMeetingModal({
         .then((data: ConferenceOption[]) => setConferences(data))
         .catch(() => {});
     }
-    if (defaultConferenceId) setSelectedConferenceId(String(defaultConferenceId));
+    const effectiveConfId = defaultConferenceId ?? activeConference?.id;
+    if (effectiveConfId) setSelectedConferenceId(String(effectiveConfId));
     fetch('/api/companies?minimal=1')
       .then(r => r.json())
       .then((data: Array<{ id: number; company_type?: string | null }>) => {

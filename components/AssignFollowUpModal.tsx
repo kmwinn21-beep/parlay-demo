@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { useActiveConference } from '@/components/ActiveConferenceContext';
 import {
   useUserOptions,
   useConfigWithIds,
@@ -64,6 +65,7 @@ export function AssignFollowUpModal({
 }: AssignFollowUpModalProps) {
   useHideBottomNav(isOpen);
   const { user } = useUser();
+  const { activeConference } = useActiveConference();
   const userOptions = useUserOptions();
   const actionOptions = useConfigWithIds('next_steps');
 
@@ -228,10 +230,11 @@ export function AssignFollowUpModal({
         }
         setAllConferences(sorted);
 
-        if (defaultConferenceId) {
-          setConferenceId(String(defaultConferenceId));
+        const effectiveConfId = defaultConferenceId ?? activeConference?.id;
+        if (effectiveConfId) {
+          setConferenceId(String(effectiveConfId));
           await loadConferenceCompanies(
-            String(defaultConferenceId),
+            String(effectiveConfId),
             defaultCompanyId
           );
         }
