@@ -233,7 +233,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   return (
     <div className="flex flex-col gap-4">
       {/* Header row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
+      <div className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
           Targets
           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
@@ -262,7 +262,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               setSelectedConfId(Number(e.target.value));
               setSelectedTiers(new Set(['1']));
             }}
-            className="input-field text-sm w-full col-span-1 sm:col-start-3 sm:col-span-2"
+            className="input-field text-sm w-full"
           >
             {allConferences.some(c => c.status === 'in_progress') && (
               <optgroup label="In Progress">
