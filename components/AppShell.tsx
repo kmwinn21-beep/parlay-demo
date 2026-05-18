@@ -19,6 +19,13 @@ import { PlanSelectionModal } from './PlanSelectionModal';
 import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
 import { ActiveConferenceProvider } from '@/components/ActiveConferenceContext';
+import { MeetingNotesDrawerProvider, useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
+import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
+
+function GlobalMeetingDrawer() {
+  const { meetingId, closeMeetingNotes } = useMeetingNotesDrawer();
+  return <MeetingNotesDrawer meetingId={meetingId} onClose={closeMeetingNotes} />;
+}
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const { isOpen, defaultPlan, closeUpgradeModal } = useUpgradeModal();
@@ -67,6 +74,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Plan selection modal — single instance, controlled via UpgradeModalContext */}
       <PlanSelectionModal isOpen={isOpen} onClose={closeUpgradeModal} defaultPlan={defaultPlan} />
+
+      {/* Global meeting notes drawer — persists across page navigations */}
+      <GlobalMeetingDrawer />
     </>
   );
 }
@@ -85,7 +95,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <OnboardingProvider>
       <UpgradeModalProvider>
       <ActiveConferenceProvider>
+      <MeetingNotesDrawerProvider>
         <AppShellInner>{children}</AppShellInner>
+      </MeetingNotesDrawerProvider>
       </ActiveConferenceProvider>
       </UpgradeModalProvider>
       </OnboardingProvider>
