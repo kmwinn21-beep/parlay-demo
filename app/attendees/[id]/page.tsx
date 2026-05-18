@@ -253,6 +253,12 @@ export default function AttendeeDetailPage() {
     return () => window.removeEventListener('meeting-notes-deleted', handler);
   }, []);
 
+  useEffect(() => {
+    const handler = () => fetchFollowUps();
+    window.addEventListener('meeting-tasks-confirmed', handler);
+    return () => window.removeEventListener('meeting-tasks-confirmed', handler);
+  }, [fetchFollowUps]);
+
   // Load conference detail when a conference is selected
   useEffect(() => {
     if (!selectedConferenceId) {

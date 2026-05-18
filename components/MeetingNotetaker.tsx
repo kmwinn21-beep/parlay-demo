@@ -639,6 +639,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       body: JSON.stringify({ tasks: selected.map(s => ({ insight_id: s.id, task_text: s.task_text, due_date_offset_days: s.suggested_due_date_offset_days })) }),
     });
     if (!res.ok) throw new Error('Failed to confirm tasks');
+    window.dispatchEvent(new CustomEvent('meeting-tasks-confirmed', { detail: { meetingId } }));
   }, [meetingId, nextSteps, selectedTaskIds]);
 
   const handleSave = useCallback(async () => {
@@ -822,7 +823,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-brand-highlight border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -1283,12 +1284,12 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                       <button
                         onClick={handleAnalyze}
                         disabled={!hasAudioOrTranscript}
-                        className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                        className="w-full py-2 bg-brand-highlight text-brand-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                         </svg>
-                        Analyze with AI
+                        Generate Meeting Summary
                       </button>
                     )}
                   </div>
@@ -1347,12 +1348,12 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   {!analysisLoading ? (
                     <button
                       onClick={handleAnalyze}
-                      className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2"
+                      className="w-full py-2 bg-brand-highlight text-brand-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
-                      Analyze with AI
+                      Generate Meeting Summary
                     </button>
                   ) : (
                     <div className="flex items-center justify-center gap-2 py-2">
@@ -1427,7 +1428,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <p className="text-sm text-gray-400 max-w-[200px]">Record or upload audio, then click Analyze with AI to extract insights.</p>
+                  <p className="text-sm text-gray-400 max-w-[200px]">Record or upload audio, then click Generate Meeting Summary to extract insights.</p>
                 </div>
               )}
 
@@ -1470,8 +1471,14 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                       </button>
                       {actionItemsOpen && (
                         <div className="space-y-2 mt-2">
-                          {nextSteps.map((step) => (
-                            <div key={step.id ?? step.task_text} className="flex items-start gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
+                          {[...nextSteps].sort((a, b) => {
+                            const aSelected = a.id != null && selectedTaskIds.has(a.id) ? 1 : 0;
+                            const bSelected = b.id != null && selectedTaskIds.has(b.id) ? 1 : 0;
+                            return bSelected - aSelected;
+                          }).map((step) => {
+                            const isSelected = step.id != null && selectedTaskIds.has(step.id);
+                            return (
+                            <div key={step.id ?? step.task_text} className={`flex items-start gap-2 p-2.5 rounded-lg border-2 transition-colors ${isSelected ? 'border-brand-primary bg-brand-primary/8' : 'border-gray-200 bg-white'}`}>
                               <input type="checkbox"
                                 checked={step.id != null && selectedTaskIds.has(step.id)}
                                 onChange={e => {
@@ -1501,9 +1508,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                           <button onClick={handleConfirmTasks} disabled={selectedTaskIds.size === 0}
-                            className="mt-1 w-full py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40">
+                            className="mt-1 w-full py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-colors disabled:opacity-40">
                             Confirm selected tasks ({selectedTaskIds.size})
                           </button>
                         </div>
