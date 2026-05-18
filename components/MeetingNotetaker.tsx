@@ -22,6 +22,7 @@ interface Insight {
 }
 
 interface NextStepItem {
+  id?: number;  // DB insight ID — present when loaded from DB or after analyze
   task_text: string;
   timestamp_seconds?: number;
   suggested_owner?: string;
@@ -78,19 +79,6 @@ function formatTime(secs: number) {
 function formatMeetingDate(d: string | null) {
   if (!d) return '';
   return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const map: Record<string, string> = {
-    high: 'bg-green-100 text-green-700',
-    medium: 'bg-yellow-100 text-yellow-700',
-    low: 'bg-gray-100 text-gray-500',
-  };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${map[confidence] ?? map.medium}`}>
-      {confidence}
-    </span>
-  );
 }
 
 function IcpBadge({ icp }: { icp: string | null }) {
@@ -331,6 +319,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [contextCollapsed, setContextCollapsed] = useState(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
+  const [actionItemsOpen, setActionItemsOpen] = useState(false);
+  const [buyingSignalsOpen, setBuyingSignalsOpen] = useState(false);
+  const [painPointsOpen, setPainPointsOpen] = useState(false);
+  const [expandedQuotes, setExpandedQuotes] = useState<Set<number>>(new Set());
 
   // Drag and drop
   const [dragOver, setDragOver] = useState(false);
@@ -370,6 +362,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             } catch { /* not JSON */ }
           }
           if (data.insights?.length) setInsights(data.insights);
+          // Load next_step insights as nextSteps so they persist across sessions
+          const storedNextSteps = (data.insights ?? [])
+            .filter((i: Insight) => i.insight_type === 'next_step')
+            .map((i: Insight) => ({ id: i.id, task_text: i.content, timestamp_seconds: i.timestamp_seconds ?? undefined }));
+          if (storedNextSteps.length) setNextSteps(storedNextSteps);
         }
 
         if (usersRes.ok) {
@@ -590,7 +587,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       setInsights(data.insights ?? []);
       setSummary(data.summary ?? '');
       if (data.transcript?.length) setTranscript(data.transcript);
-      if (data.next_steps?.length) setNextSteps(data.next_steps);
+      // Enrich next_steps with their DB insight IDs so delete works correctly
+      const nextStepInsights = (data.insights ?? []).filter((i: Insight) => i.insight_type === 'next_step');
+      const enriched = (data.next_steps ?? []).map((step: NextStepItem, idx: number) => ({
+        ...step,
+        id: nextStepInsights[idx]?.id,
+      }));
+      setNextSteps(enriched);
       toast.success('Analysis complete!');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Analysis failed');
@@ -632,12 +635,40 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       });
       if (!res.ok) throw new Error();
       toast.success('Notes saved.');
+      // Set outcome to Held (best-effort, non-blocking)
+      if (meeting) {
+        fetch(`/api/meetings/${meetingId}/set-held`, { method: 'POST' }).catch(() => {});
+      }
+      // Sync meeting note cards to entity feeds if AI analysis exists
+      if (meeting && summary) {
+        const actionItems = insights.filter(i => i.insight_type === 'next_step');
+        const buyingSig = insights.filter(i => i.insight_type === 'buying_signal');
+        const painPts = insights.filter(i => i.insight_type === 'pain_point');
+        fetch(`/api/meetings/${meetingId}/notes/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            summary,
+            attendee_id: meeting.attendee_id,
+            company_id: meeting.company_id,
+            conference_id: meeting.conference_id,
+            conference_name: meeting.conference_name,
+            attendee_name: `${meeting.first_name} ${meeting.last_name}`,
+            company_name: meeting.company_name,
+            insight_counts: JSON.stringify({
+              buying_signals: buyingSig.length,
+              pain_points: painPts.length,
+              action_items: actionItems.length,
+            }),
+          }),
+        }).catch(() => {});
+      }
     } catch {
       toast.error('Failed to save notes.');
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights]);
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
@@ -650,8 +681,20 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [meetingId]);
 
+  const handleDeleteInsight = useCallback(async (insightId: number) => {
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/insights/${insightId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      setInsights(prev => prev.filter(i => i.id !== insightId));
+      setNextSteps(prev => prev.filter(s => s.id !== insightId));
+      setSelectedTaskIds(prev => { const n = new Set(prev); n.delete(insightId); return n; });
+    } catch {
+      toast.error('Failed to delete item.');
+    }
+  }, [meetingId]);
+
   const handleConfirmTasks = useCallback(async () => {
-    const selected = nextSteps.filter((_, i) => selectedTaskIds.has(i));
+    const selected = nextSteps.filter(s => s.id != null && selectedTaskIds.has(s.id));
     if (!selected.length) { toast.error('Select at least one task.'); return; }
     try {
       const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
@@ -1333,7 +1376,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
-              {!analysisLoading && insights.length === 0 && nextSteps.length === 0 && !summary && (
+              {!analysisLoading && insights.length === 0 && nextSteps.length === 0 && !summary && !notesText && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                   <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -1342,10 +1385,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
-              {!analysisLoading && (insights.length > 0 || nextSteps.length > 0 || summary) && (
+              {!analysisLoading && (insights.length > 0 || nextSteps.length > 0 || summary || notesText) && (
                 <div className="space-y-5">
 
-                  {/* Summary — always first */}
+                  {/* 1. Meeting Summary */}
                   {summary && (
                     <div>
                       <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Meeting Summary</h3>
@@ -1355,104 +1398,218 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     </div>
                   )}
 
-                  {/* Next Steps */}
-                  {nextSteps.length > 0 && (
+                  {/* 2. User Notes */}
+                  {notesText && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Next Steps</h3>
-                      <div className="space-y-2">
-                        {nextSteps.map((step, i) => (
-                          <div key={i} className="flex items-start gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
-                            <input type="checkbox" checked={selectedTaskIds.has(i)}
-                              onChange={e => { const n = new Set(selectedTaskIds); e.target.checked ? n.add(i) : n.delete(i); setSelectedTaskIds(n); }}
-                              className="mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-gray-700">{step.task_text}</p>
-                              {step.suggested_owner && <p className="text-[10px] text-gray-400 mt-0.5">Owner: {step.suggested_owner}</p>}
-                              {step.suggested_due_date_offset_days != null && <p className="text-[10px] text-gray-400">Due: +{step.suggested_due_date_offset_days} days</p>}
-                            </div>
-                            {step.timestamp_seconds != null && audioDuration > 0 && (
-                              <button onClick={() => scrubTo(step.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline flex-shrink-0">
-                                ▶ {formatTime(step.timestamp_seconds)}
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">User Notes</h3>
+                      <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        {notesText}
                       </div>
-                      <button onClick={handleConfirmTasks} disabled={selectedTaskIds.size === 0}
-                        className="mt-2 w-full py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40">
-                        Confirm selected tasks ({selectedTaskIds.size})
-                      </button>
                     </div>
                   )}
 
-                  {/* Buying Signals */}
-                  {buyingSignals.length > 0 && (
+                  {/* 3. Action Items (collapsible, default collapsed) */}
+                  {(nextSteps.length > 0) && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Buying Signals</h3>
-                      <div className="space-y-2">
-                        {buyingSignals.map(ins => (
-                          <div key={ins.id} className={`p-2.5 rounded-lg border text-xs ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-medium text-gray-800">{ins.content}</span>
-                                <ConfidenceBadge confidence={ins.confidence} />
-                                {!ins.confirmed && <span className="text-[10px] text-gray-400 italic">Unconfirmed</span>}
-                                {ins.confirmed && (
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-green-700 font-semibold">
-                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-                                    Confirmed
-                                  </span>
-                                )}
+                      <button
+                        onClick={() => setActionItemsOpen(o => !o)}
+                        className="w-full flex items-center justify-between text-left py-1 group"
+                      >
+                        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Action Items ({nextSteps.length})
+                        </h3>
+                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${actionItemsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {actionItemsOpen && (
+                        <div className="space-y-2 mt-2">
+                          {nextSteps.map((step) => (
+                            <div key={step.id ?? step.task_text} className="flex items-start gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
+                              <input type="checkbox"
+                                checked={step.id != null && selectedTaskIds.has(step.id)}
+                                onChange={e => {
+                                  if (step.id == null) return;
+                                  const n = new Set(selectedTaskIds);
+                                  if (e.target.checked) n.add(step.id); else n.delete(step.id);
+                                  setSelectedTaskIds(n);
+                                }}
+                                className="mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-gray-700">{step.task_text}</p>
+                                {step.suggested_owner && <p className="text-[10px] text-gray-400 mt-0.5">Owner: {step.suggested_owner}</p>}
+                                {step.suggested_due_date_offset_days != null && <p className="text-[10px] text-gray-400">Due: +{step.suggested_due_date_offset_days} days</p>}
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                {ins.timestamp_seconds != null && audioDuration > 0 && (
-                                  <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
-                                    ▶ {formatTime(ins.timestamp_seconds)}
+                                {step.timestamp_seconds != null && audioDuration > 0 && (
+                                  <button onClick={() => scrubTo(step.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
+                                    ▶ {formatTime(step.timestamp_seconds)}
                                   </button>
                                 )}
-                                <button onClick={() => handleConfirmInsight(ins.id)}
-                                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${ins.confirmed ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                                  {ins.confirmed ? 'Confirmed' : 'Confirm'}
-                                </button>
+                                {step.id != null && (
+                                  <button onClick={() => handleDeleteInsight(step.id!)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
                             </div>
-                            {ins.quote && (
-                              <blockquote className="text-[11px] text-gray-500 italic border-l-2 border-gray-200 pl-2 mt-1">
-                                &ldquo;{ins.quote}&rdquo;
-                              </blockquote>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                          <button onClick={handleConfirmTasks} disabled={selectedTaskIds.size === 0}
+                            className="mt-1 w-full py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40">
+                            Confirm selected tasks ({selectedTaskIds.size})
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Pain Points */}
+                  {/* 4. Buying Signals (collapsible, default collapsed, 2-col grid) */}
+                  {buyingSignals.length > 0 && (
+                    <div>
+                      <button
+                        onClick={() => setBuyingSignalsOpen(o => !o)}
+                        className="w-full flex items-center justify-between text-left py-1"
+                      >
+                        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Buying Signals ({buyingSignals.length})
+                        </h3>
+                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${buyingSignalsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {buyingSignalsOpen && (
+                        <>
+                          <p className="text-[10px] text-gray-400 mt-0.5 mb-2">Check signals to mark them as priority. Unchecked signals are still saved.</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {buyingSignals.map(ins => (
+                              <div key={ins.id} className={`p-2.5 rounded-lg border text-xs flex flex-col ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                                <div className="flex items-start justify-between gap-1 mb-1.5">
+                                  <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
+                                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                                    {ins.timestamp_seconds != null && audioDuration > 0 && (
+                                      <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
+                                        ▶{formatTime(ins.timestamp_seconds)}
+                                      </button>
+                                    )}
+                                    <button onClick={() => handleDeleteInsight(ins.id)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                                {ins.quote && (
+                                  <div className="mb-2 flex-1">
+                                    <blockquote className={`text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 ${expandedQuotes.has(ins.id) ? '' : 'line-clamp-2'}`}>
+                                      &ldquo;{ins.quote}&rdquo;
+                                    </blockquote>
+                                    {ins.quote.length > 80 && (
+                                      <button
+                                        onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
+                                        className="text-[10px] text-blue-500 hover:underline mt-0.5"
+                                      >
+                                        {expandedQuotes.has(ins.id) ? 'Hide' : 'Show Quote'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between mt-auto pt-1">
+                                  <span className="text-[10px] text-gray-400">{ins.confidence}</span>
+                                  <button
+                                    onClick={() => handleConfirmInsight(ins.id)}
+                                    title={ins.confirmed ? 'Unmark priority' : 'Mark as priority'}
+                                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      ins.confirmed
+                                        ? 'bg-green-500 border-green-500 text-white'
+                                        : 'bg-white border-green-400 text-green-400 hover:border-green-500'
+                                    }`}
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill={ins.confirmed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 5. Pain Points (collapsible, default collapsed, 2-col grid) */}
                   {painPoints.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Pain Points</h3>
-                      <div className="space-y-2">
-                        {painPoints.map(ins => (
-                          <div key={ins.id} className="p-2.5 rounded-lg border border-gray-200 bg-white text-xs">
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-medium text-gray-800">{ins.content}</span>
-                                <ConfidenceBadge confidence={ins.confidence} />
+                      <button
+                        onClick={() => setPainPointsOpen(o => !o)}
+                        className="w-full flex items-center justify-between text-left py-1"
+                      >
+                        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Pain Points ({painPoints.length})
+                        </h3>
+                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${painPointsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {painPointsOpen && (
+                        <>
+                          <p className="text-[10px] text-gray-400 mt-0.5 mb-2">Check pain points to mark them as priority. Unchecked pain points are still saved.</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {painPoints.map(ins => (
+                              <div key={ins.id} className={`p-2.5 rounded-lg border text-xs flex flex-col ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                                <div className="flex items-start justify-between gap-1 mb-1.5">
+                                  <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
+                                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                                    {ins.timestamp_seconds != null && audioDuration > 0 && (
+                                      <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
+                                        ▶{formatTime(ins.timestamp_seconds)}
+                                      </button>
+                                    )}
+                                    <button onClick={() => handleDeleteInsight(ins.id)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                                {ins.quote && (
+                                  <div className="mb-2 flex-1">
+                                    <blockquote className={`text-[10px] text-gray-500 italic border-l-2 border-orange-200 pl-2 ${expandedQuotes.has(ins.id) ? '' : 'line-clamp-2'}`}>
+                                      &ldquo;{ins.quote}&rdquo;
+                                    </blockquote>
+                                    {ins.quote.length > 80 && (
+                                      <button
+                                        onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
+                                        className="text-[10px] text-blue-500 hover:underline mt-0.5"
+                                      >
+                                        {expandedQuotes.has(ins.id) ? 'Hide' : 'Show Quote'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between mt-auto pt-1">
+                                  <span className="text-[10px] text-gray-400">{ins.confidence}</span>
+                                  <button
+                                    onClick={() => handleConfirmInsight(ins.id)}
+                                    title={ins.confirmed ? 'Unmark priority' : 'Mark as priority'}
+                                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      ins.confirmed
+                                        ? 'bg-green-500 border-green-500 text-white'
+                                        : 'bg-white border-green-400 text-green-400 hover:border-green-500'
+                                    }`}
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill={ins.confirmed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </button>
+                                </div>
                               </div>
-                              {ins.timestamp_seconds != null && audioDuration > 0 && (
-                                <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline flex-shrink-0">
-                                  ▶ {formatTime(ins.timestamp_seconds)}
-                                </button>
-                              )}
-                            </div>
-                            {ins.quote && (
-                              <blockquote className="text-[11px] text-gray-500 italic border-l-2 border-orange-200 pl-2 mt-1">
-                                &ldquo;{ins.quote}&rdquo;
-                              </blockquote>
-                            )}
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        </>
+                      )}
                     </div>
                   )}
 
