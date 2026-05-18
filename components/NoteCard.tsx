@@ -94,6 +94,7 @@ export function NoteCard({
   showPinnedIndicator,
   entityType,
   conferences,
+  onMeetingNoteClick,
 }: {
   note: EntityNote;
   onDelete: (id: number) => void;
@@ -102,6 +103,7 @@ export function NoteCard({
   showPinnedIndicator?: boolean;
   entityType: 'attendee' | 'company' | 'conference';
   conferences?: Array<{ id: number; name: string }>;
+  onMeetingNoteClick?: (meetingId: number) => void;
 }) {
   const { user } = useUser();
   const colorMaps = useConfigColors();
@@ -305,6 +307,14 @@ export function NoteCard({
               @{getRepInitials(name)}
             </span>
           ))}
+          {note.note_type === 'meeting_note' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200 whitespace-nowrap">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+              Meeting Note
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {repInitials && (
@@ -357,6 +367,42 @@ export function NoteCard({
           Let&apos;s Talk requested — commenting closed
         </div>
       )}
+
+      {/* Insight pills (meeting notes only) */}
+      {note.note_type === 'meeting_note' && note.insight_counts && (() => {
+        let counts: { buying_signals?: number; pain_points?: number; action_items?: number } = {};
+        try { counts = JSON.parse(note.insight_counts); } catch { return null; }
+        const meetingId = note.meeting_id ?? null;
+        if (!meetingId) return null;
+        const hasPills = (counts.buying_signals ?? 0) > 0 || (counts.pain_points ?? 0) > 0 || (counts.action_items ?? 0) > 0;
+        if (!hasPills) return null;
+        // Use modal callback when available (attendee/company context), otherwise navigate to full page
+        const makePill = (label: string, colorCls: string, section: string) => {
+          const pillCls = `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors ${colorCls}`;
+          return onMeetingNoteClick
+            ? <button key={section} onClick={() => onMeetingNoteClick(meetingId)} className={pillCls}>{label}</button>
+            : <Link key={section} href={`/meetings/${meetingId}/notes?section=${section}`} className={pillCls}>{label}</Link>;
+        };
+        return (
+          <div className="flex flex-wrap gap-1.5 mt-2 mb-1">
+            {(counts.buying_signals ?? 0) > 0 && makePill(
+              `${counts.buying_signals} buying ${counts.buying_signals === 1 ? 'signal' : 'signals'}`,
+              'bg-green-100 text-green-700 hover:bg-green-200',
+              'buying_signals',
+            )}
+            {(counts.pain_points ?? 0) > 0 && makePill(
+              `${counts.pain_points} pain ${counts.pain_points === 1 ? 'point' : 'points'}`,
+              'bg-orange-100 text-orange-700 hover:bg-orange-200',
+              'pain_points',
+            )}
+            {(counts.action_items ?? 0) > 0 && makePill(
+              `${counts.action_items} action ${counts.action_items === 1 ? 'item' : 'items'}`,
+              'bg-blue-100 text-blue-700 hover:bg-blue-200',
+              'action_items',
+            )}
+          </div>
+        );
+      })()}
 
       {/* Bottom action bar */}
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-50">

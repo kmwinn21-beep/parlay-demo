@@ -22,6 +22,9 @@ export interface EntityNote {
   lets_talk?: number;
   author_user_id?: number | null;
   comment_count?: number;
+  note_type?: string | null;
+  meeting_id?: number | null;
+  insight_counts?: string | null;
 }
 
 
@@ -41,6 +44,7 @@ export function NotesSection({
   onPin,
   pinnedNoteIds = new Set(),
   showPinnedIndicator = false,
+  onMeetingNoteClick,
 }: {
   entityType: 'attendee' | 'company' | 'conference';
   entityId: number;
@@ -57,6 +61,7 @@ export function NotesSection({
   onPin?: (noteId: number, conferenceName: string | null, attendeeName: string | null, attendeeId: number | null) => void;
   pinnedNoteIds?: Set<number>;
   showPinnedIndicator?: boolean;
+  onMeetingNoteClick?: (meetingId: number) => void;
 }) {
   const [notes, setNotes] = useState<EntityNote[]>(initialNotes);
   const [isAdding, setIsAdding] = useState(false);
@@ -503,6 +508,7 @@ export function NotesSection({
               onPin={onPin ? handlePinClick : undefined}
               pinnedNoteIds={pinnedNoteIds}
               showPinnedIndicator={showPinnedIndicator}
+              onMeetingNoteClick={onMeetingNoteClick}
             />
           ))}
         </div>

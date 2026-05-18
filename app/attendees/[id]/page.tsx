@@ -1007,6 +1007,7 @@ export default function AttendeeDetailPage() {
             currentCompanyId={attendee.company_id}
             onPin={handlePinNote}
             pinnedNoteIds={pinnedNoteIds}
+            onMeetingNoteClick={(id) => setNotesDrawerMeetingId(id)}
           />
         </div>
 
