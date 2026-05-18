@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbForRequest } from '@/lib/getDb';
+import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
 
 export async function GET(req: NextRequest) {
   try {
-    const db = await getDbForRequest();
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const db = await getDb(authResult?.accountId);
     const ids = String(new URL(req.url).searchParams.get('ids') || '').split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n) && n > 0);
     if (ids.length === 0) return NextResponse.json({});
     const placeholders = ids.map(() => '?').join(',');
