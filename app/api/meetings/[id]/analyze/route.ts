@@ -310,8 +310,8 @@ RULES
     const existingNotes = await db.execute({ sql: `SELECT id FROM meeting_notes WHERE meeting_id = ?`, args: [meetingId] });
     if (existingNotes.rows.length > 0) {
       await db.execute({
-        sql: `UPDATE meeting_notes SET transcript = ?, summary = ?, updated_at = datetime('now') WHERE meeting_id = ?`,
-        args: [transcriptJson, summary, meetingId],
+        sql: `UPDATE meeting_notes SET transcript = ?, summary = ?, audio_file_path = COALESCE(?, audio_file_path), updated_at = datetime('now') WHERE meeting_id = ?`,
+        args: [transcriptJson, summary, audio_url ?? null, meetingId],
       });
     } else {
       await db.execute({

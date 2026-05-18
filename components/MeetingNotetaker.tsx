@@ -553,6 +553,27 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } catch { /* silent */ }
   }, [additionalAttendees, meeting, meetingId]);
 
+  // Upload an in-memory audio blob to R2 via presigned URL (bypasses Vercel body size limits).
+  // Returns the public R2 URL on success, null if storage is not configured.
+  const uploadBlobToR2 = useCallback(async (blob: Blob): Promise<string | null> => {
+    const contentType = blob.type || 'audio/webm';
+    const presignRes = await fetch(
+      `/api/meetings/${meetingId}/audio/presign?contentType=${encodeURIComponent(contentType)}`
+    );
+    if (!presignRes.ok) {
+      const err = await presignRes.json().catch(() => ({}));
+      throw new Error(err.error ?? 'Storage not available');
+    }
+    const { presignedUrl, publicUrl } = await presignRes.json();
+    const putRes = await fetch(presignedUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': contentType },
+    });
+    if (!putRes.ok) throw new Error('Audio upload failed. Please try again.');
+    return publicUrl as string;
+  }, [meetingId]);
+
   const handleAnalyze = useCallback(async () => {
     const hasAudioBlob = !!audioBlob;
     const hasSavedAudio = !!(audioUrl && !audioUrl.startsWith('blob:'));
@@ -568,13 +589,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       let transcriptPayload: string | null = null;
 
       if (hasAudioBlob) {
-        // Fresh audio blob — upload to R2 then transcribe via Whisper
-        const formData = new FormData();
-        const ext = audioBlob!.type.split('/')[1] || 'webm';
-        formData.append('file', new File([audioBlob!], `recording.${ext}`, { type: audioBlob!.type }));
-        const uploadRes = await fetch(`/api/meetings/${meetingId}/audio`, { method: 'POST', body: formData });
-        if (!uploadRes.ok) throw new Error((await uploadRes.json().catch(() => ({}))).error ?? 'Upload failed');
-        r2Url = (await uploadRes.json()).url;
+        // Upload directly from browser to R2 via presigned URL — no Vercel body size limit
+        r2Url = await uploadBlobToR2(audioBlob!);
+        // Update state so the player and save both use the persisted URL
+        setAudioUrl(r2Url);
+        setAudioBlob(null);
       } else if (hasTranscript) {
         // Text transcript takes priority over any saved audio URL
         transcriptPayload = transcript.map(s => s.text).join('\n');
@@ -607,6 +626,18 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
+      // If there's an in-memory blob with no persisted URL, upload to R2 first
+      let persistedAudioUrl = audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null;
+      if (audioBlob && !persistedAudioUrl) {
+        try {
+          persistedAudioUrl = await uploadBlobToR2(audioBlob);
+          setAudioUrl(persistedAudioUrl);
+          setAudioBlob(null);
+        } catch {
+          // Non-blocking — save proceeds without audio_file_path
+        }
+      }
+
       const res = await fetch(`/api/meetings/${meetingId}/notes`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -614,7 +645,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           notes_text: notesText,
           transcript: transcript.length ? JSON.stringify(transcript) : null,
           summary,
-          audio_file_path: audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null,
+          audio_file_path: persistedAudioUrl,
         }),
       });
       if (!res.ok) throw new Error();
@@ -624,7 +655,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, uploadBlobToR2]);
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
