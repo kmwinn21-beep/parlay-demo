@@ -32,14 +32,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const body = await request.json();
-    const { audio_url, transcript_text } = body as { audio_url?: string | null; transcript_text?: string | null };
+    // Accept multipart/form-data (direct audio file) or JSON (audio_url / transcript_text)
+    const contentType = request.headers.get('content-type') ?? '';
+    let audio_url: string | null = null;
+    let transcript_text: string | null = null;
+    let audioFile: File | null = null;
 
-    if (!audio_url && !transcript_text) {
-      return NextResponse.json({ error: 'audio_url or transcript_text is required' }, { status: 400 });
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      audioFile = formData.get('audio_file') as File | null;
+    } else {
+      const body = await request.json() as { audio_url?: string | null; transcript_text?: string | null };
+      audio_url = body.audio_url ?? null;
+      transcript_text = body.transcript_text ?? null;
     }
 
-    if (audio_url && !process.env.OPENAI_API_KEY) {
+    if (!audio_url && !transcript_text && !audioFile) {
+      return NextResponse.json({ error: 'audio_url, transcript_text, or audio_file is required' }, { status: 400 });
+    }
+
+    if ((audio_url || audioFile) && !process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'Transcription service not configured' }, { status: 503 });
     }
 
@@ -84,7 +96,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let segments: WhisperSegment[] = [];
     let transcriptForAnalysis: string;
 
-    if (audio_url) {
+    if (audioFile) {
+      // Audio uploaded directly — pass straight to Whisper without any intermediate storage
+      const whisperForm = new FormData();
+      whisperForm.append('file', audioFile, audioFile.name);
+      whisperForm.append('model', 'whisper-1');
+      whisperForm.append('response_format', 'verbose_json');
+
+      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: whisperForm,
+      });
+
+      if (!whisperResponse.ok) {
+        console.error('Whisper API error (direct file):', await whisperResponse.text());
+        return NextResponse.json({ error: 'Transcription failed' }, { status: 502 });
+      }
+
+      const whisperData = await whisperResponse.json();
+      segments = (whisperData.segments ?? []).map((s: WhisperSegment) => ({
+        text: s.text, start: s.start, end: s.end,
+      }));
+      transcriptForAnalysis = segments.length > 0
+        ? segments.map(s => `[${Math.floor(s.start)}s] ${s.text.trim()}`).join('\n')
+        : (whisperData.text ?? '');
+    } else if (audio_url) {
       const audioResponse = await fetch(audio_url);
       if (!audioResponse.ok) {
         return NextResponse.json({ error: 'Failed to fetch audio file' }, { status: 400 });

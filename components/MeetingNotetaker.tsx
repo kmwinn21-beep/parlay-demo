@@ -553,27 +553,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } catch { /* silent */ }
   }, [additionalAttendees, meeting, meetingId]);
 
-  // Upload an in-memory audio blob to R2 via presigned URL (bypasses Vercel body size limits).
-  // Returns the public R2 URL on success, null if storage is not configured.
-  const uploadBlobToR2 = useCallback(async (blob: Blob): Promise<string | null> => {
-    const contentType = blob.type || 'audio/webm';
-    const presignRes = await fetch(
-      `/api/meetings/${meetingId}/audio/presign?contentType=${encodeURIComponent(contentType)}`
-    );
-    if (!presignRes.ok) {
-      const err = await presignRes.json().catch(() => ({}));
-      throw new Error(err.error ?? 'Storage not available');
-    }
-    const { presignedUrl, publicUrl } = await presignRes.json();
-    const putRes = await fetch(presignedUrl, {
-      method: 'PUT',
-      body: blob,
-      headers: { 'Content-Type': contentType },
-    });
-    if (!putRes.ok) throw new Error('Audio upload failed. Please try again.');
-    return publicUrl as string;
-  }, [meetingId]);
-
   const handleAnalyze = useCallback(async () => {
     const hasAudioBlob = !!audioBlob;
     const hasSavedAudio = !!(audioUrl && !audioUrl.startsWith('blob:'));
@@ -585,28 +564,23 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
     setAnalysisLoading(true);
     try {
-      let r2Url: string | null = null;
-      let transcriptPayload: string | null = null;
+      let analyzeRes: Response;
 
       if (hasAudioBlob) {
-        // Upload directly from browser to R2 via presigned URL — no Vercel body size limit
-        r2Url = await uploadBlobToR2(audioBlob!);
-        // Update state so the player and save both use the persisted URL
-        setAudioUrl(r2Url);
-        setAudioBlob(null);
-      } else if (hasTranscript) {
-        // Text transcript takes priority over any saved audio URL
-        transcriptPayload = transcript.map(s => s.text).join('\n');
+        // Send audio directly to the analyze endpoint — no R2, no CORS required
+        const ext = (audioBlob!.type.split('/')[1] || 'webm').replace('mpeg', 'mp3');
+        const formData = new FormData();
+        formData.append('audio_file', new File([audioBlob!], `recording.${ext}`, { type: audioBlob!.type }));
+        analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, { method: 'POST', body: formData });
       } else {
-        // Fall back to previously saved R2 audio URL
-        r2Url = audioUrl;
+        const transcriptPayload = hasTranscript ? transcript.map(s => s.text).join('\n') : null;
+        const r2Url = hasSavedAudio ? audioUrl : null;
+        analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio_url: r2Url, transcript_text: transcriptPayload }),
+        });
       }
-
-      const analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio_url: r2Url, transcript_text: transcriptPayload }),
-      });
 
       if (!analyzeRes.ok) throw new Error((await analyzeRes.json().catch(() => ({}))).error ?? 'Analysis failed');
 
@@ -626,16 +600,21 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // If there's an in-memory blob with no persisted URL, upload to R2 first
+      // If there's an in-memory blob with no persisted URL, upload to R2 via server-side route
       let persistedAudioUrl = audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null;
       if (audioBlob && !persistedAudioUrl) {
         try {
-          persistedAudioUrl = await uploadBlobToR2(audioBlob);
-          setAudioUrl(persistedAudioUrl);
-          setAudioBlob(null);
-        } catch {
-          // Non-blocking — save proceeds without audio_file_path
-        }
+          const ext = (audioBlob.type.split('/')[1] || 'webm').replace('mpeg', 'mp3');
+          const fd = new FormData();
+          fd.append('file', new File([audioBlob], `recording.${ext}`, { type: audioBlob.type }));
+          const up = await fetch(`/api/meetings/${meetingId}/audio`, { method: 'POST', body: fd });
+          if (up.ok) {
+            const { url } = await up.json();
+            persistedAudioUrl = url;
+            setAudioUrl(url);
+            setAudioBlob(null);
+          }
+        } catch { /* non-blocking — save proceeds without audio_file_path */ }
       }
 
       const res = await fetch(`/api/meetings/${meetingId}/notes`, {
@@ -655,7 +634,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, uploadBlobToR2]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob]);
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
