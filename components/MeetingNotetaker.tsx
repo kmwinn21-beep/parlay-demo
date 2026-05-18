@@ -35,10 +35,28 @@ interface MeetingContext {
   first_name: string;
   last_name: string;
   title: string | null;
+  company_id: number | null;
   company_name: string | null;
   company_icp: string | null;
   conference_name: string;
+  conference_internal_attendees: string | null;
   scheduled_by: string | null;
+  additional_attendees: string | null;
+  meeting_date: string | null;
+  meeting_time: string | null;
+}
+
+interface AttendeeResult {
+  id: number;
+  first_name: string;
+  last_name: string;
+  title: string | null;
+  company_name: string | null;
+}
+
+interface UserOption {
+  id: number;
+  value: string;
 }
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
@@ -54,6 +72,11 @@ function formatTime(secs: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function formatMeetingDate(d: string | null) {
+  if (!d) return '';
+  return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function ConfidenceBadge({ confidence }: { confidence: string }) {
   const map: Record<string, string> = {
     high: 'bg-green-100 text-green-700',
@@ -67,15 +90,159 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
   );
 }
 
-function IcpTierBadge({ tier }: { tier: string | null }) {
-  if (!tier) return null;
-  const t = tier.toLowerCase();
-  let cls = 'bg-gray-100 text-gray-600';
-  if (t === 'yes' || t === 'must target') cls = 'bg-red-100 text-red-700';
-  else if (t === 'high priority') cls = 'bg-blue-100 text-blue-700';
-  else if (t === 'worth engaging') cls = 'bg-green-100 text-green-700';
-  return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${cls}`}>{tier}</span>;
+function IcpBadge({ icp }: { icp: string | null }) {
+  if (!icp || icp.toLowerCase() === 'no') return null;
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+      ICP Match
+    </span>
+  );
 }
+
+function Avatar({ name, size = 7 }: { name: string; size?: number }) {
+  const initials = name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div className={`w-${size} h-${size} rounded-full bg-brand-secondary/20 flex items-center justify-center text-[10px] font-bold text-brand-secondary flex-shrink-0`}>
+      {initials}
+    </div>
+  );
+}
+
+// ─── External Attendee Form ──────────────────────────────────────────────────
+
+interface ExternalAttendeeFormProps {
+  conferenceId: number;
+  defaultCompanyId: number | null;
+  defaultCompanyName: string | null;
+  onAdd: (name: string) => void;
+  onCancel: () => void;
+}
+
+function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyName, onAdd, onCancel }: ExternalAttendeeFormProps) {
+  const [tab, setTab] = useState<'search' | 'create'>('search');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<AttendeeResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [newFirst, setNewFirst] = useState('');
+  const [newLast, setNewLast] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newCompanyName, setNewCompanyName] = useState(defaultCompanyName ?? '');
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'search' || query.length < 2) { setResults([]); return; }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/attendees?conference_id=${conferenceId}&search=${encodeURIComponent(query)}&limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          setResults((data.attendees ?? data).slice(0, 10));
+        }
+      } catch { /* ignore */ }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, conferenceId, tab]);
+
+  const handleCreate = async () => {
+    if (!newFirst.trim() || !newLast.trim()) { toast.error('First and last name required.'); return; }
+    setCreating(true);
+    try {
+      const res = await fetch('/api/attendees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: newFirst.trim(),
+          last_name: newLast.trim(),
+          title: newTitle.trim() || null,
+          company_name: newCompanyName.trim() || null,
+          company_id: defaultCompanyId,
+          conference_id: conferenceId,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Attendee created.');
+      onAdd(`${newFirst.trim()} ${newLast.trim()}`);
+    } catch {
+      toast.error('Failed to create attendee.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary';
+
+  return (
+    <div className="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-3 space-y-2">
+      <div className="flex gap-1">
+        {(['search', 'create'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${tab === t ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 border border-gray-200'}`}
+          >
+            {t === 'search' ? 'Search Conference' : 'Create New'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'search' && (
+        <div>
+          <input
+            className={inputCls}
+            placeholder="Search attendees…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            autoFocus
+          />
+          {searching && <p className="text-[10px] text-gray-400 mt-1">Searching…</p>}
+          {results.length > 0 && (
+            <ul className="mt-1 max-h-36 overflow-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
+              {results.map(a => (
+                <li key={a.id}>
+                  <button
+                    className="w-full text-left px-2.5 py-2 text-xs hover:bg-blue-50 transition-colors"
+                    onClick={() => onAdd(`${a.first_name} ${a.last_name}`)}
+                  >
+                    <span className="font-medium text-gray-800">{a.first_name} {a.last_name}</span>
+                    {a.title && <span className="text-gray-400">, {a.title}</span>}
+                    {a.company_name && <span className="text-gray-400 block text-[10px]">{a.company_name}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {query.length >= 2 && !searching && results.length === 0 && (
+            <p className="text-[10px] text-gray-400 mt-1">No attendees found. Try creating a new one.</p>
+          )}
+        </div>
+      )}
+
+      {tab === 'create' && (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
+            <input className={inputCls} placeholder="First name *" value={newFirst} onChange={e => setNewFirst(e.target.value)} />
+            <input className={inputCls} placeholder="Last name *" value={newLast} onChange={e => setNewLast(e.target.value)} />
+          </div>
+          <input className={inputCls} placeholder="Title (optional)" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
+          <input className={inputCls} placeholder="Company" value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} />
+          <button
+            onClick={handleCreate}
+            disabled={creating || !newFirst.trim() || !newLast.trim()}
+            className="w-full py-1.5 bg-brand-secondary text-white text-[10px] font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
+          >
+            {creating ? 'Creating…' : 'Create & Add'}
+          </button>
+        </div>
+      )}
+
+      <button onClick={onCancel} className="text-[10px] text-gray-400 hover:text-gray-600 w-full text-center">Cancel</button>
+    </div>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export function MeetingNotetaker({ meetingId, onClose }: Props) {
   const router = useRouter();
@@ -88,6 +255,13 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [summary, setSummary] = useState('');
   const [nextSteps, setNextSteps] = useState<NextStepItem[]>([]);
+
+  // Attendees state
+  const [additionalAttendees, setAdditionalAttendees] = useState<string[]>([]);
+  const [internalAttendees, setInternalAttendees] = useState<string[]>([]); // extra internal
+  const [showExternalForm, setShowExternalForm] = useState(false);
+  const [showInternalPicker, setShowInternalPicker] = useState(false);
+  const [allUsers, setAllUsers] = useState<UserOption[]>([]);
 
   // Audio state
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -113,40 +287,47 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
 
   // Drag and drop
   const [dragOver, setDragOver] = useState(false);
+  const [dragOverText, setDragOverText] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textFileInputRef = useRef<HTMLInputElement>(null);
 
   // Load initial data
   useEffect(() => {
     async function load() {
       try {
-        const [meetingDetailRes, notesRes] = await Promise.all([
+        const [meetingDetailRes, notesRes, usersRes] = await Promise.all([
           fetch(`/api/meetings/${meetingId}`),
           fetch(`/api/meetings/${meetingId}/notes`),
+          fetch('/api/config?category=user'),
         ]);
 
         if (meetingDetailRes.ok) {
-          const m = await meetingDetailRes.json();
+          const m: MeetingContext = await meetingDetailRes.json();
           setMeeting(m);
+          if (m.additional_attendees) {
+            setAdditionalAttendees(
+              m.additional_attendees.split(',').map(s => s.trim()).filter(Boolean)
+            );
+          }
         }
 
         if (notesRes.ok) {
           const data = await notesRes.json();
           setNotesText(data.notes_text ?? '');
           setSummary(data.summary ?? '');
-          if (data.audio_file_path) {
-            setAudioUrl(data.audio_file_path);
-          }
+          if (data.audio_file_path) setAudioUrl(data.audio_file_path);
           if (data.transcript) {
             try {
               const parsed = JSON.parse(data.transcript);
               if (Array.isArray(parsed)) setTranscript(parsed);
-            } catch {
-              // not JSON, ignore
-            }
+            } catch { /* not JSON */ }
           }
-          if (data.insights?.length) {
-            setInsights(data.insights);
-          }
+          if (data.insights?.length) setInsights(data.insights);
+        }
+
+        if (usersRes.ok) {
+          const users: { id: number; value: string }[] = await usersRes.json();
+          setAllUsers(users);
         }
       } catch (e) {
         console.error('Failed to load meeting notes:', e);
@@ -206,18 +387,16 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
-        setAudioUrl(url);
+        setAudioUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach(t => t.stop());
       };
       mr.start(1000);
       setRecordingState('recording');
       setRecordingElapsed(0);
       recordingTimerRef.current = setInterval(() => setRecordingElapsed(e => e + 1), 1000);
-    } catch (e) {
+    } catch {
       toast.error('Could not access microphone.');
-      console.error(e);
     }
   }, []);
 
@@ -245,57 +424,107 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
     setRecordingState('stopped');
   }, []);
 
-  // File upload
-  const handleFile = useCallback((file: File) => {
+  // Audio file upload
+  const handleAudioFile = useCallback((file: File) => {
     const allowed = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/m4a', 'audio/wav', 'audio/ogg', 'audio/x-m4a'];
-    if (!allowed.includes(file.type)) {
+    if (!allowed.includes(file.type) && !file.name.match(/\.(mp3|mp4|m4a|wav|webm)$/i)) {
       toast.error('Unsupported file type. Use MP3, MP4, M4A, WAV, or WebM.');
       return;
     }
-    const url = URL.createObjectURL(file);
     setAudioBlob(file);
-    setAudioUrl(url);
+    setAudioUrl(URL.createObjectURL(file));
     toast.success('Audio file loaded.');
   }, []);
 
+  // Text transcript upload
+  const handleTextFile = useCallback((file: File) => {
+    if (!file.name.match(/\.(txt|text|vtt|srt)$/i)) {
+      toast.error('Unsupported format. Upload a .txt, .vtt, or .srt file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      // Parse into pseudo-segments (one per non-empty line)
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const segments: TranscriptSegment[] = lines.map((line, i) => ({
+        text: line,
+        start: i * 5,
+        end: (i + 1) * 5,
+      }));
+      setTranscript(segments);
+      setTranscriptExpanded(true);
+      toast.success('Transcript loaded. Click "Analyze with AI" to extract insights.');
+    };
+    reader.readAsText(file);
+  }, []);
+
+  // Add external attendee
+  const addExternalAttendee = useCallback(async (name: string) => {
+    const updated = [...additionalAttendees, name];
+    setAdditionalAttendees(updated);
+    setShowExternalForm(false);
+    try {
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meeting_date: meeting?.meeting_date ?? '',
+          meeting_time: meeting?.meeting_time ?? '',
+          additional_attendees: updated.join(', '),
+          scheduled_by: meeting?.scheduled_by ?? '',
+        }),
+      });
+    } catch { /* silent — we still show the updated list */ }
+  }, [additionalAttendees, meeting, meetingId]);
+
+  const removeExternalAttendee = useCallback(async (name: string) => {
+    const updated = additionalAttendees.filter(n => n !== name);
+    setAdditionalAttendees(updated);
+    try {
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meeting_date: meeting?.meeting_date ?? '',
+          meeting_time: meeting?.meeting_time ?? '',
+          additional_attendees: updated.join(', '),
+          scheduled_by: meeting?.scheduled_by ?? '',
+        }),
+      });
+    } catch { /* silent */ }
+  }, [additionalAttendees, meeting, meetingId]);
+
   const handleAnalyze = useCallback(async () => {
-    if (!audioBlob && !audioUrl) {
-      toast.error('No audio to analyze.');
+    const hasAudio = audioBlob || (audioUrl && !audioUrl.startsWith('blob:'));
+    const hasTranscript = transcript.length > 0;
+    if (!hasAudio && !hasTranscript) {
+      toast.error('No audio or transcript to analyze.');
       return;
     }
     setAnalysisLoading(true);
     try {
-      let r2Url = audioUrl;
+      let r2Url = audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null;
 
-      // Upload blob to R2 if we have a local blob
       if (audioBlob) {
         const formData = new FormData();
         const ext = audioBlob.type.split('/')[1] || 'webm';
         formData.append('file', new File([audioBlob], `recording.${ext}`, { type: audioBlob.type }));
-        const uploadRes = await fetch(`/api/meetings/${meetingId}/audio`, {
-          method: 'POST',
-          body: formData,
-        });
-        if (!uploadRes.ok) {
-          const err = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
-          throw new Error(err.error ?? 'Upload failed');
-        }
-        const { url } = await uploadRes.json();
-        r2Url = url;
+        const uploadRes = await fetch(`/api/meetings/${meetingId}/audio`, { method: 'POST', body: formData });
+        if (!uploadRes.ok) throw new Error((await uploadRes.json().catch(() => ({}))).error ?? 'Upload failed');
+        r2Url = (await uploadRes.json()).url;
       }
-
-      if (!r2Url) throw new Error('No audio URL');
 
       const analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio_url: r2Url }),
+        body: JSON.stringify({
+          audio_url: r2Url,
+          transcript_text: hasTranscript && !hasAudio ? transcript.map(s => s.text).join('\n') : null,
+        }),
       });
 
-      if (!analyzeRes.ok) {
-        const err = await analyzeRes.json().catch(() => ({ error: 'Analysis failed' }));
-        throw new Error(err.error ?? 'Analysis failed');
-      }
+      if (!analyzeRes.ok) throw new Error((await analyzeRes.json().catch(() => ({}))).error ?? 'Analysis failed');
 
       const data = await analyzeRes.json();
       setInsights(data.insights ?? []);
@@ -304,13 +533,11 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
       if (data.next_steps?.length) setNextSteps(data.next_steps);
       toast.success('Analysis complete!');
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Analysis failed';
-      toast.error(msg);
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Analysis failed');
     } finally {
       setAnalysisLoading(false);
     }
-  }, [audioBlob, audioUrl, meetingId]);
+  }, [audioBlob, audioUrl, meetingId, transcript]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -336,9 +563,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
-      const res = await fetch(`/api/meetings/${meetingId}/insights/${insightId}/confirm`, {
-        method: 'PATCH',
-      });
+      const res = await fetch(`/api/meetings/${meetingId}/insights/${insightId}/confirm`, { method: 'PATCH' });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setInsights(prev => prev.map(i => i.id === insightId ? { ...i, confirmed: data.confirmed } : i));
@@ -348,21 +573,13 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
   }, [meetingId]);
 
   const handleConfirmTasks = useCallback(async () => {
-    const selectedSteps = nextSteps.filter((_, i) => selectedTaskIds.has(i));
-    if (selectedSteps.length === 0) {
-      toast.error('Select at least one task.');
-      return;
-    }
+    const selected = nextSteps.filter((_, i) => selectedTaskIds.has(i));
+    if (!selected.length) { toast.error('Select at least one task.'); return; }
     try {
       const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tasks: selectedSteps.map(s => ({
-            task_text: s.task_text,
-            due_date_offset_days: s.suggested_due_date_offset_days,
-          })),
-        }),
+        body: JSON.stringify({ tasks: selected.map(s => ({ task_text: s.task_text, due_date_offset_days: s.suggested_due_date_offset_days })) }),
       });
       if (!res.ok) throw new Error();
       toast.success('Tasks created as follow-ups!');
@@ -374,6 +591,38 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
 
   const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal');
   const painPoints = insights.filter(i => i.insight_type === 'pain_point');
+  const hasAudioOrTranscript = !!(audioUrl || audioBlob || transcript.length);
+
+  // Derive scheduled_by display names and conference internal attendee names
+  const scheduledByNames: string[] = (() => {
+    if (!meeting?.scheduled_by) return [];
+    const ids = meeting.scheduled_by.split(',').map(s => s.trim()).filter(Boolean);
+    return ids.map(idStr => {
+      const id = Number(idStr);
+      const user = allUsers.find(u => u.id === id);
+      return user ? user.value : idStr;
+    });
+  })();
+
+  const conferenceInternalNames: string[] = meeting?.conference_internal_attendees
+    ? meeting.conference_internal_attendees.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  // Users grouped: conference internal first, then others
+  const usersGrouped = (() => {
+    const confSet = new Set(conferenceInternalNames.map(n => n.toLowerCase()));
+    const internal = allUsers.filter(u => confSet.has(u.value.toLowerCase()));
+    const others = allUsers.filter(u => !confSet.has(u.value.toLowerCase()))
+      .sort((a, b) => a.value.localeCompare(b.value));
+    return { internal, others };
+  })();
+
+  const addInternalAttendee = (name: string) => {
+    if (!internalAttendees.includes(name) && !scheduledByNames.includes(name)) {
+      setInternalAttendees(prev => [...prev, name]);
+    }
+    setShowInternalPicker(false);
+  };
 
   if (loading) {
     return (
@@ -387,33 +636,36 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
     <div className="flex flex-col h-full bg-white">
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 flex-shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {onClose ? (
-            <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
+            <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           ) : (
-            <button onClick={() => router.back()} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
+            <button onClick={() => router.back()} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
           )}
-          <div>
-            <h1 className="text-sm font-semibold text-gray-800">
+          <div className="min-w-0">
+            <h1 className="text-sm font-semibold text-gray-800 truncate">
               {meeting ? `Meeting Notes — ${meeting.first_name} ${meeting.last_name}` : 'Meeting Notes'}
             </h1>
             {meeting && (
-              <p className="text-xs text-gray-500">{meeting.conference_name}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {meeting.conference_name}
+                {meeting.meeting_date && ` · ${formatMeetingDate(meeting.meeting_date)}`}
+              </p>
             )}
           </div>
         </div>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          className="flex-shrink-0 px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -424,33 +676,24 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
         <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex-shrink-0">
           <div className="flex items-center gap-3">
             <button onClick={togglePlayback} className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-secondary text-white flex items-center justify-center hover:bg-blue-700 transition-colors">
-              {isPlaying ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
-              ) : (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-              )}
+              {isPlaying
+                ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              }
             </button>
             <span className="text-xs text-gray-500 w-10 flex-shrink-0 font-mono">{formatTime(audioCurrentTime)}</span>
             <div
               className="relative flex-1 h-2 bg-gray-200 rounded-full cursor-pointer"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                const pct = (e.clientX - rect.left) / rect.width;
-                scrubTo(pct * audioDuration);
+                scrubTo(((e.clientX - rect.left) / rect.width) * audioDuration);
               }}
             >
-              <div
-                className="absolute left-0 top-0 h-2 bg-brand-secondary rounded-full"
-                style={{ width: audioDuration > 0 ? `${(audioCurrentTime / audioDuration) * 100}%` : '0%' }}
-              />
-              {/* Insight markers */}
+              <div className="absolute left-0 top-0 h-2 bg-brand-secondary rounded-full" style={{ width: audioDuration > 0 ? `${(audioCurrentTime / audioDuration) * 100}%` : '0%' }} />
               {insights.filter(i => i.timestamp_seconds != null && audioDuration > 0).map(i => (
                 <button
                   key={i.id}
-                  className={`absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full -ml-1 ${
-                    i.insight_type === 'buying_signal' ? 'bg-green-500' :
-                    i.insight_type === 'pain_point' ? 'bg-orange-500' : 'bg-blue-400'
-                  }`}
+                  className={`absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full -ml-1 ${i.insight_type === 'buying_signal' ? 'bg-green-500' : i.insight_type === 'pain_point' ? 'bg-orange-500' : 'bg-blue-400'}`}
                   style={{ left: `${(i.timestamp_seconds! / audioDuration) * 100}%` }}
                   onClick={(e) => { e.stopPropagation(); scrubTo(i.timestamp_seconds!); }}
                   title={i.content}
@@ -459,16 +702,25 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
             </div>
             <span className="text-xs text-gray-500 w-10 flex-shrink-0 font-mono text-right">{formatTime(audioDuration)}</span>
           </div>
+          <div className="flex items-center gap-3 mt-1">
+            <div className="w-8 flex-shrink-0" />
+            <span className="w-10 flex-shrink-0" />
+            <div className="flex items-center gap-3 text-[10px] text-gray-400">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Buying signal</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block" /> Pain point</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Action item</span>
+            </div>
+          </div>
           <audio ref={audioRef} src={audioUrl} className="hidden" />
         </div>
       )}
-      {!audioUrl && <audio ref={audioRef} src={audioUrl ?? undefined} className="hidden" />}
+      {!audioUrl && <audio ref={audioRef} src={undefined} className="hidden" />}
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
         <div className="flex flex-col lg:grid lg:grid-cols-[auto_1fr_1fr] h-full min-h-0">
 
-          {/* Context Panel */}
+          {/* ── Context Panel ── */}
           <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0`}>
             <div className="flex items-center justify-between p-3 border-b border-gray-100">
               {!contextCollapsed && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Context</span>}
@@ -482,43 +734,163 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                 </svg>
               </button>
             </div>
+
             {!contextCollapsed && meeting && (
-              <div className="p-3 space-y-3">
-                {/* Conference badge */}
+              <div className="p-3 space-y-4 overflow-y-auto">
+
+                {/* Conference */}
                 <div>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Conference</p>
                   <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
                     {meeting.conference_name}
                   </span>
                 </div>
+
                 {/* Company */}
                 <div>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Company</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-medium text-gray-800">{meeting.company_name ?? '—'}</span>
-                    <IcpTierBadge tier={meeting.company_icp} />
+                    <IcpBadge icp={meeting.company_icp} />
                   </div>
                 </div>
-                {/* Attendee */}
+
+                {/* External Attendees */}
                 <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Attendee</p>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 flex-shrink-0">
-                      {meeting.first_name?.[0]}{meeting.last_name?.[0]}
-                    </div>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">External Attendees</p>
+
+                  {/* Primary attendee */}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Avatar name={`${meeting.first_name} ${meeting.last_name}`} size={7} />
                     <div>
                       <p className="text-xs font-medium text-gray-800">{meeting.first_name} {meeting.last_name}</p>
                       {meeting.title && <p className="text-[10px] text-gray-500">{meeting.title}</p>}
                     </div>
                   </div>
+
+                  {/* Additional external attendees */}
+                  {additionalAttendees.map(name => (
+                    <div key={name} className="flex items-center gap-2 mb-1.5 group">
+                      <Avatar name={name} size={7} />
+                      <p className="text-xs font-medium text-gray-800 flex-1 min-w-0 truncate">{name}</p>
+                      <button
+                        onClick={() => removeExternalAttendee(name)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-400 transition-all flex-shrink-0"
+                        title="Remove"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add external attendee button */}
+                  {!showExternalForm && (
+                    <button
+                      onClick={() => setShowExternalForm(true)}
+                      className="flex items-center gap-1 text-[11px] text-brand-secondary hover:text-blue-700 font-medium mt-0.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      External Attendee
+                    </button>
+                  )}
+
+                  {showExternalForm && (
+                    <ExternalAttendeeForm
+                      conferenceId={meeting.conference_id}
+                      defaultCompanyId={meeting.company_id}
+                      defaultCompanyName={meeting.company_name}
+                      onAdd={addExternalAttendee}
+                      onCancel={() => setShowExternalForm(false)}
+                    />
+                  )}
                 </div>
+
+                {/* Internal Attendees */}
+                <div>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Internal Attendees</p>
+
+                  {/* Scheduled-by reps */}
+                  {scheduledByNames.map(name => (
+                    <div key={name} className="flex items-center gap-2 mb-1.5">
+                      <div className="w-7 h-7 rounded-full bg-brand-primary/15 flex items-center justify-center text-[10px] font-bold text-brand-primary flex-shrink-0">
+                        {name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                      <p className="text-xs font-medium text-gray-800 truncate">{name}</p>
+                    </div>
+                  ))}
+
+                  {/* Extra internal attendees added by user */}
+                  {internalAttendees.map(name => (
+                    <div key={name} className="flex items-center gap-2 mb-1.5 group">
+                      <div className="w-7 h-7 rounded-full bg-brand-primary/15 flex items-center justify-center text-[10px] font-bold text-brand-primary flex-shrink-0">
+                        {name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                      <p className="text-xs font-medium text-gray-800 flex-1 truncate">{name}</p>
+                      <button
+                        onClick={() => setInternalAttendees(prev => prev.filter(n => n !== name))}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-400 transition-all flex-shrink-0"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add internal attendee */}
+                  {!showInternalPicker && (
+                    <button
+                      onClick={() => setShowInternalPicker(true)}
+                      className="flex items-center gap-1 text-[11px] text-brand-secondary hover:text-blue-700 font-medium mt-0.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Internal Attendee
+                    </button>
+                  )}
+
+                  {showInternalPicker && (
+                    <div className="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-2 space-y-1">
+                      {usersGrouped.internal.length > 0 && (
+                        <>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Conference Team</p>
+                          {usersGrouped.internal.map(u => (
+                            <button key={u.id} onClick={() => addInternalAttendee(u.value)}
+                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-white transition-colors text-gray-700">
+                              {u.value}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      {usersGrouped.others.length > 0 && (
+                        <>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 pt-1">All Reps</p>
+                          {usersGrouped.others.map(u => (
+                            <button key={u.id} onClick={() => addInternalAttendee(u.value)}
+                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-white transition-colors text-gray-700">
+                              {u.value}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      <button onClick={() => setShowInternalPicker(false)} className="text-[10px] text-gray-400 hover:text-gray-600 w-full text-center pt-1">Cancel</button>
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
           </div>
 
-          {/* Notes + Recording column */}
+          {/* ── Notes + Recording column ── */}
           <div className="border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto">
             <div className="p-4 space-y-4">
+
               {/* Notes */}
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5">Notes</label>
@@ -531,7 +903,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                 />
               </div>
 
-              {/* Recording section */}
+              {/* Recording */}
               <div className="border-t border-gray-100 pt-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Recording</p>
                 {recordingState === 'idle' && !audioUrl && (
@@ -551,43 +923,31 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                 {(recordingState === 'recording' || recordingState === 'paused') && (
                   <div className="flex flex-col items-center gap-3">
                     <div className="flex items-center gap-2">
-                      {recordingState === 'recording' && (
-                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      )}
+                      {recordingState === 'recording' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
                       <span className="text-sm font-mono text-gray-700">{formatTime(recordingElapsed)}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      {recordingState === 'recording' ? (
-                        <button onClick={pauseRecording} className="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-lg hover:bg-yellow-200 transition-colors">
-                          Pause
-                        </button>
-                      ) : (
-                        <button onClick={resumeRecording} className="px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-lg hover:bg-green-200 transition-colors">
-                          Resume
-                        </button>
-                      )}
-                      <button onClick={stopRecording} className="px-3 py-1.5 bg-red-100 text-red-700 text-xs font-semibold rounded-lg hover:bg-red-200 transition-colors">
-                        Stop
-                      </button>
+                      {recordingState === 'recording'
+                        ? <button onClick={pauseRecording} className="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-lg hover:bg-yellow-200">Pause</button>
+                        : <button onClick={resumeRecording} className="px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-lg hover:bg-green-200">Resume</button>
+                      }
+                      <button onClick={stopRecording} className="px-3 py-1.5 bg-red-100 text-red-700 text-xs font-semibold rounded-lg hover:bg-red-200">Stop</button>
                     </div>
                   </div>
                 )}
                 {(recordingState === 'stopped' || (audioUrl && recordingState === 'idle')) && (
                   <div className="space-y-3">
-                    {/* Waveform placeholder */}
                     <div className="h-10 bg-gray-100 rounded-lg flex items-center px-3 gap-0.5 overflow-hidden">
                       {Array.from({ length: 40 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-full bg-brand-secondary opacity-60"
-                          style={{ height: `${20 + Math.sin(i * 0.8) * 12 + Math.cos(i * 1.2) * 8}%` }}
-                        />
+                        <div key={i} className="flex-1 rounded-full bg-brand-secondary opacity-60"
+                          style={{ height: `${20 + Math.sin(i * 0.8) * 12 + Math.cos(i * 1.2) * 8}%` }} />
                       ))}
                     </div>
                     {!analysisLoading && (
                       <button
                         onClick={handleAnalyze}
-                        className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2"
+                        disabled={!hasAudioOrTranscript}
+                        className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -599,37 +959,75 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                 )}
               </div>
 
-              {/* Upload section */}
+              {/* Upload section — audio + text side by side */}
               <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">or upload audio</p>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${dragOver ? 'border-brand-secondary bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={e => {
-                    e.preventDefault();
-                    setDragOver(false);
-                    const file = e.dataTransfer.files[0];
-                    if (file) handleFile(file);
-                  }}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <svg className="w-6 h-6 text-gray-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <p className="text-xs text-gray-500">Drag & drop or click to upload</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">MP3, MP4, M4A, WAV, WebM</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Or Upload</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Audio upload */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1.5 font-medium">Audio File</p>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors cursor-pointer ${dragOver ? 'border-brand-secondary bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleAudioFile(f); }}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <svg className="w-5 h-5 text-gray-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <p className="text-[10px] text-gray-500">Drag & drop or click</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">MP3, MP4, M4A, WAV, WebM</p>
+                    </div>
+                    <input ref={fileInputRef} type="file" accept=".mp3,.mp4,.m4a,.wav,.webm,audio/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleAudioFile(f); }} />
+                  </div>
+
+                  {/* Text transcript upload */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1.5 font-medium">Text Transcript</p>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors cursor-pointer ${dragOverText ? 'border-brand-secondary bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                      onDragOver={e => { e.preventDefault(); setDragOverText(true); }}
+                      onDragLeave={() => setDragOverText(false)}
+                      onDrop={e => { e.preventDefault(); setDragOverText(false); const f = e.dataTransfer.files[0]; if (f) handleTextFile(f); }}
+                      onClick={() => textFileInputRef.current?.click()}
+                    >
+                      <svg className="w-5 h-5 text-gray-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-[10px] text-gray-500">Drag & drop or click</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">.txt, .vtt, .srt</p>
+                    </div>
+                    <input ref={textFileInputRef} type="file" accept=".txt,.text,.vtt,.srt" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleTextFile(f); }} />
+                  </div>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".mp3,.mp4,.m4a,.wav,.webm,audio/*"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-                />
               </div>
 
-              {/* Transcript section */}
+              {/* Analyze button when no audio recorded yet but has transcript */}
+              {transcript.length > 0 && !audioUrl && recordingState === 'idle' && (
+                <div className="border-t border-gray-100 pt-4">
+                  {!analysisLoading ? (
+                    <button
+                      onClick={handleAnalyze}
+                      className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Analyze with AI
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 py-2">
+                      <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs text-gray-500">Analyzing…</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Transcript */}
               {transcript.length > 0 && (
                 <div className="border-t border-gray-100 pt-4">
                   <button
@@ -648,12 +1046,10 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                         const hasPainPoint = insights.some(ins => ins.insight_type === 'pain_point' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
                         return (
                           <div key={i} className={`flex gap-2 p-1.5 rounded text-xs ${hasBuyingSignal ? 'bg-green-50' : hasPainPoint ? 'bg-orange-50' : ''}`}>
-                            <button
-                              onClick={() => scrubTo(seg.start)}
-                              className="flex-shrink-0 text-[10px] font-mono text-blue-500 hover:text-blue-700 underline"
-                            >
+                            <button onClick={() => scrubTo(seg.start)} className="flex-shrink-0 text-[10px] font-mono text-blue-500 hover:text-blue-700 underline">
                               {formatTime(seg.start)}
                             </button>
+                            {seg.speaker && <span className="font-bold text-gray-600 flex-shrink-0">{seg.speaker}:</span>}
                             <span className="text-gray-700">{seg.text.trim()}</span>
                           </div>
                         );
@@ -665,7 +1061,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
             </div>
           </div>
 
-          {/* AI Analysis column */}
+          {/* ── AI Analysis column ── */}
           <div className="overflow-auto">
             <div className="p-4">
               {analysisLoading && (
@@ -680,7 +1076,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                   <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <p className="text-sm text-gray-400">Record or upload audio, then click Analyze with AI to extract insights.</p>
+                  <p className="text-sm text-gray-400 max-w-[200px]">Record or upload audio, then click Analyze with AI to extract insights.</p>
                 </div>
               )}
 
@@ -694,43 +1090,26 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                       <div className="space-y-2">
                         {nextSteps.map((step, i) => (
                           <div key={i} className="flex items-start gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
-                            <input
-                              type="checkbox"
-                              checked={selectedTaskIds.has(i)}
-                              onChange={e => {
-                                const next = new Set(selectedTaskIds);
-                                if (e.target.checked) next.add(i);
-                                else next.delete(i);
-                                setSelectedTaskIds(next);
-                              }}
-                              className="mt-0.5 flex-shrink-0"
-                            />
+                            <input type="checkbox" checked={selectedTaskIds.has(i)}
+                              onChange={e => { const n = new Set(selectedTaskIds); e.target.checked ? n.add(i) : n.delete(i); setSelectedTaskIds(n); }}
+                              className="mt-0.5 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs text-gray-700">{step.task_text}</p>
-                              {step.suggested_owner && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">Owner: {step.suggested_owner}</p>
-                              )}
-                              {step.suggested_due_date_offset_days != null && (
-                                <p className="text-[10px] text-gray-400">Due: +{step.suggested_due_date_offset_days} days</p>
-                              )}
+                              {step.suggested_owner && <p className="text-[10px] text-gray-400 mt-0.5">Owner: {step.suggested_owner}</p>}
+                              {step.suggested_due_date_offset_days != null && <p className="text-[10px] text-gray-400">Due: +{step.suggested_due_date_offset_days} days</p>}
                             </div>
                             {step.timestamp_seconds != null && audioDuration > 0 && (
                               <button onClick={() => scrubTo(step.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline flex-shrink-0">
-                                {formatTime(step.timestamp_seconds)}
+                                ▶ {formatTime(step.timestamp_seconds)}
                               </button>
                             )}
                           </div>
                         ))}
                       </div>
-                      {nextSteps.length > 0 && (
-                        <button
-                          onClick={handleConfirmTasks}
-                          disabled={selectedTaskIds.size === 0}
-                          className="mt-2 w-full py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40"
-                        >
-                          Confirm selected tasks ({selectedTaskIds.size})
-                        </button>
-                      )}
+                      <button onClick={handleConfirmTasks} disabled={selectedTaskIds.size === 0}
+                        className="mt-2 w-full py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40">
+                        Confirm selected tasks ({selectedTaskIds.size})
+                      </button>
                     </div>
                   )}
 
@@ -756,13 +1135,11 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 {ins.timestamp_seconds != null && audioDuration > 0 && (
                                   <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
-                                    {formatTime(ins.timestamp_seconds)}
+                                    ▶ {formatTime(ins.timestamp_seconds)}
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => handleConfirmInsight(ins.id)}
-                                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${ins.confirmed ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                >
+                                <button onClick={() => handleConfirmInsight(ins.id)}
+                                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${ins.confirmed ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                   {ins.confirmed ? 'Confirmed' : 'Confirm'}
                                 </button>
                               </div>
@@ -792,7 +1169,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                               </div>
                               {ins.timestamp_seconds != null && audioDuration > 0 && (
                                 <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline flex-shrink-0">
-                                  {formatTime(ins.timestamp_seconds)}
+                                  ▶ {formatTime(ins.timestamp_seconds)}
                                 </button>
                               )}
                             </div>
@@ -807,7 +1184,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                     </div>
                   )}
 
-                  {/* Meeting Summary */}
+                  {/* Summary */}
                   {summary && (
                     <div>
                       <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Meeting Summary</h3>
@@ -820,6 +1197,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </div>
