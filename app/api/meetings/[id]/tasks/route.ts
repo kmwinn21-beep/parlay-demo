@@ -47,6 +47,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ? String(nextStepsResult.rows[0].value)
       : 'Follow Up';
 
+    try {
+      await db.execute({
+        sql: `ALTER TABLE follow_ups ADD COLUMN meeting_id INTEGER REFERENCES meetings(id)`,
+        args: [],
+      });
+    } catch { }
+
+    const bundledNotes = tasks.map(t => `- ${t.task_text}`).join('\n');
+    const firstAssignedTo = tasks.find(t => t.assigned_to)?.assigned_to ?? null;
+
+    const existingFollowUp = await db.execute({
+      sql: `SELECT id FROM follow_ups WHERE meeting_id = ?`,
+      args: [meetingId],
+    });
+
+    if (existingFollowUp.rows.length > 0) {
+      await db.execute({
+        sql: `UPDATE follow_ups SET next_steps_notes = ? WHERE meeting_id = ?`,
+        args: [bundledNotes, meetingId],
+      });
+    } else {
+      await db.execute({
+        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed, meeting_id) VALUES (?, ?, ?, ?, ?, 0, ?)`,
+        args: [
+          Number(meeting.attendee_id),
+          Number(meeting.conference_id),
+          defaultNextSteps,
+          bundledNotes,
+          firstAssignedTo ? String(firstAssignedTo) : null,
+          meetingId,
+        ],
+      });
+    }
+
     const created: Array<{
       id: number;
       meeting_id: number;
@@ -84,19 +118,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         task_text: task.task_text,
         due_date: dueDate,
         status: 'pending',
-      });
-
-      // Also create a follow_up record
-      await db.execute({
-        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
-              VALUES (?, ?, ?, ?, ?, 0)`,
-        args: [
-          Number(meeting.attendee_id),
-          Number(meeting.conference_id),
-          defaultNextSteps,
-          task.task_text,
-          task.assigned_to ? String(task.assigned_to) : null,
-        ],
       });
     }
 

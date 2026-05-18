@@ -305,6 +305,15 @@ export default function CompanyDetailPage() {
     fetchInternalRelationships();
   }, [fetchCompany, fetchInternalRelationships]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { meetingId: deletedId } = (e as CustomEvent<{ meetingId: number }>).detail;
+      setCompanyMeetings(prev => prev.map(m => m.id === deletedId ? { ...m, has_notes: false } : m));
+    };
+    window.addEventListener('meeting-notes-deleted', handler);
+    return () => window.removeEventListener('meeting-notes-deleted', handler);
+  }, []);
+
   // Auto-classify ICP when WSE, Company Type, or Services change in edit mode
   useEffect(() => {
     if (!isEditing) return;

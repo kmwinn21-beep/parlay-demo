@@ -742,12 +742,15 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       setTranscriptExpanded(false);
       setShowDeleteConfirm(false);
       toast.success('Notes deleted.');
+      savedStateRef.current = { notesText: '', audioUrl: null, hadTranscript: false };
+      window.dispatchEvent(new CustomEvent('meeting-notes-deleted', { detail: { meetingId } }));
+      if (onClose) { onClose(); } else { router.push('/follow-ups'); }
     } catch {
       toast.error('Failed to delete notes.');
     } finally {
       setDeleting(false);
     }
-  }, [meetingId]);
+  }, [meetingId, onClose, router]);
 
   const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal');
   const painPoints = insights.filter(i => i.insight_type === 'pain_point');

@@ -244,6 +244,15 @@ export default function AttendeeDetailPage() {
 
   useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); fetchInternalRelationships(); fetchAttendeeEvents(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes, fetchInternalRelationships, fetchAttendeeEvents]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { meetingId: deletedId } = (e as CustomEvent<{ meetingId: number }>).detail;
+      setMeetings(prev => prev.map(m => m.id === deletedId ? { ...m, has_notes: false } : m));
+    };
+    window.addEventListener('meeting-notes-deleted', handler);
+    return () => window.removeEventListener('meeting-notes-deleted', handler);
+  }, []);
+
   // Load conference detail when a conference is selected
   useEffect(() => {
     if (!selectedConferenceId) {
