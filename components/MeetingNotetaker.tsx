@@ -322,6 +322,9 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showReplaceRecordingDialog, setShowReplaceRecordingDialog] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(false);
+  const [analysisWidth, setAnalysisWidth] = useState(420);
+  const analysisColRef = useRef<HTMLDivElement>(null);
+  const isResizingRef = useRef(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [actionItemsOpen, setActionItemsOpen] = useState(false);
@@ -339,10 +342,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   useEffect(() => {
     async function load() {
       try {
-        const [meetingDetailRes, notesRes, usersRes] = await Promise.all([
+        const [meetingDetailRes, notesRes, usersRes, tasksRes] = await Promise.all([
           fetch(`/api/meetings/${meetingId}`),
           fetch(`/api/meetings/${meetingId}/notes`),
           fetch('/api/config?category=user'),
+          fetch(`/api/meetings/${meetingId}/tasks`),
         ]);
 
         if (meetingDetailRes.ok) {
@@ -380,6 +384,16 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         if (usersRes.ok) {
           const users: { id: number; value: string }[] = await usersRes.json();
           setAllUsers(users);
+        }
+
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json();
+          const confirmedIds = new Set<number>(
+            (tasksData.tasks ?? [])
+              .filter((t: { insight_id: number | null }) => t.insight_id != null)
+              .map((t: { insight_id: number }) => t.insight_id)
+          );
+          if (confirmedIds.size > 0) setSelectedTaskIds(confirmedIds);
         }
       } catch (e) {
         console.error('Failed to load meeting notes:', e);
@@ -440,6 +454,25 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     audio.currentTime = secs;
     setAudioCurrentTime(secs);
   }, []);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = analysisColRef.current?.offsetWidth ?? analysisWidth;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = Math.max(320, startWidth + (startX - ev.clientX));
+      setAnalysisWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      isResizingRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [analysisWidth]);
 
   // Recording
   const startRecording = useCallback(async () => {
@@ -721,7 +754,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       });
       if (!res.ok) throw new Error();
       toast.success('Tasks created as follow-ups!');
-      setSelectedTaskIds(new Set());
     } catch {
       toast.error('Failed to create tasks.');
     }
@@ -752,8 +784,9 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [meetingId, onClose, router]);
 
-  const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal');
-  const painPoints = insights.filter(i => i.insight_type === 'pain_point');
+  const sortConfirmedFirst = (a: Insight, b: Insight) => (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0);
+  const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal').sort(sortConfirmedFirst);
+  const painPoints = insights.filter(i => i.insight_type === 'pain_point').sort(sortConfirmedFirst);
   const hasAudioOrTranscript = !!(audioUrl || audioBlob || transcript.length);
 
   // Use recorded elapsed time as fallback when the webm blob lacks duration metadata (Infinity)
@@ -1016,7 +1049,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
-        <div className="flex flex-col lg:grid lg:grid-cols-[auto_1fr_1fr] h-full min-h-0">
+        <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0">
 
           {/* ── Context Panel ── */}
           <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0`}>
@@ -1186,7 +1219,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
           {/* ── Notes + Recording column ── */}
-          <div className="border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto">
+          <div className="border-b lg:border-b-0 border-gray-200 overflow-auto flex-1 min-w-0">
             <div className="p-4 space-y-4">
 
               {/* Notes */}
@@ -1392,8 +1425,16 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             </div>
           </div>
 
+          {/* ── Resize handle between Notes and AI Analysis ── */}
+          <div
+            className="hidden lg:flex w-1 flex-shrink-0 cursor-col-resize bg-gray-200 hover:bg-brand-secondary/40 transition-colors active:bg-brand-secondary/60 relative"
+            onMouseDown={handleResizeMouseDown}
+          >
+            <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize" />
+          </div>
+
           {/* ── AI Analysis column ── */}
-          <div className="overflow-auto">
+          <div ref={analysisColRef} className="overflow-auto flex-shrink-0" style={{ width: analysisWidth }}>
             <div className="p-4">
               {analysisLoading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">

@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
+  const db = await getDb(user.accountId);
+  const { id } = await params;
+  const meetingId = Number(id);
+  try {
+    const result = await db.execute({
+      sql: `SELECT id, insight_id, task_text FROM meeting_tasks WHERE meeting_id = ?`,
+      args: [meetingId],
+    });
+    return NextResponse.json({
+      tasks: result.rows.map(r => ({
+        id: Number(r.id),
+        insight_id: r.insight_id != null ? Number(r.insight_id) : null,
+        task_text: String(r.task_text),
+      })),
+    });
+  } catch {
+    return NextResponse.json({ tasks: [] });
+  }
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;

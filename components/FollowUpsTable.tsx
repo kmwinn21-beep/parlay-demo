@@ -226,7 +226,7 @@ export function FollowUpsTable({
                     return (
                       <div className="mt-0.5 w-full">
                         {visibleLines.map((line, i) => (
-                          <p key={i} className="text-xs text-gray-500 leading-snug">- {line}</p>
+                          <p key={i} className={`text-xs text-gray-500 leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
                         ))}
                         {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
                         <button
@@ -315,9 +315,9 @@ export function FollowUpsTable({
                             const isExpanded = expandedTaskIds.has(fu.id);
                             const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
                             return (
-                              <div className="mt-0.5">
+                              <div className="mt-2">
                                 {visibleLines.map((line, i) => (
-                                  <p key={i} className="text-gray-500 leading-snug">- {line}</p>
+                                  <p key={i} className={`text-gray-500 leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
                                 ))}
                                 {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
                                 <button
