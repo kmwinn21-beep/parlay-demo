@@ -64,6 +64,8 @@ type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
 interface Props {
   meetingId: number;
   onClose?: () => void;
+  onRecordingStateChange?: (isRecording: boolean) => void;
+  onMeetingLoaded?: (label: string) => void;
 }
 
 function formatTime(secs: number) {
@@ -284,7 +286,7 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function MeetingNotetaker({ meetingId, onClose }: Props) {
+export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, onMeetingLoaded }: Props) {
   const router = useRouter();
 
   // Data state
@@ -323,6 +325,8 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showReplaceRecordingDialog, setShowReplaceRecordingDialog] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
@@ -404,6 +408,18 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
       audio.removeEventListener('pause', onPause);
     };
   }, [audioUrl]);
+
+  // Notify parent of recording state changes (for minimized bar indicator)
+  useEffect(() => {
+    onRecordingStateChange?.(recordingState === 'recording');
+  }, [recordingState, onRecordingStateChange]);
+
+  // Notify parent of meeting label once loaded
+  useEffect(() => {
+    if (meeting) {
+      onMeetingLoaded?.(`${meeting.first_name} ${meeting.last_name} — ${meeting.conference_name}`);
+    }
+  }, [meeting, onMeetingLoaded]);
 
   const togglePlayback = useCallback(() => {
     const audio = audioRef.current;
@@ -709,7 +725,7 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {onClose ? (
-            <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
+            <button onClick={() => setShowExitConfirm(true)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -750,6 +766,91 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Exit confirmation modal */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h2 className="text-sm font-semibold text-gray-800">Save before exiting?</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Save your notes to keep them for this meeting, or delete to remove all notes and transcripts permanently.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => { await handleSave(); onClose?.(); }}
+                disabled={saving}
+                className="w-full py-2 bg-brand-secondary text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save and Exit'}
+              </button>
+              <button
+                onClick={async () => {
+                  setDeleting(true);
+                  try { await fetch(`/api/meetings/${meetingId}/notes`, { method: 'DELETE' }); } catch { /* ignore */ }
+                  setDeleting(false);
+                  onClose?.();
+                }}
+                disabled={deleting}
+                className="w-full py-2 border border-red-200 text-red-500 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete and Exit'}
+              </button>
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="w-full py-2 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replace recording dialog */}
+      {showReplaceRecordingDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3h-2c0 2.76-2.24 5-5 5s-5-2.24-5-5H3c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92z"/>
+                </svg>
+              </div>
+              <h2 className="text-sm font-semibold text-gray-800">Replace existing recording?</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              A recording already exists for this meeting. Starting a new recording will permanently replace it.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowReplaceRecordingDialog(false)}
+                className="flex-1 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Keep existing
+              </button>
+              <button
+                onClick={() => {
+                  setAudioBlob(null);
+                  setAudioUrl(null);
+                  setRecordingState('idle');
+                  setShowReplaceRecordingDialog(false);
+                  startRecording();
+                }}
+                className="flex-1 py-2 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors"
+              >
+                Replace & record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       {showDeleteConfirm && (
@@ -1035,6 +1136,17 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                     <p className="text-xs text-gray-400">Tap to record</p>
                   </div>
                 )}
+                {/* Re-record button when audio exists and not currently recording */}
+                {recordingState === 'idle' && audioUrl && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setShowReplaceRecordingDialog(true)}
+                      className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors"
+                    >
+                      Re-record
+                    </button>
+                  </div>
+                )}
                 {(recordingState === 'recording' || recordingState === 'paused') && (
                   <div className="flex flex-col items-center gap-3">
                     <div className="flex items-center gap-2">
@@ -1058,6 +1170,13 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                           style={{ height: `${20 + Math.sin(i * 0.8) * 12 + Math.cos(i * 1.2) * 8}%` }} />
                       ))}
                     </div>
+                    {recordingState === 'stopped' && (
+                      <div className="flex justify-end">
+                        <button onClick={() => setShowReplaceRecordingDialog(true)} className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors">
+                          Re-record
+                        </button>
+                      </div>
+                    )}
                     {!analysisLoading && (
                       <button
                         onClick={handleAnalyze}

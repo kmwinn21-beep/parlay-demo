@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 120;
+
 const TIER_LABELS: Record<string, string> = {
   '1': 'Must Target',
   '2': 'High Priority',
@@ -218,7 +220,7 @@ RULES
 - Do not fabricate, infer beyond what was said, or add context not present in the transcript.
 - Return valid JSON only. No markdown, no code fences, no explanation text.`;
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 150_000 });
 
     const callClaude = (messages: Parameters<typeof anthropic.messages.create>[0]['messages']) =>
       anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages });
