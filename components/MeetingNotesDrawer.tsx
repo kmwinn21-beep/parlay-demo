@@ -63,7 +63,7 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
       {/* Minimized pill bar — no close button */}
       {minimized && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-3 bg-white border border-gray-200 rounded-full shadow-xl px-5 py-3 cursor-pointer hover:shadow-2xl transition-shadow select-none"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-3 bg-brand-accent/20 border border-brand-accent text-brand-primary rounded-full shadow-xl px-5 py-3 cursor-pointer hover:shadow-2xl transition-shadow select-none"
           onClick={() => setMinimized(false)}
         >
           {isRecording && (
@@ -72,8 +72,8 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
               REC
             </span>
           )}
-          <span className="text-sm font-medium text-gray-700 max-w-xs truncate">{meetingLabel}</span>
-          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span className="text-sm font-medium max-w-xs truncate">{meetingLabel}</span>
+          <svg className="w-4 h-4 flex-shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </div>

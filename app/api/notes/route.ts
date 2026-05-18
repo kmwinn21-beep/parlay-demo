@@ -29,14 +29,14 @@ export async function GET(request: NextRequest) {
       const joinCompany = entityType === 'company';
       result = await db.execute({
         sql: joinCompany
-          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, co.name AS joined_company_name, COUNT(nc.id) AS comment_count
+          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, co.name AS joined_company_name, COUNT(nc.id) AS comment_count
                 FROM entity_notes en
                 LEFT JOIN companies co ON en.entity_id = co.id
                 LEFT JOIN note_comments nc ON nc.note_id = en.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
                 GROUP BY en.id
                 ORDER BY en.created_at DESC`
-          : `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, COUNT(nc.id) AS comment_count
+          : `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, COUNT(nc.id) AS comment_count
                 FROM entity_notes en
                 LEFT JOIN note_comments nc ON nc.note_id = en.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       });
     } else {
       result = await db.execute({
-        sql: `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, COUNT(nc.id) AS comment_count
+        sql: `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, COUNT(nc.id) AS comment_count
               FROM entity_notes en
               LEFT JOIN note_comments nc ON nc.note_id = en.id
               WHERE en.entity_type = ? AND en.entity_id = ?
@@ -73,6 +73,9 @@ export async function GET(request: NextRequest) {
         lets_talk: Number(r.lets_talk ?? 0),
         author_user_id: r.author_user_id != null ? Number(r.author_user_id) : null,
         comment_count: Number(r.comment_count ?? 0),
+        note_type: r.note_type != null ? String(r.note_type) : 'note',
+        meeting_id: r.meeting_id != null ? Number(r.meeting_id) : null,
+        insight_counts: r.insight_counts != null ? String(r.insight_counts) : null,
       }))
     );
   } catch (error) {
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest) {
     const {
       entity_type, entity_id, content, conference_name, rep,
       attendee_name, company_name, skip_notification, tagged_users,
+      note_type, meeting_id, insight_counts,
     } = await request.json();
 
     if (!entity_type || !entity_id || !content?.trim()) {
@@ -118,14 +122,15 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id`,
+      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, meeting_id, insight_counts)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, meeting_id, insight_counts`,
       args: [
         entity_type, entity_id, content.trim(),
         conference_name || null, resolvedRep,
         attendee_name || null, company_name || null,
         tagged_users || null, user.id,
+        note_type || 'note', meeting_id ?? null, insight_counts ?? null,
       ],
     });
 
@@ -144,6 +149,9 @@ export async function POST(request: NextRequest) {
       lets_talk: 0,
       author_user_id: Number(user.id),
       comment_count: 0,
+      note_type: row.note_type != null ? String(row.note_type) : 'note',
+      meeting_id: row.meeting_id != null ? Number(row.meeting_id) : null,
+      insight_counts: row.insight_counts != null ? String(row.insight_counts) : null,
     };
 
     // Fire standard notifications (best-effort) — skipped on cross-posts to avoid duplicates

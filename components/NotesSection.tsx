@@ -22,6 +22,9 @@ export interface EntityNote {
   lets_talk?: number;
   author_user_id?: number | null;
   comment_count?: number;
+  note_type?: string | null;
+  meeting_id?: number | null;
+  insight_counts?: string | null;
 }
 
 
