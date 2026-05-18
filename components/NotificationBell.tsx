@@ -24,6 +24,7 @@ function TypePill({ type }: { type: string }) {
     company:    { label: 'C',  cls: 'bg-blue-100 text-blue-700 border-blue-200' },
     attendee:   { label: 'A',  cls: 'bg-green-100 text-green-700 border-green-200' },
     conference: { label: 'CF', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+    meeting:    { label: 'M',  cls: 'bg-amber-100 text-amber-700 border-amber-200' },
   };
   const { label, cls } = map[type] ?? { label: type[0]?.toUpperCase() ?? '?', cls: 'bg-gray-100 text-gray-700 border-gray-200' };
   return (
@@ -65,6 +66,7 @@ function entityUrl(entityType: string, entityId: number): string {
   if (entityType === 'company') return `/companies/${entityId}?from_notification=1`;
   if (entityType === 'attendee') return `/attendees/${entityId}?from_notification=1`;
   if (entityType === 'conference') return `/conferences/${entityId}?from_notification=1`;
+  if (entityType === 'meeting') return `/follow-ups?meeting_id=${entityId}&from_notification=1`;
   return '/notifications';
 }
 

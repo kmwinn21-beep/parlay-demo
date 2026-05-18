@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const TIER_LABELS: Record<string, string> = {
   '1': 'Must Target',
@@ -32,12 +32,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    // Ensure meeting tables exist in this tenant DB (migrations only run on master DB at boot)
+    // Ensure meeting tables + notifications exist in this tenant DB
     await db.executeMultiple(`
       CREATE TABLE IF NOT EXISTS meeting_notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         meeting_id INTEGER NOT NULL UNIQUE REFERENCES meetings(id) ON DELETE CASCADE,
         notes_text TEXT, transcript TEXT, audio_file_path TEXT, summary TEXT,
+        analysis_status TEXT DEFAULT 'idle',
         created_by INTEGER REFERENCES users(id),
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -60,7 +61,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         created_by INTEGER REFERENCES users(id),
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        record_id INTEGER NOT NULL,
+        record_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        changed_by_config_id INTEGER,
+        changed_by_email TEXT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
     `);
+    // Add analysis_status to tables provisioned before this column was introduced
+    try { await db.execute({ sql: `ALTER TABLE meeting_notes ADD COLUMN analysis_status TEXT DEFAULT 'idle'`, args: [] }); } catch { /* already exists */ }
 
     // Accept multipart/form-data (direct audio file) or JSON (audio_url / transcript_text)
     const contentType = request.headers.get('content-type') ?? '';
@@ -106,6 +126,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const mtg = meetingResult.rows[0];
+
+    // Mark analysis as in-progress so clients can poll even if user has closed the modal
+    const notesCheck = await db.execute({ sql: `SELECT id FROM meeting_notes WHERE meeting_id = ?`, args: [meetingId] });
+    if (notesCheck.rows.length > 0) {
+      await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'processing', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] });
+    } else {
+      await db.execute({ sql: `INSERT INTO meeting_notes (meeting_id, analysis_status, created_by) VALUES (?, 'processing', ?)`, args: [meetingId, user.id ?? null] });
+    }
 
     // Look up rep name from scheduled_by (first ID)
     let repName = 'Unknown Rep';
@@ -188,6 +216,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const lines = (transcript_text ?? '').split('\n').map(l => l.trim()).filter(Boolean);
       segments = lines.map((line, i) => ({ text: line, start: i * 5, end: (i + 1) * 5 }));
       transcriptForAnalysis = transcript_text ?? '';
+    }
+
+    // Truncate very long transcripts to prevent timeouts (Whisper already limits audio length)
+    const MAX_TRANSCRIPT_CHARS = 14_000;
+    if (transcriptForAnalysis.length > MAX_TRANSCRIPT_CHARS) {
+      transcriptForAnalysis = transcriptForAnalysis.slice(0, MAX_TRANSCRIPT_CHARS) + '\n[Transcript truncated — first portion shown]';
     }
 
     // Fetch ICP settings
@@ -287,7 +321,7 @@ RULES
 - Do not fabricate, infer beyond what was said, or add context not present in the transcript.
 - Return valid JSON only. No markdown, no code fences, no explanation text.`;
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 150_000 });
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 270_000 });
 
     const callClaude = (messages: Parameters<typeof anthropic.messages.create>[0]['messages']) =>
       anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages });
@@ -387,6 +421,24 @@ RULES
       });
     }
 
+    // Mark analysis complete and create in-app notification
+    await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'complete', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] });
+    try {
+      const attendeeName = `${mtg.first_name} ${mtg.last_name}`;
+      await db.execute({
+        sql: `INSERT INTO notifications (user_id, type, record_id, record_name, message, changed_by_email, entity_type, entity_id)
+              VALUES (?, 'meeting', ?, ?, ?, ?, 'meeting', ?)`,
+        args: [
+          Number(user.id),
+          meetingId,
+          attendeeName,
+          `Meeting analysis ready: ${attendeeName} · ${mtg.conference_name}`,
+          user.email ?? '',
+          meetingId,
+        ],
+      });
+    } catch { /* non-blocking — analysis result is still returned */ }
+
     return NextResponse.json({
       insights: insertedInsights,
       transcript: segments,
@@ -395,6 +447,8 @@ RULES
     });
   } catch (error) {
     console.error('POST /api/meetings/[id]/analyze error:', error);
+    // Best-effort: mark analysis as failed so the UI can recover
+    try { await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'failed', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] }); } catch { /* ignore */ }
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

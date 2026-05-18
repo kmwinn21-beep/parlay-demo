@@ -66,6 +66,7 @@ interface Props {
   onClose?: () => void;
   onRecordingStateChange?: (isRecording: boolean) => void;
   onMeetingLoaded?: (label: string) => void;
+  onAnalysisStateChange?: (running: boolean) => void;
 }
 
 function formatTime(secs: number) {
@@ -286,7 +287,7 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, onMeetingLoaded }: Props) {
+export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, onMeetingLoaded, onAnalysisStateChange }: Props) {
   const router = useRouter();
 
   // Data state
@@ -563,6 +564,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       return;
     }
     setAnalysisLoading(true);
+    onAnalysisStateChange?.(true);
     try {
       let analyzeRes: Response;
 
@@ -594,8 +596,9 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       toast.error(e instanceof Error ? e.message : 'Analysis failed');
     } finally {
       setAnalysisLoading(false);
+      onAnalysisStateChange?.(false);
     }
-  }, [audioBlob, audioUrl, meetingId, transcript]);
+  }, [audioBlob, audioUrl, meetingId, transcript, onAnalysisStateChange]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

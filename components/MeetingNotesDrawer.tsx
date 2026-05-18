@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import toast from 'react-hot-toast';
 import { MeetingNotetaker } from '@/components/MeetingNotetaker';
 
 interface Props {
@@ -14,6 +15,14 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
   const [minimized, setMinimized] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [meetingLabel, setMeetingLabel] = useState('Meeting Notes');
+  const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (isAnalysisRunning) {
+      toast('Analysis is running in the background. You\'ll receive a notification when it\'s complete.', { icon: '⏳', duration: 6000 });
+    }
+    onClose();
+  }, [isAnalysisRunning, onClose]);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -43,9 +52,10 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
         >
           <MeetingNotetaker
             meetingId={meetingId}
-            onClose={onClose}
+            onClose={handleClose}
             onRecordingStateChange={setIsRecording}
             onMeetingLoaded={setMeetingLabel}
+            onAnalysisStateChange={setIsAnalysisRunning}
           />
         </div>
       </div>
