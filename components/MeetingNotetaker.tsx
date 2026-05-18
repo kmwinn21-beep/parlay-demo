@@ -322,9 +322,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showReplaceRecordingDialog, setShowReplaceRecordingDialog] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(false);
-  const [analysisWidth, setAnalysisWidth] = useState(420);
-  const analysisColRef = useRef<HTMLDivElement>(null);
-  const isResizingRef = useRef(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [actionItemsOpen, setActionItemsOpen] = useState(false);
@@ -454,25 +451,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     audio.currentTime = secs;
     setAudioCurrentTime(secs);
   }, []);
-
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    const startX = e.clientX;
-    const startWidth = analysisColRef.current?.offsetWidth ?? analysisWidth;
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const newWidth = Math.max(320, startWidth + (startX - ev.clientX));
-      setAnalysisWidth(newWidth);
-    };
-    const onMouseUp = () => {
-      isResizingRef.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  }, [analysisWidth]);
 
   // Recording
   const startRecording = useCallback(async () => {
@@ -652,6 +630,17 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [audioBlob, audioUrl, meetingId, transcript, onAnalysisStateChange]);
 
+  const confirmSelectedTasksToApi = useCallback(async () => {
+    const selected = nextSteps.filter(s => s.id != null && selectedTaskIds.has(s.id));
+    if (!selected.length) return;
+    const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: selected.map(s => ({ insight_id: s.id, task_text: s.task_text, due_date_offset_days: s.suggested_due_date_offset_days })) }),
+    });
+    if (!res.ok) throw new Error('Failed to confirm tasks');
+  }, [meetingId, nextSteps, selectedTaskIds]);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -684,6 +673,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       });
       if (!res.ok) throw new Error();
       savedStateRef.current = { notesText, audioUrl: persistedAudioUrl, hadTranscript: transcript.length > 0 };
+      // Confirm any selected action items into the bundled follow-up
+      if (selectedTaskIds.size > 0) {
+        try { await confirmSelectedTasksToApi(); } catch { /* non-blocking */ }
+      }
       toast.success('Notes saved.');
       // Set outcome to Held (best-effort, non-blocking)
       if (meeting) {
@@ -718,7 +711,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights, selectedTaskIds, confirmSelectedTasksToApi]);
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
@@ -744,20 +737,14 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   }, [meetingId]);
 
   const handleConfirmTasks = useCallback(async () => {
-    const selected = nextSteps.filter(s => s.id != null && selectedTaskIds.has(s.id));
-    if (!selected.length) { toast.error('Select at least one task.'); return; }
+    if (!selectedTaskIds.size) { toast.error('Select at least one task.'); return; }
     try {
-      const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks: selected.map(s => ({ task_text: s.task_text, due_date_offset_days: s.suggested_due_date_offset_days })) }),
-      });
-      if (!res.ok) throw new Error();
+      await confirmSelectedTasksToApi();
       toast.success('Tasks created as follow-ups!');
     } catch {
       toast.error('Failed to create tasks.');
     }
-  }, [meetingId, nextSteps, selectedTaskIds]);
+  }, [selectedTaskIds.size, confirmSelectedTasksToApi]);
 
   const handleDeleteNotes = useCallback(async () => {
     setDeleting(true);
@@ -1219,7 +1206,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
           {/* ── Notes + Recording column ── */}
-          <div className="border-b lg:border-b-0 border-gray-200 overflow-auto flex-1 min-w-0">
+          <div className="border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto lg:w-[320px] lg:flex-shrink-0">
             <div className="p-4 space-y-4">
 
               {/* Notes */}
@@ -1425,16 +1412,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             </div>
           </div>
 
-          {/* ── Resize handle between Notes and AI Analysis ── */}
-          <div
-            className="hidden lg:flex w-1 flex-shrink-0 cursor-col-resize bg-gray-200 hover:bg-brand-secondary/40 transition-colors active:bg-brand-secondary/60 relative"
-            onMouseDown={handleResizeMouseDown}
-          >
-            <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize" />
-          </div>
-
           {/* ── AI Analysis column ── */}
-          <div ref={analysisColRef} className="overflow-auto flex-shrink-0" style={{ width: analysisWidth }}>
+          <div className="overflow-auto flex-1 min-w-0">
             <div className="p-4">
               {analysisLoading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
