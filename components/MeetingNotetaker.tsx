@@ -1138,15 +1138,30 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
               {/* Transcript */}
               {transcript.length > 0 && (
                 <div className="border-t border-gray-100 pt-4">
-                  <button
-                    onClick={() => setTranscriptExpanded(e => !e)}
-                    className="flex items-center gap-2 text-xs font-semibold text-gray-600 w-full"
-                  >
-                    <svg className={`w-4 h-4 transition-transform ${transcriptExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    Transcript ({transcript.length} segments)
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setTranscriptExpanded(e => !e)}
+                      className="flex items-center gap-2 text-xs font-semibold text-gray-600"
+                    >
+                      <svg className={`w-4 h-4 transition-transform ${transcriptExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      Transcript ({transcript.length} segments)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTranscript([]);
+                        setTranscriptExpanded(false);
+                        setInsights([]);
+                        setSummary('');
+                        setNextSteps([]);
+                      }}
+                      className="text-[10px] text-red-400 hover:text-red-600 font-medium transition-colors"
+                      title="Clear transcript and analysis"
+                    >
+                      Clear
+                    </button>
+                  </div>
                   {transcriptExpanded && (
                     <div className="mt-2 space-y-1 max-h-60 overflow-auto">
                       {transcript.map((seg, i) => {

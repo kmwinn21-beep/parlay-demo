@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                a.first_name, a.last_name, a.title AS attendee_title,
                co.name AS company_name, co.icp AS company_icp,
                c.name AS conference_name,
-               cad.tier AS tier, cad.relationship_status AS relationship_status
+               cad.tier AS tier
             FROM meetings m
             JOIN attendees a ON m.attendee_id = a.id
             LEFT JOIN companies co ON a.company_id = co.id
@@ -65,17 +65,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Look up rep name from scheduled_by (first ID)
     let repName = 'Unknown Rep';
-    let repTitle = '';
     if (mtg.scheduled_by) {
       const firstId = String(mtg.scheduled_by).split(',')[0].trim();
       if (firstId && !isNaN(Number(firstId))) {
         const repResult = await db.execute({
-          sql: `SELECT first_name, last_name, title FROM users WHERE id = ?`,
+          sql: `SELECT first_name, last_name FROM users WHERE id = ?`,
           args: [Number(firstId)],
         });
         if (repResult.rows[0]) {
           repName = `${repResult.rows[0].first_name ?? ''} ${repResult.rows[0].last_name ?? ''}`.trim();
-          repTitle = repResult.rows[0].title ? String(repResult.rows[0].title) : '';
         }
       }
     }
@@ -153,7 +151,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const tier = mtg.tier ? String(mtg.tier) : 'unassigned';
     const tierLabel = TIER_LABELS[tier] ?? 'Monitor';
     const tierDesc = TIER_DESCRIPTIONS[tier] ?? 'Worth watching but not yet prioritized';
-    const relationshipStatus = mtg.relationship_status ? String(mtg.relationship_status) : 'No prior relationship';
     const meetingDateStr = mtg.meeting_date
       ? new Date(`${mtg.meeting_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
       : 'Unknown date';
@@ -169,10 +166,10 @@ You always respond with valid JSON only. No preamble, no explanation, no markdow
 MEETING CONTEXT
 Conference: ${mtg.conference_name}
 Date: ${meetingDateStr}
-Internal rep: ${repName}${repTitle ? `, ${repTitle}` : ''}
+Internal rep: ${repName}
 External attendee: ${mtg.first_name} ${mtg.last_name}, ${mtg.attendee_title ?? 'Unknown Title'}, ${mtg.company_name ?? 'Unknown Company'}
 Company tier: ${tierLabel} (${tierDesc})
-Relationship status: ${relationshipStatus}
+Relationship status: No prior relationship on record
 
 ICP BUYING SIGNALS TO WATCH FOR
 These are the buying signals configured for this account's ideal customer profile. Flag any moment in the transcript where the prospect says something that matches or strongly relates to one of these signals.
