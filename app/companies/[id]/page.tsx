@@ -1193,6 +1193,7 @@ export default function CompanyDetailPage() {
             currentCompanyId={Number(id)}
             onPin={handlePinNote}
             pinnedNoteIds={pinnedNoteIds}
+            onMeetingNoteClick={(meetingId) => setNotesDrawerMeetingId(meetingId)}
           />
 
         </div>{/* end left column */}

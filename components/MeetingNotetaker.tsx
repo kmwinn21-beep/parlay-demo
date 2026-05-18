@@ -1501,18 +1501,18 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                   </div>
                                 </div>
                                 {ins.quote && (
-                                  <div className="mb-2 flex-1">
-                                    <blockquote className={`text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 ${expandedQuotes.has(ins.id) ? '' : 'line-clamp-2'}`}>
-                                      &ldquo;{ins.quote}&rdquo;
-                                    </blockquote>
-                                    {ins.quote.length > 80 && (
-                                      <button
-                                        onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
-                                        className="text-[10px] text-blue-500 hover:underline mt-0.5"
-                                      >
-                                        {expandedQuotes.has(ins.id) ? 'Hide' : 'Show Quote'}
-                                      </button>
+                                  <div className="mb-2">
+                                    {expandedQuotes.has(ins.id) && (
+                                      <blockquote className="text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 mb-0.5">
+                                        &ldquo;{ins.quote}&rdquo;
+                                      </blockquote>
                                     )}
+                                    <button
+                                      onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
+                                      className="text-[10px] text-blue-500 hover:underline"
+                                    >
+                                      {expandedQuotes.has(ins.id) ? 'Hide Quote' : 'Show Quote'}
+                                    </button>
                                   </div>
                                 )}
                                 <div className="flex items-center justify-between mt-auto pt-1">
@@ -1575,18 +1575,18 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                   </div>
                                 </div>
                                 {ins.quote && (
-                                  <div className="mb-2 flex-1">
-                                    <blockquote className={`text-[10px] text-gray-500 italic border-l-2 border-orange-200 pl-2 ${expandedQuotes.has(ins.id) ? '' : 'line-clamp-2'}`}>
-                                      &ldquo;{ins.quote}&rdquo;
-                                    </blockquote>
-                                    {ins.quote.length > 80 && (
-                                      <button
-                                        onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
-                                        className="text-[10px] text-blue-500 hover:underline mt-0.5"
-                                      >
-                                        {expandedQuotes.has(ins.id) ? 'Hide' : 'Show Quote'}
-                                      </button>
+                                  <div className="mb-2">
+                                    {expandedQuotes.has(ins.id) && (
+                                      <blockquote className="text-[10px] text-gray-500 italic border-l-2 border-orange-200 pl-2 mb-0.5">
+                                        &ldquo;{ins.quote}&rdquo;
+                                      </blockquote>
                                     )}
+                                    <button
+                                      onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
+                                      className="text-[10px] text-blue-500 hover:underline"
+                                    >
+                                      {expandedQuotes.has(ins.id) ? 'Hide Quote' : 'Show Quote'}
+                                    </button>
                                   </div>
                                 )}
                                 <div className="flex items-center justify-between mt-auto pt-1">

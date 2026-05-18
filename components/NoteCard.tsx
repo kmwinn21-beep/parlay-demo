@@ -94,6 +94,7 @@ export function NoteCard({
   showPinnedIndicator,
   entityType,
   conferences,
+  onMeetingNoteClick,
 }: {
   note: EntityNote;
   onDelete: (id: number) => void;
@@ -102,6 +103,7 @@ export function NoteCard({
   showPinnedIndicator?: boolean;
   entityType: 'attendee' | 'company' | 'conference';
   conferences?: Array<{ id: number; name: string }>;
+  onMeetingNoteClick?: (meetingId: number) => void;
 }) {
   const { user } = useUser();
   const colorMaps = useConfigColors();
@@ -370,26 +372,33 @@ export function NoteCard({
       {note.note_type === 'meeting_note' && note.insight_counts && (() => {
         let counts: { buying_signals?: number; pain_points?: number; action_items?: number } = {};
         try { counts = JSON.parse(note.insight_counts); } catch { return null; }
-        const meetingPath = note.meeting_id ? `/meetings/${note.meeting_id}/notes` : null;
-        if (!meetingPath) return null;
+        const meetingId = note.meeting_id ?? null;
+        if (!meetingId) return null;
         const hasPills = (counts.buying_signals ?? 0) > 0 || (counts.pain_points ?? 0) > 0 || (counts.action_items ?? 0) > 0;
         if (!hasPills) return null;
+        // Use modal callback when available (attendee/company context), otherwise navigate to full page
+        const makePill = (label: string, colorCls: string, section: string) => {
+          const pillCls = `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors ${colorCls}`;
+          return onMeetingNoteClick
+            ? <button key={section} onClick={() => onMeetingNoteClick(meetingId)} className={pillCls}>{label}</button>
+            : <Link key={section} href={`/meetings/${meetingId}/notes?section=${section}`} className={pillCls}>{label}</Link>;
+        };
         return (
           <div className="flex flex-wrap gap-1.5 mt-2 mb-1">
-            {(counts.buying_signals ?? 0) > 0 && (
-              <Link href={`${meetingPath}?section=buying_signals`} className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[11px] font-medium hover:bg-green-200 transition-colors">
-                {counts.buying_signals} buying {counts.buying_signals === 1 ? 'signal' : 'signals'}
-              </Link>
+            {(counts.buying_signals ?? 0) > 0 && makePill(
+              `${counts.buying_signals} buying ${counts.buying_signals === 1 ? 'signal' : 'signals'}`,
+              'bg-green-100 text-green-700 hover:bg-green-200',
+              'buying_signals',
             )}
-            {(counts.pain_points ?? 0) > 0 && (
-              <Link href={`${meetingPath}?section=pain_points`} className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[11px] font-medium hover:bg-orange-200 transition-colors">
-                {counts.pain_points} pain {counts.pain_points === 1 ? 'point' : 'points'}
-              </Link>
+            {(counts.pain_points ?? 0) > 0 && makePill(
+              `${counts.pain_points} pain ${counts.pain_points === 1 ? 'point' : 'points'}`,
+              'bg-orange-100 text-orange-700 hover:bg-orange-200',
+              'pain_points',
             )}
-            {(counts.action_items ?? 0) > 0 && (
-              <Link href={`${meetingPath}?section=action_items`} className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[11px] font-medium hover:bg-blue-200 transition-colors">
-                {counts.action_items} action {counts.action_items === 1 ? 'item' : 'items'}
-              </Link>
+            {(counts.action_items ?? 0) > 0 && makePill(
+              `${counts.action_items} action ${counts.action_items === 1 ? 'item' : 'items'}`,
+              'bg-blue-100 text-blue-700 hover:bg-blue-200',
+              'action_items',
             )}
           </div>
         );
