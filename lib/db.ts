@@ -816,6 +816,46 @@ export async function initDb(): Promise<void> {
       reason TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+    `CREATE TABLE IF NOT EXISTS meeting_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL UNIQUE REFERENCES meetings(id) ON DELETE CASCADE,
+      notes_text TEXT,
+      transcript TEXT,
+      audio_file_path TEXT,
+      summary TEXT,
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS meeting_insights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+      conference_id INTEGER,
+      company_id INTEGER,
+      attendee_id INTEGER,
+      insight_type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      quote TEXT,
+      timestamp_seconds INTEGER,
+      icp_match_id INTEGER,
+      confidence TEXT DEFAULT 'medium',
+      confirmed INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_meeting_insights_meeting ON meeting_insights(meeting_id)`,
+    `CREATE TABLE IF NOT EXISTS meeting_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+      insight_id INTEGER REFERENCES meeting_insights(id),
+      task_text TEXT NOT NULL,
+      assigned_to INTEGER REFERENCES users(id),
+      due_date TEXT,
+      status TEXT DEFAULT 'pending',
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
   ];
   // Split into DDL (schema) and DML (data) so data ops don't race against column creation.
   // Each group runs in parallel; groups stay sequential relative to each other.

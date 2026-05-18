@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -35,6 +36,7 @@ export interface Meeting {
   company_name: string | null;
   company_wse: number | null;
   conference_name: string;
+  has_notes?: boolean;
 }
 
 type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'meeting_type' | 'outcome';
@@ -487,6 +489,7 @@ export function MeetingsTable({
   onOutcomeChange,
   onDelete,
   onEdit,
+  onNotesClick,
   userOptions = [],
   hideCompany = false,
   tableName = 'meetings',
@@ -497,10 +500,12 @@ export function MeetingsTable({
   onOutcomeChange: (meetingId: number, outcome: string) => void;
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
+  onNotesClick?: (meetingId: number) => void;
   userOptions?: UserOption[];
   hideCompany?: boolean;
   tableName?: string;
 }) {
+  const router = useRouter();
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -671,7 +676,7 @@ export function MeetingsTable({
                   case 'conference': return <SortHeader key="conference" label="Conference" col="conference" />;
                   case 'meeting_type': return <SortHeader key="meeting_type" label="Meeting Type" col="meeting_type" />;
                   case 'outcome': return <SortHeader key="outcome" label="Outcome" col="outcome" />;
-                  case 'info': return <th key="info" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>;
+                  case 'info': return <th key="info" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>;
                   default: return null;
                 }
               })}
@@ -720,7 +725,21 @@ export function MeetingsTable({
                         <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
                       </td>;
                       case 'info': return <td key="info" className="px-3 py-2">
-                        <MeetingInfoTooltip scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
+                        <button
+                          type="button"
+                          className={`relative transition-colors ${m.has_notes ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
+                          title={m.has_notes ? 'View notes' : 'Add notes'}
+                          onClick={() => onNotesClick ? onNotesClick(m.id) : router.push(`/meetings/${m.id}/notes`)}
+                        >
+                          {m.has_notes ? (
+                            <span className="relative inline-flex">
+                              <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
+                            </span>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                          )}
+                        </button>
                       </td>;
                       default: return null;
                     }

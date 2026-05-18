@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
+import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { BackButton } from '@/components/BackButton';
@@ -139,6 +140,7 @@ export default function CompanyDetailPage() {
   const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
   const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
   const [companyMeetings, setCompanyMeetings] = useState<Meeting[]>([]);
+  const [notesDrawerMeetingId, setNotesDrawerMeetingId] = useState<number | null>(null);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
   const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
@@ -1109,6 +1111,7 @@ export default function CompanyDetailPage() {
               userOptions={userOptions}
               hideCompany
               tableName="company_meetings"
+              onNotesClick={(id) => setNotesDrawerMeetingId(id)}
               onOutcomeChange={async (meetingId, outcome) => {
                 setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {
@@ -1512,6 +1515,7 @@ export default function CompanyDetailPage() {
         open={showTpMatrix}
         onClose={() => setShowTpMatrix(false)}
       />
+      <MeetingNotesDrawer meetingId={notesDrawerMeetingId} onClose={() => setNotesDrawerMeetingId(null)} />
     </div>
   );
 }

@@ -3,6 +3,51 @@ import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
+    const { id } = params;
+
+    const result = await db.execute({
+      sql: `SELECT m.id, m.attendee_id, m.conference_id, m.scheduled_by,
+               a.first_name, a.last_name, a.title,
+               co.name AS company_name, co.icp AS company_icp,
+               c.name AS conference_name
+            FROM meetings m
+            JOIN attendees a ON m.attendee_id = a.id
+            LEFT JOIN companies co ON a.company_id = co.id
+            JOIN conferences c ON m.conference_id = c.id
+            WHERE m.id = ?`,
+      args: [id],
+    });
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    const r = result.rows[0];
+    return NextResponse.json({
+      id: Number(r.id),
+      attendee_id: Number(r.attendee_id),
+      conference_id: Number(r.conference_id),
+      scheduled_by: r.scheduled_by ? String(r.scheduled_by) : null,
+      first_name: String(r.first_name ?? ''),
+      last_name: String(r.last_name ?? ''),
+      title: r.title ? String(r.title) : null,
+      company_name: r.company_name ? String(r.company_name) : null,
+      company_icp: r.company_icp ? String(r.company_icp) : null,
+      conference_name: String(r.conference_name ?? ''),
+    });
+  } catch (error) {
+    console.error('GET /api/meetings/[id] error:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
