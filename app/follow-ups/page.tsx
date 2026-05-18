@@ -130,6 +130,17 @@ export default function FollowUpsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  useEffect(() => {
+    const handler = () => {
+      fetch('/api/follow-ups')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setFollowUps(data); })
+        .catch(() => {});
+    };
+    window.addEventListener('meeting-tasks-confirmed', handler);
+    return () => window.removeEventListener('meeting-tasks-confirmed', handler);
+  }, []);
+
   const handleToggle = async (id: number, completed: boolean) => {
     setFollowUps((prev) =>
       prev.map((fu) =>

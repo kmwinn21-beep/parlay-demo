@@ -308,6 +308,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const recordingElapsedRef = useRef(0);
+  const [recordingDuration, setRecordingDuration] = useState(0); // elapsed secs at stop, fallback when blob lacks metadata
+
+  // Tracks last-persisted state to detect unsaved changes
+  const savedStateRef = useRef({ notesText: '', audioUrl: null as string | null, hadTranscript: false });
 
   // UI state
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -334,10 +339,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   useEffect(() => {
     async function load() {
       try {
-        const [meetingDetailRes, notesRes, usersRes] = await Promise.all([
+        const [meetingDetailRes, notesRes, usersRes, tasksRes] = await Promise.all([
           fetch(`/api/meetings/${meetingId}`),
           fetch(`/api/meetings/${meetingId}/notes`),
           fetch('/api/config?category=user'),
+          fetch(`/api/meetings/${meetingId}/tasks`),
         ]);
 
         if (meetingDetailRes.ok) {
@@ -352,9 +358,12 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
         if (notesRes.ok) {
           const data = await notesRes.json();
-          setNotesText(data.notes_text ?? '');
+          const loadedNotes = data.notes_text ?? '';
+          const loadedAudioUrl = data.audio_file_path ?? null;
+          setNotesText(loadedNotes);
           setSummary(data.summary ?? '');
-          if (data.audio_file_path) setAudioUrl(data.audio_file_path);
+          if (loadedAudioUrl) setAudioUrl(loadedAudioUrl);
+          savedStateRef.current = { notesText: loadedNotes, audioUrl: loadedAudioUrl, hadTranscript: !!data.transcript };
           if (data.transcript) {
             try {
               const parsed = JSON.parse(data.transcript);
@@ -372,6 +381,16 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         if (usersRes.ok) {
           const users: { id: number; value: string }[] = await usersRes.json();
           setAllUsers(users);
+        }
+
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json();
+          const confirmedIds = new Set<number>(
+            (tasksData.tasks ?? [])
+              .filter((t: { insight_id: number | null }) => t.insight_id != null)
+              .map((t: { insight_id: number }) => t.insight_id)
+          );
+          if (confirmedIds.size > 0) setSelectedTaskIds(confirmedIds);
         }
       } catch (e) {
         console.error('Failed to load meeting notes:', e);
@@ -450,7 +469,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       mr.start(1000);
       setRecordingState('recording');
       setRecordingElapsed(0);
-      recordingTimerRef.current = setInterval(() => setRecordingElapsed(e => e + 1), 1000);
+      recordingElapsedRef.current = 0;
+      recordingTimerRef.current = setInterval(() => {
+        recordingElapsedRef.current += 1;
+        setRecordingElapsed(recordingElapsedRef.current);
+      }, 1000);
     } catch {
       toast.error('Could not access microphone.');
     }
@@ -468,7 +491,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     if (mediaRecorderRef.current?.state === 'paused') {
       mediaRecorderRef.current.resume();
       setRecordingState('recording');
-      recordingTimerRef.current = setInterval(() => setRecordingElapsed(e => e + 1), 1000);
+      recordingTimerRef.current = setInterval(() => {
+        recordingElapsedRef.current += 1;
+        setRecordingElapsed(recordingElapsedRef.current);
+      }, 1000);
     }
   }, []);
 
@@ -477,6 +503,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
+    setRecordingDuration(recordingElapsedRef.current);
     setRecordingState('stopped');
   }, []);
 
@@ -603,6 +630,18 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [audioBlob, audioUrl, meetingId, transcript, onAnalysisStateChange]);
 
+  const confirmSelectedTasksToApi = useCallback(async () => {
+    const selected = nextSteps.filter(s => s.id != null && selectedTaskIds.has(s.id));
+    if (!selected.length) return;
+    const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: selected.map(s => ({ insight_id: s.id, task_text: s.task_text, due_date_offset_days: s.suggested_due_date_offset_days })) }),
+    });
+    if (!res.ok) throw new Error('Failed to confirm tasks');
+    window.dispatchEvent(new CustomEvent('meeting-tasks-confirmed', { detail: { meetingId } }));
+  }, [meetingId, nextSteps, selectedTaskIds]);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -634,6 +673,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         }),
       });
       if (!res.ok) throw new Error();
+      savedStateRef.current = { notesText, audioUrl: persistedAudioUrl, hadTranscript: transcript.length > 0 };
+      // Confirm any selected action items into the bundled follow-up
+      if (selectedTaskIds.size > 0) {
+        try { await confirmSelectedTasksToApi(); } catch { /* non-blocking */ }
+      }
       toast.success('Notes saved.');
       // Set outcome to Held (best-effort, non-blocking)
       if (meeting) {
@@ -668,7 +712,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights, selectedTaskIds, confirmSelectedTasksToApi]);
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
@@ -694,21 +738,14 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   }, [meetingId]);
 
   const handleConfirmTasks = useCallback(async () => {
-    const selected = nextSteps.filter(s => s.id != null && selectedTaskIds.has(s.id));
-    if (!selected.length) { toast.error('Select at least one task.'); return; }
+    if (!selectedTaskIds.size) { toast.error('Select at least one task.'); return; }
     try {
-      const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks: selected.map(s => ({ task_text: s.task_text, due_date_offset_days: s.suggested_due_date_offset_days })) }),
-      });
-      if (!res.ok) throw new Error();
+      await confirmSelectedTasksToApi();
       toast.success('Tasks created as follow-ups!');
-      setSelectedTaskIds(new Set());
     } catch {
       toast.error('Failed to create tasks.');
     }
-  }, [meetingId, nextSteps, selectedTaskIds]);
+  }, [selectedTaskIds.size, confirmSelectedTasksToApi]);
 
   const handleDeleteNotes = useCallback(async () => {
     setDeleting(true);
@@ -725,16 +762,32 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       setTranscriptExpanded(false);
       setShowDeleteConfirm(false);
       toast.success('Notes deleted.');
+      savedStateRef.current = { notesText: '', audioUrl: null, hadTranscript: false };
+      window.dispatchEvent(new CustomEvent('meeting-notes-deleted', { detail: { meetingId } }));
+      if (onClose) { onClose(); } else { router.push('/follow-ups'); }
     } catch {
       toast.error('Failed to delete notes.');
     } finally {
       setDeleting(false);
     }
-  }, [meetingId]);
+  }, [meetingId, onClose, router]);
 
-  const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal');
-  const painPoints = insights.filter(i => i.insight_type === 'pain_point');
+  const sortConfirmedFirst = (a: Insight, b: Insight) => (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0);
+  const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal').sort(sortConfirmedFirst);
+  const painPoints = insights.filter(i => i.insight_type === 'pain_point').sort(sortConfirmedFirst);
   const hasAudioOrTranscript = !!(audioUrl || audioBlob || transcript.length);
+
+  // Use recorded elapsed time as fallback when the webm blob lacks duration metadata (Infinity)
+  const displayDuration = isFinite(audioDuration) && audioDuration > 0 ? audioDuration : recordingDuration;
+
+  // True when user has changes that haven't been persisted yet
+  const hasUnsavedChanges = (
+    notesText !== savedStateRef.current.notesText ||
+    !!audioBlob ||
+    !!(audioUrl?.startsWith('blob:')) ||
+    internalAttendees.length > 0 ||
+    (!savedStateRef.current.hadTranscript && transcript.length > 0)
+  );
 
   // Derive scheduled_by display names and conference internal attendee names
   const scheduledByNames: string[] = (() => {
@@ -770,7 +823,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-brand-highlight border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -781,7 +834,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {onClose ? (
-            <button onClick={() => setShowExitConfirm(true)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
+            <button onClick={() => { if (hasUnsavedChanges) setShowExitConfirm(true); else onClose(); }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -823,7 +876,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         </div>
       </div>
 
-      {/* Exit confirmation modal */}
+      {/* Exit confirmation modal — only shown when there are unsaved changes */}
       {showExitConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
@@ -833,10 +886,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h2 className="text-sm font-semibold text-gray-800">Save before exiting?</h2>
+              <h2 className="text-sm font-semibold text-gray-800">You have unsaved changes</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Save your notes to keep them for this meeting, or delete to remove all notes and transcripts permanently.
+              Save to keep your latest changes, or discard them and exit without affecting previously saved data.
             </p>
             <div className="flex flex-col gap-2">
               <button
@@ -847,16 +900,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 {saving ? 'Saving…' : 'Save and Exit'}
               </button>
               <button
-                onClick={async () => {
-                  setDeleting(true);
-                  try { await fetch(`/api/meetings/${meetingId}/notes`, { method: 'DELETE' }); } catch { /* ignore */ }
-                  setDeleting(false);
-                  onClose?.();
-                }}
-                disabled={deleting}
-                className="w-full py-2 border border-red-200 text-red-500 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
+                onClick={() => { setShowExitConfirm(false); onClose?.(); }}
+                className="w-full py-2 border border-red-200 text-red-500 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
               >
-                {deleting ? 'Deleting…' : 'Delete and Exit'}
+                Discard Changes &amp; Exit
               </button>
               <button
                 onClick={() => setShowExitConfirm(false)}
@@ -958,21 +1005,21 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               className="relative flex-1 h-2 bg-gray-200 rounded-full cursor-pointer"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                scrubTo(((e.clientX - rect.left) / rect.width) * audioDuration);
+                scrubTo(((e.clientX - rect.left) / rect.width) * displayDuration);
               }}
             >
-              <div className="absolute left-0 top-0 h-2 bg-brand-secondary rounded-full" style={{ width: audioDuration > 0 ? `${(audioCurrentTime / audioDuration) * 100}%` : '0%' }} />
-              {insights.filter(i => i.timestamp_seconds != null && audioDuration > 0).map(i => (
+              <div className="absolute left-0 top-0 h-2 bg-brand-secondary rounded-full" style={{ width: displayDuration > 0 ? `${(audioCurrentTime / displayDuration) * 100}%` : '0%' }} />
+              {insights.filter(i => i.timestamp_seconds != null && displayDuration > 0).map(i => (
                 <button
                   key={i.id}
                   className={`absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full -ml-1 ${i.insight_type === 'buying_signal' ? 'bg-green-500' : i.insight_type === 'pain_point' ? 'bg-orange-500' : 'bg-blue-400'}`}
-                  style={{ left: `${(i.timestamp_seconds! / audioDuration) * 100}%` }}
+                  style={{ left: `${(i.timestamp_seconds! / displayDuration) * 100}%` }}
                   onClick={(e) => { e.stopPropagation(); scrubTo(i.timestamp_seconds!); }}
                   title={i.content}
                 />
               ))}
             </div>
-            <span className="text-xs text-gray-500 w-10 flex-shrink-0 font-mono text-right">{formatTime(audioDuration)}</span>
+            <span className="text-xs text-gray-500 w-10 flex-shrink-0 font-mono text-right">{formatTime(displayDuration)}</span>
           </div>
           <div className="flex items-center gap-3 mt-1">
             <div className="w-8 flex-shrink-0" />
@@ -990,7 +1037,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
-        <div className="flex flex-col lg:grid lg:grid-cols-[auto_1fr_1fr] h-full min-h-0">
+        <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0">
 
           {/* ── Context Panel ── */}
           <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0`}>
@@ -1160,7 +1207,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
           {/* ── Notes + Recording column ── */}
-          <div className="border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto">
+          <div className="border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto lg:w-[320px] lg:flex-shrink-0">
             <div className="p-4 space-y-4">
 
               {/* Notes */}
@@ -1237,12 +1284,12 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                       <button
                         onClick={handleAnalyze}
                         disabled={!hasAudioOrTranscript}
-                        className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                        className="w-full py-2 bg-brand-highlight text-brand-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                         </svg>
-                        Analyze with AI
+                        Generate Meeting Summary
                       </button>
                     )}
                   </div>
@@ -1301,12 +1348,12 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   {!analysisLoading ? (
                     <button
                       onClick={handleAnalyze}
-                      className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2"
+                      className="w-full py-2 bg-brand-highlight text-brand-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
-                      Analyze with AI
+                      Generate Meeting Summary
                     </button>
                   ) : (
                     <div className="flex items-center justify-center gap-2 py-2">
@@ -1367,7 +1414,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
           {/* ── AI Analysis column ── */}
-          <div className="overflow-auto">
+          <div className="overflow-auto flex-1 min-w-0">
             <div className="p-4">
               {analysisLoading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -1381,7 +1428,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <p className="text-sm text-gray-400 max-w-[200px]">Record or upload audio, then click Analyze with AI to extract insights.</p>
+                  <p className="text-sm text-gray-400 max-w-[200px]">Record or upload audio, then click Generate Meeting Summary to extract insights.</p>
                 </div>
               )}
 
@@ -1424,8 +1471,14 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                       </button>
                       {actionItemsOpen && (
                         <div className="space-y-2 mt-2">
-                          {nextSteps.map((step) => (
-                            <div key={step.id ?? step.task_text} className="flex items-start gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
+                          {[...nextSteps].sort((a, b) => {
+                            const aSelected = a.id != null && selectedTaskIds.has(a.id) ? 1 : 0;
+                            const bSelected = b.id != null && selectedTaskIds.has(b.id) ? 1 : 0;
+                            return bSelected - aSelected;
+                          }).map((step) => {
+                            const isSelected = step.id != null && selectedTaskIds.has(step.id);
+                            return (
+                            <div key={step.id ?? step.task_text} className={`flex items-start gap-2 p-2.5 rounded-lg border-2 transition-colors ${isSelected ? 'border-brand-primary bg-brand-primary/8' : 'border-gray-200 bg-white'}`}>
                               <input type="checkbox"
                                 checked={step.id != null && selectedTaskIds.has(step.id)}
                                 onChange={e => {
@@ -1441,7 +1494,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                 {step.suggested_due_date_offset_days != null && <p className="text-[10px] text-gray-400">Due: +{step.suggested_due_date_offset_days} days</p>}
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                {step.timestamp_seconds != null && audioDuration > 0 && (
+                                {step.timestamp_seconds != null && displayDuration > 0 && (
                                   <button onClick={() => scrubTo(step.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
                                     ▶ {formatTime(step.timestamp_seconds)}
                                   </button>
@@ -1455,9 +1508,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                           <button onClick={handleConfirmTasks} disabled={selectedTaskIds.size === 0}
-                            className="mt-1 w-full py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40">
+                            className="mt-1 w-full py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-colors disabled:opacity-40">
                             Confirm selected tasks ({selectedTaskIds.size})
                           </button>
                         </div>
@@ -1488,7 +1542,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                 <div className="flex items-start justify-between gap-1 mb-1.5">
                                   <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
                                   <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    {ins.timestamp_seconds != null && audioDuration > 0 && (
+                                    {ins.timestamp_seconds != null && displayDuration > 0 && (
                                       <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
                                         ▶{formatTime(ins.timestamp_seconds)}
                                       </button>
@@ -1562,7 +1616,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                                 <div className="flex items-start justify-between gap-1 mb-1.5">
                                   <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
                                   <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    {ins.timestamp_seconds != null && audioDuration > 0 && (
+                                    {ins.timestamp_seconds != null && displayDuration > 0 && (
                                       <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
                                         ▶{formatTime(ins.timestamp_seconds)}
                                       </button>

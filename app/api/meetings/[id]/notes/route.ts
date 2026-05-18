@@ -110,6 +110,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await db.execute({ sql: `DELETE FROM meeting_insights WHERE meeting_id = ?`, args: [meetingId] });
     await db.execute({ sql: `DELETE FROM meeting_tasks WHERE meeting_id = ?`, args: [meetingId] });
     await db.execute({ sql: `DELETE FROM meeting_notes WHERE meeting_id = ?`, args: [meetingId] });
+    try {
+      await db.execute({ sql: `DELETE FROM follow_ups WHERE meeting_id = ?`, args: [meetingId] });
+    } catch { }
 
     return NextResponse.json({ success: true });
   } catch (error) {

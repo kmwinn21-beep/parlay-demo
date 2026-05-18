@@ -60,15 +60,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
       const oldKey = oldKeyRes.rows.length > 0 && oldKeyRes.rows[0].action_key ? String(oldKeyRes.rows[0].action_key) : null;
       if (oldKey === 'meeting_scheduled') {
-        const postMtgRes = await db.execute({
-          sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
-          args: [],
+        // Only create if no meeting-linked follow-up exists yet (tasks route may create one)
+        try { await db.execute({ sql: 'ALTER TABLE follow_ups ADD COLUMN meeting_id INTEGER REFERENCES meetings(id)', args: [] }); } catch { }
+        const existingFu = await db.execute({
+          sql: 'SELECT id FROM follow_ups WHERE meeting_id = ?',
+          args: [meetingId],
         });
-        if (postMtgRes.rows.length > 0) {
-          await db.execute({
-            sql: 'INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed) VALUES (?, ?, ?, ?, 0)',
-            args: [attendee_id as number, conference_id as number, String(postMtgRes.rows[0].value), `Auto-created from ${heldValue} Meeting`],
+        if (existingFu.rows.length === 0) {
+          const postMtgRes = await db.execute({
+            sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
+            args: [],
           });
+          if (postMtgRes.rows.length > 0) {
+            await db.execute({
+              sql: 'INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, meeting_id) VALUES (?, ?, ?, ?, 0, ?)',
+              args: [attendee_id as number, conference_id as number, String(postMtgRes.rows[0].value), `Auto-created from ${heldValue} Meeting`, meetingId],
+            });
+          }
         }
       }
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { MeetingNotetaker } from '@/components/MeetingNotetaker';
@@ -16,6 +16,8 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [meetingLabel, setMeetingLabel] = useState('Meeting Notes');
   const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
+  const [modalWidth, setModalWidth] = useState(960);
+  const isResizingRef = useRef(false);
 
   const handleClose = useCallback(() => {
     if (isAnalysisRunning) {
@@ -30,6 +32,26 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
   useEffect(() => {
     if (meetingId) setMinimized(false);
   }, [meetingId]);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = modalWidth;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = Math.max(680, Math.min(startWidth + (ev.clientX - startX), window.innerWidth - 24));
+      setModalWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      isResizingRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [modalWidth]);
 
   if (!mounted || !meetingId) return null;
 
@@ -47,7 +69,8 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
         style={{ visibility: minimized ? 'hidden' : 'visible' }}
       >
         <div
-          className="pointer-events-auto flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-5xl h-full"
+          className="pointer-events-auto flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden relative h-full"
+          style={{ width: Math.min(modalWidth, window.innerWidth - 24) }}
           onClick={e => e.stopPropagation()}
         >
           <MeetingNotetaker
@@ -56,6 +79,11 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
             onRecordingStateChange={setIsRecording}
             onMeetingLoaded={setMeetingLabel}
             onAnalysisStateChange={setIsAnalysisRunning}
+          />
+          {/* Right-edge resize handle */}
+          <div
+            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize z-10 hover:bg-brand-secondary/30 transition-colors rounded-r-xl"
+            onMouseDown={handleResizeMouseDown}
           />
         </div>
       </div>

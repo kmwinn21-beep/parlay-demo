@@ -92,6 +92,13 @@ export function FollowUpsTable({
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
+
+  function parseTaskLines(notes: string | null): string[] {
+    if (!notes) return [];
+    const lines = notes.split('\n').map(l => l.trim()).filter(l => l.startsWith('- '));
+    return lines.map(l => l.slice(2));
+  }
 
   const canEditRep = !!onRepChange && userOptions.length > 0;
 
@@ -211,9 +218,34 @@ export function FollowUpsTable({
                 <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
                   {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                 </span>
-                {fu.next_steps_notes && (
-                  <span className="text-xs text-gray-500">{fu.next_steps_notes}</span>
-                )}
+                {(() => {
+                  const taskLines = parseTaskLines(fu.next_steps_notes);
+                  if (taskLines.length > 1) {
+                    const isExpanded = expandedTaskIds.has(fu.id);
+                    const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
+                    return (
+                      <div className="mt-0.5 w-full">
+                        {visibleLines.map((line, i) => (
+                          <p key={i} className={`text-xs text-gray-500 leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
+                        ))}
+                        {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTaskIds(prev => {
+                            const n = new Set(prev);
+                            if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id);
+                            return n;
+                          })}
+                          className="text-[10px] text-brand-secondary hover:underline mt-0.5"
+                        >
+                          {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
+                        </button>
+                      </div>
+                    );
+                  }
+                  if (fu.next_steps_notes) return <span className="text-xs text-gray-500">{fu.next_steps_notes}</span>;
+                  return null;
+                })()}
               </div>
               <div className="mt-1.5 flex items-center gap-2">
                 <Link href={`/conferences/${fu.conference_id}`} className="text-xs text-brand-secondary hover:underline">
@@ -277,7 +309,34 @@ export function FollowUpsTable({
                         <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
                           {resolveConfigValue(fu.next_steps, nextStepsOpts)}
                         </span>
-                        {fu.next_steps_notes && (<p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>)}
+                        {(() => {
+                          const taskLines = parseTaskLines(fu.next_steps_notes);
+                          if (taskLines.length > 1) {
+                            const isExpanded = expandedTaskIds.has(fu.id);
+                            const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
+                            return (
+                              <div className="mt-2">
+                                {visibleLines.map((line, i) => (
+                                  <p key={i} className={`text-gray-500 leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
+                                ))}
+                                {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedTaskIds(prev => {
+                                    const n = new Set(prev);
+                                    if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id);
+                                    return n;
+                                  })}
+                                  className="text-[10px] text-brand-secondary hover:underline mt-0.5"
+                                >
+                                  {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
+                                </button>
+                              </div>
+                            );
+                          }
+                          if (fu.next_steps_notes) return <p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>;
+                          return null;
+                        })()}
                       </td>;
                       case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
                         <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">{fu.conference_name}</Link>
