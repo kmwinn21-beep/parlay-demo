@@ -72,7 +72,7 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'conference',   label: 'Conference' },
     { key: 'meeting_type', label: 'Meeting Type' },
     { key: 'outcome',      label: 'Outcome' },
-    { key: 'info',         label: 'Info' },
+    { key: 'info',         label: 'Notes' },
   ],
   attendee_meetings: [
     { key: 'name',         label: 'Name' },
@@ -82,7 +82,7 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'conference',   label: 'Conference' },
     { key: 'meeting_type', label: 'Meeting Type' },
     { key: 'outcome',      label: 'Outcome' },
-    { key: 'info',         label: 'Info' },
+    { key: 'info',         label: 'Notes' },
   ],
   attendee_follow_ups: [
     { key: 'name',       label: 'Name' },
@@ -102,7 +102,7 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'conference',   label: 'Conference' },
     { key: 'meeting_type', label: 'Meeting Type' },
     { key: 'outcome',      label: 'Outcome' },
-    { key: 'info',         label: 'Info' },
+    { key: 'info',         label: 'Notes' },
   ],
   conference_meetings: [
     { key: 'name',         label: 'Name' },
@@ -112,7 +112,7 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'datetime',     label: 'Date/Time' },
     { key: 'meeting_type', label: 'Meeting Type' },
     { key: 'outcome',      label: 'Outcome' },
-    { key: 'info',         label: 'Info' },
+    { key: 'info',         label: 'Notes' },
   ],
   company_follow_ups: [
     { key: 'name',       label: 'Name' },

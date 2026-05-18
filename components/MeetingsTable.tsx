@@ -35,6 +35,7 @@ export interface Meeting {
   company_name: string | null;
   company_wse: number | null;
   conference_name: string;
+  has_notes?: boolean;
 }
 
 type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'meeting_type' | 'outcome';
@@ -490,6 +491,7 @@ export function MeetingsTable({
   userOptions = [],
   hideCompany = false,
   tableName = 'meetings',
+  onNotesClick,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -500,6 +502,7 @@ export function MeetingsTable({
   userOptions?: UserOption[];
   hideCompany?: boolean;
   tableName?: string;
+  onNotesClick?: (meetingId: number) => void;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
@@ -613,12 +616,10 @@ export function MeetingsTable({
                       <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
                     ) : null)}
                   </div>
-                  <MeetingInfoTooltip
-                    scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
-                    location={m.location}
-                    attendees={m.additional_attendees}
-                    companyWse={m.company_wse}
-                  />
+                  <button type="button" onClick={() => onNotesClick ? onNotesClick(m.id) : (window.location.href = `/meetings/${m.id}/notes`)} title="Meeting Notes" className={`relative transition-colors ${m.has_notes ? 'text-brand-secondary' : 'text-gray-400 hover:text-brand-secondary'}`}>
+                    <i className="ti ti-notes text-base" />
+                    {m.has_notes && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-brand-secondary" />}
+                  </button>
                   {onEdit && (
                     <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-brand-secondary p-1 rounded" title="Edit">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -661,7 +662,7 @@ export function MeetingsTable({
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {orderedColumns.map(col => {
-                if (!isVisible(col.key)) return null;
+                if (col.key !== 'info' && !isVisible(col.key)) return null;
                 switch (col.key) {
                   case 'name': return <SortHeader key="name" label="Name" col="name" />;
                   case 'title': return <SortHeader key="title" label="Title" col="title" />;
@@ -671,7 +672,7 @@ export function MeetingsTable({
                   case 'conference': return <SortHeader key="conference" label="Conference" col="conference" />;
                   case 'meeting_type': return <SortHeader key="meeting_type" label="Meeting Type" col="meeting_type" />;
                   case 'outcome': return <SortHeader key="outcome" label="Outcome" col="outcome" />;
-                  case 'info': return <th key="info" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Info</th>;
+                  case 'info': return <th key="info" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>;
                   default: return null;
                 }
               })}
@@ -694,7 +695,7 @@ export function MeetingsTable({
               ) : (
                 <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
                   {orderedColumns.map(col => {
-                    if (!isVisible(col.key)) return null;
+                    if (col.key !== 'info' && !isVisible(col.key)) return null;
                     switch (col.key) {
                       case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
                         <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
@@ -720,7 +721,10 @@ export function MeetingsTable({
                         <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
                       </td>;
                       case 'info': return <td key="info" className="px-3 py-2">
-                        <MeetingInfoTooltip scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null} location={m.location} attendees={m.additional_attendees} companyWse={m.company_wse} />
+                        <button type="button" onClick={() => onNotesClick ? onNotesClick(m.id) : (window.location.href = `/meetings/${m.id}/notes`)} title="Meeting Notes" className={`relative transition-colors ${m.has_notes ? 'text-brand-secondary' : 'text-gray-400 hover:text-brand-secondary'}`}>
+                          <i className="ti ti-notes text-base" />
+                          {m.has_notes && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-brand-secondary" />}
+                        </button>
                       </td>;
                       default: return null;
                     }
