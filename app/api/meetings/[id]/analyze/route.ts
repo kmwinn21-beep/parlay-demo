@@ -11,20 +11,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const meetingId = Number(id);
 
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: 'Transcription service not configured' }, { status: 503 });
-  }
-
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'Analysis service not configured' }, { status: 503 });
   }
 
   try {
     const body = await request.json();
-    const { audio_url } = body;
+    const { audio_url, transcript_text } = body as { audio_url?: string | null; transcript_text?: string | null };
 
-    if (!audio_url) {
-      return NextResponse.json({ error: 'audio_url is required' }, { status: 400 });
+    if (!audio_url && !transcript_text) {
+      return NextResponse.json({ error: 'audio_url or transcript_text is required' }, { status: 400 });
+    }
+
+    if (audio_url && !process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: 'Transcription service not configured' }, { status: 503 });
     }
 
     // Verify meeting exists
@@ -47,57 +47,60 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const mtg = meetingResult.rows[0];
 
-    // Fetch audio from URL
-    const audioResponse = await fetch(audio_url);
-    if (!audioResponse.ok) {
-      return NextResponse.json({ error: 'Failed to fetch audio file' }, { status: 400 });
-    }
-
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
-
-    // Determine extension from URL
-    const urlPath = new URL(audio_url).pathname;
-    const ext = urlPath.split('.').pop() || 'webm';
-    const filename = `audio.${ext}`;
-
-    // Call OpenAI Whisper API
-    const whisperForm = new FormData();
-    whisperForm.append('file', new File([audioBlob], filename));
-    whisperForm.append('model', 'whisper-1');
-    whisperForm.append('response_format', 'verbose_json');
-
-    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: whisperForm,
-    });
-
-    if (!whisperResponse.ok) {
-      const errText = await whisperResponse.text();
-      console.error('Whisper API error:', errText);
-      return NextResponse.json({ error: 'Transcription failed' }, { status: 502 });
-    }
-
-    const whisperData = await whisperResponse.json();
-
-    // Parse transcript segments
     interface WhisperSegment {
       text: string;
       start: number;
       end: number;
     }
-    const segments: WhisperSegment[] = (whisperData.segments ?? []).map((s: WhisperSegment) => ({
-      text: s.text,
-      start: s.start,
-      end: s.end,
-    }));
+    let segments: WhisperSegment[] = [];
+    let transcriptForAnalysis: string;
 
-    const transcriptText = segments.length > 0
-      ? segments.map((s) => `[${Math.floor(s.start)}s] ${s.text.trim()}`).join('\n')
-      : (whisperData.text ?? '');
+    if (audio_url) {
+      // Fetch audio from URL
+      const audioResponse = await fetch(audio_url);
+      if (!audioResponse.ok) {
+        return NextResponse.json({ error: 'Failed to fetch audio file' }, { status: 400 });
+      }
+
+      const audioBuffer = await audioResponse.arrayBuffer();
+      const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
+
+      const urlPath = new URL(audio_url).pathname;
+      const ext = urlPath.split('.').pop() || 'webm';
+      const filename = `audio.${ext}`;
+
+      const whisperForm = new FormData();
+      whisperForm.append('file', new File([audioBlob], filename));
+      whisperForm.append('model', 'whisper-1');
+      whisperForm.append('response_format', 'verbose_json');
+
+      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: whisperForm,
+      });
+
+      if (!whisperResponse.ok) {
+        const errText = await whisperResponse.text();
+        console.error('Whisper API error:', errText);
+        return NextResponse.json({ error: 'Transcription failed' }, { status: 502 });
+      }
+
+      const whisperData = await whisperResponse.json();
+      segments = (whisperData.segments ?? []).map((s: WhisperSegment) => ({
+        text: s.text,
+        start: s.start,
+        end: s.end,
+      }));
+      transcriptForAnalysis = segments.length > 0
+        ? segments.map((s) => `[${Math.floor(s.start)}s] ${s.text.trim()}`).join('\n')
+        : (whisperData.text ?? '');
+    } else {
+      // Text transcript provided directly — build pseudo-segments for storage
+      const lines = (transcript_text ?? '').split('\n').map(l => l.trim()).filter(Boolean);
+      segments = lines.map((line, i) => ({ text: line, start: i * 5, end: (i + 1) * 5 }));
+      transcriptForAnalysis = transcript_text ?? '';
+    }
 
     // Fetch ICP settings
     const icpSettings = await db.execute({
@@ -142,7 +145,7 @@ ICP Pain points configured: ${painPoints.join(', ') || 'None configured'}
 ICP Trigger events/buying signals: ${triggers.join(', ') || 'None configured'}
 
 Transcript:
-${transcriptText}
+${transcriptForAnalysis}
 
 Return ONLY valid JSON with no preamble or explanation:
 {
@@ -288,7 +291,7 @@ Return ONLY valid JSON with no preamble or explanation:
     } else {
       await db.execute({
         sql: `INSERT INTO meeting_notes (meeting_id, transcript, summary, audio_file_path, created_by) VALUES (?, ?, ?, ?, ?)`,
-        args: [meetingId, transcriptJson, summary, audio_url, user.id ?? null],
+        args: [meetingId, transcriptJson, summary, audio_url ?? null, user.id ?? null],
       });
     }
 

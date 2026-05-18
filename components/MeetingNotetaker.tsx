@@ -118,10 +118,14 @@ interface ExternalAttendeeFormProps {
   onCancel: () => void;
 }
 
+interface AttendeeResultWithSource extends AttendeeResult {
+  isConferenceAttendee: boolean;
+}
+
 function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyName, onAdd, onCancel }: ExternalAttendeeFormProps) {
   const [tab, setTab] = useState<'search' | 'create'>('search');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<AttendeeResult[]>([]);
+  const [results, setResults] = useState<AttendeeResultWithSource[]>([]);
   const [searching, setSearching] = useState(false);
   const [newFirst, setNewFirst] = useState('');
   const [newLast, setNewLast] = useState('');
@@ -134,16 +138,43 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
     setSearching(true);
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/attendees?conference_id=${conferenceId}&search=${encodeURIComponent(query)}&limit=10`);
-        if (res.ok) {
-          const data = await res.json();
-          setResults((data.attendees ?? data).slice(0, 10));
-        }
+        const params = encodeURIComponent(query);
+        const [confRes, companyRes] = await Promise.all([
+          fetch(`/api/attendees?conference_id=${conferenceId}&search=${params}&limit=10`),
+          defaultCompanyId
+            ? fetch(`/api/attendees?company_id=${defaultCompanyId}&search=${params}&limit=10`)
+            : Promise.resolve(null),
+        ]);
+        const confJson = confRes.ok ? await confRes.json() : null;
+        const companyJson = companyRes?.ok ? await companyRes.json() : null;
+        const confData: AttendeeResult[] = confJson ? (confJson.attendees ?? confJson) : [];
+        const companyData: AttendeeResult[] = companyJson ? (companyJson.attendees ?? companyJson) : [];
+        const confIds = new Set(confData.map(a => a.id));
+        const merged: AttendeeResultWithSource[] = [
+          ...confData.map(a => ({ ...a, isConferenceAttendee: true })),
+          ...companyData.filter(a => !confIds.has(a.id)).map(a => ({ ...a, isConferenceAttendee: false })),
+        ];
+        setResults(merged.slice(0, 12));
       } catch { /* ignore */ }
       setSearching(false);
     }, 300);
     return () => clearTimeout(t);
-  }, [query, conferenceId, tab]);
+  }, [query, conferenceId, defaultCompanyId, tab]);
+
+  const associateWithConference = async (attendeeId: number) => {
+    await fetch('/api/conference-attendees/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conference_ids: [conferenceId], attendee_ids: [attendeeId] }),
+    });
+  };
+
+  const handleSelectResult = async (a: AttendeeResultWithSource) => {
+    if (!a.isConferenceAttendee) {
+      await associateWithConference(a.id).catch(() => { /* non-blocking */ });
+    }
+    onAdd(`${a.first_name} ${a.last_name}`);
+  };
 
   const handleCreate = async () => {
     if (!newFirst.trim() || !newLast.trim()) { toast.error('First and last name required.'); return; }
@@ -162,6 +193,10 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
         }),
       });
       if (!res.ok) throw new Error();
+      const created = await res.json();
+      if (created?.id) {
+        await associateWithConference(created.id).catch(() => { /* non-blocking */ });
+      }
       toast.success('Attendee created.');
       onAdd(`${newFirst.trim()} ${newLast.trim()}`);
     } catch {
@@ -182,7 +217,7 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
             onClick={() => setTab(t)}
             className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${tab === t ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 border border-gray-200'}`}
           >
-            {t === 'search' ? 'Search Conference' : 'Create New'}
+            {t === 'search' ? 'Search' : 'Create New'}
           </button>
         ))}
       </div>
@@ -203,10 +238,15 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
                 <li key={a.id}>
                   <button
                     className="w-full text-left px-2.5 py-2 text-xs hover:bg-blue-50 transition-colors"
-                    onClick={() => onAdd(`${a.first_name} ${a.last_name}`)}
+                    onClick={() => handleSelectResult(a)}
                   >
-                    <span className="font-medium text-gray-800">{a.first_name} {a.last_name}</span>
-                    {a.title && <span className="text-gray-400">, {a.title}</span>}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-gray-800">{a.first_name} {a.last_name}</span>
+                      {!a.isConferenceAttendee && (
+                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-amber-100 text-amber-700">Company</span>
+                      )}
+                    </div>
+                    {a.title && <span className="text-gray-400">{a.title}</span>}
                     {a.company_name && <span className="text-gray-400 block text-[10px]">{a.company_name}</span>}
                   </button>
                 </li>
