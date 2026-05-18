@@ -11,11 +11,15 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
   if (!meetingId) return null;
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
-        <MeetingNotetaker meetingId={meetingId} onClose={onClose} />
+    <div className="fixed inset-0 z-[500] flex bg-black/50" onClick={onClose}>
+      <div className="flex h-full w-full items-stretch justify-end p-3">
+        <div
+          className="flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-5xl"
+          onClick={e => e.stopPropagation()}
+        >
+          <MeetingNotetaker meetingId={meetingId} onClose={onClose} />
+        </div>
       </div>
-    </>
+    </div>
   );
 }

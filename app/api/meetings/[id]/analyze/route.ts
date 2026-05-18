@@ -220,12 +220,8 @@ RULES
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const callClaude = () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
+    const callClaude = (messages: Parameters<typeof anthropic.messages.create>[0]['messages']) =>
+      anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages });
 
     let analysis: {
       next_steps?: Array<{ task_text: string; timestamp_seconds?: number; suggested_owner?: string; suggested_due_date_offset_days?: number; confidence?: string }>;
@@ -240,29 +236,30 @@ RULES
       throw new Error('No JSON object found in response');
     };
 
-    const message = await callClaude();
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    let responseText = '';
+    try {
+      const message = await callClaude([{ role: 'user', content: userPrompt }]);
+      responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    } catch (claudeErr) {
+      console.error('Claude API call failed:', claudeErr);
+      const msg = claudeErr instanceof Error ? claudeErr.message : String(claudeErr);
+      return NextResponse.json({ error: `AI service error: ${msg}` }, { status: 502 });
+    }
 
     try {
       analysis = parseResponse(responseText);
     } catch {
-      console.error('First parse attempt failed, retrying. Raw response:', responseText);
-      // Retry with explicit JSON instruction appended
-      const retryMessage = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [
+      console.error('First parse attempt failed. Raw response:', responseText);
+      try {
+        const retryMessage = await callClaude([
           { role: 'user', content: userPrompt },
           { role: 'assistant', content: responseText },
           { role: 'user', content: 'Your previous response was not valid JSON. Return only the JSON object with no other text.' },
-        ],
-      });
-      const retryText = retryMessage.content[0].type === 'text' ? retryMessage.content[0].text : '';
-      try {
+        ]);
+        const retryText = retryMessage.content[0].type === 'text' ? retryMessage.content[0].text : '';
         analysis = parseResponse(retryText);
-      } catch {
-        console.error('Retry also failed. Raw retry response:', retryText);
+      } catch (retryErr) {
+        console.error('Retry also failed:', retryErr);
         return NextResponse.json({ error: 'Analysis returned invalid data. Please try again.' }, { status: 502 });
       }
     }
