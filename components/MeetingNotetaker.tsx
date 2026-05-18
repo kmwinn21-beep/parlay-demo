@@ -321,6 +321,8 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
   // UI state
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
@@ -629,6 +631,28 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
     }
   }, [meetingId, nextSteps, selectedTaskIds]);
 
+  const handleDeleteNotes = useCallback(async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/notes`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      setNotesText('');
+      setSummary('');
+      setInsights([]);
+      setNextSteps([]);
+      setTranscript([]);
+      setAudioUrl(null);
+      setAudioBlob(null);
+      setTranscriptExpanded(false);
+      setShowDeleteConfirm(false);
+      toast.success('Notes deleted.');
+    } catch {
+      toast.error('Failed to delete notes.');
+    } finally {
+      setDeleting(false);
+    }
+  }, [meetingId]);
+
   const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal');
   const painPoints = insights.filter(i => i.insight_type === 'pain_point');
   const hasAudioOrTranscript = !!(audioUrl || audioBlob || transcript.length);
@@ -702,14 +726,58 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
             )}
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-shrink-0 px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+            title="Delete all notes"
+          >
+            Delete
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h2 className="text-sm font-semibold text-gray-800">Delete meeting notes?</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              All notes, transcripts, AI insights, and follow-up tasks for this meeting will be permanently deleted and cannot be recovered.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteNotes}
+                disabled={deleting}
+                className="flex-1 py-2 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete notes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Timeline scrubber */}
       {audioUrl && (
@@ -1123,6 +1191,16 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
               {!analysisLoading && (insights.length > 0 || nextSteps.length > 0 || summary) && (
                 <div className="space-y-5">
 
+                  {/* Summary — always first */}
+                  {summary && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Meeting Summary</h3>
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700 leading-relaxed">
+                        {summary}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Next Steps */}
                   {nextSteps.length > 0 && (
                     <div>
@@ -1224,15 +1302,6 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
                     </div>
                   )}
 
-                  {/* Summary */}
-                  {summary && (
-                    <div>
-                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Meeting Summary</h3>
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700 leading-relaxed">
-                        {summary}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>

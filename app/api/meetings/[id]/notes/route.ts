@@ -60,6 +60,31 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
+  const db = await getDb(user.accountId);
+  const { id } = await params;
+  const meetingId = Number(id);
+
+  try {
+    const meeting = await getMeetingForAccount(db, meetingId);
+    if (!meeting) {
+      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    await db.execute({ sql: `DELETE FROM meeting_insights WHERE meeting_id = ?`, args: [meetingId] });
+    await db.execute({ sql: `DELETE FROM meeting_tasks WHERE meeting_id = ?`, args: [meetingId] });
+    await db.execute({ sql: `DELETE FROM meeting_notes WHERE meeting_id = ?`, args: [meetingId] });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/meetings/[id]/notes error:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
