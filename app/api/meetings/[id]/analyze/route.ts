@@ -91,12 +91,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                a.first_name, a.last_name, a.title AS attendee_title,
                co.name AS company_name, co.icp AS company_icp,
                c.name AS conference_name,
-               cad.tier AS tier
+               ct.tier AS tier
             FROM meetings m
             JOIN attendees a ON m.attendee_id = a.id
             LEFT JOIN companies co ON a.company_id = co.id
             JOIN conferences c ON m.conference_id = c.id
-            LEFT JOIN conference_attendee_details cad ON m.attendee_id = cad.attendee_id AND m.conference_id = cad.conference_id
+            LEFT JOIN conference_targets ct ON m.attendee_id = ct.attendee_id AND m.conference_id = ct.conference_id
             WHERE m.id = ?`,
       args: [meetingId],
     });
@@ -394,8 +394,7 @@ RULES
       next_steps: analysis.next_steps ?? [],
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error('POST /api/meetings/[id]/analyze error:', msg);
-    return NextResponse.json({ error: `Debug: ${msg}` }, { status: 500 });
+    console.error('POST /api/meetings/[id]/analyze error:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
