@@ -662,7 +662,7 @@ export function MeetingsTable({
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {orderedColumns.map(col => {
-                if (!isVisible(col.key)) return null;
+                if (col.key !== 'info' && !isVisible(col.key)) return null;
                 switch (col.key) {
                   case 'name': return <SortHeader key="name" label="Name" col="name" />;
                   case 'title': return <SortHeader key="title" label="Title" col="title" />;
@@ -695,7 +695,7 @@ export function MeetingsTable({
               ) : (
                 <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
                   {orderedColumns.map(col => {
-                    if (!isVisible(col.key)) return null;
+                    if (col.key !== 'info' && !isVisible(col.key)) return null;
                     switch (col.key) {
                       case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
                         <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
