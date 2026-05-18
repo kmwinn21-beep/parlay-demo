@@ -1,0 +1,454 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import Anthropic from '@anthropic-ai/sdk';
+
+export const maxDuration = 300;
+
+const TIER_LABELS: Record<string, string> = {
+  '1': 'Must Target',
+  '2': 'High Priority',
+  '3': 'Worth Engaging',
+  'unassigned': 'Monitor',
+};
+
+const TIER_DESCRIPTIONS: Record<string, string> = {
+  '1': 'Top priority prospect that closely matches ICP',
+  '2': 'Strong fit, pursue actively',
+  '3': 'Moderate fit, worthwhile to connect',
+  'unassigned': 'Worth watching but not yet prioritized',
+};
+
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
+  const db = await getDb(user.accountId);
+  const { id } = await params;
+  const meetingId = Number(id);
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ error: 'Analysis service not configured' }, { status: 503 });
+  }
+
+  try {
+    // Ensure meeting tables + notifications exist in this tenant DB
+    await db.executeMultiple(`
+      CREATE TABLE IF NOT EXISTS meeting_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meeting_id INTEGER NOT NULL UNIQUE REFERENCES meetings(id) ON DELETE CASCADE,
+        notes_text TEXT, transcript TEXT, audio_file_path TEXT, summary TEXT,
+        analysis_status TEXT DEFAULT 'idle',
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS meeting_insights (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        conference_id INTEGER, company_id INTEGER, attendee_id INTEGER,
+        insight_type TEXT NOT NULL, content TEXT NOT NULL,
+        quote TEXT, timestamp_seconds INTEGER, icp_match_id INTEGER,
+        confidence TEXT DEFAULT 'medium', confirmed INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_meeting_insights_meeting ON meeting_insights(meeting_id);
+      CREATE TABLE IF NOT EXISTS meeting_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        insight_id INTEGER REFERENCES meeting_insights(id),
+        task_text TEXT NOT NULL, assigned_to INTEGER REFERENCES users(id),
+        due_date TEXT, status TEXT DEFAULT 'pending',
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        record_id INTEGER NOT NULL,
+        record_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        changed_by_config_id INTEGER,
+        changed_by_email TEXT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
+    `);
+    // Add analysis_status to tables provisioned before this column was introduced
+    try { await db.execute({ sql: `ALTER TABLE meeting_notes ADD COLUMN analysis_status TEXT DEFAULT 'idle'`, args: [] }); } catch { /* already exists */ }
+
+    // Accept multipart/form-data (direct audio file) or JSON (audio_url / transcript_text)
+    const contentType = request.headers.get('content-type') ?? '';
+    let audio_url: string | null = null;
+    let transcript_text: string | null = null;
+    let audioFile: File | null = null;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      audioFile = formData.get('audio_file') as File | null;
+    } else {
+      const body = await request.json() as { audio_url?: string | null; transcript_text?: string | null };
+      audio_url = body.audio_url ?? null;
+      transcript_text = body.transcript_text ?? null;
+    }
+
+    if (!audio_url && !transcript_text && !audioFile) {
+      return NextResponse.json({ error: 'audio_url, transcript_text, or audio_file is required' }, { status: 400 });
+    }
+
+    if ((audio_url || audioFile) && !process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: 'Transcription service not configured' }, { status: 503 });
+    }
+
+    // Fetch meeting + context
+    const meetingResult = await db.execute({
+      sql: `SELECT m.id, m.attendee_id, m.conference_id, m.meeting_date, m.scheduled_by,
+               a.first_name, a.last_name, a.title AS attendee_title,
+               co.name AS company_name, co.icp AS company_icp,
+               c.name AS conference_name,
+               ct.tier AS tier
+            FROM meetings m
+            JOIN attendees a ON m.attendee_id = a.id
+            LEFT JOIN companies co ON a.company_id = co.id
+            JOIN conferences c ON m.conference_id = c.id
+            LEFT JOIN conference_targets ct ON m.attendee_id = ct.attendee_id AND m.conference_id = ct.conference_id
+            WHERE m.id = ?`,
+      args: [meetingId],
+    });
+
+    if (meetingResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    const mtg = meetingResult.rows[0];
+
+    // Mark analysis as in-progress so clients can poll even if user has closed the modal
+    const notesCheck = await db.execute({ sql: `SELECT id FROM meeting_notes WHERE meeting_id = ?`, args: [meetingId] });
+    if (notesCheck.rows.length > 0) {
+      await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'processing', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] });
+    } else {
+      await db.execute({ sql: `INSERT INTO meeting_notes (meeting_id, analysis_status, created_by) VALUES (?, 'processing', ?)`, args: [meetingId, user.id ?? null] });
+    }
+
+    // Look up rep name from scheduled_by (first ID)
+    let repName = 'Unknown Rep';
+    if (mtg.scheduled_by) {
+      const firstId = String(mtg.scheduled_by).split(',')[0].trim();
+      if (firstId && !isNaN(Number(firstId))) {
+        const repResult = await db.execute({
+          sql: `SELECT first_name, last_name FROM users WHERE id = ?`,
+          args: [Number(firstId)],
+        });
+        if (repResult.rows[0]) {
+          repName = `${repResult.rows[0].first_name ?? ''} ${repResult.rows[0].last_name ?? ''}`.trim();
+        }
+      }
+    }
+
+    interface WhisperSegment { text: string; start: number; end: number; }
+    let segments: WhisperSegment[] = [];
+    let transcriptForAnalysis: string;
+
+    if (audioFile) {
+      // Audio uploaded directly — pass straight to Whisper without any intermediate storage
+      const whisperForm = new FormData();
+      whisperForm.append('file', audioFile, audioFile.name);
+      whisperForm.append('model', 'whisper-1');
+      whisperForm.append('response_format', 'verbose_json');
+
+      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: whisperForm,
+      });
+
+      if (!whisperResponse.ok) {
+        console.error('Whisper API error (direct file):', await whisperResponse.text());
+        return NextResponse.json({ error: 'Transcription failed' }, { status: 502 });
+      }
+
+      const whisperData = await whisperResponse.json();
+      segments = (whisperData.segments ?? []).map((s: WhisperSegment) => ({
+        text: s.text, start: s.start, end: s.end,
+      }));
+      transcriptForAnalysis = segments.length > 0
+        ? segments.map(s => `[${Math.floor(s.start)}s] ${s.text.trim()}`).join('\n')
+        : (whisperData.text ?? '');
+    } else if (audio_url) {
+      const audioResponse = await fetch(audio_url);
+      if (!audioResponse.ok) {
+        return NextResponse.json({ error: 'Failed to fetch audio file' }, { status: 400 });
+      }
+      const audioBuffer = await audioResponse.arrayBuffer();
+      const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
+      const urlPath = new URL(audio_url).pathname;
+      const ext = urlPath.split('.').pop() || 'webm';
+
+      const whisperForm = new FormData();
+      whisperForm.append('file', new File([audioBlob], `audio.${ext}`));
+      whisperForm.append('model', 'whisper-1');
+      whisperForm.append('response_format', 'verbose_json');
+
+      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: whisperForm,
+      });
+
+      if (!whisperResponse.ok) {
+        console.error('Whisper API error:', await whisperResponse.text());
+        return NextResponse.json({ error: 'Transcription failed' }, { status: 502 });
+      }
+
+      const whisperData = await whisperResponse.json();
+      segments = (whisperData.segments ?? []).map((s: WhisperSegment) => ({
+        text: s.text, start: s.start, end: s.end,
+      }));
+      transcriptForAnalysis = segments.length > 0
+        ? segments.map(s => `[${Math.floor(s.start)}s] ${s.text.trim()}`).join('\n')
+        : (whisperData.text ?? '');
+    } else {
+      const lines = (transcript_text ?? '').split('\n').map(l => l.trim()).filter(Boolean);
+      segments = lines.map((line, i) => ({ text: line, start: i * 5, end: (i + 1) * 5 }));
+      transcriptForAnalysis = transcript_text ?? '';
+    }
+
+    // Truncate very long transcripts to prevent timeouts (Whisper already limits audio length)
+    const MAX_TRANSCRIPT_CHARS = 14_000;
+    if (transcriptForAnalysis.length > MAX_TRANSCRIPT_CHARS) {
+      transcriptForAnalysis = transcriptForAnalysis.slice(0, MAX_TRANSCRIPT_CHARS) + '\n[Transcript truncated — first portion shown]';
+    }
+
+    // Fetch ICP settings
+    const icpSettings = await db.execute({
+      sql: `SELECT key, value FROM site_settings WHERE key IN ('icp_pain_points', 'icp_ai_pain_points')`,
+      args: [],
+    });
+
+    let painPointsList = 'No specific pain points configured. Surface any explicitly stated business problems, operational challenges, cost pressures, or staffing issues.';
+    let buyingSignalsList = 'No specific buying signals configured. Surface any signals of budget authority, timeline urgency, active vendor evaluation, executive sponsorship, or stated intent to purchase.';
+
+    for (const row of icpSettings.rows) {
+      const key = String(row.key);
+      const val = String(row.value ?? '');
+      try {
+        if (key === 'icp_pain_points') {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            painPointsList = parsed.map(String).map(p => `- ${p}`).join('\n');
+          }
+        } else if (key === 'icp_ai_pain_points') {
+          const parsed = JSON.parse(val) as Array<{ title?: string; description?: string }>;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            buyingSignalsList = parsed.map(p => p.title ? `- ${p.title}: ${p.description ?? ''}` : `- ${String(p)}`).join('\n');
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    const tier = mtg.tier ? String(mtg.tier) : 'unassigned';
+    const tierLabel = TIER_LABELS[tier] ?? 'Monitor';
+    const tierDesc = TIER_DESCRIPTIONS[tier] ?? 'Worth watching but not yet prioritized';
+    const meetingDateStr = mtg.meeting_date
+      ? new Date(`${mtg.meeting_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : 'Unknown date';
+
+    const systemPrompt = `You are a revenue intelligence assistant embedded in a B2B conference management platform. Your job is to analyze meeting transcripts from sales conversations that took place at industry conferences and extract structured intelligence that helps sales reps follow up effectively.
+
+You have deep knowledge of B2B sales dynamics, buying signals, objection patterns, and stakeholder behavior. You are precise, objective, and commercially focused. You do not editorialize or add filler. Every insight you surface must be grounded in something explicitly said in the transcript — do not infer or fabricate.
+
+You always respond with valid JSON only. No preamble, no explanation, no markdown formatting, no code fences. Your entire response must be parseable by JSON.parse().`;
+
+    const userPrompt = `Analyze the following sales meeting transcript from a conference conversation. Extract structured intelligence based on the context provided.
+
+MEETING CONTEXT
+Conference: ${mtg.conference_name}
+Date: ${meetingDateStr}
+Internal rep: ${repName}
+External attendee: ${mtg.first_name} ${mtg.last_name}, ${mtg.attendee_title ?? 'Unknown Title'}, ${mtg.company_name ?? 'Unknown Company'}
+Company tier: ${tierLabel} (${tierDesc})
+Relationship status: No prior relationship on record
+
+ICP BUYING SIGNALS TO WATCH FOR
+These are the buying signals configured for this account's ideal customer profile. Flag any moment in the transcript where the prospect says something that matches or strongly relates to one of these signals.
+${buyingSignalsList}
+
+ICP PAIN POINTS TO WATCH FOR
+These are the pain points configured for this account's ideal customer profile. Flag any moment where the prospect explicitly mentions or implies one of these pain points.
+${painPointsList}
+
+TRANSCRIPT
+${transcriptForAnalysis}
+
+INSTRUCTIONS
+Analyze the transcript and return a JSON object with exactly these four keys:
+
+"next_steps": Array of action items explicitly committed to or clearly implied during the conversation. Each object must include:
+- "task_text": Clear, specific, actionable description of the task (start with a verb)
+- "timestamp_seconds": Integer — the point in the recording where this commitment was made or discussed
+- "suggested_owner": "rep" or "prospect" — who is responsible for this action
+- "suggested_due_date_offset_days": Integer — suggested days from today to complete this (use 3 for immediate, 7 for this week, 14 for two weeks)
+- "confidence": "high", "medium", or "low" — how clearly this was committed to vs implied
+
+"buying_signals": Array of moments where the prospect said something indicating genuine buying intent, authority, urgency, or fit. Each object must include:
+- "label": Short label for the signal type (e.g. "Budget authority confirmed", "Active evaluation in progress", "Timeline pressure", "Executive sponsor identified")
+- "quote": The verbatim quote from the transcript that triggered this signal — use the exact words spoken, not a paraphrase
+- "timestamp_seconds": Integer — position in the recording where this was said
+- "confidence": "high", "medium", or "low"
+- "icp_match_label": The label of the matching ICP buying signal if one matches, or null if this is a novel signal not in the configured list
+
+"pain_points": Array of moments where the prospect explicitly mentioned or clearly implied a business problem, challenge, or frustration. Each object must include:
+- "label": Short label for the pain point (e.g. "Frontline staff turnover", "Workers comp visibility", "Recruiting cost overrun")
+- "quote": The verbatim quote from the transcript — exact words, not a paraphrase
+- "timestamp_seconds": Integer — position in the recording where this was said
+- "confidence": "high", "medium", or "low"
+- "icp_match_label": The label of the matching ICP pain point if one matches, or null if novel
+
+"summary": A single string of 2-4 sentences. Summarize who was in the meeting, the key themes discussed, the strongest signal or pain point surfaced, and the most important next step. Write in past tense. Be specific — include names, numbers, and concrete details where they appear in the transcript. Do not use filler phrases like "overall" or "in conclusion".
+
+RULES
+- Every quote must be verbatim from the transcript. Do not paraphrase.
+- Every timestamp_seconds must be a positive integer corresponding to a real moment in the transcript.
+- If no buying signals are detected, return an empty array for buying_signals.
+- If no pain points are detected, return an empty array for pain_points.
+- If no next steps are detected, return an empty array for next_steps.
+- Do not include insights with low confidence unless they are clearly grounded in something said.
+- Do not fabricate, infer beyond what was said, or add context not present in the transcript.
+- Return valid JSON only. No markdown, no code fences, no explanation text.`;
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 270_000 });
+
+    const callClaude = (messages: Parameters<typeof anthropic.messages.create>[0]['messages']) =>
+      anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages });
+
+    let analysis: {
+      next_steps?: Array<{ task_text: string; timestamp_seconds?: number; suggested_owner?: string; suggested_due_date_offset_days?: number; confidence?: string }>;
+      buying_signals?: Array<{ label: string; quote?: string; timestamp_seconds?: number; confidence?: string; icp_match_label?: string }>;
+      pain_points?: Array<{ label: string; quote?: string; timestamp_seconds?: number; confidence?: string; icp_match_label?: string }>;
+      summary?: string;
+    } = {};
+
+    const parseResponse = (text: string) => {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]);
+      throw new Error('No JSON object found in response');
+    };
+
+    let responseText = '';
+    try {
+      const message = await callClaude([{ role: 'user', content: userPrompt }]);
+      responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    } catch (claudeErr) {
+      console.error('Claude API call failed:', claudeErr);
+      const msg = claudeErr instanceof Error ? claudeErr.message : String(claudeErr);
+      return NextResponse.json({ error: `AI service error: ${msg}` }, { status: 502 });
+    }
+
+    try {
+      analysis = parseResponse(responseText);
+    } catch {
+      console.error('First parse attempt failed. Raw response:', responseText);
+      try {
+        const retryMessage = await callClaude([
+          { role: 'user', content: userPrompt },
+          { role: 'assistant', content: responseText },
+          { role: 'user', content: 'Your previous response was not valid JSON. Return only the JSON object with no other text.' },
+        ]);
+        const retryText = retryMessage.content[0].type === 'text' ? retryMessage.content[0].text : '';
+        analysis = parseResponse(retryText);
+      } catch (retryErr) {
+        console.error('Retry also failed:', retryErr);
+        return NextResponse.json({ error: 'Analysis returned invalid data. Please try again.' }, { status: 502 });
+      }
+    }
+
+    // Delete existing insights for this meeting
+    await db.execute({ sql: `DELETE FROM meeting_insights WHERE meeting_id = ?`, args: [meetingId] });
+
+    const insertedInsights: Array<{ id: number; insight_type: string; content: string; quote: string | null; timestamp_seconds: number | null; confidence: string; confirmed: boolean }> = [];
+
+    for (const signal of analysis.buying_signals ?? []) {
+      const result = await db.execute({
+        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, quote, timestamp_seconds, confidence)
+              VALUES (?, ?, ?, 'buying_signal', ?, ?, ?, ?) RETURNING id`,
+        args: [meetingId, Number(mtg.conference_id), Number(mtg.attendee_id), signal.label, signal.quote ?? null, signal.timestamp_seconds ?? null, signal.confidence ?? 'medium'],
+      });
+      if (result.rows[0]) {
+        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'buying_signal', content: signal.label, quote: signal.quote ?? null, timestamp_seconds: signal.timestamp_seconds ?? null, confidence: signal.confidence ?? 'medium', confirmed: false });
+      }
+    }
+
+    for (const pp of analysis.pain_points ?? []) {
+      const result = await db.execute({
+        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, quote, timestamp_seconds, confidence)
+              VALUES (?, ?, ?, 'pain_point', ?, ?, ?, ?) RETURNING id`,
+        args: [meetingId, Number(mtg.conference_id), Number(mtg.attendee_id), pp.label, pp.quote ?? null, pp.timestamp_seconds ?? null, pp.confidence ?? 'medium'],
+      });
+      if (result.rows[0]) {
+        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'pain_point', content: pp.label, quote: pp.quote ?? null, timestamp_seconds: pp.timestamp_seconds ?? null, confidence: pp.confidence ?? 'medium', confirmed: false });
+      }
+    }
+
+    for (const step of analysis.next_steps ?? []) {
+      const result = await db.execute({
+        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, timestamp_seconds, confidence)
+              VALUES (?, ?, ?, 'next_step', ?, ?, ?) RETURNING id`,
+        args: [meetingId, Number(mtg.conference_id), Number(mtg.attendee_id), step.task_text, step.timestamp_seconds ?? null, step.confidence ?? 'medium'],
+      });
+      if (result.rows[0]) {
+        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'next_step', content: step.task_text, quote: null, timestamp_seconds: step.timestamp_seconds ?? null, confidence: step.confidence ?? 'medium', confirmed: false });
+      }
+    }
+
+    const transcriptJson = JSON.stringify(segments);
+    const summary = analysis.summary ?? '';
+
+    const existingNotes = await db.execute({ sql: `SELECT id FROM meeting_notes WHERE meeting_id = ?`, args: [meetingId] });
+    if (existingNotes.rows.length > 0) {
+      await db.execute({
+        sql: `UPDATE meeting_notes SET transcript = ?, summary = ?, audio_file_path = COALESCE(?, audio_file_path), updated_at = datetime('now') WHERE meeting_id = ?`,
+        args: [transcriptJson, summary, audio_url ?? null, meetingId],
+      });
+    } else {
+      await db.execute({
+        sql: `INSERT INTO meeting_notes (meeting_id, transcript, summary, audio_file_path, created_by) VALUES (?, ?, ?, ?, ?)`,
+        args: [meetingId, transcriptJson, summary, audio_url ?? null, user.id ?? null],
+      });
+    }
+
+    // Mark analysis complete and create in-app notification
+    await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'complete', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] });
+    try {
+      const attendeeName = `${mtg.first_name} ${mtg.last_name}`;
+      await db.execute({
+        sql: `INSERT INTO notifications (user_id, type, record_id, record_name, message, changed_by_email, entity_type, entity_id)
+              VALUES (?, 'meeting', ?, ?, ?, ?, 'meeting', ?)`,
+        args: [
+          Number(user.id),
+          meetingId,
+          attendeeName,
+          `Meeting analysis ready: ${attendeeName} · ${mtg.conference_name}`,
+          user.email ?? '',
+          meetingId,
+        ],
+      });
+    } catch { /* non-blocking — analysis result is still returned */ }
+
+    return NextResponse.json({
+      insights: insertedInsights,
+      transcript: segments,
+      summary,
+      next_steps: analysis.next_steps ?? [],
+    });
+  } catch (error) {
+    console.error('POST /api/meetings/[id]/analyze error:', error);
+    // Best-effort: mark analysis as failed so the UI can recover
+    try { await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'failed', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] }); } catch { /* ignore */ }
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}

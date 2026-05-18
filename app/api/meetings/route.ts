@@ -59,11 +59,13 @@ export async function GET(request: NextRequest) {
           co.id AS company_id,
           co.name AS company_name,
           co.wse AS company_wse,
-          c.name AS conference_name
+          c.name AS conference_name,
+          CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes
         FROM meetings m
         JOIN attendees a ON m.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
         JOIN conferences c ON m.conference_id = c.id
+        LEFT JOIN meeting_notes mn ON m.id = mn.meeting_id
         ${where}
         ORDER BY m.meeting_date DESC, m.meeting_time DESC
       `,
@@ -90,6 +92,7 @@ export async function GET(request: NextRequest) {
         company_name: r.company_name != null ? String(r.company_name) : null,
         company_wse: r.company_wse != null ? Number(r.company_wse) : null,
         conference_name: String(r.conference_name ?? ''),
+        has_notes: Number(r.has_notes) === 1,
       })),
       { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } }
     );
