@@ -322,6 +322,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showReplaceRecordingDialog, setShowReplaceRecordingDialog] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'context' | 'notes' | 'summary'>('notes');
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [actionItemsOpen, setActionItemsOpen] = useState(false);
@@ -876,6 +877,23 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         </div>
       </div>
 
+      {/* Mobile tab bar */}
+      <div className="lg:hidden flex border-b border-gray-200 bg-white flex-shrink-0">
+        {(['context', 'notes', 'summary'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setMobileTab(tab)}
+            className={`flex-1 py-2.5 text-xs font-semibold capitalize transition-colors ${
+              mobileTab === tab
+                ? 'text-brand-primary border-b-2 border-brand-primary'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {tab === 'summary' ? 'Summary' : tab === 'notes' ? 'Notes' : 'Context'}
+          </button>
+        ))}
+      </div>
+
       {/* Exit confirmation modal — only shown when there are unsaved changes */}
       {showExitConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1040,7 +1058,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0">
 
           {/* ── Context Panel ── */}
-          <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0`}>
+          <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0 ${mobileTab !== 'context' ? 'hidden lg:flex lg:flex-col' : ''}`}>
             <div className="flex items-center justify-between p-3 border-b border-gray-100">
               {!contextCollapsed && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Context</span>}
               <button
@@ -1207,7 +1225,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
           {/* ── Notes + Recording column ── */}
-          <div className="border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto lg:w-[320px] lg:flex-shrink-0">
+          <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 overflow-auto lg:w-[320px] lg:flex-shrink-0 ${mobileTab !== 'notes' ? 'hidden lg:block' : ''}`}>
             <div className="p-4 space-y-4">
 
               {/* Notes */}
@@ -1414,7 +1432,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
           {/* ── AI Analysis column ── */}
-          <div className="overflow-auto flex-1 min-w-0">
+          <div className={`overflow-auto flex-1 min-w-0 ${mobileTab !== 'summary' ? 'hidden lg:block' : ''}`}>
             <div className="p-4">
               {analysisLoading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
