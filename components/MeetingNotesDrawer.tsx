@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MeetingNotetaker } from '@/components/MeetingNotetaker';
 
 interface Props {
@@ -8,18 +10,23 @@ interface Props {
 }
 
 export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
-  if (!meetingId) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
-  return (
-    <div className="fixed inset-0 z-[500] flex bg-black/50" onClick={onClose}>
-      <div className="flex h-full w-full items-stretch justify-end p-3">
-        <div
-          className="flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-5xl"
-          onClick={e => e.stopPropagation()}
-        >
-          <MeetingNotetaker meetingId={meetingId} onClose={onClose} />
-        </div>
+  if (!meetingId || !mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 p-3"
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-5xl h-full"
+        onClick={e => e.stopPropagation()}
+      >
+        <MeetingNotetaker meetingId={meetingId} onClose={onClose} />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -538,32 +538,39 @@ export function MeetingNotetaker({ meetingId, onClose }: Props) {
   }, [additionalAttendees, meeting, meetingId]);
 
   const handleAnalyze = useCallback(async () => {
-    const hasAudio = audioBlob || (audioUrl && !audioUrl.startsWith('blob:'));
+    const hasAudioBlob = !!audioBlob;
+    const hasSavedAudio = !!(audioUrl && !audioUrl.startsWith('blob:'));
     const hasTranscript = transcript.length > 0;
-    if (!hasAudio && !hasTranscript) {
+
+    if (!hasAudioBlob && !hasTranscript && !hasSavedAudio) {
       toast.error('No audio or transcript to analyze.');
       return;
     }
     setAnalysisLoading(true);
     try {
-      let r2Url = audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null;
+      let r2Url: string | null = null;
+      let transcriptPayload: string | null = null;
 
-      if (audioBlob) {
+      if (hasAudioBlob) {
+        // Fresh audio blob — upload to R2 then transcribe via Whisper
         const formData = new FormData();
-        const ext = audioBlob.type.split('/')[1] || 'webm';
-        formData.append('file', new File([audioBlob], `recording.${ext}`, { type: audioBlob.type }));
+        const ext = audioBlob!.type.split('/')[1] || 'webm';
+        formData.append('file', new File([audioBlob!], `recording.${ext}`, { type: audioBlob!.type }));
         const uploadRes = await fetch(`/api/meetings/${meetingId}/audio`, { method: 'POST', body: formData });
         if (!uploadRes.ok) throw new Error((await uploadRes.json().catch(() => ({}))).error ?? 'Upload failed');
         r2Url = (await uploadRes.json()).url;
+      } else if (hasTranscript) {
+        // Text transcript takes priority over any saved audio URL
+        transcriptPayload = transcript.map(s => s.text).join('\n');
+      } else {
+        // Fall back to previously saved R2 audio URL
+        r2Url = audioUrl;
       }
 
       const analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio_url: r2Url,
-          transcript_text: hasTranscript && !hasAudio ? transcript.map(s => s.text).join('\n') : null,
-        }),
+        body: JSON.stringify({ audio_url: r2Url, transcript_text: transcriptPayload }),
       });
 
       if (!analyzeRes.ok) throw new Error((await analyzeRes.json().catch(() => ({}))).error ?? 'Analysis failed');
