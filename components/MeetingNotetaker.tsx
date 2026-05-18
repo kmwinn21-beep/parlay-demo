@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
@@ -329,6 +329,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [dragOverText, setDragOverText] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
+  const initialStateRef = useRef<string>('');
+  const hasInitializedSnapshotRef = useRef(false);
 
   // Load initial data
   useEffect(() => {
@@ -516,40 +518,30 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   }, []);
 
   // Add external attendee
-  const addExternalAttendee = useCallback(async (name: string) => {
+  const addExternalAttendee = useCallback((name: string) => {
     const updated = [...additionalAttendees, name];
     setAdditionalAttendees(updated);
     setShowExternalForm(false);
-    try {
-      await fetch(`/api/meetings/${meetingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meeting_date: meeting?.meeting_date ?? '',
-          meeting_time: meeting?.meeting_time ?? '',
-          additional_attendees: updated.join(', '),
-          scheduled_by: meeting?.scheduled_by ?? '',
-        }),
-      });
-    } catch { /* silent — we still show the updated list */ }
-  }, [additionalAttendees, meeting, meetingId]);
+  }, [additionalAttendees]);
 
-  const removeExternalAttendee = useCallback(async (name: string) => {
+  const removeExternalAttendee = useCallback((name: string) => {
     const updated = additionalAttendees.filter(n => n !== name);
     setAdditionalAttendees(updated);
-    try {
-      await fetch(`/api/meetings/${meetingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meeting_date: meeting?.meeting_date ?? '',
-          meeting_time: meeting?.meeting_time ?? '',
-          additional_attendees: updated.join(', '),
-          scheduled_by: meeting?.scheduled_by ?? '',
-        }),
-      });
-    } catch { /* silent */ }
-  }, [additionalAttendees, meeting, meetingId]);
+  }, [additionalAttendees]);
+
+  const serializedCurrentState = useMemo(() => JSON.stringify({
+    notesText,
+    summary,
+    transcript,
+    insights,
+    nextSteps,
+    additionalAttendees,
+    internalAttendees,
+    audioUrl: audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null,
+    hasUnsavedAudioBlob: !!audioBlob,
+  }), [notesText, summary, transcript, insights, nextSteps, additionalAttendees, internalAttendees, audioUrl, audioBlob]);
+
+  const hasUnsavedChanges = initialStateRef.current !== '' && serializedCurrentState !== initialStateRef.current;
 
   const handleAnalyze = useCallback(async () => {
     const hasAudioBlob = !!audioBlob;
@@ -634,6 +626,16 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         }),
       });
       if (!res.ok) throw new Error();
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meeting_date: meeting?.meeting_date ?? '',
+          meeting_time: meeting?.meeting_time ?? '',
+          additional_attendees: additionalAttendees.join(', '),
+          scheduled_by: meeting?.scheduled_by ?? '',
+        }),
+      }).catch(() => {});
       toast.success('Notes saved.');
       // Set outcome to Held (best-effort, non-blocking)
       if (meeting) {
@@ -663,12 +665,23 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           }),
         }).catch(() => {});
       }
+      initialStateRef.current = JSON.stringify({
+        notesText,
+        summary,
+        transcript,
+        insights,
+        nextSteps,
+        additionalAttendees,
+        internalAttendees,
+        audioUrl: persistedAudioUrl,
+        hasUnsavedAudioBlob: false,
+      });
     } catch {
       toast.error('Failed to save notes.');
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights, additionalAttendees, internalAttendees, nextSteps]);
 
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
@@ -736,6 +749,22 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const painPoints = insights.filter(i => i.insight_type === 'pain_point');
   const hasAudioOrTranscript = !!(audioUrl || audioBlob || transcript.length);
 
+  useEffect(() => {
+    if (loading || hasInitializedSnapshotRef.current) return;
+    initialStateRef.current = JSON.stringify({
+      notesText,
+      summary,
+      transcript,
+      insights,
+      nextSteps,
+      additionalAttendees,
+      internalAttendees,
+      audioUrl: audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null,
+      hasUnsavedAudioBlob: !!audioBlob,
+    });
+    hasInitializedSnapshotRef.current = true;
+  }, [loading, notesText, summary, transcript, insights, nextSteps, additionalAttendees, internalAttendees, audioUrl, audioBlob]);
+
   // Derive scheduled_by display names and conference internal attendee names
   const scheduledByNames: string[] = (() => {
     if (!meeting?.scheduled_by) return [];
@@ -781,7 +810,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {onClose ? (
-            <button onClick={() => setShowExitConfirm(true)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
+            <button onClick={() => { if (hasUnsavedChanges) setShowExitConfirm(true); else onClose?.(); }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -836,7 +865,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               <h2 className="text-sm font-semibold text-gray-800">Save before exiting?</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Save your notes to keep them for this meeting, or delete to remove all notes and transcripts permanently.
+              Save your notes before exiting, or discard your unsaved changes and keep the previously saved notes.
             </p>
             <div className="flex flex-col gap-2">
               <button
@@ -848,15 +877,27 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               </button>
               <button
                 onClick={async () => {
-                  setDeleting(true);
-                  try { await fetch(`/api/meetings/${meetingId}/notes`, { method: 'DELETE' }); } catch { /* ignore */ }
-                  setDeleting(false);
+                  setNotesText('');
+                  setSummary('');
+                  setInsights([]);
+                  setNextSteps([]);
+                  setTranscript([]);
+                  setAudioUrl(null);
+                  setAudioBlob(null);
+                  setTranscriptExpanded(false);
+                  setAdditionalAttendees(
+                    meeting?.additional_attendees
+                      ? meeting.additional_attendees.split(',').map(s => s.trim()).filter(Boolean)
+                      : []
+                  );
+                  setInternalAttendees([]);
+                  setShowExitConfirm(false);
                   onClose?.();
                 }}
                 disabled={deleting}
                 className="w-full py-2 border border-red-200 text-red-500 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
               >
-                {deleting ? 'Deleting…' : 'Delete and Exit'}
+                {deleting ? 'Discarding…' : 'Discard Changes & Exit'}
               </button>
               <button
                 onClick={() => setShowExitConfirm(false)}
