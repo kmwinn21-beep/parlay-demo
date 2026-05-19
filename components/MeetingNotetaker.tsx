@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
 interface TranscriptSegment {
@@ -105,6 +104,7 @@ interface ExternalAttendeeFormProps {
   conferenceId: number;
   defaultCompanyId: number | null;
   defaultCompanyName: string | null;
+  excludeNames?: string[];
   onAdd: (name: string) => void;
   onCancel: () => void;
 }
@@ -113,7 +113,7 @@ interface AttendeeResultWithSource extends AttendeeResult {
   isConferenceAttendee: boolean;
 }
 
-function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyName, onAdd, onCancel }: ExternalAttendeeFormProps) {
+function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyName, excludeNames = [], onAdd, onCancel }: ExternalAttendeeFormProps) {
   const [tab, setTab] = useState<'search' | 'create'>('search');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AttendeeResultWithSource[]>([]);
@@ -123,6 +123,19 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
   const [newTitle, setNewTitle] = useState('');
   const [newCompanyName, setNewCompanyName] = useState(defaultCompanyName ?? '');
   const [creating, setCreating] = useState(false);
+  const [companyAttendees, setCompanyAttendees] = useState<AttendeeResult[]>([]);
+
+  // Fetch company attendees on mount for the quick-pick list
+  useEffect(() => {
+    if (!defaultCompanyId) return;
+    fetch(`/api/attendees?company_id=${defaultCompanyId}&limit=30`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const list: AttendeeResult[] = data?.attendees ?? data ?? [];
+        setCompanyAttendees(list);
+      })
+      .catch(() => {});
+  }, [defaultCompanyId]);
 
   useEffect(() => {
     if (tab !== 'search' || query.length < 2) { setResults([]); return; }
@@ -199,9 +212,33 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 
   const inputCls = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary';
 
+  const excludeSet = new Set(excludeNames.map(n => n.toLowerCase()));
+  const quickPickList = companyAttendees.filter(a => !excludeSet.has(`${a.first_name} ${a.last_name}`.toLowerCase()));
+
   return (
-    <div className="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-3 space-y-2">
-      <div className="flex gap-1">
+    <div className="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-2 space-y-1">
+
+      {/* Company quick-pick list */}
+      {quickPickList.length > 0 && (
+        <>
+          {defaultCompanyName && (
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 pt-1">{defaultCompanyName}</p>
+          )}
+          {quickPickList.map(a => (
+            <button
+              key={a.id}
+              onClick={() => onAdd(`${a.first_name} ${a.last_name}`)}
+              className="w-full text-left px-2 py-1.5 rounded hover:bg-white transition-colors"
+            >
+              <span className="text-xs text-gray-700">{a.first_name} {a.last_name}</span>
+              {a.title && <span className="block text-[10px] text-gray-400 leading-tight">{a.title}</span>}
+            </button>
+          ))}
+          <div className="border-t border-gray-200 mx-1 pt-1" />
+        </>
+      )}
+
+      <div className="flex gap-1 px-1">
         {(['search', 'create'] as const).map(t => (
           <button
             key={t}
@@ -276,8 +313,6 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, onMeetingLoaded, onAnalysisStateChange }: Props) {
-  const router = useRouter();
-
   // Data state
   const [loading, setLoading] = useState(true);
   const [meeting, setMeeting] = useState<MeetingContext | null>(null);
@@ -766,13 +801,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       toast.success('Notes deleted.');
       savedStateRef.current = { notesText: '', audioUrl: null, hadTranscript: false };
       window.dispatchEvent(new CustomEvent('meeting-notes-deleted', { detail: { meetingId } }));
-      if (onClose) { onClose(); } else { router.push('/follow-ups'); }
+      onClose?.();
     } catch {
       toast.error('Failed to delete notes.');
     } finally {
       setDeleting(false);
     }
-  }, [meetingId, onClose, router]);
+  }, [meetingId, onClose]);
 
   const sortConfirmedFirst = (a: Insight, b: Insight) => (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0);
   const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal').sort(sortConfirmedFirst);
@@ -835,19 +870,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          {onClose ? (
-            <button onClick={() => { if (hasUnsavedChanges) setShowExitConfirm(true); else onClose(); }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          ) : (
-            <button onClick={() => router.back()} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
+          <button onClick={() => { if (hasUnsavedChanges) setShowExitConfirm(true); else onClose?.(); }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
           <div className="min-w-0">
             <h1 className="text-sm font-semibold text-gray-800 truncate">
               {meeting ? `Meeting Notes — ${meeting.first_name} ${meeting.last_name}` : 'Meeting Notes'}
@@ -1158,6 +1185,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                       conferenceId={meeting.conference_id}
                       defaultCompanyId={meeting.company_id}
                       defaultCompanyName={meeting.company_name}
+                      excludeNames={[`${meeting.first_name} ${meeting.last_name}`, ...additionalAttendees]}
                       onAdd={addExternalAttendee}
                       onCancel={() => setShowExternalForm(false)}
                     />
@@ -1400,56 +1428,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
-              {/* Transcript */}
-              {transcript.length > 0 && (
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => setTranscriptExpanded(e => !e)}
-                      className="flex items-center gap-2 text-xs font-semibold text-gray-600"
-                    >
-                      <svg className={`w-4 h-4 transition-transform ${transcriptExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      Transcript ({transcript.length} segments)
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTranscript([]);
-                        setTranscriptExpanded(false);
-                        setInsights([]);
-                        setSummary('');
-                        setNextSteps([]);
-                      }}
-                      className="text-[10px] text-red-400 hover:text-red-600 font-medium transition-colors"
-                      title="Clear transcript and analysis"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  {transcriptExpanded && (
-                    <div className="mt-2 space-y-1 max-h-60 overflow-auto">
-                      {transcript.map((seg, i) => {
-                        const hasBuyingSignal = insights.some(ins => ins.insight_type === 'buying_signal' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
-                        const hasPainPoint = insights.some(ins => ins.insight_type === 'pain_point' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
-                        return (
-                          <div key={i} className={`flex gap-2 p-1.5 rounded text-xs ${hasBuyingSignal ? 'bg-green-50' : hasPainPoint ? 'bg-orange-50' : ''}`}>
-                            <button onClick={() => scrubTo(seg.start)} className="flex-shrink-0 text-[10px] font-mono text-blue-500 hover:text-blue-700 underline">
-                              {formatTime(seg.start)}
-                            </button>
-                            {seg.speaker && <span className="font-bold text-gray-600 flex-shrink-0">{seg.speaker}:</span>}
-                            <span className="text-gray-700">{seg.text.trim()}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
-
-          {/* ── AI Analysis column ── */}
           <div className={`overflow-auto flex-1 min-w-0 ${mobileTab !== 'summary' ? 'hidden lg:block' : ''}`}>
             <div className="p-4">
               {analysisLoading && (
@@ -1709,6 +1689,53 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                             ))}
                           </div>
                         </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 6. Transcript */}
+                  {transcript.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between py-1">
+                        <button
+                          onClick={() => setTranscriptExpanded(e => !e)}
+                          className="flex items-center gap-2 text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                        >
+                          <svg className={`w-4 h-4 text-gray-400 transition-transform ${transcriptExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                          Transcript ({transcript.length} segments)
+                        </button>
+                        <button
+                          onClick={() => {
+                            setTranscript([]);
+                            setTranscriptExpanded(false);
+                            setInsights([]);
+                            setSummary('');
+                            setNextSteps([]);
+                          }}
+                          className="text-[10px] text-red-400 hover:text-red-600 font-medium transition-colors"
+                          title="Clear transcript and analysis"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      {transcriptExpanded && (
+                        <div className="mt-2 space-y-1 max-h-60 overflow-auto">
+                          {transcript.map((seg, i) => {
+                            const hasBuyingSignal = insights.some(ins => ins.insight_type === 'buying_signal' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
+                            const hasPainPoint = insights.some(ins => ins.insight_type === 'pain_point' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
+                            return (
+                              <div key={i} className={`flex gap-2 p-1.5 rounded text-xs ${hasBuyingSignal ? 'bg-green-50' : hasPainPoint ? 'bg-orange-50' : ''}`}>
+                                <button onClick={() => scrubTo(seg.start)} className="flex-shrink-0 text-[10px] font-mono text-blue-500 hover:text-blue-700 underline">
+                                  {formatTime(seg.start)}
+                                </button>
+                                {seg.speaker && <span className="font-bold text-gray-600 flex-shrink-0">{seg.speaker}:</span>}
+                                <span className="text-gray-700">{seg.text.trim()}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}

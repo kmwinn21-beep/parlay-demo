@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -379,9 +378,9 @@ export function NoteCard({
         // Use modal callback when available (attendee/company context), otherwise navigate to full page
         const makePill = (label: string, colorCls: string, section: string) => {
           const pillCls = `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors ${colorCls}`;
-          return onMeetingNoteClick
-            ? <button key={section} onClick={() => onMeetingNoteClick(meetingId)} className={pillCls}>{label}</button>
-            : <Link key={section} href={`/meetings/${meetingId}/notes?section=${section}`} className={pillCls}>{label}</Link>;
+          return (
+            <button key={section} onClick={() => onMeetingNoteClick?.(meetingId)} className={pillCls}>{label}</button>
+          );
         };
         return (
           <div className="flex flex-wrap gap-1.5 mt-2 mb-1">

@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -505,7 +504,6 @@ export function MeetingsTable({
   hideCompany?: boolean;
   tableName?: string;
 }) {
-  const router = useRouter();
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -748,7 +746,7 @@ export function MeetingsTable({
                           type="button"
                           className={`relative transition-colors ${m.has_notes ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
                           title={m.has_notes ? 'View notes' : 'Add notes'}
-                          onClick={() => onNotesClick ? onNotesClick(m.id) : router.push(`/meetings/${m.id}/notes`)}
+                          onClick={() => onNotesClick?.(m.id)}
                         >
                           {m.has_notes ? (
                             <span className="relative inline-flex">
