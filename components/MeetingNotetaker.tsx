@@ -104,6 +104,7 @@ interface ExternalAttendeeFormProps {
   conferenceId: number;
   defaultCompanyId: number | null;
   defaultCompanyName: string | null;
+  excludeNames?: string[];
   onAdd: (name: string) => void;
   onCancel: () => void;
 }
@@ -112,7 +113,7 @@ interface AttendeeResultWithSource extends AttendeeResult {
   isConferenceAttendee: boolean;
 }
 
-function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyName, onAdd, onCancel }: ExternalAttendeeFormProps) {
+function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyName, excludeNames = [], onAdd, onCancel }: ExternalAttendeeFormProps) {
   const [tab, setTab] = useState<'search' | 'create'>('search');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AttendeeResultWithSource[]>([]);
@@ -122,6 +123,19 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
   const [newTitle, setNewTitle] = useState('');
   const [newCompanyName, setNewCompanyName] = useState(defaultCompanyName ?? '');
   const [creating, setCreating] = useState(false);
+  const [companyAttendees, setCompanyAttendees] = useState<AttendeeResult[]>([]);
+
+  // Fetch company attendees on mount for the quick-pick list
+  useEffect(() => {
+    if (!defaultCompanyId) return;
+    fetch(`/api/attendees?company_id=${defaultCompanyId}&limit=30`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const list: AttendeeResult[] = data?.attendees ?? data ?? [];
+        setCompanyAttendees(list);
+      })
+      .catch(() => {});
+  }, [defaultCompanyId]);
 
   useEffect(() => {
     if (tab !== 'search' || query.length < 2) { setResults([]); return; }
@@ -198,9 +212,33 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 
   const inputCls = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary';
 
+  const excludeSet = new Set(excludeNames.map(n => n.toLowerCase()));
+  const quickPickList = companyAttendees.filter(a => !excludeSet.has(`${a.first_name} ${a.last_name}`.toLowerCase()));
+
   return (
-    <div className="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-3 space-y-2">
-      <div className="flex gap-1">
+    <div className="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-2 space-y-1">
+
+      {/* Company quick-pick list */}
+      {quickPickList.length > 0 && (
+        <>
+          {defaultCompanyName && (
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 pt-1">{defaultCompanyName}</p>
+          )}
+          {quickPickList.map(a => (
+            <button
+              key={a.id}
+              onClick={() => onAdd(`${a.first_name} ${a.last_name}`)}
+              className="w-full text-left px-2 py-1.5 rounded hover:bg-white transition-colors"
+            >
+              <span className="text-xs text-gray-700">{a.first_name} {a.last_name}</span>
+              {a.title && <span className="block text-[10px] text-gray-400 leading-tight">{a.title}</span>}
+            </button>
+          ))}
+          <div className="border-t border-gray-200 mx-1 pt-1" />
+        </>
+      )}
+
+      <div className="flex gap-1 px-1">
         {(['search', 'create'] as const).map(t => (
           <button
             key={t}
@@ -1147,6 +1185,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                       conferenceId={meeting.conference_id}
                       defaultCompanyId={meeting.company_id}
                       defaultCompanyName={meeting.company_name}
+                      excludeNames={[`${meeting.first_name} ${meeting.last_name}`, ...additionalAttendees]}
                       onAdd={addExternalAttendee}
                       onCancel={() => setShowExternalForm(false)}
                     />
