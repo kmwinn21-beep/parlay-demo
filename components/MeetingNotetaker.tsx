@@ -1389,56 +1389,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
-              {/* Transcript */}
-              {transcript.length > 0 && (
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => setTranscriptExpanded(e => !e)}
-                      className="flex items-center gap-2 text-xs font-semibold text-gray-600"
-                    >
-                      <svg className={`w-4 h-4 transition-transform ${transcriptExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      Transcript ({transcript.length} segments)
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTranscript([]);
-                        setTranscriptExpanded(false);
-                        setInsights([]);
-                        setSummary('');
-                        setNextSteps([]);
-                      }}
-                      className="text-[10px] text-red-400 hover:text-red-600 font-medium transition-colors"
-                      title="Clear transcript and analysis"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  {transcriptExpanded && (
-                    <div className="mt-2 space-y-1 max-h-60 overflow-auto">
-                      {transcript.map((seg, i) => {
-                        const hasBuyingSignal = insights.some(ins => ins.insight_type === 'buying_signal' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
-                        const hasPainPoint = insights.some(ins => ins.insight_type === 'pain_point' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
-                        return (
-                          <div key={i} className={`flex gap-2 p-1.5 rounded text-xs ${hasBuyingSignal ? 'bg-green-50' : hasPainPoint ? 'bg-orange-50' : ''}`}>
-                            <button onClick={() => scrubTo(seg.start)} className="flex-shrink-0 text-[10px] font-mono text-blue-500 hover:text-blue-700 underline">
-                              {formatTime(seg.start)}
-                            </button>
-                            {seg.speaker && <span className="font-bold text-gray-600 flex-shrink-0">{seg.speaker}:</span>}
-                            <span className="text-gray-700">{seg.text.trim()}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
-
-          {/* ── AI Analysis column ── */}
           <div className={`overflow-auto flex-1 min-w-0 ${mobileTab !== 'summary' ? 'hidden lg:block' : ''}`}>
             <div className="p-4">
               {analysisLoading && (
@@ -1698,6 +1650,53 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                             ))}
                           </div>
                         </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 6. Transcript */}
+                  {transcript.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between py-1">
+                        <button
+                          onClick={() => setTranscriptExpanded(e => !e)}
+                          className="flex items-center gap-2 text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                        >
+                          <svg className={`w-4 h-4 text-gray-400 transition-transform ${transcriptExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                          Transcript ({transcript.length} segments)
+                        </button>
+                        <button
+                          onClick={() => {
+                            setTranscript([]);
+                            setTranscriptExpanded(false);
+                            setInsights([]);
+                            setSummary('');
+                            setNextSteps([]);
+                          }}
+                          className="text-[10px] text-red-400 hover:text-red-600 font-medium transition-colors"
+                          title="Clear transcript and analysis"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      {transcriptExpanded && (
+                        <div className="mt-2 space-y-1 max-h-60 overflow-auto">
+                          {transcript.map((seg, i) => {
+                            const hasBuyingSignal = insights.some(ins => ins.insight_type === 'buying_signal' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
+                            const hasPainPoint = insights.some(ins => ins.insight_type === 'pain_point' && ins.timestamp_seconds != null && ins.timestamp_seconds >= seg.start && ins.timestamp_seconds <= seg.end);
+                            return (
+                              <div key={i} className={`flex gap-2 p-1.5 rounded text-xs ${hasBuyingSignal ? 'bg-green-50' : hasPainPoint ? 'bg-orange-50' : ''}`}>
+                                <button onClick={() => scrubTo(seg.start)} className="flex-shrink-0 text-[10px] font-mono text-blue-500 hover:text-blue-700 underline">
+                                  {formatTime(seg.start)}
+                                </button>
+                                {seg.speaker && <span className="font-bold text-gray-600 flex-shrink-0">{seg.speaker}:</span>}
+                                <span className="text-gray-700">{seg.text.trim()}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}
