@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
 interface TranscriptSegment {
@@ -276,8 +275,6 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, onMeetingLoaded, onAnalysisStateChange }: Props) {
-  const router = useRouter();
-
   // Data state
   const [loading, setLoading] = useState(true);
   const [meeting, setMeeting] = useState<MeetingContext | null>(null);
@@ -766,13 +763,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       toast.success('Notes deleted.');
       savedStateRef.current = { notesText: '', audioUrl: null, hadTranscript: false };
       window.dispatchEvent(new CustomEvent('meeting-notes-deleted', { detail: { meetingId } }));
-      if (onClose) { onClose(); } else { router.push('/follow-ups'); }
+      onClose?.();
     } catch {
       toast.error('Failed to delete notes.');
     } finally {
       setDeleting(false);
     }
-  }, [meetingId, onClose, router]);
+  }, [meetingId, onClose]);
 
   const sortConfirmedFirst = (a: Insight, b: Insight) => (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0);
   const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal').sort(sortConfirmedFirst);
@@ -835,19 +832,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          {onClose ? (
-            <button onClick={() => { if (hasUnsavedChanges) setShowExitConfirm(true); else onClose(); }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          ) : (
-            <button onClick={() => router.back()} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
+          <button onClick={() => { if (hasUnsavedChanges) setShowExitConfirm(true); else onClose?.(); }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
           <div className="min-w-0">
             <h1 className="text-sm font-semibold text-gray-800 truncate">
               {meeting ? `Meeting Notes — ${meeting.first_name} ${meeting.last_name}` : 'Meeting Notes'}
