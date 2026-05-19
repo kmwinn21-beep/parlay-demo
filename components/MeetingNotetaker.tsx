@@ -326,6 +326,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [actionItemsOpen, setActionItemsOpen] = useState(false);
+  const [meetingSummaryOpen, setMeetingSummaryOpen] = useState(true);
   const [buyingSignalsOpen, setBuyingSignalsOpen] = useState(false);
   const [painPointsOpen, setPainPointsOpen] = useState(false);
   const [expandedQuotes, setExpandedQuotes] = useState<Set<number>>(new Set());
@@ -859,7 +860,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
@@ -875,6 +876,23 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
+      </div>
+
+      {/* Mobile action row — Delete + Save between header and tab bar */}
+      <div className="lg:hidden flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white flex-shrink-0">
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="flex-1 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+        >
+          Delete
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
       </div>
 
       {/* Mobile tab bar */}
@@ -1456,10 +1474,20 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   {/* 1. Meeting Summary */}
                   {summary && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Meeting Summary</h3>
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700 leading-relaxed">
-                        {summary}
-                      </div>
+                      <button
+                        onClick={() => setMeetingSummaryOpen(o => !o)}
+                        className="w-full flex items-center justify-between text-left py-1 group"
+                      >
+                        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Meeting Summary</h3>
+                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${meetingSummaryOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {meetingSummaryOpen && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700 leading-relaxed mt-2">
+                          {summary}
+                        </div>
+                      )}
                     </div>
                   )}
 
