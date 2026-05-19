@@ -7,6 +7,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { BackButton } from '@/components/BackButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { type UserOption, parseRepIds } from '@/lib/useUserOptions';
+import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 
 function FilterSelect({ value, onChange, label, children }: { value: string; onChange: (v: string) => void; label: string; children: React.ReactNode }) {
   return (
@@ -63,6 +64,7 @@ function FilterDropdown({ label, options, selected, onToggle, onClear, fullWidth
 }
 
 export default function FollowUpsPage() {
+  const { openMeetingNotes } = useMeetingNotesDrawer();
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
@@ -423,6 +425,7 @@ export default function FollowUpsPage() {
               userOptions={userOptions}
               onOutcomeChange={handleOutcomeChange}
               onDelete={handleDeleteMeeting}
+              onNotesClick={(id) => openMeetingNotes(id)}
               onEdit={async (meetingId, data) => {
                 setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
                 try {
