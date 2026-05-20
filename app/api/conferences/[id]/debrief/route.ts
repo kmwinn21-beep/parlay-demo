@@ -151,6 +151,7 @@ export async function GET(
     // 6. Aggregate by company
     type CompanyData = {
       id: number; name: string; tier: string | null;
+      status: string | null; icp: string | null;
       attendeeIds: Set<number>;
       attendeeInfo: Map<number, { name: string; title: string | null }>;
       meetingRows: Record<string, unknown>[];
@@ -164,6 +165,7 @@ export async function GET(
         companyMap.set(companyId, {
           id: companyId, name: companyName,
           tier: tierByCompany.get(companyId) ?? null,
+          status: null, icp: null,
           attendeeIds: new Set(), attendeeInfo: new Map(),
           meetingRows: [], followUps: [],
         });
@@ -195,6 +197,51 @@ export async function GET(
         co.attendeeInfo.set(aid, { name: `${fu.first_name} ${fu.last_name}`, title: null });
       }
       co.followUps.push(fu);
+    }
+
+    // 6b. Enrich companyMap: all conference attendees + company metadata
+    const companyIds = Array.from(companyMap.keys()).filter(id => id > 0);
+    if (companyIds.length > 0) {
+      const ph = companyIds.map(() => '?').join(',');
+      const [allAttendeesRes, companyMetaRes] = await Promise.all([
+        db.execute({
+          sql: `SELECT DISTINCT a.id, a.first_name, a.last_name, a.title, a.company_id
+                FROM attendees a
+                WHERE a.company_id IN (${ph})
+                AND (
+                  a.id IN (SELECT attendee_id FROM conference_attendees WHERE conference_id = ?)
+                  OR a.id IN (SELECT attendee_id FROM meetings WHERE conference_id = ?)
+                  OR a.id IN (SELECT attendee_id FROM conference_targets WHERE conference_id = ?)
+                )`,
+          args: [...companyIds, conferenceId, conferenceId, conferenceId],
+        }),
+        db.execute({
+          sql: `SELECT id, status, icp FROM companies WHERE id IN (${ph})`,
+          args: companyIds,
+        }),
+      ]).catch(() => [{ rows: [] }, { rows: [] }] as [{ rows: unknown[] }, { rows: unknown[] }]);
+
+      for (const row of (allAttendeesRes as { rows: Record<string, unknown>[] }).rows) {
+        const cid = Number(row.company_id);
+        const co = companyMap.get(cid);
+        if (!co) continue;
+        const aid = Number(row.id);
+        co.attendeeIds.add(aid);
+        if (!co.attendeeInfo.has(aid)) {
+          co.attendeeInfo.set(aid, {
+            name: `${row.first_name} ${row.last_name}`,
+            title: row.title ? String(row.title) : null,
+          });
+        }
+      }
+
+      for (const row of (companyMetaRes as { rows: Record<string, unknown>[] }).rows) {
+        const co = companyMap.get(Number(row.id));
+        if (co) {
+          co.status = row.status ? String(row.status) : null;
+          co.icp = row.icp ? String(row.icp) : null;
+        }
+      }
     }
 
     // 7. Build output companies
@@ -249,6 +296,8 @@ export async function GET(
       return {
         id: co.id, name: co.name,
         tier: co.tier,
+        status: co.status,
+        icp: co.icp,
         attendeeCount: co.attendeeIds.size,
         meetingCount: co.meetingRows.length,
         meetingsHeld: co.meetingRows.filter(m => String(m.outcome_key) === 'meeting_held').length,
@@ -259,11 +308,14 @@ export async function GET(
           id, name: info.name, title: info.title,
           meetingCount: co.meetingRows.filter(m => Number(m.attendee_id) === id).length,
           touchpointCount: touchpointByAttendee.get(id) ?? 0,
+          followUpCount: co.followUps.filter(fu => Number(fu.attendee_id) === id).length,
         })),
         timeline,
         meetingCards,
         followUps: co.followUps.map(fu => ({
           id: Number(fu.id),
+          attendeeId: fu.attendee_id != null ? Number(fu.attendee_id) : null,
+          attendeeName: fu.first_name ? `${String(fu.first_name)} ${String(fu.last_name ?? '')}`.trim() : null,
           taskText: fu.next_steps_notes ? String(fu.next_steps_notes) : String(fu.next_steps ?? ''),
           nextSteps: String(fu.next_steps ?? ''),
           completed: Boolean(fu.completed),

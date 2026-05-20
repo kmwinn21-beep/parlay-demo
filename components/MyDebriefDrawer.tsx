@@ -20,15 +20,28 @@ interface DebriefAttendee {
   title: string | null;
   meetingCount: number;
   touchpointCount: number;
+  followUpCount: number;
 }
 
 interface DebriefFollowUp {
   id: number;
+  attendeeId: number | null;
+  attendeeName: string | null;
   taskText: string;
   nextSteps: string;
   completed: boolean;
   meetingId: number | null;
   source: string;
+}
+
+interface DebriefNote {
+  id: number;
+  content: string;
+  created_at: string;
+  conference_name: string | null;
+  rep: string | null;
+  attendee_name: string | null;
+  note_type: string | null;
 }
 
 interface MeetingInsight {
@@ -70,6 +83,8 @@ interface DebriefCompany {
   id: number;
   name: string;
   tier: string | null;
+  status: string | null;
+  icp: string | null;
   attendeeCount: number;
   meetingCount: number;
   meetingsHeld: number;
@@ -109,6 +124,17 @@ const TIER_COLORS: Record<string, string> = {
   unassigned: 'bg-gray-100 text-gray-500',
 };
 
+const STATUS_COLORS: Record<string, string> = {
+  Client: 'bg-yellow-100 text-yellow-700',
+  Priority: 'bg-red-100 text-red-700',
+  Interested: 'bg-green-100 text-green-700',
+  'Not Interested': 'bg-gray-100 text-gray-500',
+  Unknown: 'bg-gray-100 text-gray-500',
+  'Active Op.': 'bg-blue-100 text-blue-700',
+  Nurturing: 'bg-orange-100 text-orange-700',
+  DNC: 'bg-purple-100 text-purple-700',
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmt$(n: number | null | undefined): string {
@@ -124,17 +150,19 @@ function parseTaskLines(text: string | null | undefined): string[] {
   return lines.length > 0 ? lines.map(l => l.slice(2)) : [text.trim()].filter(Boolean);
 }
 
+function fmtDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
+
 // Replicates SalesExecutionTab per-rep SES computation exactly.
-// Uses data.pipeline.rep_attribution + data.sales_execution.effective_weights.
-function computeRepSes(
-  repName: string,
-  effData: Record<string, unknown>
-): number | null {
-  const repAttrib = ((effData.pipeline as Record<string, unknown> | null)
-    ?.rep_attribution) as Record<string, unknown>[] | null;
+function computeRepSes(repName: string, effData: Record<string, unknown>): number | null {
+  const repAttrib = ((effData.pipeline as Record<string, unknown> | null)?.rep_attribution) as Record<string, unknown>[] | null;
   const sx = effData.sales_execution as Record<string, unknown> | null;
   if (!repAttrib?.length || !sx) return null;
-
   const repRow = repAttrib.find(r => String(r.rep ?? '') === repName);
   if (!repRow) return null;
 
@@ -206,6 +234,14 @@ function TierBadge({ tier }: { tier: string | null }) {
   );
 }
 
+function StatPill({ children, cls }: { children: ReactNode; cls?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600 ${cls ?? ''}`}>
+      {children}
+    </span>
+  );
+}
+
 function StatTile({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-3 border-r border-white/20 last:border-r-0 min-w-[90px] flex-shrink-0">
@@ -237,11 +273,13 @@ function PipelineBar({
   value,
   goal,
   teamTotal,
+  barColor,
 }: {
   label: string;
   value: number;
   goal: number | null;
   teamTotal?: number;
+  barColor?: string;
 }) {
   const pct = goal != null && goal > 0 ? Math.min((value / goal) * 100, 100) : 0;
   const teamPct = teamTotal != null && teamTotal > 0 && value > 0 ? Math.round((value / teamTotal) * 100) : null;
@@ -252,8 +290,11 @@ function PipelineBar({
         <span className="text-[9px] text-white/60 uppercase tracking-wide">{label}</span>
         <span className="text-[10px] text-white font-semibold">{fmt$(value)}</span>
       </div>
-      <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-        <div className="h-full bg-white/80 rounded-full transition-all" style={{ width: `${pct}%` }} />
+      <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${barColor ?? 'bg-emerald-400'}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <div className="flex items-center justify-between mt-0.5">
         {goal != null ? (
@@ -309,6 +350,30 @@ function Col4Section({
   );
 }
 
+function NoteCard({ note }: { note: DebriefNote }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {note.note_type && (
+          <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-primary/10 text-brand-primary">
+            {note.note_type}
+          </span>
+        )}
+        {note.attendee_name && (
+          <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+            {note.attendee_name}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{note.content}</p>
+      <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1 border-t border-gray-100">
+        {note.rep ? <span>{note.rep}</span> : <span />}
+        <span>{fmtDate(note.created_at)}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -328,8 +393,10 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [expandedFuIds, setExpandedFuIds] = useState<Set<number>>(new Set());
   const [activeMeetingId, setActiveMeetingId] = useState<number | null>(null);
-  const [col4Sections, setCol4Sections] = useState<Record<string, boolean>>({ summary: true });
+  const [col4Sections, setCol4Sections] = useState<Record<string, boolean>>({});
   const [col4FadeKey, setCol4FadeKey] = useState(0);
+  const [expandedQuoteIds, setExpandedQuoteIds] = useState<Set<number>>(new Set());
+  const [companyNotes, setCompanyNotes] = useState<DebriefNote[]>([]);
   const [mounted, setMounted] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -364,7 +431,17 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     if (isOpen && data === null && !loading) fetchData();
   }, [isOpen, data, loading, fetchData]);
 
-  // Per-rep SES — same formula as SalesExecutionTab
+  // Fetch notes for selected company filtered to this conference
+  useEffect(() => {
+    if (!selectedCompanyId || !data) { setCompanyNotes([]); return; }
+    fetch(`/api/notes?entity_type=company&entity_id=${selectedCompanyId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((notes: DebriefNote[]) => {
+        setCompanyNotes(notes.filter(n => n.conference_name === data.conference.name));
+      })
+      .catch(() => setCompanyNotes([]));
+  }, [selectedCompanyId, data]);
+
   const repSesScore = useMemo(() => {
     if (!data) return null;
     if (effData) {
@@ -374,7 +451,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     return data.stats.sesScore;
   }, [data, effData]);
 
-  // Pipeline data from effectiveness endpoint
   const pipelineByRep = useMemo(() => {
     if (!effData || !data) return null;
     const sx = effData.sales_execution as Record<string, unknown> | null;
@@ -391,7 +467,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     return { repPipeline, total, goal, repShare, numReps };
   }, [effData, data]);
 
-  // Live follow-ups-due count (updates as user toggles)
   const followUpsDue = useMemo(() => {
     if (!data) return 0;
     return data.companies.reduce(
@@ -400,7 +475,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     );
   }, [data, followUps]);
 
-  // Companies sorted reactively: tier asc, then open-FU count desc
   const sortedCompanies = useMemo(() => {
     if (!data) return [];
     return [...data.companies].sort((a, b) => {
@@ -473,18 +547,17 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   }, [fetchData]);
 
   const openMeeting = useCallback((meetingId: number) => {
-    setActiveMeetingId(prev => {
-      if (prev === meetingId) return null;
-      return meetingId;
-    });
-    setCol4Sections({ summary: true });
+    setActiveMeetingId(prev => (prev === meetingId ? null : meetingId));
+    setCol4Sections({});
     setCol4FadeKey(k => k + 1);
+    setExpandedQuoteIds(new Set());
   }, []);
 
   const switchMeeting = useCallback((meetingId: number) => {
     setActiveMeetingId(meetingId);
-    setCol4Sections({ summary: true });
+    setCol4Sections({});
     setCol4FadeKey(k => k + 1);
+    setExpandedQuoteIds(new Set());
   }, []);
 
   if (!isOpen) return null;
@@ -531,19 +604,21 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 value={repSesScore != null ? String(repSesScore) : '—'}
                 sub={repSesScore != null ? '/100' : undefined}
               />
-              {/* Pipeline bars */}
+              {/* Pipeline bars — double width, colored bars */}
               {pipelineByRep && (pipelineByRep.repPipeline != null || pipelineByRep.total > 0) && (
-                <div className="flex flex-col justify-center px-4 py-2 border-l border-white/20 min-w-[200px] max-w-[240px] flex-shrink-0 gap-2">
+                <div className="flex flex-col justify-center px-5 py-2 border-l border-white/20 min-w-[400px] max-w-[480px] flex-shrink-0 gap-2.5">
                   <PipelineBar
                     label="My Pipeline Influence"
                     value={pipelineByRep.repPipeline ?? 0}
                     goal={pipelineByRep.repShare}
                     teamTotal={pipelineByRep.total}
+                    barColor="bg-emerald-400"
                   />
                   <PipelineBar
-                    label="vs. Team Goal"
+                    label="Team vs. Goal"
                     value={pipelineByRep.total}
                     goal={pipelineByRep.goal}
+                    barColor="bg-sky-400"
                   />
                 </div>
               )}
@@ -575,8 +650,8 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
         {!loading && !error && data && (
           <div className="flex flex-1 overflow-hidden">
 
-            {/* Col 1 — Company list */}
-            <div className="w-56 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+            {/* Col 1 — Company list (1.5× wider = 21rem) */}
+            <div className="w-[21rem] flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
               <div className="px-3 py-2 border-b border-gray-100">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
@@ -603,11 +678,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                     <p className={`text-sm font-semibold truncate leading-snug ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
                       {co.name}
                     </p>
-                    <div className="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400 flex-wrap">
-                      <span>{co.attendeeCount} att</span>
-                      {co.meetingsHeld > 0 && <><span className="opacity-40">·</span><span>{co.meetingsHeld} mtg</span></>}
-                      {co.touchpointCount > 0 && <><span className="opacity-40">·</span><span>{co.touchpointCount} tp</span></>}
-                    </div>
+                    {/* Only tier badge + due pill — no subtitle text */}
                     <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                       {co.tier && <TierBadge tier={co.tier} />}
                       {allDone && (
@@ -626,44 +697,82 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
               })}
             </div>
 
-            {/* Col 2 — Company activity */}
+            {/* Col 2 — Company activity (shrinks to accommodate wider col 1 + col 3) */}
             <div className="flex-1 overflow-y-auto p-5 border-r border-gray-200 min-w-0">
               {!selectedCompany ? (
                 <p className="text-sm text-gray-400 text-center mt-12">Select a company to view activity.</p>
               ) : (
                 <div className="space-y-5">
+
+                  {/* Company header */}
                   <div>
                     <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                       {selectedCompany.tier && <TierBadge tier={selectedCompany.tier} />}
-                      <span className="text-xs text-gray-500">{selectedCompany.attendeeCount} attendee{selectedCompany.attendeeCount !== 1 ? 's' : ''}</span>
-                      <span className="text-xs text-gray-500">{selectedCompany.meetingsHeld} meeting{selectedCompany.meetingsHeld !== 1 ? 's' : ''} held</span>
+                      {selectedCompany.status && selectedCompany.status !== 'Unknown' && (
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                          {selectedCompany.status}
+                        </span>
+                      )}
+                      {selectedCompany.icp && selectedCompany.icp !== 'No' && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700">
+                          ICP
+                        </span>
+                      )}
+                      <StatPill>{selectedCompany.attendeeCount} attendee{selectedCompany.attendeeCount !== 1 ? 's' : ''}</StatPill>
+                      <StatPill>{selectedCompany.meetingsHeld} meeting{selectedCompany.meetingsHeld !== 1 ? 's' : ''} held</StatPill>
                       {selectedCompany.touchpointCount > 0 && (
-                        <span className="text-xs text-gray-500">{selectedCompany.touchpointCount} touchpoint{selectedCompany.touchpointCount !== 1 ? 's' : ''}</span>
+                        <StatPill>{selectedCompany.touchpointCount} touchpoint{selectedCompany.touchpointCount !== 1 ? 's' : ''}</StatPill>
+                      )}
+                      {selectedCompany.openFollowUpCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border border-rose-200 bg-rose-50 text-rose-600">
+                          {selectedCompany.openFollowUpCount} open FU{selectedCompany.openFollowUpCount !== 1 ? 's' : ''}
+                        </span>
                       )}
                     </div>
                   </div>
 
+                  {/* Contacts — 3-col grid of cards, ALL conference attendees */}
                   {selectedCompany.attendees.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacts</p>
-                      <div className="space-y-1">
-                        {selectedCompany.attendees.map(a => (
-                          <div key={a.id} className="flex items-center justify-between text-sm">
-                            <div>
-                              <span className="font-medium text-gray-800">{a.name}</span>
-                              {a.title && <span className="text-gray-400 ml-1.5 text-xs">{a.title}</span>}
+                      <div className="grid grid-cols-3 gap-2">
+                        {selectedCompany.attendees.map(a => {
+                          const hasMeetings = a.meetingCount > 0;
+                          const hasTp = a.touchpointCount > 0;
+                          const hasFu = a.followUpCount > 0;
+                          return (
+                            <div key={a.id} className="border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
+                              <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
+                              {a.title && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{a.title}</p>}
+                              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                                {hasMeetings && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-primary/10 text-brand-primary">
+                                    {a.meetingCount} mtg
+                                  </span>
+                                )}
+                                {hasTp && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                                    {a.touchpointCount} tp
+                                  </span>
+                                )}
+                                {hasFu && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-100 text-rose-600">
+                                    {a.followUpCount} fu
+                                  </span>
+                                )}
+                                {!hasMeetings && !hasTp && !hasFu && (
+                                  <span className="text-[10px] text-gray-300 italic">No activity</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-gray-400">
-                              {a.meetingCount > 0 && <span>{a.meetingCount} mtg</span>}
-                              {a.touchpointCount > 0 && <span>{a.touchpointCount} tp</span>}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
 
+                  {/* Meetings */}
                   {selectedCompany.meetingCards.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Meetings</p>
@@ -718,12 +827,27 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       </div>
                     </div>
                   )}
+
+                  {/* Conference Notes */}
+                  {companyNotes.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                        {data.conference.name} Notes
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {companyNotes.map(note => (
+                          <NoteCard key={note.id} note={note} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )}
             </div>
 
-            {/* Col 3 — Follow-ups (FollowUpsTable mobile card style) */}
-            <div className="w-72 flex-shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
+            {/* Col 3 — Follow-ups (1.5× width = 27rem) */}
+            <div className="w-[27rem] flex-shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
               <div className="px-4 py-2.5 border-b border-gray-100">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Follow-ups</p>
                 {selectedCompany && <p className="text-xs text-gray-500 mt-0.5">{selectedCompany.name}</p>}
@@ -746,13 +870,18 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       <div key={fu.id} className={`p-3 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            {/* Tag pill + source */}
+                            {/* Tag pill + attendee pill */}
                             <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                               {fu.nextSteps && (
                                 <span className={`inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
                                   fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'
                                 }`}>
                                   {fu.nextSteps}
+                                </span>
+                              )}
+                              {fu.attendeeName && (
+                                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                                  {fu.attendeeName}
                                 </span>
                               )}
                             </div>
@@ -784,7 +913,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                 )}
                               </div>
                             )}
-                            {/* Source label */}
                             <p className="text-[10px] text-gray-400 mt-1">{fu.source}</p>
                           </div>
                           {/* Actions */}
@@ -863,7 +991,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       </button>
                     </div>
 
-                    {/* Meeting switcher — only when company has >1 meeting */}
                     {selectedCompany.meetingCards.length > 1 && (
                       <div className="flex gap-1 mt-2 overflow-x-auto hide-scrollbar">
                         {selectedCompany.meetingCards.map((m, idx) => (
@@ -884,17 +1011,17 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                     )}
                   </div>
 
-                  {/* Col 4 content — keyed for 150ms fade on meeting switch */}
+                  {/* Col 4 content — all sections default collapsed, keyed for 150ms fade */}
                   <div
                     key={col4FadeKey}
                     className="flex-1 overflow-y-auto"
                     style={{ animation: 'debriefFadeIn 0.15s ease-out' }}
                   >
-                    {/* Summary */}
+                    {/* Summary — default collapsed */}
                     <Col4Section
                       title="Meeting Summary"
                       count={0}
-                      isOpen={col4Sections.summary ?? true}
+                      isOpen={col4Sections.summary ?? false}
                       onToggle={() => setCol4Sections(prev => ({ ...prev, summary: !prev.summary }))}
                     >
                       {activeMeeting.summary ? (
@@ -925,7 +1052,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       );
                     })()}
 
-                    {/* Buying Signals */}
+                    {/* Buying Signals — quote hidden behind toggle */}
                     {(() => {
                       const items = activeMeeting.insights.filter(i => i.insight_type === 'buying_signal');
                       return (
@@ -938,16 +1065,33 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                           {items.length === 0 ? (
                             <p className="text-xs text-gray-400 italic">None identified.</p>
                           ) : items.map(i => (
-                            <div key={i.id} className="text-xs text-gray-700 leading-snug">
-                              · {i.content}
-                              {i.quote && <p className="text-[10px] text-gray-400 italic mt-0.5">&ldquo;{i.quote}&rdquo;</p>}
+                            <div key={i.id} className="space-y-0.5">
+                              <p className="text-xs text-gray-700 leading-snug">· {i.content}</p>
+                              {i.quote && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedQuoteIds(prev => {
+                                      const n = new Set(prev);
+                                      n.has(i.id) ? n.delete(i.id) : n.add(i.id);
+                                      return n;
+                                    })}
+                                    className="block text-[10px] text-brand-secondary hover:underline ml-3"
+                                  >
+                                    {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
+                                  </button>
+                                  {expandedQuoteIds.has(i.id) && (
+                                    <p className="text-[10px] text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
+                                  )}
+                                </>
+                              )}
                             </div>
                           ))}
                         </Col4Section>
                       );
                     })()}
 
-                    {/* Pain Points */}
+                    {/* Pain Points — quote hidden behind toggle */}
                     {(() => {
                       const items = activeMeeting.insights.filter(i => i.insight_type === 'pain_point');
                       return (
@@ -960,9 +1104,26 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                           {items.length === 0 ? (
                             <p className="text-xs text-gray-400 italic">None identified.</p>
                           ) : items.map(i => (
-                            <div key={i.id} className="text-xs text-gray-700 leading-snug">
-                              · {i.content}
-                              {i.quote && <p className="text-[10px] text-gray-400 italic mt-0.5">&ldquo;{i.quote}&rdquo;</p>}
+                            <div key={i.id} className="space-y-0.5">
+                              <p className="text-xs text-gray-700 leading-snug">· {i.content}</p>
+                              {i.quote && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedQuoteIds(prev => {
+                                      const n = new Set(prev);
+                                      n.has(i.id) ? n.delete(i.id) : n.add(i.id);
+                                      return n;
+                                    })}
+                                    className="block text-[10px] text-brand-secondary hover:underline ml-3"
+                                  >
+                                    {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
+                                  </button>
+                                  {expandedQuoteIds.has(i.id) && (
+                                    <p className="text-[10px] text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
+                                  )}
+                                </>
+                              )}
                             </div>
                           ))}
                         </Col4Section>
