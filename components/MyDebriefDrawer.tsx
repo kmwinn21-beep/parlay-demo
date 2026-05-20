@@ -152,7 +152,7 @@ function parseTaskLines(text: string | null | undefined): string[] {
 
 function fmtDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   } catch {
     return iso;
   }
@@ -353,19 +353,13 @@ function Col4Section({
 function NoteCard({ note }: { note: DebriefNote }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {note.note_type && (
+      {note.attendee_name && (
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-primary/10 text-brand-primary">
-            {note.note_type}
-          </span>
-        )}
-        {note.attendee_name && (
-          <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
             {note.attendee_name}
           </span>
-        )}
-      </div>
-      <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{note.content}</p>
+        </div>
+      )}
       <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1 border-t border-gray-100">
         {note.rep ? <span>{note.rep}</span> : <span />}
         <span>{fmtDate(note.created_at)}</span>
@@ -564,14 +558,16 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
   const content = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-5"
+      className="fixed inset-0 z-50"
       style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
     >
       <style>{`
         @keyframes debriefFadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
+      {/* Center within the area to the right of the sidebar (w-64 = 16rem) */}
+      <div className="absolute top-0 bottom-0 right-0 flex items-center justify-center p-5" style={{ left: '16rem' }}>
 
-      <div className="w-[90vw] max-w-[1400px] h-[85vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-[1200px] h-[85vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
 
         {/* ── Header ── */}
         <div className="bg-brand-primary flex-shrink-0">
@@ -650,8 +646,8 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
         {!loading && !error && data && (
           <div className="flex flex-1 overflow-hidden">
 
-            {/* Col 1 — Company list (1.5× wider = 21rem) */}
-            <div className="w-[21rem] flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+            {/* Col 1 — Company list */}
+            <div className="w-56 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
               <div className="px-3 py-2 border-b border-gray-100">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
@@ -675,23 +671,28 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                         : 'border-l-transparent hover:bg-gray-50'
                     }`}
                   >
-                    <p className={`text-sm font-semibold truncate leading-snug ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
-                      {co.name}
-                    </p>
-                    {/* Only tier badge + due pill — no subtitle text */}
-                    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                      {co.tier && <TierBadge tier={co.tier} />}
+                    {/* Name row with due pill pinned to upper right */}
+                    <div className="flex items-start justify-between gap-1">
+                      <p className={`text-sm font-semibold leading-snug min-w-0 ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
+                        {co.name}
+                      </p>
                       {allDone && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">
+                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">
                           Done
                         </span>
                       )}
                       {!allDone && openFus > 0 && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-600">
+                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-600">
                           {openFus} due
                         </span>
                       )}
                     </div>
+                    {/* Tier badge below */}
+                    {co.tier && co.tier !== 'unassigned' && (
+                      <div className="mt-1">
+                        <TierBadge tier={co.tier} />
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -723,11 +724,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       <StatPill>{selectedCompany.meetingsHeld} meeting{selectedCompany.meetingsHeld !== 1 ? 's' : ''} held</StatPill>
                       {selectedCompany.touchpointCount > 0 && (
                         <StatPill>{selectedCompany.touchpointCount} touchpoint{selectedCompany.touchpointCount !== 1 ? 's' : ''}</StatPill>
-                      )}
-                      {selectedCompany.openFollowUpCount > 0 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border border-rose-200 bg-rose-50 text-rose-600">
-                          {selectedCompany.openFollowUpCount} open FU{selectedCompany.openFollowUpCount !== 1 ? 's' : ''}
-                        </span>
                       )}
                     </div>
                   </div>
@@ -1159,6 +1155,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
           </div>
         )}
+      </div>
       </div>
     </div>
   );
