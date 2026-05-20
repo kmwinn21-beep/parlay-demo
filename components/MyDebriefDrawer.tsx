@@ -940,7 +940,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                           ) : items.map(i => (
                             <div key={i.id} className="text-xs text-gray-700 leading-snug">
                               · {i.content}
-                              {i.quote && <p className="text-[10px] text-gray-400 italic mt-0.5">"{i.quote}"</p>}
+                              {i.quote && <p className="text-[10px] text-gray-400 italic mt-0.5">&ldquo;{i.quote}&rdquo;</p>}
                             </div>
                           ))}
                         </Col4Section>
@@ -962,7 +962,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                           ) : items.map(i => (
                             <div key={i.id} className="text-xs text-gray-700 leading-snug">
                               · {i.content}
-                              {i.quote && <p className="text-[10px] text-gray-400 italic mt-0.5">"{i.quote}"</p>}
+                              {i.quote && <p className="text-[10px] text-gray-400 italic mt-0.5">&ldquo;{i.quote}&rdquo;</p>}
                             </div>
                           ))}
                         </Col4Section>
