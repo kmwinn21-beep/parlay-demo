@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/debrief-notifications",
+      "schedule": "0 23 * * *"
+    }
+  ]
+}
