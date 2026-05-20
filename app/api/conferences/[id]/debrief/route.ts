@@ -151,7 +151,7 @@ export async function GET(
     // 6. Aggregate by company
     type CompanyData = {
       id: number; name: string; tier: string | null;
-      status: string | null; icp: string | null;
+      status: string | null; icp: string | null; wse: number | null;
       attendeeIds: Set<number>;
       attendeeInfo: Map<number, { name: string; title: string | null }>;
       meetingRows: Record<string, unknown>[];
@@ -165,7 +165,7 @@ export async function GET(
         companyMap.set(companyId, {
           id: companyId, name: companyName,
           tier: tierByCompany.get(companyId) ?? null,
-          status: null, icp: null,
+          status: null, icp: null, wse: null,
           attendeeIds: new Set(), attendeeInfo: new Map(),
           meetingRows: [], followUps: [],
         });
@@ -216,7 +216,7 @@ export async function GET(
           args: [...companyIds, conferenceId, conferenceId, conferenceId],
         }),
         db.execute({
-          sql: `SELECT id, status, icp FROM companies WHERE id IN (${ph})`,
+          sql: `SELECT id, status, icp, wse FROM companies WHERE id IN (${ph})`,
           args: companyIds,
         }),
       ]).catch(() => [{ rows: [] }, { rows: [] }] as [{ rows: unknown[] }, { rows: unknown[] }]);
@@ -240,6 +240,7 @@ export async function GET(
         if (co) {
           co.status = row.status ? String(row.status) : null;
           co.icp = row.icp ? String(row.icp) : null;
+          co.wse = row.wse != null ? Number(row.wse) : null;
         }
       }
     }
@@ -298,6 +299,7 @@ export async function GET(
         tier: co.tier,
         status: co.status,
         icp: co.icp,
+        wse: co.wse,
         attendeeCount: co.attendeeIds.size,
         meetingCount: co.meetingRows.length,
         meetingsHeld: co.meetingRows.filter(m => String(m.outcome_key) === 'meeting_held').length,

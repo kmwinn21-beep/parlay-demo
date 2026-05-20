@@ -85,6 +85,7 @@ interface DebriefCompany {
   tier: string | null;
   status: string | null;
   icp: string | null;
+  wse: number | null;
   attendeeCount: number;
   meetingCount: number;
   meetingsHeld: number;
@@ -215,7 +216,7 @@ function StatTile({ label, value, sub }: { label: string; value: string | number
   return (
     <div className="flex flex-col items-center justify-center px-4 py-3 border-r border-white/20 last:border-r-0 min-w-[90px] flex-shrink-0">
       <span className="text-xl font-bold text-white leading-tight">{value}</span>
-      <span className="text-[10px] text-white/70 mt-0.5 text-center leading-tight">{label}</span>
+      <span className="text-xs text-white/70 mt-0.5 text-center leading-tight">{label}</span>
       {sub && <span className="text-[9px] text-white/50">{sub}</span>}
     </div>
   );
@@ -225,7 +226,7 @@ function MobileStatCell({ label, value }: { label: string; value: string | numbe
   return (
     <div className="flex flex-col items-center justify-center py-2.5 px-2 border-b border-white/10 border-r border-r-white/10 last:border-r-0">
       <span className="text-lg font-bold text-white leading-tight">{value}</span>
-      <span className="text-[10px] text-white/60 mt-0.5 text-center leading-tight">{label}</span>
+      <span className="text-xs text-white/60 mt-0.5 text-center leading-tight">{label}</span>
     </div>
   );
 }
@@ -240,7 +241,7 @@ function InsightChip({ type, count }: { type: string; count: number }) {
   const m = map[type];
   if (!m) return null;
   return (
-    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${m.cls}`}>
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${m.cls}`}>
       {count} {m.label}{count > 1 ? 's' : ''}
     </span>
   );
@@ -266,7 +267,7 @@ function PipelineBar({
     <div>
       <div className="flex items-baseline justify-between mb-0.5">
         <span className="text-[9px] text-white/60 uppercase tracking-wide">{label}</span>
-        <span className="text-[10px] text-white font-semibold">{fmt$(value)}</span>
+        <span className="text-xs text-white font-semibold">{fmt$(value)}</span>
       </div>
       <div className="h-2 bg-white/20 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${barColor ?? 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
@@ -296,7 +297,7 @@ function Col4Section({
         <span className="text-xs font-semibold text-gray-700">{title}</span>
         <div className="flex items-center gap-2">
           {count > 0 && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">
               {count}
             </span>
           )}
@@ -312,17 +313,28 @@ function Col4Section({
 }
 
 function NoteCard({ note }: { note: DebriefNote }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = note.content.length > 200;
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
       {note.attendee_name && (
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-primary/10 text-brand-primary">
+          <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-semibold bg-brand-primary/10 text-brand-primary">
             {note.attendee_name}
           </span>
         </div>
       )}
-      <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{note.content}</p>
-      <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1 border-t border-gray-100">
+      <p className={`text-xs text-gray-700 leading-relaxed ${expanded ? '' : 'line-clamp-4'}`}>{note.content}</p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs text-brand-secondary hover:underline"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+      <div className="flex items-center justify-between text-xs text-gray-400 pt-1 border-t border-gray-100">
         {note.rep ? <span>{note.rep}</span> : <span />}
         <span>{fmtDate(note.created_at)}</span>
       </div>
@@ -384,7 +396,7 @@ function MeetingNotesPanel({
                 key={m.meetingId}
                 type="button"
                 onClick={() => switchMeeting(m.meetingId)}
-                className={`flex-shrink-0 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                className={`flex-shrink-0 px-2 py-1 rounded text-xs font-medium transition-colors ${
                   m.meetingId === activeMeetingId
                     ? 'bg-brand-primary text-white'
                     : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
@@ -399,6 +411,19 @@ function MeetingNotesPanel({
 
       {/* Panel content */}
       <div key={col4FadeKey} className="flex-1 overflow-y-auto" style={{ animation: 'debriefFadeIn 0.15s ease-out' }}>
+        {activeMeeting.notesText && (
+          <Col4Section
+            title="User Notes"
+            count={0}
+            isOpen={col4Sections.userNotes ?? true}
+            onToggle={() => setCol4Sections(prev => ({ ...prev, userNotes: !prev.userNotes }))}
+          >
+            <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+              <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{activeMeeting.notesText}</p>
+            </div>
+          </Col4Section>
+        )}
+
         <Col4Section
           title="Meeting Summary"
           count={0}
@@ -407,10 +432,8 @@ function MeetingNotesPanel({
         >
           {activeMeeting.summary ? (
             <p className="text-xs text-gray-600 leading-relaxed">{activeMeeting.summary}</p>
-          ) : activeMeeting.notesText ? (
-            <p className="text-xs text-gray-600 leading-relaxed">{activeMeeting.notesText}</p>
           ) : (
-            <p className="text-xs text-gray-400 italic">No summary available.</p>
+            <p className="text-xs text-gray-400 italic">No AI summary available.</p>
           )}
         </Col4Section>
 
@@ -451,12 +474,12 @@ function MeetingNotesPanel({
                           n.has(i.id) ? n.delete(i.id) : n.add(i.id);
                           return n;
                         })}
-                        className="block text-[10px] text-brand-secondary hover:underline ml-3"
+                        className="block text-xs text-brand-secondary hover:underline ml-3"
                       >
                         {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
                       </button>
                       {expandedQuoteIds.has(i.id) && (
-                        <p className="text-[10px] text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
+                        <p className="text-xs text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
                       )}
                     </>
                   )}
@@ -475,7 +498,7 @@ function MeetingNotesPanel({
               onToggle={() => setCol4Sections(prev => ({ ...prev, transcript: !prev.transcript }))}>
               {segments.map((s, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5 font-mono">
+                  <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5 font-mono">
                     {Math.floor((s.start ?? 0) / 60)}:{String(Math.round((s.start ?? 0) % 60)).padStart(2, '0')}
                   </span>
                   <p className="text-[11px] text-gray-600 leading-snug">{s.text}</p>
@@ -717,7 +740,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                   </svg>
                 </button>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-white/60 font-semibold uppercase tracking-widest">Field Report</p>
+                  <p className="text-xs text-white/60 font-semibold uppercase tracking-widest">Field Report</p>
                   <h2 className="text-base font-bold text-white font-serif leading-tight truncate">
                     {data?.conference.name ?? 'Loading…'}
                   </h2>
@@ -839,14 +862,14 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 mobileTab === 'companies' ? 'flex' : 'hidden',
                 // Desktop: always shown (overrides hidden), collapsible width
                 `sm:flex sm:flex-col sm:flex-shrink-0 sm:border-r sm:border-gray-200 sm:bg-white sm:overflow-hidden sm:transition-all sm:duration-200 sm:ease-out`,
-                col1Collapsed ? 'sm:w-8' : 'sm:w-56',
+                col1Collapsed ? 'sm:w-8' : 'sm:w-72',
                 // Mobile: full width
                 'flex-col w-full',
               ].join(' ')}>
                 {/* Header with collapse toggle (desktop only) */}
                 <div className="hidden sm:flex items-center justify-between px-2 py-2 border-b border-gray-100 flex-shrink-0">
                   {!col1Collapsed && (
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                       {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
                     </p>
                   )}
@@ -864,14 +887,14 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 </div>
                 {/* Mobile header */}
                 <div className="sm:hidden px-3 py-2 border-b border-gray-100">
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
                   </p>
                 </div>
 
                 {/* Company list — hidden when desktop-collapsed */}
                 {(!col1Collapsed || true) && (
-                  <div className={`overflow-y-auto flex-1 ${col1Collapsed ? 'sm:hidden' : ''}`}>
+                  <div className={`overflow-y-auto flex-1 p-2 space-y-2 ${col1Collapsed ? 'sm:hidden' : ''}`}>
                     {sortedCompanies.length === 0 && (
                       <p className="text-sm text-gray-400 p-4 text-center">No company activity found.</p>
                     )}
@@ -888,21 +911,43 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                             setActiveMeetingId(null);
                             setMobileTab('activity');
                           }}
-                          className={`w-full text-left px-3 py-3 border-b border-gray-50 transition-colors border-l-2 ${
-                            isSelected
-                              ? 'bg-rose-50 border-l-rose-500'
-                              : 'border-l-transparent hover:bg-gray-50'
+                          className={`w-full text-left bg-white rounded-xl p-3 border-2 transition-all hover:shadow-sm ${
+                            isSelected ? 'border-brand-primary' : 'border-gray-200'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-1">
-                            <p className={`text-sm font-semibold leading-snug min-w-0 ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
+                          <div className="flex items-start justify-between gap-1 mb-1.5">
+                            <p className={`text-sm font-semibold leading-snug min-w-0 truncate ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
                               {co.name}
                             </p>
                             {allDone && (
-                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">Done</span>
+                              <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Done
+                              </span>
                             )}
                             {!allDone && openFus > 0 && (
-                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-600">{openFus} due</span>
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-600 border border-rose-200">
+                                {openFus} due
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {co.status && co.status !== 'Unknown' && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[co.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                                {co.status}
+                              </span>
+                            )}
+                            {co.icp && co.icp !== 'No' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                ICP
+                              </span>
+                            )}
+                            {co.wse != null && co.wse > 0 && (
+                              <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                                {fmt$(co.wse)}
+                              </span>
                             )}
                           </div>
                         </button>
@@ -928,12 +973,12 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {selectedCompany.status && selectedCompany.status !== 'Unknown' && (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
                             {selectedCompany.status}
                           </span>
                         )}
                         {selectedCompany.icp && selectedCompany.icp !== 'No' && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700">ICP</span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">ICP</span>
                         )}
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600">
                           {selectedCompany.attendeeCount} attendee{selectedCompany.attendeeCount !== 1 ? 's' : ''}
@@ -957,19 +1002,25 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                           {selectedCompany.attendees.map(a => (
                             <div key={a.id} className="border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
                               <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
-                              {a.title && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{a.title}</p>}
-                              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                              {a.title && <p className="text-xs text-gray-400 mt-0.5 truncate">{a.title}</p>}
+                              <div className="flex flex-col gap-1 mt-1.5">
                                 {a.meetingCount > 0 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-primary/10 text-brand-primary">{a.meetingCount} mtg</span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-brand-primary/10 text-brand-primary">
+                                    {a.meetingCount} Meeting{a.meetingCount !== 1 ? 's' : ''}
+                                  </span>
                                 )}
                                 {a.touchpointCount > 0 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">{a.touchpointCount} tp</span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                    {a.touchpointCount} Touchpoint{a.touchpointCount !== 1 ? 's' : ''}
+                                  </span>
                                 )}
                                 {a.followUpCount > 0 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-100 text-rose-600">{a.followUpCount} fu</span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-600">
+                                    {a.followUpCount} Follow-Up{a.followUpCount !== 1 ? 's' : ''}
+                                  </span>
                                 )}
                                 {a.meetingCount === 0 && a.touchpointCount === 0 && a.followUpCount === 0 && (
-                                  <span className="text-[10px] text-gray-300 italic">No activity</span>
+                                  <span className="text-xs text-gray-300 italic">No activity</span>
                                 )}
                               </div>
                             </div>
@@ -1052,7 +1103,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 'flex-col w-full overflow-y-auto',
               ].join(' ')}>
                 <div className="px-4 py-2.5 border-b border-gray-100 flex-shrink-0">
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Follow-ups</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Follow-ups</p>
                   {selectedCompany && <p className="text-xs text-gray-500 mt-0.5">{selectedCompany.name}</p>}
                 </div>
                 {!selectedCompany ? (
@@ -1080,7 +1131,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                   }`}>{fu.nextSteps}</span>
                                 )}
                                 {fu.attendeeName && (
-                                  <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                                  <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                                     {fu.attendeeName}
                                   </span>
                                 )}
@@ -1102,7 +1153,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                           n.has(fu.id) ? n.delete(fu.id) : n.add(fu.id);
                                           return n;
                                         })}
-                                        className="text-[10px] text-brand-secondary hover:underline mt-0.5"
+                                        className="text-xs text-brand-secondary hover:underline mt-0.5"
                                       >
                                         {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
                                       </button>
@@ -1110,7 +1161,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                   )}
                                 </div>
                               )}
-                              <p className="text-[10px] text-gray-400 mt-1">{fu.source}</p>
+                              <p className="text-xs text-gray-400 mt-1">{fu.source}</p>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button

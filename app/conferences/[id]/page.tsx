@@ -46,6 +46,7 @@ import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/title
 import { ClassifyTitleModal } from '@/components/ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
+import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 
 interface Attendee {
   id: number;
@@ -362,6 +363,8 @@ export default function ConferenceDetailPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addFormData, setAddFormData] = useState({ first_name: '', last_name: '', title: '', company: '', email: '' });
   const [isAddingAttendee, setIsAddingAttendee] = useState(false);
+
+  const { openMeetingNotes } = useMeetingNotesDrawer();
 
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
@@ -2277,6 +2280,7 @@ export default function ConferenceDetailPage() {
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
               userOptions={userOptions}
+              onNotesClick={(meetingId) => openMeetingNotes(meetingId)}
               onOutcomeChange={async (meetingId, outcome) => {
                 setConfMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
                 try {
