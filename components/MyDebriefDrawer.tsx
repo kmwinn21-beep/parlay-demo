@@ -110,20 +110,6 @@ interface DebriefData {
 
 const TIER_ORDER: Record<string, number> = { must_target: 0, high_priority: 1, worth_engaging: 2, unassigned: 3 };
 
-const TIER_LABELS: Record<string, string> = {
-  must_target: 'Must Target',
-  high_priority: 'High Priority',
-  worth_engaging: 'Worth Engaging',
-  unassigned: 'Unassigned',
-};
-
-const TIER_COLORS: Record<string, string> = {
-  must_target: 'bg-red-100 text-red-700',
-  high_priority: 'bg-orange-100 text-orange-700',
-  worth_engaging: 'bg-yellow-100 text-yellow-700',
-  unassigned: 'bg-gray-100 text-gray-500',
-};
-
 const STATUS_COLORS: Record<string, string> = {
   Client: 'bg-yellow-100 text-yellow-700',
   Priority: 'bg-red-100 text-red-700',
@@ -225,29 +211,21 @@ function computeRepSes(repName: string, effData: Record<string, unknown>): numbe
 
 // ─── UI sub-components ────────────────────────────────────────────────────────
 
-function TierBadge({ tier }: { tier: string | null }) {
-  const t = tier ?? 'unassigned';
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${TIER_COLORS[t] ?? 'bg-gray-100 text-gray-500'}`}>
-      {TIER_LABELS[t] ?? t}
-    </span>
-  );
-}
-
-function StatPill({ children, cls }: { children: ReactNode; cls?: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600 ${cls ?? ''}`}>
-      {children}
-    </span>
-  );
-}
-
 function StatTile({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-3 border-r border-white/20 last:border-r-0 min-w-[90px] flex-shrink-0">
       <span className="text-xl font-bold text-white leading-tight">{value}</span>
       <span className="text-[10px] text-white/70 mt-0.5 text-center leading-tight">{label}</span>
       {sub && <span className="text-[9px] text-white/50">{sub}</span>}
+    </div>
+  );
+}
+
+function MobileStatCell({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-2.5 px-2 border-b border-white/10 border-r border-r-white/10 last:border-r-0">
+      <span className="text-lg font-bold text-white leading-tight">{value}</span>
+      <span className="text-[10px] text-white/60 mt-0.5 text-center leading-tight">{label}</span>
     </div>
   );
 }
@@ -291,35 +269,22 @@ function PipelineBar({
         <span className="text-[10px] text-white font-semibold">{fmt$(value)}</span>
       </div>
       <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${barColor ?? 'bg-emerald-400'}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={`h-full rounded-full transition-all ${barColor ?? 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between mt-0.5">
         {goal != null ? (
           <span className="text-[9px] text-white/50">{goalPct != null ? `${goalPct}%` : ''} of {fmt$(goal)}</span>
         ) : <span />}
-        {teamPct != null && (
-          <span className="text-[9px] text-white/50">{teamPct}% of team</span>
-        )}
+        {teamPct != null && <span className="text-[9px] text-white/50">{teamPct}% of team</span>}
       </div>
     </div>
   );
 }
 
 function Col4Section({
-  title,
-  count,
-  isOpen,
-  onToggle,
-  children,
+  title, count, isOpen, onToggle, children,
 }: {
-  title: string;
-  count: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
+  title: string; count: number; isOpen: boolean; onToggle: () => void; children: ReactNode;
 }) {
   return (
     <div className="border-b border-gray-100">
@@ -335,12 +300,8 @@ function Col4Section({
               {count}
             </span>
           )}
-          <svg
-            className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
@@ -369,7 +330,168 @@ function NoteCard({ note }: { note: DebriefNote }) {
   );
 }
 
+// Shared meeting notes panel — used by both desktop col4 and mobile overlay
+function MeetingNotesPanel({
+  activeMeeting,
+  selectedCompany,
+  activeMeetingId,
+  col4Sections,
+  setCol4Sections,
+  col4FadeKey,
+  expandedQuoteIds,
+  setExpandedQuoteIds,
+  switchMeeting,
+  onClose,
+}: {
+  activeMeeting: MeetingCard;
+  selectedCompany: DebriefCompany;
+  activeMeetingId: number | null;
+  col4Sections: Record<string, boolean>;
+  setCol4Sections: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void;
+  col4FadeKey: number;
+  expandedQuoteIds: Set<number>;
+  setExpandedQuoteIds: (fn: (prev: Set<number>) => Set<number>) => void;
+  switchMeeting: (id: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {/* Panel header */}
+      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate">
+              Meeting with {activeMeeting.attendeeName}
+            </p>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {activeMeeting.date && <span className="text-[11px] text-gray-400">{activeMeeting.date}</span>}
+              {activeMeeting.meetingType && <span className="text-[11px] text-gray-400">{activeMeeting.meetingType}</span>}
+              <span className={`text-[11px] font-medium ${activeMeeting.isHeld ? 'text-green-600' : 'text-gray-400'}`}>
+                {activeMeeting.isHeld ? 'Held' : activeMeeting.outcome ?? 'Scheduled'}
+              </span>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {selectedCompany.meetingCards.length > 1 && (
+          <div className="flex gap-1 mt-2 overflow-x-auto hide-scrollbar">
+            {selectedCompany.meetingCards.map((m, idx) => (
+              <button
+                key={m.meetingId}
+                type="button"
+                onClick={() => switchMeeting(m.meetingId)}
+                className={`flex-shrink-0 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                  m.meetingId === activeMeetingId
+                    ? 'bg-brand-primary text-white'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {m.date ?? `Meeting ${idx + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Panel content */}
+      <div key={col4FadeKey} className="flex-1 overflow-y-auto" style={{ animation: 'debriefFadeIn 0.15s ease-out' }}>
+        <Col4Section
+          title="Meeting Summary"
+          count={0}
+          isOpen={col4Sections.summary ?? false}
+          onToggle={() => setCol4Sections(prev => ({ ...prev, summary: !prev.summary }))}
+        >
+          {activeMeeting.summary ? (
+            <p className="text-xs text-gray-600 leading-relaxed">{activeMeeting.summary}</p>
+          ) : activeMeeting.notesText ? (
+            <p className="text-xs text-gray-600 leading-relaxed">{activeMeeting.notesText}</p>
+          ) : (
+            <p className="text-xs text-gray-400 italic">No summary available.</p>
+          )}
+        </Col4Section>
+
+        {(() => {
+          const items = activeMeeting.insights.filter(i => i.insight_type === 'next_step');
+          return (
+            <Col4Section title="Action Items" count={items.length}
+              isOpen={col4Sections.actions ?? false}
+              onToggle={() => setCol4Sections(prev => ({ ...prev, actions: !prev.actions }))}>
+              {items.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">None identified.</p>
+              ) : items.map(i => (
+                <div key={i.id} className="text-xs text-gray-700 leading-snug">· {i.content}</div>
+              ))}
+            </Col4Section>
+          );
+        })()}
+
+        {(['buying_signal', 'pain_point'] as const).map(type => {
+          const title = type === 'buying_signal' ? 'Buying Signals' : 'Pain Points';
+          const key = type === 'buying_signal' ? 'buying' : 'pain';
+          const items = activeMeeting.insights.filter(i => i.insight_type === type);
+          return (
+            <Col4Section key={type} title={title} count={items.length}
+              isOpen={col4Sections[key] ?? false}
+              onToggle={() => setCol4Sections(prev => ({ ...prev, [key]: !prev[key] }))}>
+              {items.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">None identified.</p>
+              ) : items.map(i => (
+                <div key={i.id} className="space-y-0.5">
+                  <p className="text-xs text-gray-700 leading-snug">· {i.content}</p>
+                  {i.quote && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedQuoteIds(prev => {
+                          const n = new Set(prev);
+                          n.has(i.id) ? n.delete(i.id) : n.add(i.id);
+                          return n;
+                        })}
+                        className="block text-[10px] text-brand-secondary hover:underline ml-3"
+                      >
+                        {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
+                      </button>
+                      {expandedQuoteIds.has(i.id) && (
+                        <p className="text-[10px] text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </Col4Section>
+          );
+        })}
+
+        {(() => {
+          const segments = (activeMeeting.transcript ?? []) as TranscriptSegment[];
+          if (segments.length === 0) return null;
+          return (
+            <Col4Section title="Transcript" count={segments.length}
+              isOpen={col4Sections.transcript ?? false}
+              onToggle={() => setCol4Sections(prev => ({ ...prev, transcript: !prev.transcript }))}>
+              {segments.map((s, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5 font-mono">
+                    {Math.floor((s.start ?? 0) / 60)}:{String(Math.round((s.start ?? 0) % 60)).padStart(2, '0')}
+                  </span>
+                  <p className="text-[11px] text-gray-600 leading-snug">{s.text}</p>
+                </div>
+              ))}
+            </Col4Section>
+          );
+        })()}
+      </div>
+    </>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
+
+type MobileTab = 'companies' | 'activity' | 'followups';
 
 interface Props {
   conferenceId: number;
@@ -393,6 +515,8 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const [expandedQuoteIds, setExpandedQuoteIds] = useState<Set<number>>(new Set());
   const [companyNotes, setCompanyNotes] = useState<DebriefNote[]>([]);
   const [col1Collapsed, setCol1Collapsed] = useState(false);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('activity');
+  const [statsOpen, setStatsOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -427,14 +551,11 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     if (isOpen && data === null && !loading) fetchData();
   }, [isOpen, data, loading, fetchData]);
 
-  // Fetch notes for selected company filtered to this conference
   useEffect(() => {
     if (!selectedCompanyId || !data) { setCompanyNotes([]); return; }
     fetch(`/api/notes?entity_type=company&entity_id=${selectedCompanyId}`)
       .then(r => r.ok ? r.json() : [])
-      .then((notes: DebriefNote[]) => {
-        setCompanyNotes(notes.filter(n => n.conference_name === data.conference.name));
-      })
+      .then((notes: DebriefNote[]) => setCompanyNotes(notes.filter(n => n.conference_name === data.conference.name)))
       .catch(() => setCompanyNotes([]));
   }, [selectedCompanyId, data]);
 
@@ -557,619 +678,528 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     setExpandedQuoteIds(new Set());
   }, []);
 
+  const closeMeetingPanel = useCallback(() => {
+    setActiveMeetingId(null);
+  }, []);
+
   if (!isOpen) return null;
 
   const content = (
-    <div
-      className="fixed inset-0 z-50"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-    >
+    <div className="fixed inset-0 z-50">
       <style>{`
         @keyframes debriefFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
       `}</style>
-      {/* Center within the area to the right of the sidebar (w-64 = 16rem) */}
-      <div className="absolute top-0 bottom-0 right-0 flex items-center justify-center p-5" style={{ left: '16rem' }}>
 
-      <div className="w-full max-w-[1200px] h-[85vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
+      {/* Dark backdrop — desktop only (mobile uses full-screen modal) */}
+      <div className="hidden sm:block absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} />
 
-        {/* ── Header ── */}
-        <div className="bg-brand-primary flex-shrink-0">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-white/20">
-            <div className="flex items-center gap-3">
-              <button onClick={onClose} className="text-white/70 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <div>
-                <p className="text-[10px] text-white/60 font-semibold uppercase tracking-widest">My Debrief</p>
-                <h2 className="text-base font-bold text-white font-serif leading-tight">
-                  {data?.conference.name ?? 'Loading…'}
-                </h2>
+      {/* Mobile: full-screen white backdrop */}
+      <div className="sm:hidden absolute inset-0 bg-black/30" />
+
+      {/* ── Centering wrapper ──
+          Mobile: absolute inset-0 (full screen)
+          Desktop: starts at sidebar right edge (left-64), flex centered */}
+      <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+
+        {/* Modal box — full-screen on mobile, contained on desktop */}
+        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
+
+          {/* ── Header ── */}
+          <div className="bg-brand-primary flex-shrink-0">
+
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-white/20">
+              <div className="flex items-center gap-3 min-w-0">
+                <button onClick={onClose} className="text-white/70 hover:text-white transition-colors flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-white/60 font-semibold uppercase tracking-widest">Field Report</p>
+                  <h2 className="text-base font-bold text-white font-serif leading-tight truncate">
+                    {data?.conference.name ?? 'Loading…'}
+                  </h2>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {data && <p className="text-xs text-white/60 hidden sm:block">{data.conference.location}</p>}
+                {/* Mobile stats toggle */}
+                {data && (
+                  <button
+                    type="button"
+                    onClick={() => setStatsOpen(v => !v)}
+                    className="sm:hidden text-white/70 hover:text-white transition-colors p-1"
+                    aria-label={statsOpen ? 'Collapse stats' : 'Expand stats'}
+                  >
+                    <svg className={`w-5 h-5 transition-transform duration-200 ${statsOpen ? '' : 'rotate-180'}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
-            {data && <p className="text-xs text-white/60 hidden sm:block">{data.conference.location}</p>}
+
+            {/* ── Mobile stats grid (collapsible) ── */}
+            {data && (
+              <div className={`sm:hidden ${statsOpen ? 'block' : 'hidden'}`}>
+                <div className="grid grid-cols-3 border-t border-white/10">
+                  <MobileStatCell label="Companies" value={data.stats.companiesEngaged} />
+                  <MobileStatCell label="Meetings" value={data.stats.meetingsHeld} />
+                  <MobileStatCell label="Touchpoints" value={data.stats.touchpoints} />
+                  <MobileStatCell label="Follow-ups Due" value={followUpsDue} />
+                  <MobileStatCell
+                    label="Sales Exec"
+                    value={repSesScore != null ? `${repSesScore}/100` : '—'}
+                  />
+                  <div className="py-2.5 px-2 border-b border-white/10" /> {/* spacer */}
+                </div>
+                {pipelineByRep && (pipelineByRep.repPipeline != null || pipelineByRep.total > 0) && (
+                  <div className="px-4 py-3 space-y-2.5 border-t border-white/10">
+                    <PipelineBar label="My Pipeline Influence" value={pipelineByRep.repPipeline ?? 0} goal={pipelineByRep.repShare} teamTotal={pipelineByRep.total} barColor="bg-emerald-400" />
+                    <PipelineBar label="Team vs. Goal" value={pipelineByRep.total} goal={pipelineByRep.goal} barColor="bg-sky-400" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Desktop stats bar (always visible) ── */}
+            {data && (
+              <div className="hidden sm:flex items-stretch overflow-x-auto hide-scrollbar">
+                <StatTile label="Companies" value={data.stats.companiesEngaged} />
+                <StatTile label="Meetings Held" value={data.stats.meetingsHeld} />
+                <StatTile label="Touchpoints" value={data.stats.touchpoints} />
+                <StatTile label="Follow-ups Due" value={followUpsDue} />
+                <StatTile
+                  label="Sales Exec Score"
+                  value={repSesScore != null ? String(repSesScore) : '—'}
+                  sub={repSesScore != null ? '/100' : undefined}
+                />
+                {pipelineByRep && (pipelineByRep.repPipeline != null || pipelineByRep.total > 0) && (
+                  <div className="flex flex-col justify-center px-5 py-2 border-l border-white/20 min-w-[400px] max-w-[480px] flex-shrink-0 gap-2.5">
+                    <PipelineBar label="My Pipeline Influence" value={pipelineByRep.repPipeline ?? 0} goal={pipelineByRep.repShare} teamTotal={pipelineByRep.total} barColor="bg-emerald-400" />
+                    <PipelineBar label="Team vs. Goal" value={pipelineByRep.total} goal={pipelineByRep.goal} barColor="bg-sky-400" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Stats bar */}
-          {data && (
-            <div className="flex items-stretch overflow-x-auto hide-scrollbar">
-              <StatTile label="Companies" value={data.stats.companiesEngaged} />
-              <StatTile label="Meetings Held" value={data.stats.meetingsHeld} />
-              <StatTile label="Touchpoints" value={data.stats.touchpoints} />
-              <StatTile label="Follow-ups Due" value={followUpsDue} />
-              <StatTile
-                label="Sales Exec Score"
-                value={repSesScore != null ? String(repSesScore) : '—'}
-                sub={repSesScore != null ? '/100' : undefined}
-              />
-              {/* Pipeline bars — double width, colored bars */}
-              {pipelineByRep && (pipelineByRep.repPipeline != null || pipelineByRep.total > 0) && (
-                <div className="flex flex-col justify-center px-5 py-2 border-l border-white/20 min-w-[400px] max-w-[480px] flex-shrink-0 gap-2.5">
-                  <PipelineBar
-                    label="My Pipeline Influence"
-                    value={pipelineByRep.repPipeline ?? 0}
-                    goal={pipelineByRep.repShare}
-                    teamTotal={pipelineByRep.total}
-                    barColor="bg-emerald-400"
-                  />
-                  <PipelineBar
-                    label="Team vs. Goal"
-                    value={pipelineByRep.total}
-                    goal={pipelineByRep.goal}
-                    barColor="bg-sky-400"
-                  />
-                </div>
-              )}
+          {/* ── Mobile tab bar ── */}
+          {data && !loading && !error && (
+            <div className="sm:hidden flex border-b border-gray-200 bg-white flex-shrink-0">
+              {(['companies', 'activity', 'followups'] as const).map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setMobileTab(tab)}
+                  className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${
+                    mobileTab === tab
+                      ? 'text-brand-primary border-b-2 border-brand-primary'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {tab === 'companies' ? 'Companies' : tab === 'activity' ? 'Activity' : 'Follow-ups'}
+                </button>
+              ))}
             </div>
           )}
-        </div>
 
-        {/* ── Loading ── */}
-        {loading && (
-          <div className="flex-1 flex items-center justify-center">
-            <svg className="w-8 h-8 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-          </div>
-        )}
-
-        {/* ── Error ── */}
-        {error && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-gray-500 mb-3">{error}</p>
-              <button onClick={fetchData} className="btn-primary text-sm">Try again</button>
+          {/* ── Loading ── */}
+          {loading && (
+            <div className="flex-1 flex items-center justify-center">
+              <svg className="w-8 h-8 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── Body ── */}
-        {!loading && !error && data && (
-          <div className="flex flex-1 overflow-hidden">
+          {/* ── Error ── */}
+          {error && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-gray-500 mb-3">{error}</p>
+                <button onClick={fetchData} className="btn-primary text-sm">Try again</button>
+              </div>
+            </div>
+          )}
 
-            {/* Col 1 — Company list (collapsible) */}
-            <div className={`flex-shrink-0 border-r border-gray-200 bg-white flex flex-col transition-all duration-200 ease-out overflow-hidden ${col1Collapsed ? 'w-8' : 'w-56'}`}>
-              {/* Header with collapse toggle */}
-              <div className="flex items-center justify-between px-2 py-2 border-b border-gray-100 flex-shrink-0">
-                {!col1Collapsed && (
+          {/* ── Body ── */}
+          {!loading && !error && data && (
+            <div className="flex flex-1 overflow-hidden">
+
+              {/* Col 1 — Company list
+                  Mobile: full-width when tab=companies, hidden otherwise
+                  Desktop: collapsible w-56/w-8 */}
+              <div className={[
+                // Mobile visibility
+                mobileTab === 'companies' ? 'flex' : 'hidden',
+                // Desktop: always shown (overrides hidden), collapsible width
+                `sm:flex sm:flex-col sm:flex-shrink-0 sm:border-r sm:border-gray-200 sm:bg-white sm:overflow-hidden sm:transition-all sm:duration-200 sm:ease-out`,
+                col1Collapsed ? 'sm:w-8' : 'sm:w-56',
+                // Mobile: full width
+                'flex-col w-full',
+              ].join(' ')}>
+                {/* Header with collapse toggle (desktop only) */}
+                <div className="hidden sm:flex items-center justify-between px-2 py-2 border-b border-gray-100 flex-shrink-0">
+                  {!col1Collapsed && (
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                      {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setCol1Collapsed(v => !v)}
+                    className="ml-auto text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                    title={col1Collapsed ? 'Expand' : 'Collapse'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d={col1Collapsed ? 'M9 5l7 7-7 7' : 'M15 19l-7-7 7-7'} />
+                    </svg>
+                  </button>
+                </div>
+                {/* Mobile header */}
+                <div className="sm:hidden px-3 py-2 border-b border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
                   </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setCol1Collapsed(v => !v)}
-                  className="ml-auto text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                  title={col1Collapsed ? 'Expand' : 'Collapse'}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d={col1Collapsed ? 'M9 5l7 7-7 7' : 'M15 19l-7-7 7-7'} />
-                  </svg>
-                </button>
-              </div>
-              {/* List — hidden when collapsed */}
-              {!col1Collapsed && <div className="overflow-y-auto flex-1">
-              {sortedCompanies.length === 0 && (
-                <p className="text-sm text-gray-400 p-4 text-center">No company activity found.</p>
-              )}
-              {sortedCompanies.map(co => {
-                const isSelected = co.id === selectedCompanyId;
-                const openFus = (followUps[co.id] ?? co.followUps).filter(f => !f.completed).length;
-                const totalFus = (followUps[co.id] ?? co.followUps).length;
-                const allDone = totalFus > 0 && openFus === 0;
-                return (
-                  <button
-                    key={co.id}
-                    onClick={() => { setSelectedCompanyId(co.id); setActiveMeetingId(null); }}
-                    className={`w-full text-left px-3 py-3 border-b border-gray-50 transition-colors border-l-2 ${
-                      isSelected
-                        ? 'bg-rose-50 border-l-rose-500'
-                        : 'border-l-transparent hover:bg-gray-50'
-                    }`}
-                  >
-                    {/* Name row with due pill pinned to upper right */}
-                    <div className="flex items-start justify-between gap-1">
-                      <p className={`text-sm font-semibold leading-snug min-w-0 ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
-                        {co.name}
-                      </p>
-                      {allDone && (
-                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">
-                          Done
-                        </span>
-                      )}
-                      {!allDone && openFus > 0 && (
-                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-600">
-                          {openFus} due
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-              </div>}
-            </div>
+                </div>
 
-            {/* Col 2 — Company activity (shrinks to accommodate wider col 1 + col 3) */}
-            <div className="flex-1 overflow-y-auto p-5 border-r border-gray-200 min-w-0">
-              {!selectedCompany ? (
-                <p className="text-sm text-gray-400 text-center mt-12">Select a company to view activity.</p>
-              ) : (
-                <div className="space-y-5">
-
-                  {/* Company header */}
-                  <div>
-                    <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
-                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      {selectedCompany.tier && <TierBadge tier={selectedCompany.tier} />}
-                      {selectedCompany.status && selectedCompany.status !== 'Unknown' && (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                          {selectedCompany.status}
-                        </span>
-                      )}
-                      {selectedCompany.icp && selectedCompany.icp !== 'No' && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700">
-                          ICP
-                        </span>
-                      )}
-                      <StatPill>{selectedCompany.attendeeCount} attendee{selectedCompany.attendeeCount !== 1 ? 's' : ''}</StatPill>
-                      <StatPill>{selectedCompany.meetingsHeld} meeting{selectedCompany.meetingsHeld !== 1 ? 's' : ''} held</StatPill>
-                      {selectedCompany.touchpointCount > 0 && (
-                        <StatPill>{selectedCompany.touchpointCount} touchpoint{selectedCompany.touchpointCount !== 1 ? 's' : ''}</StatPill>
-                      )}
-                    </div>
+                {/* Company list — hidden when desktop-collapsed */}
+                {(!col1Collapsed || true) && (
+                  <div className={`overflow-y-auto flex-1 ${col1Collapsed ? 'sm:hidden' : ''}`}>
+                    {sortedCompanies.length === 0 && (
+                      <p className="text-sm text-gray-400 p-4 text-center">No company activity found.</p>
+                    )}
+                    {sortedCompanies.map(co => {
+                      const isSelected = co.id === selectedCompanyId;
+                      const openFus = (followUps[co.id] ?? co.followUps).filter(f => !f.completed).length;
+                      const totalFus = (followUps[co.id] ?? co.followUps).length;
+                      const allDone = totalFus > 0 && openFus === 0;
+                      return (
+                        <button
+                          key={co.id}
+                          onClick={() => {
+                            setSelectedCompanyId(co.id);
+                            setActiveMeetingId(null);
+                            setMobileTab('activity');
+                          }}
+                          className={`w-full text-left px-3 py-3 border-b border-gray-50 transition-colors border-l-2 ${
+                            isSelected
+                              ? 'bg-rose-50 border-l-rose-500'
+                              : 'border-l-transparent hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1">
+                            <p className={`text-sm font-semibold leading-snug min-w-0 ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
+                              {co.name}
+                            </p>
+                            {allDone && (
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">Done</span>
+                            )}
+                            {!allDone && openFus > 0 && (
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-600">{openFus} due</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
+                )}
+              </div>
 
-                  {/* Contacts — 3-col grid of cards, ALL conference attendees */}
-                  {selectedCompany.attendees.length > 0 && (
+              {/* Col 2 — Company activity
+                  Mobile: full-width when tab=activity
+                  Desktop: flex-1 */}
+              <div className={[
+                mobileTab === 'activity' ? 'block' : 'hidden',
+                'sm:block sm:flex-1 overflow-y-auto p-4 sm:p-5 border-r border-gray-200 min-w-0 w-full',
+              ].join(' ')}>
+                {!selectedCompany ? (
+                  <p className="text-sm text-gray-400 text-center mt-12">Select a company to view activity.</p>
+                ) : (
+                  <div className="space-y-5">
+                    {/* Company header */}
                     <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacts</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {selectedCompany.attendees.map(a => {
-                          const hasMeetings = a.meetingCount > 0;
-                          const hasTp = a.touchpointCount > 0;
-                          const hasFu = a.followUpCount > 0;
-                          return (
+                      <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {selectedCompany.status && selectedCompany.status !== 'Unknown' && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                            {selectedCompany.status}
+                          </span>
+                        )}
+                        {selectedCompany.icp && selectedCompany.icp !== 'No' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700">ICP</span>
+                        )}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600">
+                          {selectedCompany.attendeeCount} attendee{selectedCompany.attendeeCount !== 1 ? 's' : ''}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600">
+                          {selectedCompany.meetingsHeld} meeting{selectedCompany.meetingsHeld !== 1 ? 's' : ''} held
+                        </span>
+                        {selectedCompany.touchpointCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600">
+                            {selectedCompany.touchpointCount} touchpoint{selectedCompany.touchpointCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Contacts grid */}
+                    {selectedCompany.attendees.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacts</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {selectedCompany.attendees.map(a => (
                             <div key={a.id} className="border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
                               <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
                               {a.title && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{a.title}</p>}
                               <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                                {hasMeetings && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-primary/10 text-brand-primary">
-                                    {a.meetingCount} mtg
-                                  </span>
+                                {a.meetingCount > 0 && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-primary/10 text-brand-primary">{a.meetingCount} mtg</span>
                                 )}
-                                {hasTp && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
-                                    {a.touchpointCount} tp
-                                  </span>
+                                {a.touchpointCount > 0 && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">{a.touchpointCount} tp</span>
                                 )}
-                                {hasFu && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-100 text-rose-600">
-                                    {a.followUpCount} fu
-                                  </span>
+                                {a.followUpCount > 0 && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-100 text-rose-600">{a.followUpCount} fu</span>
                                 )}
-                                {!hasMeetings && !hasTp && !hasFu && (
+                                {a.meetingCount === 0 && a.touchpointCount === 0 && a.followUpCount === 0 && (
                                   <span className="text-[10px] text-gray-300 italic">No activity</span>
                                 )}
                               </div>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Meetings */}
-                  {selectedCompany.meetingCards.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Meetings</p>
-                      <div className="space-y-2">
-                        {selectedCompany.meetingCards.map(m => {
-                          const isActive = activeMeetingId === m.meetingId;
-                          return (
-                            <button
-                              key={m.meetingId}
-                              type="button"
-                              onClick={e => { e.stopPropagation(); openMeeting(m.meetingId); }}
-                              className={`w-full text-left rounded-lg border p-3 transition-all ${
-                                isActive
-                                  ? 'border-brand-primary bg-brand-primary/5'
-                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-sm font-medium text-gray-800">{m.attendeeName}</span>
-                                    {m.attendeeTitle && <span className="text-xs text-gray-400">{m.attendeeTitle}</span>}
+                    {/* Meetings */}
+                    {selectedCompany.meetingCards.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Meetings</p>
+                        <div className="space-y-2">
+                          {selectedCompany.meetingCards.map(m => {
+                            const isActive = activeMeetingId === m.meetingId;
+                            return (
+                              <button
+                                key={m.meetingId}
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openMeeting(m.meetingId); }}
+                                className={`w-full text-left rounded-lg border p-3 transition-all ${
+                                  isActive ? 'border-brand-primary bg-brand-primary/5' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-sm font-medium text-gray-800">{m.attendeeName}</span>
+                                      {m.attendeeTitle && <span className="text-xs text-gray-400">{m.attendeeTitle}</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                      {m.date && <span className="text-xs text-gray-400">{m.date}</span>}
+                                      {m.meetingType && <span className="text-xs text-gray-400">{m.meetingType}</span>}
+                                      <span className={`text-xs font-medium ${m.isHeld ? 'text-green-600' : 'text-gray-400'}`}>
+                                        {m.isHeld ? 'Held' : m.outcome ?? 'Scheduled'}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                    {m.date && <span className="text-xs text-gray-400">{m.date}</span>}
-                                    {m.meetingType && <span className="text-xs text-gray-400">{m.meetingType}</span>}
-                                    <span className={`text-xs font-medium ${m.isHeld ? 'text-green-600' : 'text-gray-400'}`}>
-                                      {m.isHeld ? 'Held' : m.outcome ?? 'Scheduled'}
-                                    </span>
-                                  </div>
-                                </div>
-                                <svg
-                                  className={`w-4 h-4 flex-shrink-0 mt-0.5 transition-colors ${isActive ? 'text-brand-primary' : 'text-gray-300'}`}
-                                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                >
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </div>
-                              {(m.actionItemCount > 0 || m.buyingSignalCount > 0 || m.painPointCount > 0) && (
-                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                                  <InsightChip type="buying_signal" count={m.buyingSignalCount} />
-                                  <InsightChip type="pain_point" count={m.painPointCount} />
-                                  <InsightChip type="next_step" count={m.actionItemCount} />
-                                </div>
-                              )}
-                              {m.summary && (
-                                <p className="text-xs text-gray-500 mt-2 line-clamp-2">{m.summary}</p>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Conference Notes */}
-                  {companyNotes.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                        {data.conference.name} Notes
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {companyNotes.map(note => (
-                          <NoteCard key={note.id} note={note} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-              )}
-            </div>
-
-            {/* Col 3 — Follow-ups (1.5× width = 27rem) */}
-            <div className="w-[27rem] flex-shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
-              <div className="px-4 py-2.5 border-b border-gray-100">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Follow-ups</p>
-                {selectedCompany && <p className="text-xs text-gray-500 mt-0.5">{selectedCompany.name}</p>}
-              </div>
-              {!selectedCompany ? (
-                <p className="text-sm text-gray-400 p-4 text-center">Select a company.</p>
-              ) : companyFollowUps.length === 0 ? (
-                <p className="text-sm text-gray-400 p-4 text-center">No follow-ups.</p>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {[
-                    ...companyFollowUps.filter(f => !f.completed),
-                    ...companyFollowUps.filter(f => f.completed),
-                  ].map(fu => {
-                    const taskLines = parseTaskLines(fu.taskText);
-                    const isExpanded = expandedFuIds.has(fu.id);
-                    const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
-                    const multiLine = taskLines.length > 1;
-                    return (
-                      <div key={fu.id} className={`p-3 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            {/* Tag pill + attendee pill */}
-                            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                              {fu.nextSteps && (
-                                <span className={`inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
-                                  fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'
-                                }`}>
-                                  {fu.nextSteps}
-                                </span>
-                              )}
-                              {fu.attendeeName && (
-                                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
-                                  {fu.attendeeName}
-                                </span>
-                              )}
-                            </div>
-                            {/* Task lines */}
-                            {taskLines.length === 0 ? (
-                              <p className="text-xs text-gray-700 leading-snug">{fu.taskText}</p>
-                            ) : (
-                              <div>
-                                {visibleLines.map((line, i) => (
-                                  <p key={i} className={`text-xs text-gray-700 leading-snug${i > 0 ? ' mt-1.5' : ''}`}>
-                                    - {line}
-                                  </p>
-                                ))}
-                                {multiLine && (
-                                  <>
-                                    {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
-                                    <button
-                                      type="button"
-                                      onClick={() => setExpandedFuIds(prev => {
-                                        const n = new Set(prev);
-                                        n.has(fu.id) ? n.delete(fu.id) : n.add(fu.id);
-                                        return n;
-                                      })}
-                                      className="text-[10px] text-brand-secondary hover:underline mt-0.5"
-                                    >
-                                      {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                            <p className="text-[10px] text-gray-400 mt-1">{fu.source}</p>
-                          </div>
-                          {/* Actions */}
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => toggleFollowUp(fu, selectedCompany.id)}
-                              disabled={togglingId === fu.id}
-                              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border-2 transition-all disabled:opacity-50 ${
-                                fu.completed
-                                  ? 'bg-green-500 text-white border-green-600'
-                                  : 'bg-white text-gray-500 border-gray-300 hover:border-green-400'
-                              }`}
-                            >
-                              {fu.completed ? (
-                                <>
-                                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  <svg className={`w-4 h-4 flex-shrink-0 mt-0.5 transition-colors ${isActive ? 'text-brand-primary' : 'text-gray-300'}`}
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                   </svg>
-                                  Done
-                                </>
-                              ) : 'Done'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteFollowUp(fu.id, selectedCompany.id)}
-                              disabled={deletingId === fu.id}
-                              className="text-red-300 hover:text-red-500 p-1 rounded transition-colors disabled:opacity-50"
-                              title="Delete"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
+                                </div>
+                                {(m.actionItemCount > 0 || m.buyingSignalCount > 0 || m.painPointCount > 0) && (
+                                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                    <InsightChip type="buying_signal" count={m.buyingSignalCount} />
+                                    <InsightChip type="pain_point" count={m.painPointCount} />
+                                    <InsightChip type="next_step" count={m.actionItemCount} />
+                                  </div>
+                                )}
+                                {m.summary && <p className="text-xs text-gray-500 mt-2 line-clamp-2">{m.summary}</p>}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                    )}
 
-            {/* Col 4 — Meeting notes (slides in at 200ms ease-out) */}
-            <div
-              className={`flex-shrink-0 border-l border-gray-200 bg-white overflow-hidden transition-all ease-out ${
-                activeMeetingId != null ? 'w-80' : 'w-0'
-              }`}
-              style={{ transitionDuration: '200ms' }}
-            >
-              {activeMeeting && selectedCompany && (
-                <div className="w-80 h-full flex flex-col overflow-hidden">
-                  {/* Col 4 header */}
-                  <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100 bg-gray-50">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          Meeting with {activeMeeting.attendeeName}
+                    {/* Conference Notes */}
+                    {companyNotes.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                          {data.conference.name} Notes
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {activeMeeting.date && <span className="text-[11px] text-gray-400">{activeMeeting.date}</span>}
-                          {activeMeeting.meetingType && <span className="text-[11px] text-gray-400">{activeMeeting.meetingType}</span>}
-                          <span className={`text-[11px] font-medium ${activeMeeting.isHeld ? 'text-green-600' : 'text-gray-400'}`}>
-                            {activeMeeting.isHeld ? 'Held' : activeMeeting.outcome ?? 'Scheduled'}
-                          </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {companyNotes.map(note => <NoteCard key={note.id} note={note} />)}
                         </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setActiveMeetingId(null)}
-                        className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    {selectedCompany.meetingCards.length > 1 && (
-                      <div className="flex gap-1 mt-2 overflow-x-auto hide-scrollbar">
-                        {selectedCompany.meetingCards.map((m, idx) => (
-                          <button
-                            key={m.meetingId}
-                            type="button"
-                            onClick={() => switchMeeting(m.meetingId)}
-                            className={`flex-shrink-0 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                              m.meetingId === activeMeetingId
-                                ? 'bg-brand-primary text-white'
-                                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
-                            }`}
-                          >
-                            {m.date ?? `Meeting ${idx + 1}`}
-                          </button>
-                        ))}
                       </div>
                     )}
                   </div>
+                )}
+              </div>
 
-                  {/* Col 4 content — all sections default collapsed, keyed for 150ms fade */}
-                  <div
-                    key={col4FadeKey}
-                    className="flex-1 overflow-y-auto"
-                    style={{ animation: 'debriefFadeIn 0.15s ease-out' }}
-                  >
-                    {/* Summary — default collapsed */}
-                    <Col4Section
-                      title="Meeting Summary"
-                      count={0}
-                      isOpen={col4Sections.summary ?? false}
-                      onToggle={() => setCol4Sections(prev => ({ ...prev, summary: !prev.summary }))}
-                    >
-                      {activeMeeting.summary ? (
-                        <p className="text-xs text-gray-600 leading-relaxed">{activeMeeting.summary}</p>
-                      ) : activeMeeting.notesText ? (
-                        <p className="text-xs text-gray-600 leading-relaxed">{activeMeeting.notesText}</p>
-                      ) : (
-                        <p className="text-xs text-gray-400 italic">No summary available.</p>
-                      )}
-                    </Col4Section>
-
-                    {/* Action Items */}
-                    {(() => {
-                      const items = activeMeeting.insights.filter(i => i.insight_type === 'next_step');
+              {/* Col 3 — Follow-ups
+                  Mobile: full-width when tab=followups
+                  Desktop: fixed w-[27rem] */}
+              <div className={[
+                mobileTab === 'followups' ? 'flex' : 'hidden',
+                'sm:flex sm:flex-col sm:flex-shrink-0 sm:w-[27rem] sm:border-r sm:border-gray-200 sm:bg-white sm:overflow-y-auto',
+                'flex-col w-full overflow-y-auto',
+              ].join(' ')}>
+                <div className="px-4 py-2.5 border-b border-gray-100 flex-shrink-0">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Follow-ups</p>
+                  {selectedCompany && <p className="text-xs text-gray-500 mt-0.5">{selectedCompany.name}</p>}
+                </div>
+                {!selectedCompany ? (
+                  <p className="text-sm text-gray-400 p-4 text-center">Select a company.</p>
+                ) : companyFollowUps.length === 0 ? (
+                  <p className="text-sm text-gray-400 p-4 text-center">No follow-ups.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 overflow-y-auto flex-1">
+                    {[
+                      ...companyFollowUps.filter(f => !f.completed),
+                      ...companyFollowUps.filter(f => f.completed),
+                    ].map(fu => {
+                      const taskLines = parseTaskLines(fu.taskText);
+                      const isExpanded = expandedFuIds.has(fu.id);
+                      const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
+                      const multiLine = taskLines.length > 1;
                       return (
-                        <Col4Section
-                          title="Action Items"
-                          count={items.length}
-                          isOpen={col4Sections.actions ?? false}
-                          onToggle={() => setCol4Sections(prev => ({ ...prev, actions: !prev.actions }))}
-                        >
-                          {items.length === 0 ? (
-                            <p className="text-xs text-gray-400 italic">None identified.</p>
-                          ) : items.map(i => (
-                            <div key={i.id} className="text-xs text-gray-700 leading-snug">· {i.content}</div>
-                          ))}
-                        </Col4Section>
-                      );
-                    })()}
-
-                    {/* Buying Signals — quote hidden behind toggle */}
-                    {(() => {
-                      const items = activeMeeting.insights.filter(i => i.insight_type === 'buying_signal');
-                      return (
-                        <Col4Section
-                          title="Buying Signals"
-                          count={items.length}
-                          isOpen={col4Sections.buying ?? false}
-                          onToggle={() => setCol4Sections(prev => ({ ...prev, buying: !prev.buying }))}
-                        >
-                          {items.length === 0 ? (
-                            <p className="text-xs text-gray-400 italic">None identified.</p>
-                          ) : items.map(i => (
-                            <div key={i.id} className="space-y-0.5">
-                              <p className="text-xs text-gray-700 leading-snug">· {i.content}</p>
-                              {i.quote && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setExpandedQuoteIds(prev => {
-                                      const n = new Set(prev);
-                                      n.has(i.id) ? n.delete(i.id) : n.add(i.id);
-                                      return n;
-                                    })}
-                                    className="block text-[10px] text-brand-secondary hover:underline ml-3"
-                                  >
-                                    {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
-                                  </button>
-                                  {expandedQuoteIds.has(i.id) && (
-                                    <p className="text-[10px] text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
+                        <div key={fu.id} className={`p-3 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                                {fu.nextSteps && (
+                                  <span className={`inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
+                                    fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'
+                                  }`}>{fu.nextSteps}</span>
+                                )}
+                                {fu.attendeeName && (
+                                  <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                                    {fu.attendeeName}
+                                  </span>
+                                )}
+                              </div>
+                              {taskLines.length === 0 ? (
+                                <p className="text-xs text-gray-700 leading-snug">{fu.taskText}</p>
+                              ) : (
+                                <div>
+                                  {visibleLines.map((line, i) => (
+                                    <p key={i} className={`text-xs text-gray-700 leading-snug${i > 0 ? ' mt-1.5' : ''}`}>- {line}</p>
+                                  ))}
+                                  {multiLine && (
+                                    <>
+                                      {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedFuIds(prev => {
+                                          const n = new Set(prev);
+                                          n.has(fu.id) ? n.delete(fu.id) : n.add(fu.id);
+                                          return n;
+                                        })}
+                                        className="text-[10px] text-brand-secondary hover:underline mt-0.5"
+                                      >
+                                        {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
+                                      </button>
+                                    </>
                                   )}
-                                </>
+                                </div>
                               )}
+                              <p className="text-[10px] text-gray-400 mt-1">{fu.source}</p>
                             </div>
-                          ))}
-                        </Col4Section>
-                      );
-                    })()}
-
-                    {/* Pain Points — quote hidden behind toggle */}
-                    {(() => {
-                      const items = activeMeeting.insights.filter(i => i.insight_type === 'pain_point');
-                      return (
-                        <Col4Section
-                          title="Pain Points"
-                          count={items.length}
-                          isOpen={col4Sections.pain ?? false}
-                          onToggle={() => setCol4Sections(prev => ({ ...prev, pain: !prev.pain }))}
-                        >
-                          {items.length === 0 ? (
-                            <p className="text-xs text-gray-400 italic">None identified.</p>
-                          ) : items.map(i => (
-                            <div key={i.id} className="space-y-0.5">
-                              <p className="text-xs text-gray-700 leading-snug">· {i.content}</p>
-                              {i.quote && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setExpandedQuoteIds(prev => {
-                                      const n = new Set(prev);
-                                      n.has(i.id) ? n.delete(i.id) : n.add(i.id);
-                                      return n;
-                                    })}
-                                    className="block text-[10px] text-brand-secondary hover:underline ml-3"
-                                  >
-                                    {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
-                                  </button>
-                                  {expandedQuoteIds.has(i.id) && (
-                                    <p className="text-[10px] text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
-                                  )}
-                                </>
-                              )}
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => selectedCompany && toggleFollowUp(fu, selectedCompany.id)}
+                                disabled={togglingId === fu.id}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border-2 transition-all disabled:opacity-50 ${
+                                  fu.completed ? 'bg-green-500 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400'
+                                }`}
+                              >
+                                {fu.completed ? (
+                                  <>
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Done
+                                  </>
+                                ) : 'Done'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => selectedCompany && deleteFollowUp(fu.id, selectedCompany.id)}
+                                disabled={deletingId === fu.id}
+                                className="text-red-300 hover:text-red-500 p-1 rounded transition-colors disabled:opacity-50"
+                                title="Delete"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
                             </div>
-                          ))}
-                        </Col4Section>
+                          </div>
+                        </div>
                       );
-                    })()}
-
-                    {/* Transcript */}
-                    {(() => {
-                      const segments = (activeMeeting.transcript ?? []) as TranscriptSegment[];
-                      if (segments.length === 0) return null;
-                      return (
-                        <Col4Section
-                          title="Transcript"
-                          count={segments.length}
-                          isOpen={col4Sections.transcript ?? false}
-                          onToggle={() => setCol4Sections(prev => ({ ...prev, transcript: !prev.transcript }))}
-                        >
-                          {segments.map((s, i) => (
-                            <div key={i} className="flex gap-2">
-                              <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5 font-mono">
-                                {Math.floor((s.start ?? 0) / 60)}:{String(Math.round((s.start ?? 0) % 60)).padStart(2, '0')}
-                              </span>
-                              <p className="text-[11px] text-gray-600 leading-snug">{s.text}</p>
-                            </div>
-                          ))}
-                        </Col4Section>
-                      );
-                    })()}
+                    })}
                   </div>
+                )}
+              </div>
+
+              {/* Col 4 — Meeting notes: desktop slide-in panel */}
+              <div
+                className={`hidden sm:flex sm:flex-col sm:flex-shrink-0 sm:border-l sm:border-gray-200 sm:bg-white sm:overflow-hidden sm:transition-all sm:ease-out ${
+                  activeMeetingId != null ? 'sm:w-80' : 'sm:w-0'
+                }`}
+                style={{ transitionDuration: '200ms' }}
+              >
+                {activeMeeting && selectedCompany && (
+                  <div className="w-80 h-full flex flex-col overflow-hidden">
+                    <MeetingNotesPanel
+                      activeMeeting={activeMeeting}
+                      selectedCompany={selectedCompany}
+                      activeMeetingId={activeMeetingId}
+                      col4Sections={col4Sections}
+                      setCol4Sections={setCol4Sections}
+                      col4FadeKey={col4FadeKey}
+                      expandedQuoteIds={expandedQuoteIds}
+                      setExpandedQuoteIds={setExpandedQuoteIds}
+                      switchMeeting={switchMeeting}
+                      onClose={closeMeetingPanel}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile meeting notes overlay — slides in over the modal, full-screen */}
+              {activeMeetingId != null && activeMeeting && selectedCompany && (
+                <div
+                  className="sm:hidden absolute inset-0 z-10 bg-white flex flex-col"
+                  style={{ animation: 'slideInRight 0.25s ease-out' }}
+                >
+                  <MeetingNotesPanel
+                    activeMeeting={activeMeeting}
+                    selectedCompany={selectedCompany}
+                    activeMeetingId={activeMeetingId}
+                    col4Sections={col4Sections}
+                    setCol4Sections={setCol4Sections}
+                    col4FadeKey={col4FadeKey}
+                    expandedQuoteIds={expandedQuoteIds}
+                    setExpandedQuoteIds={setExpandedQuoteIds}
+                    switchMeeting={switchMeeting}
+                    onClose={closeMeetingPanel}
+                  />
                 </div>
               )}
-            </div>
 
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );

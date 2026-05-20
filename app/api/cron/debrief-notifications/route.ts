@@ -158,7 +158,7 @@ async function processAccount(
                 VALUES (?, 'conference', ?, ?, ?, NULL, 'system', 'conference', ?, 0)`,
           args: [
             userId, conferenceId, conferenceName,
-            `Your post-conference debrief for ${conferenceName} is ready. ${meetingsHeld} meetings held · ${followUpsDue} follow-up${followUpsDue !== 1 ? 's' : ''} due.`,
+            `Your Field Report for ${conferenceName} is ready. ${meetingsHeld} meetings held · ${followUpsDue} follow-up${followUpsDue !== 1 ? 's' : ''} due.`,
             conferenceId,
           ],
         });
