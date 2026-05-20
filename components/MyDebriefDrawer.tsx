@@ -360,6 +360,7 @@ function NoteCard({ note }: { note: DebriefNote }) {
           </span>
         </div>
       )}
+      <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{note.content}</p>
       <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1 border-t border-gray-100">
         {note.rep ? <span>{note.rep}</span> : <span />}
         <span>{fmtDate(note.created_at)}</span>
@@ -391,6 +392,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const [col4FadeKey, setCol4FadeKey] = useState(0);
   const [expandedQuoteIds, setExpandedQuoteIds] = useState<Set<number>>(new Set());
   const [companyNotes, setCompanyNotes] = useState<DebriefNote[]>([]);
+  const [col1Collapsed, setCol1Collapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -646,13 +648,29 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
         {!loading && !error && data && (
           <div className="flex flex-1 overflow-hidden">
 
-            {/* Col 1 — Company list */}
-            <div className="w-56 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
-              <div className="px-3 py-2 border-b border-gray-100">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
-                </p>
+            {/* Col 1 — Company list (collapsible) */}
+            <div className={`flex-shrink-0 border-r border-gray-200 bg-white flex flex-col transition-all duration-200 ease-out overflow-hidden ${col1Collapsed ? 'w-8' : 'w-56'}`}>
+              {/* Header with collapse toggle */}
+              <div className="flex items-center justify-between px-2 py-2 border-b border-gray-100 flex-shrink-0">
+                {!col1Collapsed && (
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    {data.companies.length} Compan{data.companies.length !== 1 ? 'ies' : 'y'}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCol1Collapsed(v => !v)}
+                  className="ml-auto text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                  title={col1Collapsed ? 'Expand' : 'Collapse'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d={col1Collapsed ? 'M9 5l7 7-7 7' : 'M15 19l-7-7 7-7'} />
+                  </svg>
+                </button>
               </div>
+              {/* List — hidden when collapsed */}
+              {!col1Collapsed && <div className="overflow-y-auto flex-1">
               {sortedCompanies.length === 0 && (
                 <p className="text-sm text-gray-400 p-4 text-center">No company activity found.</p>
               )}
@@ -687,15 +705,10 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                         </span>
                       )}
                     </div>
-                    {/* Tier badge below */}
-                    {co.tier && co.tier !== 'unassigned' && (
-                      <div className="mt-1">
-                        <TierBadge tier={co.tier} />
-                      </div>
-                    )}
                   </button>
                 );
               })}
+              </div>}
             </div>
 
             {/* Col 2 — Company activity (shrinks to accommodate wider col 1 + col 3) */}
