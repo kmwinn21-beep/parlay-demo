@@ -544,6 +544,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
   const openMeeting = useCallback((meetingId: number) => {
     setActiveMeetingId(prev => (prev === meetingId ? null : meetingId));
+    setCol1Collapsed(true);
     setCol4Sections({});
     setCol4FadeKey(k => k + 1);
     setExpandedQuoteIds(new Set());
