@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -45,6 +45,7 @@ import { getConferencePermissions } from '@/lib/conference-permissions';
 import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ClassifyTitleModal } from '@/components/ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
+import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
 
 interface Attendee {
   id: number;
@@ -261,6 +262,7 @@ function MeetingMultiSelect({
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('conference_detail');
@@ -363,6 +365,7 @@ export default function ConferenceDetailPage() {
 
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showDebrief, setShowDebrief] = useState(false);
   const [showCrmExport, setShowCrmExport] = useState(false);
   const [showAdminStage, setShowAdminStage] = useState(false);
   const [stageActionLoading, setStageActionLoading] = useState(false);
@@ -395,6 +398,20 @@ export default function ConferenceDetailPage() {
     if (!conferenceStage) return null;
     return getConferencePermissions(conferenceStage, isAdminUser);
   }, [conferenceStage, isAdminUser]);
+
+  const isInternalAttendee = useMemo(() => {
+    if (!conference || !currentUser?.repName) return false;
+    const names = conference.internal_attendees?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
+    return names.includes(currentUser.repName);
+  }, [conference, currentUser?.repName]);
+
+  // Open debrief drawer if ?debrief=true is in the URL
+  useEffect(() => {
+    if (searchParams.get('debrief') === 'true' && isInternalAttendee) {
+      setShowDebrief(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [searchParams, isInternalAttendee]);
 
   async function applyStageAction(action: string, extra?: Record<string, unknown>) {
     setStageActionLoading(true);
@@ -1472,6 +1489,17 @@ export default function ConferenceDetailPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
+              {isInternalAttendee && (
+                <button
+                  onClick={() => setShowDebrief(true)}
+                  className="btn-primary flex items-center gap-2 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  My Debrief
+                </button>
+              )}
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
@@ -2427,6 +2455,12 @@ export default function ConferenceDetailPage() {
           userEmail={currentUser?.email || ''}
         />
       )}
+
+      <MyDebriefDrawer
+        conferenceId={Number(id)}
+        isOpen={showDebrief}
+        onClose={() => setShowDebrief(false)}
+      />
 
       {showBatchScan && (
         <BatchCardScanModal

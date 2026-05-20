@@ -807,4 +807,11 @@ export const migrations: string[] = [
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     )`,
+  `CREATE TABLE IF NOT EXISTS debrief_notifications_sent (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      sent_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, conference_id)
+    )`,
 ];
