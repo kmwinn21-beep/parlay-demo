@@ -446,9 +446,15 @@ function MeetingNotesPanel({
               onToggle={() => setCol4Sections(prev => ({ ...prev, actions: !prev.actions }))}>
               {items.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">None identified.</p>
-              ) : items.map(i => (
-                <div key={i.id} className="text-xs text-gray-700 leading-snug">· {i.content}</div>
-              ))}
+              ) : (
+                <div className="space-y-1.5">
+                  {items.map(i => (
+                    <div key={i.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2">
+                      <p className="text-xs text-gray-700 leading-snug">{i.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Col4Section>
           );
         })()}
@@ -456,6 +462,9 @@ function MeetingNotesPanel({
         {(['buying_signal', 'pain_point'] as const).map(type => {
           const title = type === 'buying_signal' ? 'Buying Signals' : 'Pain Points';
           const key = type === 'buying_signal' ? 'buying' : 'pain';
+          const cardCls = type === 'buying_signal'
+            ? 'border-green-100 bg-green-50/60'
+            : 'border-red-100 bg-red-50/60';
           const items = activeMeeting.insights.filter(i => i.insight_type === type);
           return (
             <Col4Section key={type} title={title} count={items.length}
@@ -463,29 +472,33 @@ function MeetingNotesPanel({
               onToggle={() => setCol4Sections(prev => ({ ...prev, [key]: !prev[key] }))}>
               {items.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">None identified.</p>
-              ) : items.map(i => (
-                <div key={i.id} className="space-y-0.5">
-                  <p className="text-xs text-gray-700 leading-snug">· {i.content}</p>
-                  {i.quote && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedQuoteIds(prev => {
-                          const n = new Set(prev);
-                          n.has(i.id) ? n.delete(i.id) : n.add(i.id);
-                          return n;
-                        })}
-                        className="block text-xs text-brand-secondary hover:underline ml-3"
-                      >
-                        {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
-                      </button>
-                      {expandedQuoteIds.has(i.id) && (
-                        <p className="text-xs text-gray-400 italic ml-3">&ldquo;{i.quote}&rdquo;</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {items.map(i => (
+                    <div key={i.id} className={`rounded-lg border px-3 py-2 space-y-1.5 ${cardCls}`}>
+                      <p className="text-xs text-gray-700 leading-snug">{i.content}</p>
+                      {i.quote && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedQuoteIds(prev => {
+                              const n = new Set(prev);
+                              n.has(i.id) ? n.delete(i.id) : n.add(i.id);
+                              return n;
+                            })}
+                            className="text-xs text-brand-secondary hover:underline"
+                          >
+                            {expandedQuoteIds.has(i.id) ? 'Hide quote' : 'Show quote'}
+                          </button>
+                          {expandedQuoteIds.has(i.id) && (
+                            <p className="text-xs text-gray-500 italic border-t border-gray-200/60 pt-1.5">&ldquo;{i.quote}&rdquo;</p>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </Col4Section>
           );
         })}
