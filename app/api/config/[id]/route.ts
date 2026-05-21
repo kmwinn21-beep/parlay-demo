@@ -12,13 +12,15 @@ export async function PUT(
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { value, sort_order, color, visible_forms, scope, auto_follow_up } = body as {
+    const { value, sort_order, color, visible_forms, scope, auto_follow_up, category_id, description } = body as {
       value: string;
       sort_order?: number;
       color?: string | null;
       visible_forms?: string[];
       scope?: string;
       auto_follow_up?: boolean | number;
+      category_id?: number | null;
+      description?: string | null;
     };
 
     if (!value) {
@@ -39,9 +41,9 @@ export async function PUT(
     const category = String(existing.rows[0].category);
     const isSystem = Number(existing.rows[0].is_system) === 1;
 
-    // Company type display names are always editable (identified stably by action_key, not value).
+    // Company type and products display names are always editable.
     // For all other system-seeded categories, the value is locked.
-    if (isSystem && value !== oldValue && category !== 'company_type') {
+    if (isSystem && value !== oldValue && category !== 'company_type' && category !== 'products' && category !== 'product_category') {
       return NextResponse.json({ error: 'System options cannot be renamed.' }, { status: 403 });
     }
 
@@ -49,11 +51,11 @@ export async function PUT(
     const autoFollowUpVal = auto_follow_up === undefined ? 1 : (auto_follow_up ? 1 : 0);
     const result = await db.execute({
       sql: sort_order !== undefined
-        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ?, scope = ?, auto_follow_up = ? WHERE id = ? RETURNING *'
-        : 'UPDATE config_options SET value = ?, color = ?, scope = ?, auto_follow_up = ? WHERE id = ? RETURNING *',
+        ? 'UPDATE config_options SET value = ?, sort_order = ?, color = ?, scope = ?, auto_follow_up = ?, category_id = ?, description = ? WHERE id = ? RETURNING *'
+        : 'UPDATE config_options SET value = ?, color = ?, scope = ?, auto_follow_up = ?, category_id = ?, description = ? WHERE id = ? RETURNING *',
       args: sort_order !== undefined
-        ? [value, sort_order, color !== undefined ? color : null, scopeValue, autoFollowUpVal, params.id]
-        : [value, color !== undefined ? color : null, scopeValue, autoFollowUpVal, params.id],
+        ? [value, sort_order, color !== undefined ? color : null, scopeValue, autoFollowUpVal, category_id !== undefined ? (category_id ?? null) : null, description !== undefined ? (description ?? null) : null, params.id]
+        : [value, color !== undefined ? color : null, scopeValue, autoFollowUpVal, category_id !== undefined ? (category_id ?? null) : null, description !== undefined ? (description ?? null) : null, params.id],
     });
 
     if (result.rows.length === 0) {
@@ -216,6 +218,21 @@ export async function DELETE(
 
     const deletedCategory = String(check.rows[0].category ?? '');
     const deletedValue = String(check.rows[0].value ?? '');
+
+    // Block product_category deletion if any products reference it
+    if (deletedCategory === 'product_category') {
+      const refCount = await db.execute({
+        sql: `SELECT COUNT(*) as cnt FROM config_options WHERE category = 'products' AND category_id = ?`,
+        args: [params.id],
+      });
+      const cnt = Number(refCount.rows[0]?.cnt ?? 0);
+      if (cnt > 0) {
+        return NextResponse.json(
+          { error: `This category is used by ${cnt} product${cnt !== 1 ? 's' : ''}. Reassign those products before deleting.` },
+          { status: 409 },
+        );
+      }
+    }
 
     await db.execute({
       sql: 'DELETE FROM config_options WHERE id = ?',

@@ -814,4 +814,7 @@ export const migrations: string[] = [
       sent_at TEXT DEFAULT (datetime('now')),
       UNIQUE(user_id, conference_id)
     )`,
+  `ALTER TABLE config_options ADD COLUMN category_id INTEGER`,
+  `ALTER TABLE config_options ADD COLUMN description TEXT`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('product_category', 'General', 1, 1)`,
 ];
