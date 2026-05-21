@@ -74,7 +74,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'permissions' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1816,7 +1816,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (tab === 'permissions') {
+    if (tab === 'users') {
       fetchSettings();
       fetch('/api/admin/role-capabilities')
         .then(r => r.json())
@@ -1965,14 +1965,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'permissions', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'permissions' ? 'Permissions' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -2550,32 +2550,6 @@ export default function AdminPage() {
         )
       )}
 
-      {/* ── Permissions tab ── */}
-      {tab === 'permissions' && (
-        loadingPerms ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="card">
-              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Conference Attendee List Upload</h2>
-              <p className="text-sm text-gray-500 mb-4">Control whether regular users can upload attendee lists to conferences. Administrators can always upload.</p>
-              <div className="flex items-center justify-between py-3 border-t border-gray-100">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Allow regular users to upload attendee lists</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{allowUpload ? 'Enabled — all users can upload' : 'Restricted — administrators only'}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {savingPerms && <span className="text-xs text-gray-400">Saving…</span>}
-                  <Toggle checked={allowUpload} onChange={handleUploadToggle} disabled={savingPerms} />
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )
-      )}
 
       {/* ── ICP tab ── */}
       {tab === 'icp' && (
@@ -3909,6 +3883,22 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Conference Attendee List Upload — moved from Permissions tab */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Conference Attendee List Upload</h2>
+            <p className="text-sm text-gray-500 mb-4">Control whether regular users can upload attendee lists to conferences. Administrators can always upload.</p>
+            <div className="flex items-center justify-between py-3 border-t border-gray-100">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Allow regular users to upload attendee lists</p>
+                <p className="text-xs text-gray-400 mt-0.5">{allowUpload ? 'Enabled — all users can upload' : 'Restricted — administrators only'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {savingPerms && <span className="text-xs text-gray-400">Saving…</span>}
+                <Toggle checked={allowUpload} onChange={handleUploadToggle} disabled={savingPerms} />
+              </div>
             </div>
           </div>
         </div>
