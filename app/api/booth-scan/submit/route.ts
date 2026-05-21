@@ -129,9 +129,8 @@ export async function POST(request: NextRequest) {
       if (tpOption.rows.length > 0) {
         const tpId = Number(tpOption.rows[0].id);
         await db.execute({
-          sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, touchpoint_id, notes, created_by)
-                VALUES (?, ?, ?, ?, ?)`,
-          args: [attendee_id, conference_id, tpId, notes_text ?? null, authResult.id],
+          sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id) VALUES (?, ?, ?)`,
+          args: [attendee_id, conference_id, tpId],
         });
         results.touchpoint = 'created';
 
