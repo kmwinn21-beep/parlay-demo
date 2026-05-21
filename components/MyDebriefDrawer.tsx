@@ -671,7 +671,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     }));
     try {
       const res = await fetch('/api/follow-ups', {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: fu.id, completed: next }),
       });
