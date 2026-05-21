@@ -302,7 +302,7 @@ export async function DELETE(
   }
 }
 
-// Update color only (no cascade rename needed)
+// Update color and/or metadata (no cascade rename needed)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -312,11 +312,18 @@ export async function PATCH(
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { color } = body;
+    const { color, metadata } = body as { color?: string | null; metadata?: string | null };
+
+    const setClauses: string[] = [];
+    const setArgs: (string | null | number)[] = [];
+    if ('color' in body) { setClauses.push('color = ?'); setArgs.push(color ?? null); }
+    if ('metadata' in body) { setClauses.push('metadata = ?'); setArgs.push(metadata ?? null); }
+    if (setClauses.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    setArgs.push(params.id);
 
     const result = await db.execute({
-      sql: 'UPDATE config_options SET color = ? WHERE id = ? RETURNING *',
-      args: [color ?? null, params.id],
+      sql: `UPDATE config_options SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`,
+      args: setArgs,
     });
 
     if (result.rows.length === 0) {
@@ -326,6 +333,6 @@ export async function PATCH(
     return NextResponse.json(result.rows[0]);
   } catch (error) {
     console.error('PATCH /api/config/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to update color' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }
 }

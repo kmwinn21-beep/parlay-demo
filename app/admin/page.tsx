@@ -21,6 +21,7 @@ import { invalidateTagline } from '@/lib/useTagline';
 import { invalidateUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS, DEFAULT_RECOMMENDED_ACTIONS, DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS, DEFAULT_TARGET_PRIORITY_WEIGHTS, DEFAULT_TIER_THRESHOLDS, validateTargetPriorityWeights, type TargetPriorityWeights } from '@/lib/targeting/targetPriority';
 import { IcpAiAssistModal, type AiItem } from '@/components/IcpAiAssistModal';
+import { ProductsSolutionsTab } from '@/components/admin/ProductsSolutionsTab';
 
 interface ConfigOption {
   id: number;
@@ -36,6 +37,7 @@ interface ConfigOption {
   action_key?: string | null; // stable identifier; company_type uses 'prospect' to mark the primary target type
   category_id?: number | null;
   description?: string | null;
+  metadata?: string | null;
 }
 
 const CATEGORIES = [
@@ -60,6 +62,7 @@ const CATEGORIES = [
   { key: 'target_recommended_action', label: 'Target Recommended Actions' },
   { key: 'user', label: 'Users' },
   { key: 'cost_type', label: 'Cost Types' },
+  { key: 'industry', label: 'Industry' },
 ];
 
 const TABLE_LABELS: Record<string, string> = {
@@ -77,7 +80,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'products-solutions' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
 
 interface IcpRuleDraft {
   id?: number;
@@ -2026,14 +2029,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -3726,6 +3729,18 @@ export default function AdminPage() {
             </IcpSettingsSection>
           </div>
         )
+      )}
+
+      {/* ── Products & Solutions tab ── */}
+      {tab === 'products-solutions' && (
+        <ProductsSolutionsTab
+          products={optionsByCategory['products'] ?? []}
+          categories={optionsByCategory['product_category'] ?? []}
+          seniorityOptions={optionsByCategory['seniority'] ?? []}
+          functionOptions={optionsByCategory['function'] ?? []}
+          industryOptions={optionsByCategory['industry'] ?? []}
+          onRefresh={fetchAll}
+        />
       )}
 
       {/* ── Custom Forms tab ── */}
