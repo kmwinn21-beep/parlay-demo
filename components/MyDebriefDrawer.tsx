@@ -1407,33 +1407,40 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 </div>
               )}
 
-              {/* Record drawer — absolute overlay, slides in from right */}
-              <div
-                className={`hidden sm:flex sm:flex-col sm:flex-shrink-0 sm:border-l sm:border-gray-200 sm:bg-white sm:overflow-hidden sm:transition-all sm:ease-out absolute right-0 top-0 h-full z-10 ${
-                  recordDrawer != null ? 'sm:w-[400px]' : 'sm:w-0'
-                }`}
-                style={{ transitionDuration: '200ms' }}
-                onClick={e => e.stopPropagation()}
-              >
-                {recordDrawer != null && (
-                  <div className="w-[400px] h-full flex flex-col overflow-hidden">
-                    <RecordDrawerPanel
-                      type={recordDrawer.type}
-                      entityId={recordDrawer.id}
-                      onClose={closeRecordDrawer}
-                      onNavigate={openRecordDrawer}
-                      onOpenMeeting={openMeetingFromDrawer}
-                      cacheRef={recordCacheRef}
-                      contentFadeKey={recordDrawerFadeKey}
-                    />
-                  </div>
-                )}
-              </div>
-
             </div>
           )}
 
         </div>
+      </div>
+
+      {/* Record drawer — fixed, full viewport height, slides in from right */}
+      {/* Mobile backdrop */}
+      {recordDrawer != null && (
+        <div
+          className="sm:hidden fixed inset-0 z-[59] bg-black/30"
+          onClick={closeRecordDrawer}
+        />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden transition-all ease-out ${
+          recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
+        }`}
+        style={{ transitionDuration: '200ms' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {recordDrawer != null && (
+          <div className="w-full sm:w-[400px] h-full flex flex-col overflow-hidden flex-shrink-0">
+            <RecordDrawerPanel
+              type={recordDrawer.type}
+              entityId={recordDrawer.id}
+              onClose={closeRecordDrawer}
+              onNavigate={openRecordDrawer}
+              onOpenMeeting={openMeetingFromDrawer}
+              cacheRef={recordCacheRef}
+              contentFadeKey={recordDrawerFadeKey}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
