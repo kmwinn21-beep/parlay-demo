@@ -135,13 +135,13 @@ export async function sendDebriefEmail(opts: {
   const BASE_URL_DEBRIEF =
     process.env.NEXT_PUBLIC_BASE_URL ??
     (process.env.NODE_ENV === 'production' ? 'https://conferencehubpc.netlify.app' : 'http://localhost:3000');
-  const deepLink = `${BASE_URL_DEBRIEF}/conferences/${opts.conferenceId}?debrief=true`;
+  const deepLink = `${BASE_URL_DEBRIEF}/conferences/${opts.conferenceId}?fieldreport=true`;
   return sendEmail(
     opts.email,
-    `Your ${opts.conferenceName} debrief is ready — ${opts.followUpsDue} follow-up${opts.followUpsDue !== 1 ? 's' : ''} due`,
+    `Your ${opts.conferenceName} Field Report is ready — ${opts.followUpsDue} follow-up${opts.followUpsDue !== 1 ? 's' : ''} due`,
     `<div style="${baseStyle}">
       <h2 style="color:#0B3C62">Hi ${opts.firstName},</h2>
-      <p>Your post-conference debrief for <strong>${opts.conferenceName}</strong> is ready.</p>
+      <p>Your Field Report for <strong>${opts.conferenceName}</strong> is ready.</p>
       <p>Here's how you did:</p>
       <table style="border-collapse:collapse;margin:16px 0">
         <tr><td style="padding:4px 16px 4px 0;color:#555;font-size:14px">Meetings held:</td><td style="font-weight:600;font-size:14px">${opts.meetingsHeld}</td></tr>
@@ -149,7 +149,7 @@ export async function sendDebriefEmail(opts: {
         <tr><td style="padding:4px 16px 4px 0;color:#555;font-size:14px">Follow-ups due:</td><td style="font-weight:600;font-size:14px">${opts.followUpsDue}</td></tr>
         <tr><td style="padding:4px 16px 4px 0;color:#555;font-size:14px">Sales Execution Score:</td><td style="font-weight:600;font-size:14px">${opts.sesScore != null ? `${opts.sesScore}/100` : 'N/A'}</td></tr>
       </table>
-      <p style="margin:24px 0"><a href="${deepLink}" style="${btnStyle}">View My Debrief →</a></p>
+      <p style="margin:24px 0"><a href="${deepLink}" style="${btnStyle}">View Field Report →</a></p>
       <p style="${footerStyle}">From Conversations to Follow-Through.<br>${APP_NAME}</p>
     </div>`
   );
