@@ -172,26 +172,6 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [loading, setLoading] = useState(true);
   const [loadingConf, setLoadingConf] = useState(false);
 
-  // Booth scan Phase 2 state
-  const isBoothScan = note.tag === 'card-badge' && note.secondary_tag?.startsWith('booth-');
-  const [boothNotes, setBoothNotes] = useState('');
-  const [meetingDate, setMeetingDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [meetingTime, setMeetingTime] = useState(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
-  const [followUpType, setFollowUpType] = useState('');
-  const [nextStepsOptions, setNextStepsOptions] = useState<{ id: number; value: string }[]>([]);
-
-  useEffect(() => {
-    if (isBoothScan) {
-      fetch('/api/config?category=next_steps')
-        .then(r => r.ok ? r.json() : [])
-        .then((data: { id: number; value: string }[]) => setNextStepsOptions(Array.isArray(data) ? data : []))
-        .catch(() => {});
-    }
-  }, [isBoothScan]);
-
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -291,33 +271,6 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   }, [selCompany, allCompanies]);
 
   const canSave = selConference || selCompany || selAttendee;
-  const canBoothSave = isBoothScan && !!(selConference || selAttendee || selCompany);
-
-  const handleBoothSave = async () => {
-    if (!canBoothSave) return;
-    setSaving(true);
-    try {
-      const res = await fetch('/api/booth-scan/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          quick_note_id: note.id,
-          attendee_id: selAttendee?.id ?? null,
-          conference_id: selConference?.id ?? null,
-          company_id: selCompany?.id ?? null,
-          interaction_type: note.secondary_tag,
-          notes_text: boothNotes || null,
-          meeting_date: meetingDate || null,
-          meeting_time: meetingTime || null,
-          follow_up_type: followUpType || null,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success('Booth interaction saved.');
-      onAssigned(note.id);
-    } catch { toast.error('Failed to save booth interaction.'); }
-    finally { setSaving(false); }
-  };
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -343,129 +296,16 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-          <h3 className="text-base font-semibold text-brand-primary font-serif">{isBoothScan ? 'Log Booth Interaction' : 'Assign Note'}</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">Assign Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
-          {!isBoothScan && <p className="text-xs text-gray-500 mb-4 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 line-clamp-3">{note.content}</p>}
+          <p className="text-xs text-gray-500 mb-4 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 line-clamp-3">{note.content}</p>
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
-            </div>
-          ) : isBoothScan ? (
-            <div className="space-y-4">
-              {/* Interaction type badge */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium border border-blue-200">
-                  {note.secondary_tag === 'booth-stop' ? 'Stopped By'
-                    : note.secondary_tag === 'booth-demo' ? 'Demo'
-                    : note.secondary_tag === 'booth-meeting' ? 'Meeting'
-                    : 'Follow-up Req'}
-                </span>
-                <span className="text-xs text-gray-400">from badge scan</span>
-              </div>
-
-              {/* Suggested products (from persisted relevance) */}
-              {(() => {
-                const suggestions: { productId: number; productName: string; score: number; buyerRole: string | null }[] =
-                  note.product_suggestions ? (() => { try { return JSON.parse(note.product_suggestions!); } catch { return []; } })() : [];
-                if (suggestions.length === 0) return null;
-                return (
-                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-                    <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-2">Suggested Products</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {suggestions.map(s => (
-                        <span key={s.productId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-blue-200 text-[11px] font-medium text-blue-700">
-                          {s.productName}
-                          {s.buyerRole && (
-                            <span className={`text-[9px] px-1 rounded-full ${
-                              s.buyerRole === 'decision_maker' ? 'bg-emerald-100 text-emerald-700'
-                              : s.buyerRole === 'influencer' ? 'bg-violet-100 text-violet-700'
-                              : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {s.buyerRole === 'decision_maker' ? 'DM' : s.buyerRole === 'influencer' ? 'INF' : 'TGT'}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Conference picker */}
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Conference</label>
-                <SearchableSelect options={filteredConferences} value={selConference} onChange={handleConferenceChange} getLabel={c => c.name} placeholder="Select a conference…" />
-              </div>
-
-              {/* Attendee picker */}
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Attendee</label>
-                {loadingConf ? (
-                  <div className="flex items-center gap-2 py-2 px-3 text-xs text-gray-400">
-                    <div className="animate-spin w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full" />
-                    Loading attendees…
-                  </div>
-                ) : (
-                  <SearchableSelect options={filteredAttendees} value={selAttendee} onChange={handleAttendeeChange} getLabel={a => `${a.first_name} ${a.last_name}`} placeholder="Select an attendee…" />
-                )}
-              </div>
-
-              {/* Company picker */}
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Company</label>
-                <GroupedCompanyDropdown
-                  companies={filteredCompanies}
-                  value={selCompany?.id ?? null}
-                  onChange={(id, _name) => {
-                    const comp = filteredCompanies.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
-                    handleCompanyChange(comp);
-                  }}
-                  onClear={() => handleCompanyChange(null)}
-                  placeholder="Select a company…"
-                  inputClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
-                />
-              </div>
-
-              {/* Date/time for demo or meeting */}
-              {(note.secondary_tag === 'booth-demo' || note.secondary_tag === 'booth-meeting') && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Date</label>
-                    <input type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Time</label>
-                    <input type="time" value={meetingTime} onChange={e => setMeetingTime(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary" />
-                  </div>
-                </div>
-              )}
-
-              {/* Follow-up type for booth-followup */}
-              {note.secondary_tag === 'booth-followup' && (
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Follow-up Type</label>
-                  <select value={followUpType} onChange={e => setFollowUpType(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white">
-                    <option value="">Select follow-up type…</option>
-                    {nextStepsOptions.map(o => <option key={o.id} value={o.value}>{o.value}</option>)}
-                  </select>
-                </div>
-              )}
-
-              {/* Notes */}
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Notes <span className="text-gray-300 font-normal">(optional)</span></label>
-                <textarea value={boothNotes} onChange={e => setBoothNotes(e.target.value)} rows={3} placeholder="Add any notes about this interaction…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary resize-none" />
-              </div>
-
-              {!canBoothSave && <p className="text-xs text-amber-600">Select at least one conference, company, or attendee.</p>}
             </div>
           ) : (
             <div className="space-y-4">
@@ -506,15 +346,9 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
         </div>
         <div className="flex justify-end gap-2 px-6 pb-5">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
-          {isBoothScan ? (
-            <button type="button" onClick={handleBoothSave} disabled={!canBoothSave || saving || loading || !!user?.demoVisitor} className="btn-primary text-sm">
-              {saving ? 'Saving…' : 'Save Interaction'}
-            </button>
-          ) : (
-            <button type="button" onClick={handleSave} disabled={!canSave || saving || loading || !!user?.demoVisitor} className="btn-primary text-sm">
-              {saving ? 'Assigning…' : 'Assign Note'}
-            </button>
-          )}
+          <button type="button" onClick={handleSave} disabled={!canSave || saving || loading || !!user?.demoVisitor} className="btn-primary text-sm">
+            {saving ? 'Assigning…' : 'Assign Note'}
+          </button>
         </div>
       </div>
     </div>
@@ -706,6 +540,257 @@ function BadgeScanResultsModal({
   );
 }
 
+// ── Booth Structured Capture Modal ───────────────────────────────────────────
+interface BoothCaptureData {
+  note: QuickNote;
+  attendeeId: number;
+  companyId: number | null;
+  conferenceId: number | null;
+}
+
+interface ProductOption { id: number; name: string; }
+interface StatusOption { value: string; label: string; }
+
+function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
+  data: BoothCaptureData;
+  onClose: () => void;
+  onSubmitted: (noteId: number) => void;
+}) {
+  const interactionType = data.note.secondary_tag ?? 'booth-stop';
+  const isMeeting = interactionType === 'booth-demo' || interactionType === 'booth-meeting';
+
+  const interactionLabel = interactionType === 'booth-demo' ? 'Demo'
+    : interactionType === 'booth-meeting' ? 'Meeting'
+    : interactionType === 'booth-followup' ? 'Follow-up Request'
+    : 'Booth Stop';
+
+  // Parse suggested products from note
+  const suggested: { productName: string; score: number }[] = (() => {
+    try { return JSON.parse(data.note.product_suggestions ?? '[]'); } catch { return []; }
+  })();
+
+  const [allProducts, setAllProducts] = useState<ProductOption[]>([]);
+  const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(
+    new Set(suggested.slice(0, 3).map(s => s.productName))
+  );
+  const [sentiment, setSentiment] = useState<string | null>(null);
+  const [scheduleFollowUp, setScheduleFollowUp] = useState<boolean | null>(null);
+  const [notesText, setNotesText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [prodRes, statusRes] = await Promise.all([
+          fetch('/api/config-options?category=products').then(r => r.ok ? r.json() : []),
+          fetch('/api/config-options?category=status').then(r => r.ok ? r.json() : []),
+        ]);
+        setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string; name?: string }) => ({ id: p.id ?? 0, name: p.value ?? p.name ?? '' })) : []);
+        setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string; label?: string }) => ({ value: s.value ?? '', label: s.label ?? s.value ?? '' })) : []);
+      } catch { /* non-blocking */ }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const toggleProduct = (name: string) => {
+    setSelectedProducts(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) { next.delete(name); return next; }
+      if (next.size >= 3) return prev;
+      next.add(name);
+      return next;
+    });
+  };
+
+  const canSubmit = !isMeeting || selectedProducts.size > 0;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/booth-scan/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quick_note_id: data.note.id,
+          attendee_id: data.attendeeId,
+          conference_id: data.conferenceId,
+          company_id: data.companyId,
+          interaction_type: interactionType,
+          notes_text: notesText.trim() || null,
+          products: Array.from(selectedProducts),
+          sentiment,
+          schedule_follow_up: scheduleFollowUp,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setSuccess(true);
+      setTimeout(() => { onSubmitted(data.note.id); onClose(); }, 1500);
+    } catch {
+      toast.error('Failed to save interaction.');
+      setSubmitting(false);
+    }
+  };
+
+  const suggestedNames = new Set(suggested.map(s => s.productName));
+  const otherProducts = allProducts.filter(p => !suggestedNames.has(p.name));
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h3 className="text-base font-semibold text-brand-primary font-serif">Log {interactionLabel}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {(() => {
+                const lines = data.note.content.split('\n');
+                const name = lines[0]?.replace('Name:', '').trim();
+                const co = lines[2]?.replace('Company:', '').trim();
+                return [name, co].filter(s => s && s !== '—').join(' · ');
+              })()}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {success ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <p className="text-sm font-medium text-gray-700">Interaction saved!</p>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+              {/* Products */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Products {isMeeting && <span className="text-red-400">*</span>}
+                  </label>
+                  <span className="text-xs text-gray-400">{selectedProducts.size}/3 selected</span>
+                </div>
+
+                {suggested.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">Suggested</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggested.map(s => {
+                        const sel = selectedProducts.has(s.productName);
+                        return (
+                          <button key={s.productName} type="button" onClick={() => toggleProduct(s.productName)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              sel ? 'bg-teal-500 border-teal-500 text-white' : 'bg-teal-50 border-teal-200 text-teal-700 hover:border-teal-400'
+                            }`}>
+                            {sel && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
+                            {s.productName}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {otherProducts.length > 0 && (
+                  <div>
+                    {suggested.length > 0 && <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">All Products</p>}
+                    <div className="flex flex-wrap gap-1.5">
+                      {otherProducts.map(p => {
+                        const sel = selectedProducts.has(p.name);
+                        const atMax = selectedProducts.size >= 3 && !sel;
+                        return (
+                          <button key={p.id} type="button" onClick={() => !atMax && toggleProduct(p.name)} disabled={atMax}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              sel ? 'bg-brand-secondary border-brand-secondary text-white'
+                                : atMax ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                            }`}>
+                            {sel && '✓ '}{p.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Sentiment */}
+              {statusOptions.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Status / Sentiment</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {statusOptions.map(opt => (
+                      <button key={opt.value} type="button" onClick={() => setSentiment(prev => prev === opt.value ? null : opt.value)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          sentiment === opt.value
+                            ? 'bg-brand-secondary border-brand-secondary text-white'
+                            : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                        }`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Schedule Follow-Up */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Schedule Follow-Up?</label>
+                <div className="flex gap-2">
+                  {[{ val: true, label: 'Yes' }, { val: false, label: 'No' }].map(opt => (
+                    <button key={String(opt.val)} type="button"
+                      onClick={() => setScheduleFollowUp(prev => prev === opt.val ? null : opt.val)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                        scheduleFollowUp === opt.val
+                          ? 'bg-brand-secondary border-brand-secondary text-white'
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Notes</label>
+                <textarea
+                  value={notesText} onChange={e => setNotesText(e.target.value)}
+                  placeholder="Add any notes from this interaction…"
+                  style={{ minHeight: 80 }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 pb-5 flex-shrink-0">
+              {isMeeting && selectedProducts.size === 0 && (
+                <p className="text-xs text-amber-600 mb-2">Select at least one product to save a Demo or Meeting.</p>
+              )}
+              <button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting}
+                className="w-full btn-primary text-sm py-2.5 disabled:opacity-50">
+                {submitting ? 'Saving…' : 'Save Interaction'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main QuickNotesSection ────────────────────────────────────────────────────
 export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [notes, setNotes] = useState<QuickNote[]>([]);
@@ -724,6 +809,8 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [batchModalCards, setBatchModalCards] = useState<ScannedCard[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
+  const [boothCaptureData, setBoothCaptureData] = useState<BoothCaptureData | null>(null);
+  const [boothSourceNote, setBoothSourceNote] = useState<QuickNote | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const cameraMenuRef = useRef<HTMLDivElement>(null);
@@ -912,8 +999,6 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
 
   const handleAssignNote = useCallback(async (note: QuickNote) => {
     if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
-    // Booth-tagged notes go to AssignNoteModal (booth form), not BatchCardScanModal
-    if (note.secondary_tag?.startsWith('booth-')) { setAssigningNote(note); return; }
     const lines = note.content.split('\n');
     const get = (key: string) => { const l = lines.find(ln => ln.startsWith(key + ':')); return l ? l.slice(key.length + 1).trim().replace('—', '').trim() : ''; };
     const nameParts = get('Name').split(' ');
@@ -929,9 +1014,15 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       const { attendeeMatches = [], companyMatches = [] } = mRes.ok ? await mRes.json() : {};
       const scanned: ScannedCard = { ...makeCard(draft), attendeeMatches, companyMatches, status: attendeeMatches.length > 0 ? 'matched' : 'no-match' };
       setBatchModalCards([scanned]);
+      if (note.secondary_tag?.startsWith('booth-')) {
+        // Booth flow: open BatchCardScanModal; on confirm → show structured capture
+        setBoothSourceNote(note);
+      } else {
+        // Non-booth: open BatchCardScanModal and delete the note immediately
+        setNotes(prev => prev.filter(n => n.id !== note.id));
+        await fetch(`/api/quick-notes/${note.id}`, { method: 'DELETE' });
+      }
       setShowBatchModal(true);
-      setNotes(prev => prev.filter(n => n.id !== note.id));
-      await fetch(`/api/quick-notes/${note.id}`, { method: 'DELETE' });
     } catch { toast.error('Failed to search for match.'); }
   }, []);
 
@@ -1042,7 +1133,26 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
           onAssignLater={handleScanAssignLater} savingId={scanSavingId} productRelevanceMap={badgeScanRelevance} />
       )}
       {showBatchModal && (
-        <BatchCardScanModal initialCards={batchModalCards} onClose={() => setShowBatchModal(false)} onDone={() => setShowBatchModal(false)} />
+        <BatchCardScanModal
+          initialCards={batchModalCards}
+          onClose={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
+          onDone={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
+          onConfirmed={boothSourceNote ? (attendeeId, companyId, conferenceId) => {
+            setBoothCaptureData({ note: boothSourceNote, attendeeId, companyId, conferenceId });
+            setBoothSourceNote(null);
+            setShowBatchModal(false);
+          } : undefined}
+        />
+      )}
+      {boothCaptureData && (
+        <BoothStructuredCaptureModal
+          data={boothCaptureData}
+          onClose={() => setBoothCaptureData(null)}
+          onSubmitted={(noteId) => {
+            setNotes(prev => prev.filter(n => n.id !== noteId));
+            setBoothCaptureData(null);
+          }}
+        />
       )}
     </div>
   );
