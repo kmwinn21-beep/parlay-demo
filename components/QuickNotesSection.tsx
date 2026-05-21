@@ -15,6 +15,7 @@ interface QuickNote {
   created_at: string;
   created_by: string | null;
   tag: string | null;
+  secondary_tag: string | null;
 }
 
 interface Conference { id: number; name: string; }
@@ -382,6 +383,15 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
               Badge
             </span>
           )}
+          {note.tag === 'card-badge' && note.secondary_tag?.startsWith('booth-') && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-[10px] font-medium text-violet-600 flex-shrink-0">
+              {note.secondary_tag === 'booth-stop' ? 'Stopped By'
+                : note.secondary_tag === 'booth-demo' ? 'Demo'
+                : note.secondary_tag === 'booth-meeting' ? 'Meeting'
+                : note.secondary_tag === 'booth-followup' ? 'Follow-up Req'
+                : note.secondary_tag}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button type="button" onClick={() => { setEditing(true); setEditText(note.content); }}
@@ -426,6 +436,42 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
   );
 }
 
+// ── Booth Interaction Picker ──────────────────────────────────────────────────
+const BOOTH_INTERACTIONS = [
+  { value: 'booth-stop', label: 'Stopped By', icon: '👋' },
+  { value: 'booth-demo', label: 'Demo', icon: '🖥' },
+  { value: 'booth-meeting', label: 'Meeting', icon: '📅' },
+  { value: 'booth-followup', label: 'Follow-up Req', icon: '📋' },
+] as const;
+
+function BoothInteractionPicker({
+  onSelect,
+  savingId,
+}: {
+  onSelect: (value: string) => void;
+  savingId: string | null;
+}) {
+  return (
+    <div className="pt-1">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Log Interaction</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {BOOTH_INTERACTIONS.map(item => (
+          <button
+            key={item.value}
+            type="button"
+            disabled={!!savingId}
+            onClick={() => onSelect(item.value)}
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:border-brand-secondary hover:text-brand-secondary hover:bg-blue-50 transition-colors disabled:opacity-50 text-left"
+          >
+            <span className="text-sm">{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Badge Scan Results Modal ──────────────────────────────────────────────────
 function BadgeScanResultsModal({
   cards, onClose, onAssignNow, onAssignLater, savingId, productRelevanceMap,
@@ -433,7 +479,7 @@ function BadgeScanResultsModal({
   cards: BadgeScanCard[];
   onClose: () => void;
   onAssignNow: (card: BadgeScanCard) => void;
-  onAssignLater: (card: BadgeScanCard) => Promise<void>;
+  onAssignLater: (card: BadgeScanCard, secondaryTag?: string) => Promise<void>;
   savingId: string | null;
   productRelevanceMap: Record<string, ProductRelevanceResult[]>;
 }) {
@@ -477,14 +523,15 @@ function BadgeScanResultsModal({
                   )}
                 </div>
                 <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
-                <div className="flex gap-2">
+                <BoothInteractionPicker onSelect={(v) => onAssignLater(card, v)} savingId={savingId === card.localId ? savingId : null} />
+                <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => onAssignNow(card)} disabled={isSaving}
                     className="flex-1 btn-primary text-xs py-1.5 disabled:opacity-50">
                     Assign Now
                   </button>
                   <button type="button" onClick={() => onAssignLater(card)} disabled={isSaving}
                     className="flex-1 btn-secondary text-xs py-1.5 disabled:opacity-50">
-                    {isSaving ? 'Saving…' : 'Assign Later'}
+                    {isSaving ? 'Saving…' : 'Skip'}
                   </button>
                 </div>
               </div>
@@ -662,16 +709,37 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     setShowBatchModal(true);
   }, []);
 
-  const handleScanAssignLater = useCallback(async (card: BadgeScanCard) => {
+  const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
     setScanSavingId(card.localId);
-    await handleSaveNote(formatCardAsText(card.draft), 'card-badge');
+    const res = await fetch('/api/quick-notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: formatCardAsText(card.draft),
+        tag: 'card-badge',
+        secondary_tag: secondaryTag ?? null,
+      }),
+    });
+    if (res.ok) {
+      const note = await res.json() as QuickNote;
+      setNotes(prev => [note, ...prev]);
+      setSectionExpanded(true);
+      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
+        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
+        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
+        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
+        : 'Saved for later';
+      toast.success(`${label} — assign details anytime`);
+    } else {
+      toast.error('Failed to save.');
+    }
     setScanSavingId(null);
     setBadgeScanCards(prev => {
       const next = prev.filter(c => c.localId !== card.localId);
       if (next.length === 0) setShowScanModal(false);
       return next;
     });
-  }, [handleSaveNote]);
+  }, []);
 
   const handleAssignNote = useCallback(async (note: QuickNote) => {
     if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
