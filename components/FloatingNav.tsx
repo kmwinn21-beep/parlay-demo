@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBottomNav } from './BottomNavContext';
@@ -239,23 +240,39 @@ export function FloatingNav() {
     setShowBatchModal(true);
   }, []);
 
-  const handleFloatingScanAssignLater = useCallback(async (card: BadgeScanCard) => {
+  const handleFloatingScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
     setScanSavingId(card.localId);
+    const relevance = badgeScanRelevance[card.localId] ?? [];
+    const productSuggestions = JSON.stringify(
+      relevance.map((r: ProductRelevanceResult) => ({ productId: r.productId, productName: r.productName, score: r.score, buyerRole: r.buyerRole }))
+    );
     const res = await fetch('/api/quick-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: formatCardAsText(card.draft), tag: 'card-badge' }),
+      body: JSON.stringify({
+        content: formatCardAsText(card.draft),
+        tag: 'card-badge',
+        secondary_tag: secondaryTag ?? null,
+        product_suggestions: productSuggestions,
+      }),
     });
     if (res.ok) {
       const note = await res.json();
       window.dispatchEvent(new CustomEvent('quicknote:saved', { detail: note }));
-    }
+      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
+        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
+        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
+        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
+        : 'Saved to Floor Notes';
+      toast.success(`${label} — assign details anytime`);
+    } else { toast.error('Failed to save note.'); }
     setScanSavingId(null);
     setBadgeScanCards(prev => {
       const next = prev.filter(c => c.localId !== card.localId);
-      if (next.length === 0) setShowScanModal(false);
+      // 1.5s auto-dismiss when an interaction type was selected
+      if (next.length === 0) setTimeout(() => setShowScanModal(false), secondaryTag ? 1500 : 0);
       return next;
     });
-  }, []);
+  }, [badgeScanRelevance]);
 
   if (!pos || hidden || navHidden) return null;
 

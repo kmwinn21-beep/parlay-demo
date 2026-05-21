@@ -16,6 +16,7 @@ interface QuickNote {
   created_by: string | null;
   tag: string | null;
   secondary_tag: string | null;
+  product_suggestions: string | null;
 }
 
 interface Conference { id: number; name: string; }
@@ -366,6 +367,34 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                 <span className="text-xs text-gray-400">from badge scan</span>
               </div>
 
+              {/* Suggested products (from persisted relevance) */}
+              {(() => {
+                const suggestions: { productId: number; productName: string; score: number; buyerRole: string | null }[] =
+                  note.product_suggestions ? (() => { try { return JSON.parse(note.product_suggestions!); } catch { return []; } })() : [];
+                if (suggestions.length === 0) return null;
+                return (
+                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                    <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-2">Suggested Products</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestions.map(s => (
+                        <span key={s.productId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-blue-200 text-[11px] font-medium text-blue-700">
+                          {s.productName}
+                          {s.buyerRole && (
+                            <span className={`text-[9px] px-1 rounded-full ${
+                              s.buyerRole === 'decision_maker' ? 'bg-emerald-100 text-emerald-700'
+                              : s.buyerRole === 'influencer' ? 'bg-violet-100 text-violet-700'
+                              : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {s.buyerRole === 'decision_maker' ? 'DM' : s.buyerRole === 'influencer' ? 'INF' : 'TGT'}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Conference picker */}
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Conference</label>
@@ -591,7 +620,7 @@ function BoothInteractionPicker({
 }) {
   return (
     <div className="pt-1">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Log Interaction</p>
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">What happened?</p>
       <div className="grid grid-cols-2 gap-1.5">
         {BOOTH_INTERACTIONS.map(item => (
           <button
@@ -606,17 +635,20 @@ function BoothInteractionPicker({
           </button>
         ))}
       </div>
+      <button type="button" disabled={!!savingId} onClick={() => onSelect('skip')}
+        className="w-full mt-1.5 text-xs text-gray-400 hover:text-gray-600 py-1.5 transition-colors disabled:opacity-50">
+        Skip
+      </button>
     </div>
   );
 }
 
 // ── Badge Scan Results Modal ──────────────────────────────────────────────────
 function BadgeScanResultsModal({
-  cards, onClose, onAssignNow, onAssignLater, savingId, productRelevanceMap,
+  cards, onClose, onAssignLater, savingId, productRelevanceMap,
 }: {
   cards: BadgeScanCard[];
   onClose: () => void;
-  onAssignNow: (card: BadgeScanCard) => void;
   onAssignLater: (card: BadgeScanCard, secondaryTag?: string) => Promise<void>;
   savingId: string | null;
   productRelevanceMap: Record<string, ProductRelevanceResult[]>;
@@ -661,17 +693,10 @@ function BadgeScanResultsModal({
                   )}
                 </div>
                 <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
-                <BoothInteractionPicker onSelect={(v) => onAssignLater(card, v)} savingId={savingId === card.localId ? savingId : null} />
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => onAssignNow(card)} disabled={isSaving}
-                    className="flex-1 btn-primary text-xs py-1.5 disabled:opacity-50">
-                    Assign Now
-                  </button>
-                  <button type="button" onClick={() => onAssignLater(card)} disabled={isSaving}
-                    className="flex-1 btn-secondary text-xs py-1.5 disabled:opacity-50">
-                    {isSaving ? 'Saving…' : 'Skip'}
-                  </button>
-                </div>
+                <BoothInteractionPicker
+                  onSelect={(v) => void onAssignLater(card, v === 'skip' ? undefined : v)}
+                  savingId={savingId === card.localId ? savingId : null}
+                />
               </div>
             );
           })}
@@ -849,6 +874,10 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
 
   const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
     setScanSavingId(card.localId);
+    const relevance = badgeScanRelevance[card.localId] ?? [];
+    const productSuggestions = JSON.stringify(
+      relevance.map(r => ({ productId: r.productId, productName: r.productName, score: r.score, buyerRole: r.buyerRole }))
+    );
     const res = await fetch('/api/quick-notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -856,6 +885,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         content: formatCardAsText(card.draft),
         tag: 'card-badge',
         secondary_tag: secondaryTag ?? null,
+        product_suggestions: productSuggestions,
       }),
     });
     if (res.ok) {
@@ -874,10 +904,11 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     setScanSavingId(null);
     setBadgeScanCards(prev => {
       const next = prev.filter(c => c.localId !== card.localId);
-      if (next.length === 0) setShowScanModal(false);
+      // 1.5s auto-dismiss when an interaction type was selected
+      if (next.length === 0) setTimeout(() => setShowScanModal(false), secondaryTag ? 1500 : 0);
       return next;
     });
-  }, []);
+  }, [badgeScanRelevance]);
 
   const handleAssignNote = useCallback(async (note: QuickNote) => {
     if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
@@ -1008,7 +1039,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       )}
       {showScanModal && badgeScanCards.length > 0 && (
         <BadgeScanResultsModal cards={badgeScanCards} onClose={() => setShowScanModal(false)}
-          onAssignNow={handleScanAssignNow} onAssignLater={handleScanAssignLater} savingId={scanSavingId} productRelevanceMap={badgeScanRelevance} />
+          onAssignLater={handleScanAssignLater} savingId={scanSavingId} productRelevanceMap={badgeScanRelevance} />
       )}
       {showBatchModal && (
         <BatchCardScanModal initialCards={batchModalCards} onClose={() => setShowBatchModal(false)} onDone={() => setShowBatchModal(false)} />

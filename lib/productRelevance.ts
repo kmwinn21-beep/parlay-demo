@@ -163,8 +163,6 @@ export async function resolveProductRelevance(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const top5 = scored.slice(0, 5);
-  // Require at least 2 products scoring above 20 to surface any results
-  if (top5.filter(r => r.score > 20).length < 2) return [];
-  return top5;
+  // Show any product scoring ≥ 30 — no minimum count required
+  return scored.filter(r => r.score >= 30).slice(0, 5);
 }

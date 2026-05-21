@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const result = await db.execute({
-      sql: 'SELECT id, content, created_at, created_by, tag, secondary_tag FROM quick_notes WHERE created_by = ? ORDER BY created_at DESC',
+      sql: 'SELECT id, content, created_at, created_by, tag, secondary_tag, product_suggestions FROM quick_notes WHERE created_by = ? ORDER BY created_at DESC',
       args: [user.email],
     });
     return NextResponse.json(result.rows.map(r => ({
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       created_by: r.created_by ? String(r.created_by) : null,
       tag: r.tag ? String(r.tag) : null,
       secondary_tag: r.secondary_tag ? String(r.secondary_tag) : null,
+      product_suggestions: r.product_suggestions ? String(r.product_suggestions) : null,
     })));
   } catch (error) {
     console.error('GET /api/quick-notes error:', error);
@@ -32,11 +33,11 @@ export async function POST(request: NextRequest) {
   const user = authResult;
   const db = await getDb(user?.accountId);
   try {
-    const { content, tag, secondary_tag } = await request.json() as { content: string; tag?: string | null; secondary_tag?: string | null };
+    const { content, tag, secondary_tag, product_suggestions } = await request.json() as { content: string; tag?: string | null; secondary_tag?: string | null; product_suggestions?: string | null };
     if (!content?.trim()) return NextResponse.json({ error: 'Content is required' }, { status: 400 });
     const result = await db.execute({
-      sql: 'INSERT INTO quick_notes (content, created_by, tag, secondary_tag) VALUES (?, ?, ?, ?) RETURNING id, content, created_at, created_by, tag, secondary_tag',
-      args: [content.trim(), user.email ?? null, tag ?? null, secondary_tag ?? null],
+      sql: 'INSERT INTO quick_notes (content, created_by, tag, secondary_tag, product_suggestions) VALUES (?, ?, ?, ?, ?) RETURNING id, content, created_at, created_by, tag, secondary_tag, product_suggestions',
+      args: [content.trim(), user.email ?? null, tag ?? null, secondary_tag ?? null, product_suggestions ?? null],
     });
     const row = result.rows[0];
     return NextResponse.json({
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       created_by: row.created_by ? String(row.created_by) : null,
       tag: row.tag ? String(row.tag) : null,
       secondary_tag: row.secondary_tag ? String(row.secondary_tag) : null,
+      product_suggestions: row.product_suggestions ? String(row.product_suggestions) : null,
     }, { status: 201 });
   } catch (error) {
     console.error('POST /api/quick-notes error:', error);

@@ -822,4 +822,5 @@ export const migrations: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_quick_notes_secondary_tag ON quick_notes(secondary_tag)`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('meeting_type', 'Booth Demo', 1, 0)`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('meeting_type', 'Booth Meeting', 2, 0)`,
+  `ALTER TABLE quick_notes ADD COLUMN product_suggestions TEXT`,
 ];
