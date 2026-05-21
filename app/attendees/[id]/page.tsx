@@ -502,6 +502,26 @@ export default function AttendeeDetailPage() {
     }
   };
 
+  const handleBulkToggleFollowUp = async (ids: number[]) => {
+    // Optimistic: mark all as complete immediately
+    setFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+      toast.success(`${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`);
+    } catch {
+      // Revert optimistic update
+      setFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: false } : fu));
+      toast.error('Failed to mark all done.');
+      throw new Error();
+    }
+  };
+
   const handlePinNote = async (noteId: number, conferenceName: string | null, _attendeeName: string | null, _attendeeId: number | null) => {
     if (!user?.email) { toast.error('You must be logged in to pin notes.'); return; }
     const attendeeName = attendee ? `${attendee.first_name} ${attendee.last_name}` : null;
@@ -1008,7 +1028,7 @@ export default function AttendeeDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
             </button>
             </div>
-            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} tableName="attendee_follow_ups" />
+            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onBulkToggle={handleBulkToggleFollowUp} tableName="attendee_follow_ups" groupBy="conference" />
           </div>
 
           {/* Notes */}
