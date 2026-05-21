@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
+import { RecordDrawerPanel, type CachedRecord } from '@/components/RecordDrawerPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -562,6 +563,9 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     conferences: { id: number; name: string; cells: Record<string, { option_id: number; value: string; color: string | null; count: number }[]> }[];
   } | null>(null);
   const [tpMapLoading, setTpMapLoading] = useState(false);
+  const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const [recordDrawerFadeKey, setRecordDrawerFadeKey] = useState(0);
+  const recordCacheRef = useRef<Map<string, CachedRecord>>(new Map());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -739,6 +743,28 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     }
   }, [tpMapData]);
 
+  const openRecordDrawer = useCallback((type: 'attendee' | 'company', id: number) => {
+    setRecordDrawer(prev => {
+      if (prev?.type === type && prev?.id === id) return prev;
+      setRecordDrawerFadeKey(k => k + 1);
+      return { type, id };
+    });
+  }, []);
+
+  const closeRecordDrawer = useCallback(() => {
+    setRecordDrawer(null);
+  }, []);
+
+  const openMeetingFromDrawer = useCallback((meetingId: number) => {
+    if (!data) return;
+    const company = data.companies.find(c => c.meetingCards.some(m => m.meetingId === meetingId));
+    if (company) {
+      setSelectedCompanyId(company.id);
+    }
+    openMeeting(meetingId);
+    closeRecordDrawer();
+  }, [data, openMeeting, closeRecordDrawer]);
+
   if (!isOpen) return null;
 
   const content = (
@@ -886,7 +912,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
           {/* ── Body ── */}
           {!loading && !error && data && (
-            <div className="flex flex-1 overflow-hidden">
+            <div className="relative flex flex-1 overflow-hidden" onClick={() => closeRecordDrawer()}>
 
               {/* Col 1 — Company list
                   Mobile: full-width when tab=companies, hidden otherwise
@@ -989,7 +1015,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                   <div className="space-y-5">
                     {/* Company header */}
                     <div>
-                      <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); openRecordDrawer('company', selectedCompany.id); }}
+                        className="text-left hover:underline"
+                      >
+                        <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
+                      </button>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {selectedCompany.status && selectedCompany.status !== 'Unknown' && (
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
@@ -1024,7 +1056,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {selectedCompany.attendees.map(a => (
                             <div key={a.id} className="border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
-                              <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openRecordDrawer('attendee', a.id); }}
+                                className="text-left w-full hover:underline"
+                              >
+                                <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
+                              </button>
                               {a.title && <p className="text-xs text-gray-400 mt-0.5 truncate">{a.title}</p>}
                               <div className="flex flex-col gap-1 mt-1.5">
                                 {a.meetingCount > 0 && (
@@ -1368,6 +1406,29 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                   </div>
                 </div>
               )}
+
+              {/* Record drawer — absolute overlay, slides in from right */}
+              <div
+                className={`hidden sm:flex sm:flex-col sm:flex-shrink-0 sm:border-l sm:border-gray-200 sm:bg-white sm:overflow-hidden sm:transition-all sm:ease-out absolute right-0 top-0 h-full z-10 ${
+                  recordDrawer != null ? 'sm:w-[400px]' : 'sm:w-0'
+                }`}
+                style={{ transitionDuration: '200ms' }}
+                onClick={e => e.stopPropagation()}
+              >
+                {recordDrawer != null && (
+                  <div className="w-[400px] h-full flex flex-col overflow-hidden">
+                    <RecordDrawerPanel
+                      type={recordDrawer.type}
+                      entityId={recordDrawer.id}
+                      onClose={closeRecordDrawer}
+                      onNavigate={openRecordDrawer}
+                      onOpenMeeting={openMeetingFromDrawer}
+                      cacheRef={recordCacheRef}
+                      contentFadeKey={recordDrawerFadeKey}
+                    />
+                  </div>
+                )}
+              </div>
 
             </div>
           )}
