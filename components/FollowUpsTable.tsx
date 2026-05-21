@@ -243,7 +243,16 @@ export function FollowUpsTable({
                       </div>
                     );
                   }
-                  if (fu.next_steps_notes) return <span className="text-xs text-gray-500">{fu.next_steps_notes}</span>;
+                  if (fu.next_steps_notes) {
+                    const lines = fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
+                    return (
+                      <div className="w-full">
+                        {lines.map((line, i) => (
+                          <p key={i} className={`text-xs text-gray-500 leading-snug${i > 0 ? ' mt-2.5' : ''}`}>{line}</p>
+                        ))}
+                      </div>
+                    );
+                  }
                   return null;
                 })()}
               </div>
@@ -334,7 +343,16 @@ export function FollowUpsTable({
                               </div>
                             );
                           }
-                          if (fu.next_steps_notes) return <p className="text-gray-500 mt-0.5 leading-snug">{fu.next_steps_notes}</p>;
+                          if (fu.next_steps_notes) {
+                            const lines = fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
+                            return (
+                              <div className="mt-0.5">
+                                {lines.map((line, i) => (
+                                  <p key={i} className={`text-gray-500 leading-snug${i > 0 ? ' mt-2.5' : ''}`}>{line}</p>
+                                ))}
+                              </div>
+                            );
+                          }
                           return null;
                         })()}
                       </td>;
