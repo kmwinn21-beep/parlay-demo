@@ -586,7 +586,7 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
       try {
         const [prodRes, statusRes] = await Promise.all([
           fetch('/api/config?category=products').then(r => r.ok ? r.json() : []),
-          fetch('/api/config?category=status').then(r => r.ok ? r.json() : []),
+          fetch('/api/config?category=status&form=booth_interaction').then(r => r.ok ? r.json() : []),
         ]);
         setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string }) => ({ id: p.id ?? 0, name: p.value ?? '' })).filter(p => p.name) : []);
         setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string }) => ({ value: s.value ?? '', label: s.value ?? '' })).filter(s => s.value) : []);

@@ -17,6 +17,7 @@ export const CATEGORY_FORM_USAGE: Record<string, FormChoice[]> = {
     { key: 'attendee_detail', label: 'Attendee Detail' },
     { key: 'company_detail', label: 'Company Detail' },
     { key: 'conference_detail', label: 'Conference Details' },
+    { key: 'booth_interaction', label: 'Booth Interaction Form' },
   ],
   seniority: [
     { key: 'attendee_table', label: 'Attendee Table' },
