@@ -606,7 +606,7 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
     });
   };
 
-  const canSubmit = !isMeeting || selectedProducts.size > 0;
+  const canSubmit = true;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -677,51 +677,67 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
               {/* Products */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Products {isMeeting && <span className="text-red-400">*</span>}
-                  </label>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Products</label>
                   <span className="text-xs text-gray-400">{selectedProducts.size}/3 selected</span>
                 </div>
 
-                {suggested.length > 0 && (
-                  <div className="mb-2">
-                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">Suggested</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {suggested.map(s => {
-                        const sel = selectedProducts.has(s.productName);
-                        return (
-                          <button key={s.productName} type="button" onClick={() => toggleProduct(s.productName)}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                              sel ? 'bg-teal-500 border-teal-500 text-white' : 'bg-teal-50 border-teal-200 text-teal-700 hover:border-teal-400'
-                            }`}>
-                            {sel && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
-                            {s.productName}
-                          </button>
-                        );
-                      })}
+                {suggested.length > 0 ? (
+                  <>
+                    <div className="mb-2">
+                      <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">Suggested</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {suggested.map(s => {
+                          const sel = selectedProducts.has(s.productName);
+                          return (
+                            <button key={s.productName} type="button" onClick={() => toggleProduct(s.productName)}
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                sel ? 'bg-teal-500 border-teal-500 text-white' : 'bg-teal-50 border-teal-200 text-teal-700 hover:border-teal-400'
+                              }`}>
+                              {sel && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
+                              {s.productName}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {otherProducts.length > 0 && (
-                  <div>
-                    {suggested.length > 0 && <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">All Products</p>}
-                    <div className="flex flex-wrap gap-1.5">
-                      {otherProducts.map(p => {
-                        const sel = selectedProducts.has(p.name);
-                        const atMax = selectedProducts.size >= 3 && !sel;
-                        return (
-                          <button key={p.id} type="button" onClick={() => !atMax && toggleProduct(p.name)} disabled={atMax}
-                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                              sel ? 'bg-brand-secondary border-brand-secondary text-white'
-                                : atMax ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
-                                : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
-                            }`}>
-                            {sel && '✓ '}{p.name}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {otherProducts.length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">All Products</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {otherProducts.map(p => {
+                            const sel = selectedProducts.has(p.name);
+                            const atMax = selectedProducts.size >= 3 && !sel;
+                            return (
+                              <button key={p.id} type="button" onClick={() => !atMax && toggleProduct(p.name)} disabled={atMax}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                  sel ? 'bg-brand-secondary border-brand-secondary text-white'
+                                    : atMax ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                                }`}>
+                                {sel && '✓ '}{p.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allProducts.map(p => {
+                      const sel = selectedProducts.has(p.name);
+                      const atMax = selectedProducts.size >= 3 && !sel;
+                      return (
+                        <button key={p.id} type="button" onClick={() => !atMax && toggleProduct(p.name)} disabled={atMax}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                            sel ? 'bg-brand-secondary border-brand-secondary text-white'
+                              : atMax ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                          }`}>
+                          {sel && '✓ '}{p.name}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -776,9 +792,6 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
             </div>
 
             <div className="px-6 pb-5 flex-shrink-0">
-              {isMeeting && selectedProducts.size === 0 && (
-                <p className="text-xs text-amber-600 mb-2">Select at least one product to save a Demo or Meeting.</p>
-              )}
               <button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting}
                 className="w-full btn-primary text-sm py-2.5 disabled:opacity-50">
                 {submitting ? 'Saving…' : 'Save Interaction'}
@@ -793,6 +806,7 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
 
 // ── Main QuickNotesSection ────────────────────────────────────────────────────
 export function QuickNotesSection({ className = '' }: { className?: string }) {
+  const { activeConference } = useActiveConference();
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1135,6 +1149,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       {showBatchModal && (
         <BatchCardScanModal
           initialCards={batchModalCards}
+          conferenceId={boothSourceNote ? (activeConference?.id ?? null) : undefined}
           onClose={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
           onDone={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
           onConfirmed={boothSourceNote ? (attendeeId, companyId, conferenceId) => {

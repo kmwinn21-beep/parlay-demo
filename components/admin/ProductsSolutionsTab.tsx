@@ -178,6 +178,10 @@ function DetailPanel({
   const assignedCategory = categories.find(c => c.id === product.category_id);
   const catDropRef = useRef<HTMLDivElement>(null);
 
+  // Controlled aliases input — reset whenever product changes to avoid stale defaultValue
+  const [aliasesInput, setAliasesInput] = useState(meta.aliases ?? '');
+  useEffect(() => { setAliasesInput(meta.aliases ?? ''); }, [product.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!categoryDropdownOpen) return;
     const h = (e: MouseEvent) => {
@@ -202,9 +206,9 @@ function DetailPanel({
             placeholder="Product name"
           />
           <input
-            key={`aliases-${product.id}`}
-            defaultValue={meta.aliases}
-            onBlur={e => onUpdateMeta(product.id, m => ({ ...m, aliases: e.target.value.trim() }))}
+            value={aliasesInput}
+            onChange={e => setAliasesInput(e.target.value)}
+            onBlur={() => onUpdateMeta(product.id, m => ({ ...m, aliases: aliasesInput.trim() }))}
             className="input-field text-sm w-full text-gray-500"
             placeholder="Short name or aliases e.g. WMS, Industrial ERP"
           />
