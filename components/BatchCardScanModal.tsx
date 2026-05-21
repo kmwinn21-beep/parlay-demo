@@ -59,6 +59,7 @@ interface Props {
   initialCards?: ScannedCard[];
   onClose: () => void;
   onDone: () => void;
+  onConfirmed?: (attendeeId: number, companyId: number | null, conferenceId: number | null) => void;
 }
 
 export type { ScannedCard, CardDraft };
@@ -534,7 +535,7 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
 
 // ─── BatchCardScanModal — main export ─────────────────────────────────────────
 
-export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone }: Props) {
+export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone, onConfirmed }: Props) {
   const [cards, setCards] = useState<ScannedCard[]>(initialCards ?? []);
   const [scanning, setScanning] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -724,8 +725,9 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
       }
 
       updateCard(localId, { status: action.type === 'confirm' ? 'confirmed' : 'added', pendingAction: null });
+      onConfirmed?.(attendeeId, companyId, activeConfId);
     } finally { setSavingId(null); }
-  }, [cards, activeConfId, updateCard]);
+  }, [cards, activeConfId, updateCard, onConfirmed]);
 
   const handleAttendeeSelect = useCallback((localId: string, r: SearchResult) => {
     const parts = r.name.split(' ');
@@ -754,8 +756,8 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
   const unresolved = cards.filter(c => !['confirmed','added'].includes(c.status)).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">

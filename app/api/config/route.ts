@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     let result;
     if (category) {
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary FROM config_options WHERE category = ? ORDER BY sort_order, value',
+        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary, category_id, description, metadata FROM config_options WHERE category = ? ORDER BY sort_order, value',
         args: [category],
       });
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     } else {
       // Return all options (used for color lookups across the app)
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary FROM config_options ORDER BY category, sort_order, value',
+        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary, category_id, description, metadata FROM config_options ORDER BY category, sort_order, value',
         args: [],
       });
     }
@@ -58,6 +58,9 @@ export async function GET(request: NextRequest) {
       auto_follow_up: r.auto_follow_up === null || r.auto_follow_up === undefined ? 1 : Number(r.auto_follow_up),
       is_system: r.is_system ? Number(r.is_system) : 0,
       is_primary: r.is_primary ? Number(r.is_primary) : 0,
+      category_id: r.category_id != null ? Number(r.category_id) : null,
+      description: r.description ? String(r.description) : null,
+      metadata: r.metadata ? String(r.metadata) : null,
     }));
 
     if (!form && !includeVisibility) {
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { category, value, sort_order, color } = body;
+    const { category, value, sort_order, color, category_id, description } = body;
 
     if (!category || !value) {
       return NextResponse.json({ error: 'category and value are required' }, { status: 400 });
@@ -121,8 +124,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: 'INSERT INTO config_options (category, value, sort_order, color) VALUES (?, ?, ?, ?) RETURNING *',
-      args: [category, value, sort_order ?? 0, color ?? null],
+      sql: 'INSERT INTO config_options (category, value, sort_order, color, category_id, description) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [category, value, sort_order ?? 0, color ?? null, category_id ?? null, description ?? null],
     });
 
     return NextResponse.json(result.rows[0], { status: 201 });

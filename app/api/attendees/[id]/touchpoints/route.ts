@@ -104,6 +104,13 @@ export async function POST(
   const stageBlock = await validateConferenceStage(request, Number(conference_id), 'canLogTouchpoint');
   if (stageBlock) return stageBlock;
 
+  // Resolve config_id for assigned_rep
+  const userRow = await db.execute({
+    sql: `SELECT config_id FROM users WHERE id = ? AND config_id IS NOT NULL LIMIT 1`,
+    args: [authResult.id],
+  });
+  const assignedRep: string | null = userRow.rows[0]?.config_id ? String(userRow.rows[0].config_id) : null;
+
   const insertRes = await db.execute({
     sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id) VALUES (?, ?, ?) RETURNING id`,
     args: [attendeeId, conference_id, option_id],
@@ -122,9 +129,9 @@ export async function POST(
     if (autoFu === 1) {
       const optValue = String(opt.value);
       const fuRes = await db.execute({
-        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
-              VALUES (?, ?, ?, ?, 0) RETURNING id`,
-        args: [attendeeId, conference_id, optValue, `Auto-created from touchpoint: ${optValue}`],
+        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+              VALUES (?, ?, ?, ?, ?, 0) RETURNING id`,
+        args: [attendeeId, conference_id, optValue, `Auto-created from touchpoint: ${optValue}`, assignedRep],
       });
       followUpId = Number(fuRes.rows[0].id);
     }

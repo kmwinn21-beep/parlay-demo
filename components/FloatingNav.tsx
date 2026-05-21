@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBottomNav } from './BottomNavContext';
@@ -10,6 +11,9 @@ import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 import { useUnreadChatCount } from '@/lib/useUnreadChatCount';
 import { useChatPanel } from './ChatPanelContext';
+import { BadgeScanResultsModal, type BadgeScanCard, fileToBase64, formatCardAsText } from './DashboardActionCard';
+import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 
 const STORAGE_KEY = 'floatingNavPos';
 const BTN = 56; // diameter in px (w-14)
@@ -35,15 +39,6 @@ const NAV_ITEMS = [
     ),
   },
   {
-    href: '/program-intelligence',
-    label: 'Program',
-    icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-  },
-  {
     href: '/attendees',
     label: 'People',
     icon: (
@@ -58,15 +53,6 @@ const NAV_ITEMS = [
     icon: (
       <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-      </svg>
-    ),
-  },
-  {
-    href: '/relationships',
-    label: 'Relationships',
-    icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
       </svg>
     ),
   },
@@ -118,6 +104,14 @@ export function FloatingNav() {
   const [dragging, setDragging] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
+  const [badgeFileKey, setBadgeFileKey] = useState(0);
+  const [badgeScanCards, setBadgeScanCards] = useState<BadgeScanCard[]>([]);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [scanSavingId, setScanSavingId] = useState<string | null>(null);
+  const [batchModalCards, setBatchModalCards] = useState<ScannedCard[]>([]);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
+  const floatingBadgeRef = useRef<HTMLInputElement>(null);
 
   const fabRef = useRef<HTMLDivElement>(null);
   const ds = useRef({
@@ -196,6 +190,90 @@ export function FloatingNav() {
     }
   }, []);
 
+  const handleFloatingBadgeFile = useCallback(async (file: File) => {
+    try {
+      const base64 = await fileToBase64(file);
+      const scanRes = await fetch('/api/scan-card/batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: base64, media_type: file.type || 'image/jpeg' }),
+      });
+      if (!scanRes.ok) throw new Error();
+      const { cards: rawCards } = await scanRes.json() as { cards: Partial<CardDraft>[] };
+      const initial: BadgeScanCard[] = rawCards.map(raw => ({
+        localId: Math.random().toString(36).slice(2),
+        draft: { first_name: raw.first_name ?? '', last_name: raw.last_name ?? '', title: raw.title ?? '', company: raw.company ?? '', email: raw.email ?? '', phone: raw.phone ?? '' },
+        attendeeMatches: [], companyMatches: [], status: 'matching' as const,
+      }));
+      setBadgeScanCards(initial);
+      setShowScanModal(true);
+      setBadgeScanRelevance({});
+      initial.forEach(card => {
+        if (card.draft.title) {
+          void resolveProductRelevance(card.draft.title).then(results => {
+            setBadgeScanRelevance(prev => ({ ...prev, [card.localId]: results }));
+          });
+        }
+        void fetch('/api/card-scan/match', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ first_name: card.draft.first_name, last_name: card.draft.last_name, company: card.draft.company, email: card.draft.email }),
+        }).then(async mRes => {
+          const { attendeeMatches = [], companyMatches = [] } = mRes.ok ? await mRes.json() : {};
+          setBadgeScanCards(prev => prev.map(c => c.localId === card.localId
+            ? { ...c, attendeeMatches, companyMatches, status: (attendeeMatches.length > 0 || companyMatches.length > 0) ? 'matched' : 'no-match' }
+            : c));
+        }).catch(() => {
+          setBadgeScanCards(prev => prev.map(c => c.localId === card.localId ? { ...c, status: 'no-match' } : c));
+        });
+      });
+    } catch { /* silent */ }
+  }, []);
+
+  const handleFloatingScanAssignNow = useCallback((card: BadgeScanCard) => {
+    const scanned: ScannedCard = {
+      ...makeCard(card.draft),
+      attendeeMatches: card.attendeeMatches,
+      companyMatches: card.companyMatches,
+      status: card.attendeeMatches.length > 0 ? 'matched' : 'no-match',
+    };
+    setBatchModalCards([scanned]);
+    setShowScanModal(false);
+    setShowBatchModal(true);
+  }, []);
+
+  const handleFloatingScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
+    setScanSavingId(card.localId);
+    const relevance = badgeScanRelevance[card.localId] ?? [];
+    const productSuggestions = JSON.stringify(
+      relevance.map((r: ProductRelevanceResult) => ({ productId: r.productId, productName: r.productName, score: r.score, buyerRole: r.buyerRole }))
+    );
+    const res = await fetch('/api/quick-notes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: formatCardAsText(card.draft),
+        tag: 'card-badge',
+        secondary_tag: secondaryTag ?? null,
+        product_suggestions: productSuggestions,
+      }),
+    });
+    if (res.ok) {
+      const note = await res.json();
+      window.dispatchEvent(new CustomEvent('quicknote:saved', { detail: note }));
+      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
+        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
+        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
+        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
+        : 'Saved to Floor Notes';
+      toast.success(`${label} — assign details anytime`);
+    } else { toast.error('Failed to save note.'); }
+    setScanSavingId(null);
+    setBadgeScanCards(prev => {
+      const next = prev.filter(c => c.localId !== card.localId);
+      // 1.5s auto-dismiss when an interaction type was selected
+      if (next.length === 0) setTimeout(() => setShowScanModal(false), secondaryTag ? 1500 : 0);
+      return next;
+    });
+  }, [badgeScanRelevance]);
+
   if (!pos || hidden || navHidden) return null;
 
   const vw = window.innerWidth;
@@ -236,6 +314,19 @@ export function FloatingNav() {
       href: null,
       active: false,
       action: 'chat' as const,
+    },
+    {
+      key: 'scan',
+      label: 'Scan',
+      icon: (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+      href: null as string | null,
+      active: false,
+      action: 'scan' as const,
     },
     {
       key: 'quick-note',
@@ -279,6 +370,34 @@ export function FloatingNav() {
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
       {/* Quick note modal */}
       {showQuickNote && <QuickNoteInlineModal onClose={() => setShowQuickNote(false)} />}
+
+      {/* Hidden file input for badge scan */}
+      <input
+        key={badgeFileKey}
+        ref={floatingBadgeRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) void handleFloatingBadgeFile(f); e.target.value = ''; }}
+      />
+      {showScanModal && badgeScanCards.length > 0 && (
+        <BadgeScanResultsModal
+          cards={badgeScanCards}
+          onClose={() => setShowScanModal(false)}
+          onAssignNow={handleFloatingScanAssignNow}
+          onAssignLater={handleFloatingScanAssignLater}
+          savingId={scanSavingId}
+          productRelevanceMap={badgeScanRelevance}
+        />
+      )}
+      {showBatchModal && (
+        <BatchCardScanModal
+          initialCards={batchModalCards}
+          onClose={() => setShowBatchModal(false)}
+          onDone={() => setShowBatchModal(false)}
+        />
+      )}
 
       {/* Menu items — always in DOM so closing can animate out */}
       <div
@@ -344,6 +463,7 @@ export function FloatingNav() {
                     setOpen(false);
                     if (item.key === 'quick-note') setShowQuickNote(true);
                     else if (item.key === 'chat') setPanelOpen(true);
+                    else if (item.key === 'scan') { setBadgeFileKey(k => k + 1); floatingBadgeRef.current?.click(); }
                     else setShowSearch(true);
                   }}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border w-full min-w-[152px] transition-colors ${pillCls}`}

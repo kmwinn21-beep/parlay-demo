@@ -41,7 +41,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes, icpPrioritySettingsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, productCategoriesRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes, icpPrioritySettingsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -85,7 +85,8 @@ export async function GET(
     }),
     getIcpConfig(db),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
-    db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({ sql: `SELECT id, value, color, category_id FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({ sql: `SELECT id, value, color FROM config_options WHERE category = 'product_category' ORDER BY sort_order, value`, args: [] }),
     db.execute({ sql: `SELECT line_items, required_pipeline_amount FROM conference_budget WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [] })),
     db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] })),
     conference.conference_strategy_type_id
@@ -104,9 +105,19 @@ export async function GET(
   const socialEvents = socialRes.rows;
   const followUps = followUpsRes.rows;
 
-  const productColorMap = new Map<string, string | null>();
+  const productInfoMap = new Map<string, { color: string | null; categoryId: number | null }>();
   for (const r of productColorsRes.rows) {
-    productColorMap.set(String(r.value), r.color ? String(r.color) : null);
+    productInfoMap.set(String(r.value), {
+      color: r.color ? String(r.color) : null,
+      categoryId: r.category_id != null ? Number(r.category_id) : null,
+    });
+  }
+  const productColorMap = new Map<string, string | null>();
+  productInfoMap.forEach((v, k) => productColorMap.set(k, v.color));
+
+  const productCategoryMap = new Map<number, { label: string; color: string | null }>();
+  for (const r of productCategoriesRes.rows) {
+    productCategoryMap.set(Number(r.id), { label: String(r.value), color: r.color ? String(r.color) : null });
   }
 
   const companyIds = uniqueNumbers(attendees.map((a) => a.company_id as number | null));
@@ -702,11 +713,19 @@ export async function GET(
   }
   const productIcp = Array.from(productCompanyMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([product, compMap]) => ({
-      product,
-      color: productColorMap.get(product) ?? null,
-      companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
-    }));
+    .map(([product, compMap]) => {
+      const info = productInfoMap.get(product);
+      const catId = info?.categoryId ?? null;
+      const catEntry = catId != null ? productCategoryMap.get(catId) : null;
+      return {
+        product,
+        color: info?.color ?? null,
+        categoryId: catId,
+        categoryLabel: catEntry?.label ?? 'General',
+        categoryColor: catEntry?.color ?? null,
+        companies: Array.from(compMap.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)),
+      };
+    });
 
   // --- Strategy Assessment ---
   const budgetRow = budgetRes.rows[0];

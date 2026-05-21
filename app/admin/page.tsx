@@ -21,6 +21,7 @@ import { invalidateTagline } from '@/lib/useTagline';
 import { invalidateUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { DEFAULT_CONFERENCE_OPPORTUNITY_WEIGHTS, DEFAULT_RECOMMENDED_ACTIONS, DEFAULT_RELATIONSHIP_SIGNAL_WEIGHTS, DEFAULT_TARGET_PRIORITY_WEIGHTS, DEFAULT_TIER_THRESHOLDS, validateTargetPriorityWeights, type TargetPriorityWeights } from '@/lib/targeting/targetPriority';
 import { IcpAiAssistModal, type AiItem } from '@/components/IcpAiAssistModal';
+import { ProductsSolutionsTab } from '@/components/admin/ProductsSolutionsTab';
 
 interface ConfigOption {
   id: number;
@@ -34,6 +35,9 @@ interface ConfigOption {
   is_system?: number; // 1 = seeded system value, cannot be deleted
   is_primary?: number; // 1 = primary designation for this category
   action_key?: string | null; // stable identifier; company_type uses 'prospect' to mark the primary target type
+  category_id?: number | null;
+  description?: string | null;
+  metadata?: string | null;
 }
 
 const CATEGORIES = [
@@ -44,6 +48,7 @@ const CATEGORIES = [
   { key: 'next_steps', label: 'Next Steps' },
   { key: 'seniority', label: 'Seniority Levels' },
   { key: 'function', label: 'Function' },
+  { key: 'product_category', label: 'Product Categories' },
   { key: 'products', label: 'Products' },
   { key: 'profit_type', label: 'Profit Types' },
   { key: 'services', label: 'Services' },
@@ -57,6 +62,7 @@ const CATEGORIES = [
   { key: 'target_recommended_action', label: 'Target Recommended Actions' },
   { key: 'user', label: 'Users' },
   { key: 'cost_type', label: 'Cost Types' },
+  { key: 'industry', label: 'Industry' },
 ];
 
 const TABLE_LABELS: Record<string, string> = {
@@ -74,7 +80,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'products-solutions' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
 
 interface IcpRuleDraft {
   id?: number;
@@ -196,7 +202,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'None'
   );
 }
 
-function CategorySection({ category, label, options, onRefresh }: { category: string; label: string; options: ConfigOption[]; onRefresh: () => void }) {
+function CategorySection({ category, label, options, onRefresh, categoryOptions = [] }: { category: string; label: string; options: ConfigOption[]; onRefresh: () => void; categoryOptions?: ConfigOption[] }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localOptions, setLocalOptions] = useState<ConfigOption[]>(options);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -213,6 +219,9 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const showScopeDropdown = category === 'status';
   const showAutoFollowUp = category === 'touchpoints';
   const [editAutoFollowUp, setEditAutoFollowUp] = useState<boolean>(true);
+  const [editCategoryId, setEditCategoryId] = useState<number | null>(null);
+  const [editDescription, setEditDescription] = useState<string>('');
+  const [newOptionCategoryId, setNewOptionCategoryId] = useState<number | null>(null);
 
   useEffect(() => { setLocalOptions(options); }, [options]);
 
@@ -222,6 +231,8 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     setEditVisibleForms(opt.visible_forms ?? availableForms.map(f => f.key));
     setEditScope((opt.scope === 'user' ? 'user' : 'global') as 'global' | 'user');
     setEditAutoFollowUp(opt.auto_follow_up === undefined ? true : opt.auto_follow_up !== 0);
+    setEditCategoryId(opt.category_id ?? null);
+    setEditDescription(opt.description ?? '');
     setFormPickerOpenId(null);
     setExpandedOptions(prev => new Set(prev).add(opt.id));
   };
@@ -239,6 +250,8 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
       const payload: Record<string, unknown> = { value: editValue.trim(), visible_forms: editVisibleForms };
       if (showScopeDropdown) payload.scope = editScope;
       if (showAutoFollowUp) payload.auto_follow_up = editAutoFollowUp;
+      if (category === 'products') payload.category_id = editCategoryId;
+      if (category === 'product_category') payload.description = editDescription.trim() || null;
       const res = await fetch(`/api/config/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -262,11 +275,14 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
     if (!confirm(`Delete "${value}"? This cannot be undone.`)) return;
     try {
       const res = await fetch(`/api/config/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? 'Failed to delete.');
+      }
       setLocalOptions(prev => prev.filter(opt => opt.id !== id));
       toast.success('Deleted.');
       onRefresh();
-    } catch { toast.error('Failed to delete.'); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed to delete.'); }
   };
 
   const handleMakePrimary = async (id: number) => {
@@ -281,11 +297,16 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const trimmed = ((new FormData(form).get('newOption') as string) ?? '').trim();
+    const fd = new FormData(form);
+    const trimmed = ((fd.get('newOption') as string) ?? '').trim();
+    const newDesc = ((fd.get('newDescription') as string) ?? '').trim() || null;
     if (!trimmed) { toast.error('Value cannot be empty.'); return; }
     setIsAdding(true);
     try {
-      const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category, value: trimmed, sort_order: localOptions.length + 1 }) });
+      const addPayload: Record<string, unknown> = { category, value: trimmed, sort_order: localOptions.length + 1 };
+      if (category === 'products') addPayload.category_id = newOptionCategoryId;
+      if (category === 'product_category' && newDesc) addPayload.description = newDesc;
+      const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(addPayload) });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed to add'); }
       const newOption = await res.json();
       setLocalOptions(prev => [...prev, {
@@ -402,7 +423,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                           </button>
                         </>
                       )}
-                      {opt.is_system
+                      {opt.is_system && category !== 'company_type' && category !== 'products' && category !== 'product_category'
                         ? <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                             System
@@ -422,7 +443,7 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
-                          {opt.is_system && category !== 'company_type' ? (
+                          {opt.is_system && category !== 'company_type' && category !== 'products' && category !== 'product_category' ? (
                             <div className="input-field w-full text-sm bg-gray-50 text-gray-500 flex items-center justify-between">
                               <span>{opt.value}</span>
                               <span className="text-[10px] text-gray-400 italic ml-2">locked</span>
@@ -515,8 +536,34 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
                             </p>
                           </div>
                         )}
+                        {category === 'products' && (
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Category</label>
+                            <select
+                              value={editCategoryId ?? ''}
+                              onChange={e => setEditCategoryId(e.target.value ? Number(e.target.value) : null)}
+                              className="input-field w-full text-sm"
+                            >
+                              <option value="">General</option>
+                              {categoryOptions.map(c => (
+                                <option key={c.id} value={c.id}>{c.value}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {category === 'product_category' && (
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Description <span className="font-normal text-gray-400">(optional)</span></label>
+                            <input
+                              value={editDescription}
+                              onChange={e => setEditDescription(e.target.value)}
+                              className="input-field w-full text-sm"
+                              placeholder="Short description of this category"
+                            />
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
-                          {(!opt.is_system || category === 'company_type') && <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>}
+                          {(!opt.is_system || category === 'company_type' || category === 'products' || category === 'product_category') && <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>}
                           <button
                             type="button"
                             onClick={() => {
@@ -540,9 +587,26 @@ function CategorySection({ category, label, options, onRefresh }: { category: st
               })}
             </ul>
           )}
-          <form onSubmit={handleAdd} className="flex gap-2 pt-3 border-t border-gray-100">
-            <input name="newOption" placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`} className="input-field flex-1 text-sm" autoComplete="off" />
-            <button type="submit" disabled={isAdding} className="btn-primary text-sm">{isAdding ? 'Adding...' : 'Add'}</button>
+          <form onSubmit={handleAdd} className="pt-3 border-t border-gray-100 space-y-2">
+            <div className="flex gap-2">
+              <input name="newOption" placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`} className="input-field flex-1 text-sm" autoComplete="off" />
+              <button type="submit" disabled={isAdding} className="btn-primary text-sm">{isAdding ? 'Adding...' : 'Add'}</button>
+            </div>
+            {category === 'products' && (
+              <select
+                value={newOptionCategoryId ?? ''}
+                onChange={e => setNewOptionCategoryId(e.target.value ? Number(e.target.value) : null)}
+                className="input-field w-full text-sm"
+              >
+                <option value="">Category: General</option>
+                {categoryOptions.map(c => (
+                  <option key={c.id} value={c.id}>{c.value}</option>
+                ))}
+              </select>
+            )}
+            {category === 'product_category' && (
+              <input name="newDescription" placeholder="Description (optional)" className="input-field w-full text-sm" autoComplete="off" />
+            )}
           </form>
         </div>
       )}
@@ -1965,14 +2029,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'icp', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -2012,7 +2076,7 @@ export default function AdminPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {CATEGORIES.map(cat => (
-                <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} />
+                <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} />
               ))}
             </div>
           </div>
@@ -3665,6 +3729,18 @@ export default function AdminPage() {
             </IcpSettingsSection>
           </div>
         )
+      )}
+
+      {/* ── Products & Solutions tab ── */}
+      {tab === 'products-solutions' && (
+        <ProductsSolutionsTab
+          products={optionsByCategory['products'] ?? []}
+          categories={optionsByCategory['product_category'] ?? []}
+          seniorityOptions={optionsByCategory['seniority'] ?? []}
+          functionOptions={optionsByCategory['function'] ?? []}
+          industryOptions={(optionsByCategory['product_category'] ?? []).filter(c => !c.is_system)}
+          onRefresh={fetchAll}
+        />
       )}
 
       {/* ── Custom Forms tab ── */}

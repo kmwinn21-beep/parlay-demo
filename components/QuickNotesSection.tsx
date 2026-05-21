@@ -6,6 +6,8 @@ import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from '
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
+import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
+import { ProductRelevanceSection } from './ProductRelevanceSection';
 
 interface QuickNote {
   id: number;
@@ -13,6 +15,8 @@ interface QuickNote {
   created_at: string;
   created_by: string | null;
   tag: string | null;
+  secondary_tag: string | null;
+  product_suggestions: string | null;
 }
 
 interface Conference { id: number; name: string; }
@@ -297,7 +301,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div className="px-6 py-4">
+        <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
           <p className="text-xs text-gray-500 mb-4 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 line-clamp-3">{note.content}</p>
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -380,6 +384,15 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
               Badge
             </span>
           )}
+          {note.tag === 'card-badge' && note.secondary_tag?.startsWith('booth-') && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-[10px] font-medium text-violet-600 flex-shrink-0">
+              {note.secondary_tag === 'booth-stop' ? 'Stopped By'
+                : note.secondary_tag === 'booth-demo' ? 'Demo'
+                : note.secondary_tag === 'booth-meeting' ? 'Meeting'
+                : note.secondary_tag === 'booth-followup' ? 'Follow-up Req'
+                : note.secondary_tag}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button type="button" onClick={() => { setEditing(true); setEditText(note.content); }}
@@ -424,15 +437,55 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
   );
 }
 
+// ── Booth Interaction Picker ──────────────────────────────────────────────────
+const BOOTH_INTERACTIONS = [
+  { value: 'booth-stop', label: 'Stopped By', icon: '👋' },
+  { value: 'booth-demo', label: 'Demo', icon: '🖥' },
+  { value: 'booth-meeting', label: 'Meeting', icon: '📅' },
+  { value: 'booth-followup', label: 'Follow-up Req', icon: '📋' },
+] as const;
+
+function BoothInteractionPicker({
+  onSelect,
+  savingId,
+}: {
+  onSelect: (value: string) => void;
+  savingId: string | null;
+}) {
+  return (
+    <div className="pt-1">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">What happened?</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {BOOTH_INTERACTIONS.map(item => (
+          <button
+            key={item.value}
+            type="button"
+            disabled={!!savingId}
+            onClick={() => onSelect(item.value)}
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:border-brand-secondary hover:text-brand-secondary hover:bg-blue-50 transition-colors disabled:opacity-50 text-left"
+          >
+            <span className="text-sm">{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <button type="button" disabled={!!savingId} onClick={() => onSelect('skip')}
+        className="w-full mt-1.5 text-xs text-gray-400 hover:text-gray-600 py-1.5 transition-colors disabled:opacity-50">
+        Skip
+      </button>
+    </div>
+  );
+}
+
 // ── Badge Scan Results Modal ──────────────────────────────────────────────────
 function BadgeScanResultsModal({
-  cards, onClose, onAssignNow, onAssignLater, savingId,
+  cards, onClose, onAssignLater, savingId, productRelevanceMap,
 }: {
   cards: BadgeScanCard[];
   onClose: () => void;
-  onAssignNow: (card: BadgeScanCard) => void;
-  onAssignLater: (card: BadgeScanCard) => Promise<void>;
+  onAssignLater: (card: BadgeScanCard, secondaryTag?: string) => Promise<void>;
   savingId: string | null;
+  productRelevanceMap: Record<string, ProductRelevanceResult[]>;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -473,16 +526,11 @@ function BadgeScanResultsModal({
                     <span className="text-xs text-amber-600 font-medium">No match found</span>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => onAssignNow(card)} disabled={isSaving}
-                    className="flex-1 btn-primary text-xs py-1.5 disabled:opacity-50">
-                    Assign Now
-                  </button>
-                  <button type="button" onClick={() => onAssignLater(card)} disabled={isSaving}
-                    className="flex-1 btn-secondary text-xs py-1.5 disabled:opacity-50">
-                    {isSaving ? 'Saving…' : 'Assign Later'}
-                  </button>
-                </div>
+                <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
+                <BoothInteractionPicker
+                  onSelect={(v) => void onAssignLater(card, v === 'skip' ? undefined : v)}
+                  savingId={savingId === card.localId ? savingId : null}
+                />
               </div>
             );
           })}
@@ -492,8 +540,273 @@ function BadgeScanResultsModal({
   );
 }
 
+// ── Booth Structured Capture Modal ───────────────────────────────────────────
+interface BoothCaptureData {
+  note: QuickNote;
+  attendeeId: number;
+  companyId: number | null;
+  conferenceId: number | null;
+}
+
+interface ProductOption { id: number; name: string; }
+interface StatusOption { value: string; label: string; }
+
+function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
+  data: BoothCaptureData;
+  onClose: () => void;
+  onSubmitted: (noteId: number) => void;
+}) {
+  const interactionType = data.note.secondary_tag ?? 'booth-stop';
+  const isMeeting = interactionType === 'booth-demo' || interactionType === 'booth-meeting';
+
+  const interactionLabel = interactionType === 'booth-demo' ? 'Demo'
+    : interactionType === 'booth-meeting' ? 'Meeting'
+    : interactionType === 'booth-followup' ? 'Follow-up Request'
+    : 'Booth Stop';
+
+  // Parse suggested products from note
+  const suggested: { productName: string; score: number }[] = (() => {
+    try { return JSON.parse(data.note.product_suggestions ?? '[]'); } catch { return []; }
+  })();
+
+  const [allProducts, setAllProducts] = useState<ProductOption[]>([]);
+  const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(
+    new Set(suggested.slice(0, 3).map(s => s.productName))
+  );
+  const [sentiment, setSentiment] = useState<string | null>(null);
+  const [scheduleFollowUp, setScheduleFollowUp] = useState<boolean | null>(null);
+  const [notesText, setNotesText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [prodRes, statusRes] = await Promise.all([
+          fetch('/api/config?category=products').then(r => r.ok ? r.json() : []),
+          fetch('/api/config?category=status&form=booth_interaction').then(r => r.ok ? r.json() : []),
+        ]);
+        setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string }) => ({ id: p.id ?? 0, name: p.value ?? '' })).filter(p => p.name) : []);
+        setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string }) => ({ value: s.value ?? '', label: s.value ?? '' })).filter(s => s.value) : []);
+      } catch { /* non-blocking */ }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const toggleProduct = (name: string) => {
+    setSelectedProducts(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) { next.delete(name); return next; }
+      if (next.size >= 3) return prev;
+      next.add(name);
+      return next;
+    });
+  };
+
+  const canSubmit = true;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/booth-scan/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quick_note_id: data.note.id,
+          attendee_id: data.attendeeId,
+          conference_id: data.conferenceId,
+          company_id: data.companyId,
+          interaction_type: interactionType,
+          notes_text: notesText.trim() || null,
+          products: Array.from(selectedProducts),
+          sentiment,
+          schedule_follow_up: scheduleFollowUp,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setSuccess(true);
+      setTimeout(() => { onSubmitted(data.note.id); onClose(); }, 1500);
+    } catch {
+      toast.error('Failed to save interaction.');
+      setSubmitting(false);
+    }
+  };
+
+  const suggestedNames = new Set(suggested.map(s => s.productName));
+  const otherProducts = allProducts.filter(p => !suggestedNames.has(p.name));
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h3 className="text-base font-semibold text-brand-primary font-serif">Log {interactionLabel}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {(() => {
+                const lines = data.note.content.split('\n');
+                const name = lines[0]?.replace('Name:', '').trim();
+                const co = lines[2]?.replace('Company:', '').trim();
+                return [name, co].filter(s => s && s !== '—').join(' · ');
+              })()}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {success ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <p className="text-sm font-medium text-gray-700">Interaction saved!</p>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+              {/* Products */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Products</label>
+                  <span className="text-xs text-gray-400">{selectedProducts.size}/3 selected</span>
+                </div>
+
+                {suggested.length > 0 ? (
+                  <>
+                    <div className="mb-2">
+                      <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">Suggested</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {suggested.map(s => {
+                          const sel = selectedProducts.has(s.productName);
+                          return (
+                            <button key={s.productName} type="button" onClick={() => toggleProduct(s.productName)}
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                sel ? 'bg-teal-500 border-teal-500 text-white' : 'bg-teal-50 border-teal-200 text-teal-700 hover:border-teal-400'
+                              }`}>
+                              {sel && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
+                              {s.productName}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {otherProducts.length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5">All Products</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {otherProducts.map(p => {
+                            const sel = selectedProducts.has(p.name);
+                            const atMax = selectedProducts.size >= 3 && !sel;
+                            return (
+                              <button key={p.id} type="button" onClick={() => !atMax && toggleProduct(p.name)} disabled={atMax}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                  sel ? 'bg-brand-secondary border-brand-secondary text-white'
+                                    : atMax ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                                }`}>
+                                {sel && '✓ '}{p.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allProducts.map(p => {
+                      const sel = selectedProducts.has(p.name);
+                      const atMax = selectedProducts.size >= 3 && !sel;
+                      return (
+                        <button key={p.id} type="button" onClick={() => !atMax && toggleProduct(p.name)} disabled={atMax}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                            sel ? 'bg-brand-secondary border-brand-secondary text-white'
+                              : atMax ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                          }`}>
+                          {sel && '✓ '}{p.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Sentiment */}
+              {statusOptions.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Status / Sentiment</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {statusOptions.map(opt => (
+                      <button key={opt.value} type="button" onClick={() => setSentiment(prev => prev === opt.value ? null : opt.value)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          sentiment === opt.value
+                            ? 'bg-brand-secondary border-brand-secondary text-white'
+                            : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                        }`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Schedule Follow-Up */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Schedule Follow-Up?</label>
+                <div className="flex gap-2">
+                  {[{ val: true, label: 'Yes' }, { val: false, label: 'No' }].map(opt => (
+                    <button key={String(opt.val)} type="button"
+                      onClick={() => setScheduleFollowUp(prev => prev === opt.val ? null : opt.val)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                        scheduleFollowUp === opt.val
+                          ? 'bg-brand-secondary border-brand-secondary text-white'
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Notes</label>
+                <textarea
+                  value={notesText} onChange={e => setNotesText(e.target.value)}
+                  placeholder="Add any notes from this interaction…"
+                  style={{ minHeight: 80 }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 pb-5 flex-shrink-0">
+              <button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting}
+                className="w-full btn-primary text-sm py-2.5 disabled:opacity-50">
+                {submitting ? 'Saving…' : 'Save Interaction'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main QuickNotesSection ────────────────────────────────────────────────────
 export function QuickNotesSection({ className = '' }: { className?: string }) {
+  const { activeConference } = useActiveConference();
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -509,6 +822,9 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [scanSavingId, setScanSavingId] = useState<string | null>(null);
   const [batchModalCards, setBatchModalCards] = useState<ScannedCard[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
+  const [boothCaptureData, setBoothCaptureData] = useState<BoothCaptureData | null>(null);
+  const [boothSourceNote, setBoothSourceNote] = useState<QuickNote | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const cameraMenuRef = useRef<HTMLDivElement>(null);
@@ -603,6 +919,14 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         attendeeMatches: [], companyMatches: [], status: 'matching' as const,
       }));
       setBadgeScanCards(initial); setShowScanModal(true);
+      setBadgeScanRelevance({});
+      initial.forEach(card => {
+        if (card.draft.title) {
+          void resolveProductRelevance(card.draft.title).then(results => {
+            setBadgeScanRelevance(prev => ({ ...prev, [card.localId]: results }));
+          });
+        }
+      });
       initial.forEach(async card => {
         try {
           const mRes = await fetch('/api/card-scan/match', {
@@ -649,16 +973,43 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     setShowBatchModal(true);
   }, []);
 
-  const handleScanAssignLater = useCallback(async (card: BadgeScanCard) => {
+  const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
     setScanSavingId(card.localId);
-    await handleSaveNote(formatCardAsText(card.draft), 'card-badge');
+    const relevance = badgeScanRelevance[card.localId] ?? [];
+    const productSuggestions = JSON.stringify(
+      relevance.map(r => ({ productId: r.productId, productName: r.productName, score: r.score, buyerRole: r.buyerRole }))
+    );
+    const res = await fetch('/api/quick-notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: formatCardAsText(card.draft),
+        tag: 'card-badge',
+        secondary_tag: secondaryTag ?? null,
+        product_suggestions: productSuggestions,
+      }),
+    });
+    if (res.ok) {
+      const note = await res.json() as QuickNote;
+      setNotes(prev => [note, ...prev]);
+      setSectionExpanded(true);
+      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
+        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
+        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
+        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
+        : 'Saved for later';
+      toast.success(`${label} — assign details anytime`);
+    } else {
+      toast.error('Failed to save.');
+    }
     setScanSavingId(null);
     setBadgeScanCards(prev => {
       const next = prev.filter(c => c.localId !== card.localId);
-      if (next.length === 0) setShowScanModal(false);
+      // 1.5s auto-dismiss when an interaction type was selected
+      if (next.length === 0) setTimeout(() => setShowScanModal(false), secondaryTag ? 1500 : 0);
       return next;
     });
-  }, [handleSaveNote]);
+  }, [badgeScanRelevance]);
 
   const handleAssignNote = useCallback(async (note: QuickNote) => {
     if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
@@ -677,9 +1028,15 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       const { attendeeMatches = [], companyMatches = [] } = mRes.ok ? await mRes.json() : {};
       const scanned: ScannedCard = { ...makeCard(draft), attendeeMatches, companyMatches, status: attendeeMatches.length > 0 ? 'matched' : 'no-match' };
       setBatchModalCards([scanned]);
+      if (note.secondary_tag?.startsWith('booth-')) {
+        // Booth flow: open BatchCardScanModal; on confirm → show structured capture
+        setBoothSourceNote(note);
+      } else {
+        // Non-booth: open BatchCardScanModal and delete the note immediately
+        setNotes(prev => prev.filter(n => n.id !== note.id));
+        await fetch(`/api/quick-notes/${note.id}`, { method: 'DELETE' });
+      }
       setShowBatchModal(true);
-      setNotes(prev => prev.filter(n => n.id !== note.id));
-      await fetch(`/api/quick-notes/${note.id}`, { method: 'DELETE' });
     } catch { toast.error('Failed to search for match.'); }
   }, []);
 
@@ -787,10 +1144,30 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       )}
       {showScanModal && badgeScanCards.length > 0 && (
         <BadgeScanResultsModal cards={badgeScanCards} onClose={() => setShowScanModal(false)}
-          onAssignNow={handleScanAssignNow} onAssignLater={handleScanAssignLater} savingId={scanSavingId} />
+          onAssignLater={handleScanAssignLater} savingId={scanSavingId} productRelevanceMap={badgeScanRelevance} />
       )}
       {showBatchModal && (
-        <BatchCardScanModal initialCards={batchModalCards} onClose={() => setShowBatchModal(false)} onDone={() => setShowBatchModal(false)} />
+        <BatchCardScanModal
+          initialCards={batchModalCards}
+          conferenceId={boothSourceNote ? (activeConference?.id ?? null) : undefined}
+          onClose={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
+          onDone={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
+          onConfirmed={boothSourceNote ? (attendeeId, companyId, conferenceId) => {
+            setBoothCaptureData({ note: boothSourceNote, attendeeId, companyId, conferenceId });
+            setBoothSourceNote(null);
+            setShowBatchModal(false);
+          } : undefined}
+        />
+      )}
+      {boothCaptureData && (
+        <BoothStructuredCaptureModal
+          data={boothCaptureData}
+          onClose={() => setBoothCaptureData(null)}
+          onSubmitted={(noteId) => {
+            setNotes(prev => prev.filter(n => n.id !== noteId));
+            setBoothCaptureData(null);
+          }}
+        />
       )}
     </div>
   );
