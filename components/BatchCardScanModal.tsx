@@ -59,6 +59,7 @@ interface Props {
   initialCards?: ScannedCard[];
   onClose: () => void;
   onDone: () => void;
+  onConfirmed?: (attendeeId: number, companyId: number | null, conferenceId: number | null) => void;
 }
 
 export type { ScannedCard, CardDraft };
@@ -534,7 +535,7 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
 
 // ─── BatchCardScanModal — main export ─────────────────────────────────────────
 
-export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone }: Props) {
+export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone, onConfirmed }: Props) {
   const [cards, setCards] = useState<ScannedCard[]>(initialCards ?? []);
   const [scanning, setScanning] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -724,8 +725,9 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
       }
 
       updateCard(localId, { status: action.type === 'confirm' ? 'confirmed' : 'added', pendingAction: null });
+      onConfirmed?.(attendeeId, companyId, activeConfId);
     } finally { setSavingId(null); }
-  }, [cards, activeConfId, updateCard]);
+  }, [cards, activeConfId, updateCard, onConfirmed]);
 
   const handleAttendeeSelect = useCallback((localId: string, r: SearchResult) => {
     const parts = r.name.split(' ');

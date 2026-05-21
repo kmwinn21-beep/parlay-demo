@@ -14,21 +14,21 @@ export async function POST(request: NextRequest) {
       attendee_id,
       conference_id,
       company_id,
-      interaction_type, // 'booth-stop' | 'booth-demo' | 'booth-meeting' | 'booth-followup'
+      interaction_type,
       notes_text,
-      meeting_date,
-      meeting_time,
-      follow_up_type, // next_steps value string (for booth-followup)
+      products,         // string[] — selected product names
+      sentiment,        // string | null — status option value
+      schedule_follow_up, // boolean | null
     } = body as {
-      quick_note_id: number;
+      quick_note_id?: number | null;
       attendee_id?: number | null;
       conference_id?: number | null;
       company_id?: number | null;
       interaction_type: string;
       notes_text?: string | null;
-      meeting_date?: string | null;
-      meeting_time?: string | null;
-      follow_up_type?: string | null;
+      products?: string[] | null;
+      sentiment?: string | null;
+      schedule_follow_up?: boolean | null;
     };
 
     if (!interaction_type) {
@@ -36,22 +36,87 @@ export async function POST(request: NextRequest) {
     }
 
     const results: Record<string, unknown> = {};
+    const isMeeting = interaction_type === 'booth-demo' || interaction_type === 'booth-meeting';
+    const isConvo = interaction_type === 'booth-stop';
+    const isFollowup = interaction_type === 'booth-followup';
+    const productList = Array.isArray(products) ? products.filter(Boolean) : [];
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // All interaction types: record a touchpoint if attendee + conference provided
-    if (attendee_id && conference_id) {
-      // Map interaction_type to touchpoint value
-      const touchpointMap: Record<string, string> = {
-        'booth-stop': 'Booth Stop',
-        'booth-demo': 'Booth Stop',
-        'booth-meeting': 'Booth Stop',
-        'booth-followup': 'Booth Stop',
-      };
-      const touchpointValue = touchpointMap[interaction_type] ?? 'Booth Stop';
+    // ── Meeting path (booth-demo / booth-meeting) ──────────────────────────────
+    if (isMeeting && attendee_id && conference_id) {
+      // Read meeting type label from config at runtime
+      const typeLabel = interaction_type === 'booth-demo' ? 'Booth Demo' : 'Booth Meeting';
+      const typeRes = await db.execute({
+        sql: "SELECT value FROM config_options WHERE category = 'meeting_type' AND value = ? LIMIT 1",
+        args: [typeLabel],
+      });
+      const meetingTypeName = typeRes.rows.length > 0 ? String(typeRes.rows[0].value) : typeLabel;
 
-      // Look up the touchpoint config option to check auto_follow_up
+      // Read "Meeting Held" outcome from config (action_key = 'meeting_held')
+      const heldRes = await db.execute({
+        sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_held' LIMIT 1",
+        args: [],
+      });
+      const heldName = heldRes.rows.length > 0 ? String(heldRes.rows[0].value) : 'Held';
+
+      const mtgRes = await db.execute({
+        sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, outcome, meeting_type)
+              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', heldName, meetingTypeName],
+      });
+      const meetingId = mtgRes.rows[0]?.id ?? null;
+      results.meeting_id = meetingId;
+
+      // Update conference_attendee_details — add meeting_held action
+      const existing = await db.execute({
+        sql: 'SELECT action FROM conference_attendee_details WHERE attendee_id = ? AND conference_id = ?',
+        args: [attendee_id, conference_id],
+      });
+      if (existing.rows.length > 0) {
+        const actions = new Set(String(existing.rows[0].action ?? '').split(',').map((a: string) => a.trim()).filter(Boolean));
+        actions.add(heldName);
+        await db.execute({
+          sql: 'UPDATE conference_attendee_details SET action = ? WHERE attendee_id = ? AND conference_id = ?',
+          args: [Array.from(actions).join(','), attendee_id, conference_id],
+        });
+      } else {
+        await db.execute({
+          sql: 'INSERT OR REPLACE INTO conference_attendee_details (attendee_id, conference_id, action) VALUES (?, ?, ?)',
+          args: [attendee_id, conference_id, heldName],
+        });
+      }
+
+      // Build Post-Mtg follow-up subtext
+      const verb = interaction_type === 'booth-demo' ? 'Demoed' : 'Met re:';
+      const subtextLines: string[] = [];
+      if (productList.length > 0) subtextLines.push(`${verb} ${productList.join(', ')}`);
+      if (sentiment) subtextLines.push(sentiment);
+      if (schedule_follow_up === true) subtextLines.push('Schedule Follow Up Meeting');
+      const subtextNotes = subtextLines.length > 0 ? subtextLines.join('\n') : null;
+
+      // Read Post-Mtg next_steps option from config (action_key = 'post_mtg')
+      const postMtgRes = await db.execute({
+        sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
+        args: [],
+      });
+      if (postMtgRes.rows.length > 0) {
+        const postMtgValue = String(postMtgRes.rows[0].value);
+        await db.execute({
+          sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
+                VALUES (?, ?, ?, ?, 0)`,
+          args: [attendee_id, conference_id, postMtgValue, subtextNotes],
+        });
+        results.follow_up = 'created';
+      }
+    }
+
+    // ── Convo path (booth-stop) ───────────────────────────────────────────────
+    if (isConvo && attendee_id && conference_id) {
       const tpOption = await db.execute({
-        sql: "SELECT id, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND value = ? LIMIT 1",
-        args: [touchpointValue],
+        sql: "SELECT id, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1",
+        args: [],
       });
 
       if (tpOption.rows.length > 0) {
@@ -62,114 +127,64 @@ export async function POST(request: NextRequest) {
           args: [attendee_id, conference_id, tpId, notes_text ?? null, authResult.email],
         });
         results.touchpoint = 'created';
+
+        // Build follow-up subtext
+        const subtextLines: string[] = [];
+        if (productList.length > 0) subtextLines.push(`Discussed: ${productList.join(', ')}`);
+        if (sentiment) subtextLines.push(sentiment);
+        if (schedule_follow_up === true) subtextLines.push('Schedule Follow Up Meeting');
+        const subtextNotes = subtextLines.length > 0 ? subtextLines.join('\n') : null;
+
+        // If auto_follow_up is set on the touchpoint option, create a follow-up with our subtext
+        if (Number(tpOption.rows[0].auto_follow_up) === 1 || subtextNotes) {
+          // Look for the default follow-up next_steps for touchpoints
+          const followRes = await db.execute({
+            sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
+            args: [],
+          });
+          const followValue = followRes.rows.length > 0 ? String(followRes.rows[0].value) : 'Follow Up';
+          await db.execute({
+            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
+                  VALUES (?, ?, ?, ?, 0)`,
+            args: [attendee_id, conference_id, followValue, subtextNotes ?? `Booth conversation`],
+          });
+          results.follow_up = 'created';
+        }
       }
     }
 
-    // For booth-demo: create a meeting with type "Booth Demo"
-    if (interaction_type === 'booth-demo' && attendee_id && conference_id) {
-      const dateStr = meeting_date ?? new Date().toISOString().slice(0, 10);
-      const timeStr = meeting_time ?? '12:00';
+    // ── Follow-up path (booth-followup) ──────────────────────────────────────
+    if (isFollowup && attendee_id && conference_id) {
+      const subtextLines: string[] = [];
+      if (productList.length > 0) subtextLines.push(`Discussed: ${productList.join(', ')}`);
+      if (sentiment) subtextLines.push(sentiment);
+      if (schedule_follow_up === true) subtextLines.push('Schedule Follow Up Meeting');
+      const subtextNotes = subtextLines.length > 0 ? subtextLines.join('\n') : notes_text ?? null;
 
-      // Look up "Meeting Scheduled" action name
-      const scheduledRes = await db.execute({
-        sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' LIMIT 1",
+      const followRes = await db.execute({
+        sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
         args: [],
       });
-      const scheduledName = scheduledRes.rows.length > 0 ? String(scheduledRes.rows[0].value) : 'Scheduled';
-
-      const mtgRes = await db.execute({
-        sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, outcome, meeting_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', scheduledName, 'Booth Demo'],
-      });
-      results.meeting_id = mtgRes.rows[0]?.id ?? null;
-
-      // Update conference_attendee_details
-      const existing = await db.execute({
-        sql: 'SELECT action FROM conference_attendee_details WHERE attendee_id = ? AND conference_id = ?',
-        args: [attendee_id, conference_id],
-      });
-      if (existing.rows.length > 0) {
-        const actions = new Set(String(existing.rows[0].action ?? '').split(',').map((a: string) => a.trim()).filter(Boolean));
-        actions.add(scheduledName);
-        await db.execute({
-          sql: 'UPDATE conference_attendee_details SET action = ? WHERE attendee_id = ? AND conference_id = ?',
-          args: [Array.from(actions).join(','), attendee_id, conference_id],
-        });
-      } else {
-        await db.execute({
-          sql: 'INSERT OR REPLACE INTO conference_attendee_details (attendee_id, conference_id, action) VALUES (?, ?, ?)',
-          args: [attendee_id, conference_id, scheduledName],
-        });
-      }
-    }
-
-    // For booth-meeting: create a meeting with type "Booth Meeting"
-    if (interaction_type === 'booth-meeting' && attendee_id && conference_id) {
-      const dateStr = meeting_date ?? new Date().toISOString().slice(0, 10);
-      const timeStr = meeting_time ?? '12:00';
-
-      const scheduledRes = await db.execute({
-        sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' LIMIT 1",
-        args: [],
-      });
-      const scheduledName = scheduledRes.rows.length > 0 ? String(scheduledRes.rows[0].value) : 'Scheduled';
-
-      const mtgRes = await db.execute({
-        sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, outcome, meeting_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', scheduledName, 'Booth Meeting'],
-      });
-      results.meeting_id = mtgRes.rows[0]?.id ?? null;
-
-      const existing = await db.execute({
-        sql: 'SELECT action FROM conference_attendee_details WHERE attendee_id = ? AND conference_id = ?',
-        args: [attendee_id, conference_id],
-      });
-      if (existing.rows.length > 0) {
-        const actions = new Set(String(existing.rows[0].action ?? '').split(',').map((a: string) => a.trim()).filter(Boolean));
-        actions.add(scheduledName);
-        await db.execute({
-          sql: 'UPDATE conference_attendee_details SET action = ? WHERE attendee_id = ? AND conference_id = ?',
-          args: [Array.from(actions).join(','), attendee_id, conference_id],
-        });
-      } else {
-        await db.execute({
-          sql: 'INSERT OR REPLACE INTO conference_attendee_details (attendee_id, conference_id, action) VALUES (?, ?, ?)',
-          args: [attendee_id, conference_id, scheduledName],
-        });
-      }
-    }
-
-    // For booth-followup: create a follow_up record
-    if (interaction_type === 'booth-followup' && attendee_id && conference_id && follow_up_type) {
+      const followValue = followRes.rows.length > 0 ? String(followRes.rows[0].value) : 'Follow Up';
       await db.execute({
         sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
               VALUES (?, ?, ?, ?, 0)`,
-        args: [attendee_id, conference_id, follow_up_type, notes_text ?? `Booth follow-up`],
+        args: [attendee_id, conference_id, followValue, subtextNotes],
       });
       results.follow_up = 'created';
     }
 
-    // Write entity_note if notes_text provided and we have at least attendee or company
-    if (notes_text?.trim() && (attendee_id || company_id || conference_id)) {
-      const noteContent = notes_text.trim();
-      const inserts: Promise<unknown>[] = [];
-      if (attendee_id) inserts.push(db.execute({
+    // ── Entity note ───────────────────────────────────────────────────────────
+    if (notes_text?.trim() && attendee_id) {
+      await db.execute({
         sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_id, created_by)
               VALUES ('attendee', ?, ?, ?, ?)`,
-        args: [attendee_id, noteContent, conference_id ?? null, authResult.email],
-      }));
-      if (company_id && !attendee_id) inserts.push(db.execute({
-        sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_id, created_by)
-              VALUES ('company', ?, ?, ?, ?)`,
-        args: [company_id, noteContent, conference_id ?? null, authResult.email],
-      }));
-      await Promise.all(inserts).catch(() => {});
+        args: [attendee_id, notes_text.trim(), conference_id ?? null, authResult.email],
+      }).catch(() => {});
       results.note = 'created';
     }
 
-    // Delete the quick_note (it's been processed)
+    // ── Delete quick_note ─────────────────────────────────────────────────────
     if (quick_note_id) {
       await db.execute({ sql: 'DELETE FROM quick_notes WHERE id = ?', args: [quick_note_id] });
     }
