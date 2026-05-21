@@ -10,6 +10,8 @@ import { QuickNoteInlineModal } from './QuickNotesSection';
 import { getPreset } from '@/lib/colors';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
+import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
+import { ProductRelevanceSection } from './ProductRelevanceSection';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,7 +43,7 @@ interface Attendee {
   company_id?: number | null;
 }
 
-interface BadgeScanCard {
+export interface BadgeScanCard {
   localId: string;
   draft: CardDraft;
   attendeeMatches: ScannedCard['attendeeMatches'];
@@ -51,7 +53,7 @@ interface BadgeScanCard {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function fileToBase64(file: File): Promise<string> {
+export async function fileToBase64(file: File): Promise<string> {
   return new Promise((res, rej) => {
     const reader = new FileReader();
     reader.onload = e => res((e.target?.result as string).split(',')[1]);
@@ -60,7 +62,7 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function formatCardAsText(draft: CardDraft): string {
+export function formatCardAsText(draft: CardDraft): string {
   return [
     `Name: ${[draft.first_name, draft.last_name].filter(Boolean).join(' ') || '—'}`,
     `Title: ${draft.title || '—'}`,
@@ -271,14 +273,15 @@ function SearchableMultiSelect<T extends { id: number }>({
 
 // ── BadgeScanResultsModal ─────────────────────────────────────────────────────
 
-function BadgeScanResultsModal({
-  cards, onClose, onAssignNow, onAssignLater, savingId,
+export function BadgeScanResultsModal({
+  cards, onClose, onAssignNow, onAssignLater, savingId, productRelevanceMap,
 }: {
   cards: BadgeScanCard[];
   onClose: () => void;
   onAssignNow: (card: BadgeScanCard) => void;
   onAssignLater: (card: BadgeScanCard) => Promise<void>;
   savingId: string | null;
+  productRelevanceMap: Record<string, ProductRelevanceResult[]>;
 }) {
   const { user } = useUser();
   return (
@@ -322,6 +325,7 @@ function BadgeScanResultsModal({
                     <span className="text-xs text-amber-600 font-medium">No match found</span>
                   )}
                 </div>
+                <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -619,6 +623,7 @@ export function DashboardActionCard() {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
+  const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
 
   const cameraMenuRef = useRef<HTMLDivElement>(null);
   const badgeFileRef = useRef<HTMLInputElement>(null);
@@ -654,6 +659,15 @@ export function DashboardActionCard() {
         attendeeMatches: [], companyMatches: [], status: 'matching' as const,
       }));
       setBadgeScanCards(initial); setShowScanModal(true);
+      // Compute product relevance for each scanned card (uses cached product config)
+      setBadgeScanRelevance({});
+      initial.forEach(card => {
+        if (card.draft.title) {
+          void resolveProductRelevance(card.draft.title).then(results => {
+            setBadgeScanRelevance(prev => ({ ...prev, [card.localId]: results }));
+          });
+        }
+      });
       initial.forEach(card => {
         void fetch('/api/card-scan/match', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -862,6 +876,7 @@ export function DashboardActionCard() {
           onAssignNow={handleScanAssignNow}
           onAssignLater={handleScanAssignLater}
           savingId={scanSavingId}
+          productRelevanceMap={badgeScanRelevance}
         />
       )}
       {showBatchModal && (

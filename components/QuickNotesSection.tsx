@@ -6,6 +6,8 @@ import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from '
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
+import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
+import { ProductRelevanceSection } from './ProductRelevanceSection';
 
 interface QuickNote {
   id: number;
@@ -426,13 +428,14 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
 
 // ── Badge Scan Results Modal ──────────────────────────────────────────────────
 function BadgeScanResultsModal({
-  cards, onClose, onAssignNow, onAssignLater, savingId,
+  cards, onClose, onAssignNow, onAssignLater, savingId, productRelevanceMap,
 }: {
   cards: BadgeScanCard[];
   onClose: () => void;
   onAssignNow: (card: BadgeScanCard) => void;
   onAssignLater: (card: BadgeScanCard) => Promise<void>;
   savingId: string | null;
+  productRelevanceMap: Record<string, ProductRelevanceResult[]>;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -473,6 +476,7 @@ function BadgeScanResultsModal({
                     <span className="text-xs text-amber-600 font-medium">No match found</span>
                   )}
                 </div>
+                <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
                 <div className="flex gap-2">
                   <button type="button" onClick={() => onAssignNow(card)} disabled={isSaving}
                     className="flex-1 btn-primary text-xs py-1.5 disabled:opacity-50">
@@ -509,6 +513,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const [scanSavingId, setScanSavingId] = useState<string | null>(null);
   const [batchModalCards, setBatchModalCards] = useState<ScannedCard[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const cameraMenuRef = useRef<HTMLDivElement>(null);
@@ -603,6 +608,14 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         attendeeMatches: [], companyMatches: [], status: 'matching' as const,
       }));
       setBadgeScanCards(initial); setShowScanModal(true);
+      setBadgeScanRelevance({});
+      initial.forEach(card => {
+        if (card.draft.title) {
+          void resolveProductRelevance(card.draft.title).then(results => {
+            setBadgeScanRelevance(prev => ({ ...prev, [card.localId]: results }));
+          });
+        }
+      });
       initial.forEach(async card => {
         try {
           const mRes = await fetch('/api/card-scan/match', {
@@ -787,7 +800,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       )}
       {showScanModal && badgeScanCards.length > 0 && (
         <BadgeScanResultsModal cards={badgeScanCards} onClose={() => setShowScanModal(false)}
-          onAssignNow={handleScanAssignNow} onAssignLater={handleScanAssignLater} savingId={scanSavingId} />
+          onAssignNow={handleScanAssignNow} onAssignLater={handleScanAssignLater} savingId={scanSavingId} productRelevanceMap={badgeScanRelevance} />
       )}
       {showBatchModal && (
         <BatchCardScanModal initialCards={batchModalCards} onClose={() => setShowBatchModal(false)} onDone={() => setShowBatchModal(false)} />
