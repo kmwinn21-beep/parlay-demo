@@ -618,6 +618,26 @@ export default function CompanyDetailPage() {
     }
   };
 
+  const handleBulkToggleFollowUp = async (ids: number[]) => {
+    // Optimistic: mark all as complete immediately
+    setCompanyFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+      toast.success(`${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`);
+    } catch {
+      // Revert optimistic update
+      setCompanyFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: false } : fu));
+      toast.error('Failed to mark all done.');
+      throw new Error();
+    }
+  };
+
   const filteredAttendees = company?.attendees || [];
 
   const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
@@ -1198,7 +1218,7 @@ export default function CompanyDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
               </button>
             </div>
-            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} tableName="company_follow_ups" />
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" />
           </div>
 
           {/* Notes */}

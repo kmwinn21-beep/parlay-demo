@@ -562,6 +562,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     conferences: { id: number; name: string; cells: Record<string, { option_id: number; value: string; color: string | null; count: number }[]> }[];
   } | null>(null);
   const [tpMapLoading, setTpMapLoading] = useState(false);
+  const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -739,6 +740,14 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     }
   }, [tpMapData]);
 
+  const openRecordDrawer = useCallback((type: 'attendee' | 'company', id: number) => {
+    setRecordDrawer({ type, id });
+  }, []);
+
+  const closeRecordDrawer = useCallback(() => {
+    setRecordDrawer(null);
+  }, []);
+
   if (!isOpen) return null;
 
   const content = (
@@ -886,7 +895,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
           {/* ── Body ── */}
           {!loading && !error && data && (
-            <div className="flex flex-1 overflow-hidden">
+            <div className="relative flex flex-1 overflow-hidden" onClick={() => closeRecordDrawer()}>
 
               {/* Col 1 — Company list
                   Mobile: full-width when tab=companies, hidden otherwise
@@ -989,7 +998,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                   <div className="space-y-5">
                     {/* Company header */}
                     <div>
-                      <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); openRecordDrawer('company', selectedCompany.id); }}
+                        className="text-left hover:underline"
+                      >
+                        <h3 className="text-lg font-bold text-brand-primary font-serif">{selectedCompany.name}</h3>
+                      </button>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {selectedCompany.status && selectedCompany.status !== 'Unknown' && (
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[selectedCompany.status] ?? 'bg-gray-100 text-gray-500'}`}>
@@ -1024,7 +1039,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {selectedCompany.attendees.map(a => (
                             <div key={a.id} className="border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
-                              <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openRecordDrawer('attendee', a.id); }}
+                                className="text-left w-full hover:underline"
+                              >
+                                <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
+                              </button>
                               {a.title && <p className="text-xs text-gray-400 mt-0.5 truncate">{a.title}</p>}
                               <div className="flex flex-col gap-1 mt-1.5">
                                 {a.meetingCount > 0 && (
@@ -1373,6 +1394,40 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
           )}
 
         </div>
+      </div>
+
+      {/* Record drawer — fixed, full viewport height, slides in from right */}
+      {/* Mobile backdrop */}
+      {recordDrawer != null && (
+        <div
+          className="sm:hidden fixed inset-0 z-[59] bg-black/30"
+          onClick={closeRecordDrawer}
+        />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden transition-all ease-out ${
+          recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
+        }`}
+        style={{ transitionDuration: '200ms' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {recordDrawer != null && (
+          <>
+            <div className="flex items-center justify-end px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
+              <button type="button" onClick={closeRecordDrawer} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              key={`${recordDrawer.type}-${recordDrawer.id}`}
+              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}`}
+              className="flex-1 border-0 w-full"
+              title={`${recordDrawer.type} record`}
+            />
+          </>
+        )}
       </div>
     </div>
   );
