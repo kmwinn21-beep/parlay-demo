@@ -142,17 +142,13 @@ export async function POST(request: NextRequest) {
         const subtextNotes = subtextLines.length > 0 ? subtextLines.join('\n') : null;
 
         // If auto_follow_up is set on the touchpoint option, create a follow-up with our subtext
+        // Use the touchpoint value ("Booth Stop") directly as next_steps, same as attendee detail flow
+        const tpValue = String(tpOption.rows[0].value);
         if (Number(tpOption.rows[0].auto_follow_up) === 1 || subtextNotes) {
-          // Look for the default follow-up next_steps for touchpoints
-          const followRes = await db.execute({
-            sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'post_mtg' LIMIT 1",
-            args: [],
-          });
-          const followValue = followRes.rows.length > 0 ? String(followRes.rows[0].value) : 'Follow Up';
           await db.execute({
             sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
                   VALUES (?, ?, ?, ?, ?, 0)`,
-            args: [attendee_id, conference_id, followValue, subtextNotes ?? `Booth conversation`, assignedRep],
+            args: [attendee_id, conference_id, tpValue, subtextNotes ?? `Booth conversation`, assignedRep],
           });
           results.follow_up = 'created';
         }
@@ -182,11 +178,39 @@ export async function POST(request: NextRequest) {
 
     // ── Entity note ───────────────────────────────────────────────────────────
     if (notes_text?.trim() && attendee_id) {
-      await db.execute({
-        sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_id, created_by)
-              VALUES ('attendee', ?, ?, ?, ?)`,
-        args: [attendee_id, notes_text.trim(), conference_id ?? null, authResult.email],
-      }).catch(() => {});
+      // Fetch names needed for entity_notes columns
+      const [attRow, confRow, repRow2] = await Promise.all([
+        db.execute({ sql: `SELECT first_name, last_name, company_id FROM attendees WHERE id = ? LIMIT 1`, args: [attendee_id] }),
+        conference_id ? db.execute({ sql: `SELECT name FROM conferences WHERE id = ? LIMIT 1`, args: [conference_id] }) : Promise.resolve({ rows: [] }),
+        db.execute({ sql: `SELECT co.value as rep_name FROM users u LEFT JOIN config_options co ON u.config_id = co.id WHERE u.id = ? LIMIT 1`, args: [authResult.id] }),
+      ]);
+      const attendeeName = attRow.rows[0] ? `${attRow.rows[0].first_name} ${attRow.rows[0].last_name}`.trim() : null;
+      const confName = confRow.rows[0]?.name ? String(confRow.rows[0].name) : null;
+      const repNameStr = repRow2.rows[0]?.rep_name ? String(repRow2.rows[0].rep_name) : authResult.email;
+      const resolvedCompanyId = company_id ?? (attRow.rows[0]?.company_id ? Number(attRow.rows[0].company_id) : null);
+
+      // Fetch company name if we have a company_id
+      let companyName: string | null = null;
+      if (resolvedCompanyId) {
+        const coRow = await db.execute({ sql: `SELECT name FROM companies WHERE id = ? LIMIT 1`, args: [resolvedCompanyId] });
+        companyName = coRow.rows[0]?.name ? String(coRow.rows[0].name) : null;
+      }
+
+      const noteContent = notes_text.trim();
+      const insertNote = async (entityType: string, entityId: number) => {
+        await db.execute({
+          sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, author_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [entityType, entityId, noteContent, confName, repNameStr,
+                 entityType !== 'attendee' ? attendeeName : null,
+                 entityType !== 'company' ? companyName : null,
+                 authResult.id],
+        }).catch(() => {});
+      };
+
+      await insertNote('attendee', attendee_id);
+      if (resolvedCompanyId) await insertNote('company', resolvedCompanyId);
+      if (conference_id) await insertNote('conference', conference_id);
       results.note = 'created';
     }
 
