@@ -235,9 +235,9 @@ function MobileStatCell({ label, value }: { label: string; value: string | numbe
 function InsightChip({ type, count }: { type: string; count: number }) {
   if (count === 0) return null;
   const map: Record<string, { label: string; cls: string }> = {
-    buying_signal: { label: 'Buy', cls: 'bg-green-100 text-green-700' },
-    pain_point: { label: 'Pain', cls: 'bg-red-100 text-red-700' },
-    next_step: { label: 'Action', cls: 'bg-blue-100 text-blue-700' },
+    buying_signal: { label: 'Buy Signal', cls: 'bg-green-100 text-green-700' },
+    pain_point: { label: 'Pain Point', cls: 'bg-red-100 text-red-700' },
+    next_step: { label: 'Action Item', cls: 'bg-blue-100 text-blue-700' },
   };
   const m = map[type];
   if (!m) return null;
@@ -951,12 +951,12 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                             isSelected ? 'border-brand-primary' : 'border-gray-200'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-1 mb-1.5">
+                          <div className="flex items-start justify-between gap-1">
                             <p className={`text-sm font-semibold leading-snug min-w-0 truncate ${isSelected ? 'text-brand-primary' : 'text-gray-800'}`}>
                               {co.name}
                             </p>
                             {allDone && (
-                              <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300">
+                              <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                 </svg>
@@ -964,18 +964,11 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                               </span>
                             )}
                             {!allDone && openFus > 0 && (
-                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-600 border border-rose-200">
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-600 border border-rose-200">
                                 {openFus} due
                               </span>
                             )}
                           </div>
-                          {co.status && co.status !== 'Unknown' && (
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[co.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                                {co.status}
-                              </span>
-                            </div>
-                          )}
                         </button>
                       );
                     })}
