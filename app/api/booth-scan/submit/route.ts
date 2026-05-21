@@ -8,12 +8,12 @@ export async function POST(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
 
   try {
-    // Resolve rep display name from user's linked config_options rep profile
-    const repRow = await db.execute({
-      sql: `SELECT co.value as rep_name FROM users u LEFT JOIN config_options co ON u.config_id = co.id WHERE u.id = ?`,
+    // Resolve the current user's config_id — same pattern as card-scan/confirm
+    const userRow = await db.execute({
+      sql: `SELECT config_id FROM users WHERE id = ? AND config_id IS NOT NULL LIMIT 1`,
       args: [authResult.id],
     });
-    const repName: string = repRow.rows[0]?.rep_name != null ? String(repRow.rows[0].rep_name) : authResult.email;
+    const assignedRep: string | null = userRow.rows[0]?.config_id ? String(userRow.rows[0].config_id) : null;
 
     const body = await request.json();
     const {
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       const mtgRes = await db.execute({
         sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, outcome, meeting_type, scheduled_by)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', heldName, meetingTypeName, repName],
+        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', heldName, meetingTypeName, assignedRep],
       });
       const meetingId = mtgRes.rows[0]?.id ?? null;
       results.meeting_id = meetingId;
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
         await db.execute({
           sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
                 VALUES (?, ?, ?, ?, ?, 0)`,
-          args: [attendee_id, conference_id, postMtgValue, subtextNotes, repName],
+          args: [attendee_id, conference_id, postMtgValue, subtextNotes, assignedRep],
         });
         results.follow_up = 'created';
       }
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         await db.execute({
           sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, touchpoint_id, notes, created_by)
                 VALUES (?, ?, ?, ?, ?)`,
-          args: [attendee_id, conference_id, tpId, notes_text ?? null, repName],
+          args: [attendee_id, conference_id, tpId, notes_text ?? null, authResult.id],
         });
         results.touchpoint = 'created';
 
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
           await db.execute({
             sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
                   VALUES (?, ?, ?, ?, ?, 0)`,
-            args: [attendee_id, conference_id, followValue, subtextNotes ?? `Booth conversation`, repName],
+            args: [attendee_id, conference_id, followValue, subtextNotes ?? `Booth conversation`, assignedRep],
           });
           results.follow_up = 'created';
         }
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       await db.execute({
         sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
               VALUES (?, ?, ?, ?, ?, 0)`,
-        args: [attendee_id, conference_id, followValue, subtextNotes, repName],
+        args: [attendee_id, conference_id, followValue, subtextNotes, assignedRep],
       });
       results.follow_up = 'created';
     }
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       await db.execute({
         sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_id, created_by)
               VALUES ('attendee', ?, ?, ?, ?)`,
-        args: [attendee_id, notes_text.trim(), conference_id ?? null, repName],
+        args: [attendee_id, notes_text.trim(), conference_id ?? null, authResult.email],
       }).catch(() => {});
       results.note = 'created';
     }
