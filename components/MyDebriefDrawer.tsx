@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
-import { RecordDrawerPanel, type CachedRecord } from '@/components/RecordDrawerPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -564,8 +563,6 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   } | null>(null);
   const [tpMapLoading, setTpMapLoading] = useState(false);
   const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
-  const [recordDrawerFadeKey, setRecordDrawerFadeKey] = useState(0);
-  const recordCacheRef = useRef<Map<string, CachedRecord>>(new Map());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -744,26 +741,12 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   }, [tpMapData]);
 
   const openRecordDrawer = useCallback((type: 'attendee' | 'company', id: number) => {
-    setRecordDrawer(prev => {
-      if (prev?.type === type && prev?.id === id) return prev;
-      setRecordDrawerFadeKey(k => k + 1);
-      return { type, id };
-    });
+    setRecordDrawer({ type, id });
   }, []);
 
   const closeRecordDrawer = useCallback(() => {
     setRecordDrawer(null);
   }, []);
-
-  const openMeetingFromDrawer = useCallback((meetingId: number) => {
-    if (!data) return;
-    const company = data.companies.find(c => c.meetingCards.some(m => m.meetingId === meetingId));
-    if (company) {
-      setSelectedCompanyId(company.id);
-    }
-    openMeeting(meetingId);
-    closeRecordDrawer();
-  }, [data, openMeeting, closeRecordDrawer]);
 
   if (!isOpen) return null;
 
@@ -1429,17 +1412,21 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
         onClick={e => e.stopPropagation()}
       >
         {recordDrawer != null && (
-          <div className="w-full sm:w-[400px] h-full flex flex-col overflow-hidden flex-shrink-0">
-            <RecordDrawerPanel
-              type={recordDrawer.type}
-              entityId={recordDrawer.id}
-              onClose={closeRecordDrawer}
-              onNavigate={openRecordDrawer}
-              onOpenMeeting={openMeetingFromDrawer}
-              cacheRef={recordCacheRef}
-              contentFadeKey={recordDrawerFadeKey}
+          <>
+            <div className="flex items-center justify-end px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
+              <button type="button" onClick={closeRecordDrawer} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              key={`${recordDrawer.type}-${recordDrawer.id}`}
+              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}`}
+              className="flex-1 border-0 w-full"
+              title={`${recordDrawer.type} record`}
             />
-          </div>
+          </>
         )}
       </div>
     </div>
