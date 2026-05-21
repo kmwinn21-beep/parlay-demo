@@ -62,9 +62,9 @@ export async function POST(request: NextRequest) {
       const heldName = heldRes.rows.length > 0 ? String(heldRes.rows[0].value) : 'Held';
 
       const mtgRes = await db.execute({
-        sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, outcome, meeting_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', heldName, meetingTypeName],
+        sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, outcome, meeting_type, scheduled_by)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        args: [attendee_id, conference_id, dateStr, timeStr, 'Booth', heldName, meetingTypeName, authResult.email],
       });
       const meetingId = mtgRes.rows[0]?.id ?? null;
       results.meeting_id = meetingId;
@@ -104,9 +104,9 @@ export async function POST(request: NextRequest) {
       if (postMtgRes.rows.length > 0) {
         const postMtgValue = String(postMtgRes.rows[0].value);
         await db.execute({
-          sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
-                VALUES (?, ?, ?, ?, 0)`,
-          args: [attendee_id, conference_id, postMtgValue, subtextNotes],
+          sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+                VALUES (?, ?, ?, ?, ?, 0)`,
+          args: [attendee_id, conference_id, postMtgValue, subtextNotes, authResult.email],
         });
         results.follow_up = 'created';
       }
@@ -144,9 +144,9 @@ export async function POST(request: NextRequest) {
           });
           const followValue = followRes.rows.length > 0 ? String(followRes.rows[0].value) : 'Follow Up';
           await db.execute({
-            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
-                  VALUES (?, ?, ?, ?, 0)`,
-            args: [attendee_id, conference_id, followValue, subtextNotes ?? `Booth conversation`],
+            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+                  VALUES (?, ?, ?, ?, ?, 0)`,
+            args: [attendee_id, conference_id, followValue, subtextNotes ?? `Booth conversation`, authResult.email],
           });
           results.follow_up = 'created';
         }
@@ -167,9 +167,9 @@ export async function POST(request: NextRequest) {
       });
       const followValue = followRes.rows.length > 0 ? String(followRes.rows[0].value) : 'Follow Up';
       await db.execute({
-        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
-              VALUES (?, ?, ?, ?, 0)`,
-        args: [attendee_id, conference_id, followValue, subtextNotes],
+        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+              VALUES (?, ?, ?, ?, ?, 0)`,
+        args: [attendee_id, conference_id, followValue, subtextNotes, authResult.email],
       });
       results.follow_up = 'created';
     }
