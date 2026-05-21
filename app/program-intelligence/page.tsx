@@ -1940,7 +1940,12 @@ export default function ProgramIntelligencePage() {
 
       {selectedRep && repDerivedData && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedRep(null)}>
-          <div className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div
+            className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto"
+            style={{ animation: 'slideInFromRight 200ms ease-out' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">{selectedRep.repName}</h3>
