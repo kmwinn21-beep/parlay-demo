@@ -585,11 +585,11 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
     const load = async () => {
       try {
         const [prodRes, statusRes] = await Promise.all([
-          fetch('/api/config-options?category=products').then(r => r.ok ? r.json() : []),
-          fetch('/api/config-options?category=status').then(r => r.ok ? r.json() : []),
+          fetch('/api/config?category=products').then(r => r.ok ? r.json() : []),
+          fetch('/api/config?category=status').then(r => r.ok ? r.json() : []),
         ]);
-        setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string; name?: string }) => ({ id: p.id ?? 0, name: p.value ?? p.name ?? '' })) : []);
-        setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string; label?: string }) => ({ value: s.value ?? '', label: s.label ?? s.value ?? '' })) : []);
+        setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string }) => ({ id: p.id ?? 0, name: p.value ?? '' })).filter(p => p.name) : []);
+        setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string }) => ({ value: s.value ?? '', label: s.value ?? '' })).filter(s => s.value) : []);
       } catch { /* non-blocking */ }
       setLoading(false);
     };
