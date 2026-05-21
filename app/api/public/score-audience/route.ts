@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Compute strategy assessment (zeroing out financial/relationship inputs)
-  const assessment = computeStrategyAssessment({
+  const assessment = await computeStrategyAssessment({
     totalAttendees,
     totalCompanies,
     icpCount: icpCompanies.length,
