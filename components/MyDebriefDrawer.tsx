@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
+import { getPreset } from '@/lib/colors';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -541,6 +542,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const [mobileTab, setMobileTab] = useState<MobileTab>('activity');
   const [statsOpen, setStatsOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [tpMapOpen, setTpMapOpen] = useState(false);
+  const [tpMapData, setTpMapData] = useState<{
+    total: number;
+    attendees: { id: number; first_name: string; last_name: string }[];
+    conferences: { id: number; name: string; cells: Record<string, { option_id: number; value: string; color: string | null; count: number }[]> }[];
+  } | null>(null);
+  const [tpMapLoading, setTpMapLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -687,6 +695,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   }, [fetchData]);
 
   const openMeeting = useCallback((meetingId: number) => {
+    setTpMapOpen(false);
     setActiveMeetingId(prev => (prev === meetingId ? null : meetingId));
     setCol1Collapsed(true);
     setCol4Sections({});
@@ -704,6 +713,18 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const closeMeetingPanel = useCallback(() => {
     setActiveMeetingId(null);
   }, []);
+
+  const openTouchpointMap = useCallback(async (companyId: number) => {
+    setTpMapOpen(true);
+    if (tpMapData) return; // already loaded
+    setTpMapLoading(true);
+    try {
+      const res = await fetch(`/api/companies/${companyId}/touchpoints`);
+      if (res.ok) setTpMapData(await res.json());
+    } catch { /* non-blocking */ } finally {
+      setTpMapLoading(false);
+    }
+  }, [tpMapData]);
 
   if (!isOpen) return null;
 
@@ -910,6 +931,8 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                             setSelectedCompanyId(co.id);
                             setActiveMeetingId(null);
                             setMobileTab('activity');
+                            setTpMapOpen(false);
+                            setTpMapData(null);
                           }}
                           className={`w-full text-left bg-white rounded-xl p-3 border-2 transition-all hover:shadow-sm ${
                             isSelected ? 'border-brand-primary' : 'border-gray-200'
@@ -933,23 +956,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                               </span>
                             )}
                           </div>
-                          <div className="flex flex-wrap items-center gap-1">
-                            {co.status && co.status !== 'Unknown' && (
+                          {co.status && co.status !== 'Unknown' && (
+                            <div className="flex flex-wrap items-center gap-1">
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[co.status] ?? 'bg-gray-100 text-gray-500'}`}>
                                 {co.status}
                               </span>
-                            )}
-                            {co.icp && co.icp !== 'No' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                ICP
-                              </span>
-                            )}
-                            {co.wse != null && co.wse > 0 && (
-                              <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
-                                {fmt$(co.wse)}
-                              </span>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -987,9 +1000,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                           {selectedCompany.meetingsHeld} meeting{selectedCompany.meetingsHeld !== 1 ? 's' : ''} held
                         </span>
                         {selectedCompany.touchpointCount > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600">
+                          <button
+                            type="button"
+                            onClick={() => openTouchpointMap(selectedCompany.id)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-300 transition-colors cursor-pointer"
+                          >
                             {selectedCompany.touchpointCount} touchpoint{selectedCompany.touchpointCount !== 1 ? 's' : ''}
-                          </span>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1244,6 +1261,105 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                     switchMeeting={switchMeeting}
                     onClose={closeMeetingPanel}
                   />
+                </div>
+              )}
+
+              {/* Touchpoint Map overlay */}
+              {tpMapOpen && selectedCompany && data && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
+                  <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[75vh] flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                      <div>
+                        <h3 className="text-base font-semibold text-brand-primary font-serif">Touchpoint Map</h3>
+                        {(() => {
+                          const conf = tpMapData?.conferences.find(c => c.id === data.conference.id);
+                          if (!conf) return <p className="text-xs text-gray-400 mt-0.5">{selectedCompany.name} · {data.conference.name}</p>;
+                          const confTotal = Object.values(conf.cells).flat().reduce((s, e) => s + e.count, 0);
+                          const attendeeCount = Object.keys(conf.cells).length;
+                          return <p className="text-xs text-gray-400 mt-0.5">{confTotal} total touchpoint{confTotal !== 1 ? 's' : ''} · {attendeeCount} attendee{attendeeCount !== 1 ? 's' : ''}</p>;
+                        })()}
+                      </div>
+                      <button type="button" onClick={() => setTpMapOpen(false)} className="text-gray-300 hover:text-gray-500 transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="flex-1 overflow-auto p-4 sm:p-6">
+                      {tpMapLoading ? (
+                        <div className="flex justify-center py-8">
+                          <svg className="w-6 h-6 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                        </div>
+                      ) : (() => {
+                        const conf = tpMapData?.conferences.find(c => c.id === data.conference.id);
+                        const attendees = tpMapData?.attendees ?? [];
+                        if (!conf || attendees.length === 0) {
+                          return <p className="text-sm text-gray-400 text-center py-8">No touchpoints for this conference.</p>;
+                        }
+                        // Only show attendees who have cells in this conference
+                        const activeAttendees = attendees.filter(a => conf.cells[String(a.id)]?.length);
+                        return (
+                          <table className="w-full text-xs border-collapse min-w-max">
+                            <thead>
+                              <tr>
+                                <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wider w-36 sticky left-0 bg-white">Conference</th>
+                                {activeAttendees.map(a => (
+                                  <th key={a.id} className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[140px]">
+                                    {a.first_name} {a.last_name}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="bg-gray-50/60">
+                                <td className="py-3 pr-4 align-top sticky left-0 bg-gray-50/60">
+                                  <span className="font-semibold text-gray-700 leading-snug block">{conf.name}</span>
+                                </td>
+                                {activeAttendees.map(a => {
+                                  const entries = conf.cells[String(a.id)] ?? [];
+                                  return (
+                                    <td key={a.id} className="py-3 px-3 align-top">
+                                      {entries.length === 0 ? (
+                                        <span className="text-gray-200">—</span>
+                                      ) : (
+                                        <div className="flex flex-col gap-1">
+                                          {entries.map((e, i) => {
+                                            const preset = getPreset(e.color);
+                                            return (
+                                              <div
+                                                key={i}
+                                                className="inline-flex items-center justify-between gap-3 rounded-lg border-2 pl-2.5 pr-2 py-1 text-xs font-medium"
+                                                style={{
+                                                  borderColor: preset.hex,
+                                                  backgroundColor: `${preset.hex}18`,
+                                                  color: preset.hex,
+                                                  minWidth: '7rem',
+                                                  width: 'fit-content',
+                                                }}
+                                              >
+                                                <span>{e.value}</span>
+                                                <span className="font-bold flex-shrink-0">{e.count}</span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            </tbody>
+                          </table>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
               )}
 
