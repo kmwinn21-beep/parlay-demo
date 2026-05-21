@@ -1514,7 +1514,7 @@ export async function GET(
     const salesWeighted = reweight(salesComponents);
 
     return NextResponse.json({
-      conference: { ...confInfo, conf_event_type: confEventType },
+      conference: { id: cid, ...confInfo, conf_event_type: confEventType },
       conference_strategy: {
         id: confInfo.conference_strategy_type_id != null ? Number(confInfo.conference_strategy_type_id) : null,
         key: strategyKey,
