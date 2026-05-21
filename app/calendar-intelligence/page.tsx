@@ -1001,7 +1001,12 @@ export default function CalendarIntelligencePage() {
             ) : (
               // Normal right-panel drawer
               <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={closeDrawer}>
-                <div className="h-full w-full max-w-[560px] bg-white overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="h-full w-full max-w-[560px] bg-white overflow-y-auto"
+                  style={{ transform: 'translateX(0)', transition: 'transform 200ms ease-out', animation: 'slideInFromRight 200ms ease-out' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
                   <ScoreDrawerContent row={selectedCalendarRow} />
                 </div>
               </div>
