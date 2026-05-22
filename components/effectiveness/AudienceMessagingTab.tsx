@@ -40,10 +40,12 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const [tableFilter, setTableFilter] = useState<'net_new' | 'all'>('net_new');
   const [cardRank, setCardRank] = useState<number | null>(m?.audience_quality_rank ?? null);
   const [cardTotal, setCardTotal] = useState<number | null>(m?.audience_quality_rank_total ?? null);
+  const [rankLoading, setRankLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const currentId = Number((data as any)?.conference?.id ?? 0);
+    setRankLoading(true);
     fetch('/api/conferences?nav=1')
       .then(r => r.ok ? r.json() : [])
       .then(async (confs: Array<{ id: number }>) => {
@@ -59,9 +61,10 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         if (!cancelled) {
           setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
           setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setRankLoading(false);
         }
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setRankLoading(false); });
     return () => { cancelled = true; };
   }, [data]);
 
@@ -157,7 +160,12 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
 
         {/* Rank card */}
         <button type="button" onClick={() => setShowRankings(true)} title="View full rankings"
-          className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group">
+          className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group relative">
+          {rankLoading && (
+            <svg className="absolute top-2 right-2 w-3.5 h-3.5 animate-spin text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          )}
           <div className="text-xs text-gray-500 mb-1">Audience Quality Rank</div>
           {cardRank
             ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal} conferences</div></>

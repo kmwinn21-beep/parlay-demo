@@ -68,10 +68,12 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const [showRankings, setShowRankings] = useState(false);
   const [cardRank, setCardRank] = useState<number | null>(sx?.sales_execution_rank ?? null);
   const [cardTotal, setCardTotal] = useState<number | null>(sx?.sales_execution_rank_total ?? null);
+  const [rankLoading, setRankLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const currentId = Number((data as any)?.conference?.id ?? 0);
+    setRankLoading(true);
     fetch('/api/conferences?nav=1')
       .then(r => r.ok ? r.json() : [])
       .then(async (confs: Array<{ id: number }>) => {
@@ -87,9 +89,10 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         if (!cancelled) {
           setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
           setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setRankLoading(false);
         }
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setRankLoading(false); });
     return () => { cancelled = true; };
   }, [data, cardRank, cardTotal]);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
@@ -272,7 +275,12 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           ))}
         </div>
       </div>
-      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group">
+      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group relative">
+        {rankLoading && (
+          <svg className="absolute top-2 right-2 w-3.5 h-3.5 animate-spin text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        )}
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
         {cardRank ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
