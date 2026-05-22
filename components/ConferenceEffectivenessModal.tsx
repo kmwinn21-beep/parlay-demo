@@ -184,7 +184,8 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
       <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
         <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
         <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-        <div className="absolute inset-0 sm:inset-4 md:inset-6 flex flex-col bg-white overflow-hidden shadow-2xl sm:rounded-2xl">
+        <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+          <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
 
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: HEADER_BG }}>
@@ -246,6 +247,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
             {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
             {activeTab === 'roi'         && <OperationalROITab data={data} />}
             {activeTab === 'definitions' && <DefinitionsTab />}
+          </div>
           </div>
         </div>
       </div>
