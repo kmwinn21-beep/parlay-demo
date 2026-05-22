@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { TargetEntry } from '../PreConferenceReview';
 import type { ParlayRec, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
 
@@ -41,6 +41,7 @@ function ParlayRecCard({
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
 }) {
+  const openRecord = useRecordDrawer();
   const [angleExpanded, setAngleExpanded] = useState(false);
 
   return (
@@ -48,12 +49,13 @@ function ParlayRecCard({
       {/* Header */}
       <div className="min-w-0">
         {rec.company_id ? (
-          <Link
-            href={`/companies/${rec.company_id}`}
-            className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate"
+          <button
+            type="button"
+            onClick={() => openRecord('company', rec.company_id!)}
+            className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate text-left w-full"
           >
             {rec.company_name}
-          </Link>
+          </button>
         ) : (
           <p className="font-semibold text-gray-900 text-sm truncate">{rec.company_name}</p>
         )}
@@ -107,12 +109,13 @@ function ParlayRecCard({
               const isTarget = targetMap.has(a.id);
               return (
                 <div key={a.id} className="flex items-center gap-2 text-xs">
-                  <Link
-                    href={`/attendees/${a.id}`}
-                    className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => openRecord('attendee', a.id)}
+                    className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors text-left"
                   >
                     {a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}
-                  </Link>
+                  </button>
                   <TargetBtn
                     isTarget={isTarget}
                     onClick={() => onToggleTarget({

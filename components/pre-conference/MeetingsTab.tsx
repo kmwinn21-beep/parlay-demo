@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { MeetingRow } from '../PreConferenceReview';
 
 function fmtDate(d: string | null) {
@@ -21,6 +21,7 @@ function fmtTime(t: string | null) {
 }
 
 export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
+  const openRecord = useRecordDrawer();
   if (meetings.length === 0) {
     return (
       <div className="text-center py-16">
@@ -51,9 +52,9 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <Link href={`/attendees/${m.attendee_id}`} className="font-medium text-brand-secondary hover:underline text-sm">
+                <button type="button" onClick={() => openRecord('attendee', m.attendee_id)} className="font-medium text-brand-secondary hover:underline text-sm text-left">
                   {m.first_name} {m.last_name}
-                </Link>
+                </button>
                 {m.title && <p className="text-xs text-gray-400 truncate">{m.title}</p>}
               </div>
               {m.outcome ? (
@@ -99,9 +100,9 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
             {meetings.map((m) => (
               <tr key={m.id} className={`${m.hasConflict ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
                 <td className="px-4 py-3">
-                  <Link href={`/attendees/${m.attendee_id}`} className="font-medium text-brand-secondary hover:underline">
+                  <button type="button" onClick={() => openRecord('attendee', m.attendee_id)} className="font-medium text-brand-secondary hover:underline text-left">
                     {m.first_name} {m.last_name}
-                  </Link>
+                  </button>
                   {m.title && <p className="text-xs text-gray-400">{m.title}</p>}
                 </td>
                 <td className="px-4 py-3 text-gray-700 text-xs">{m.company_name ?? '—'}</td>

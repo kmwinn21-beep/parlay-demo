@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { RecordDrawerCtx } from './pre-conference/RecordDrawerContext';
 import { LandscapeTab } from './pre-conference/LandscapeTab';
 import { IcpCompaniesTab } from './pre-conference/IcpCompaniesTab';
 import { MeetingsTab } from './pre-conference/MeetingsTab';
@@ -226,6 +227,9 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
   const [activeTab, setActiveTab] = useState<TabKey>('landscape');
   const [targetMap, setTargetMap] = useState<Map<number, TargetEntry>>(new Map());
   const [statsOpen, setStatsOpen] = useState(true);
+  const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const openRecord = useCallback((type: 'attendee' | 'company', id: number) => setRecordDrawer({ type, id }), []);
+  const closeRecord = useCallback(() => setRecordDrawer(null), []);
 
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
@@ -345,9 +349,10 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
       {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
 
       {open && data && (
+        <RecordDrawerCtx.Provider value={openRecord}>
         <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
           <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setOpen(false); closeRecord(); }} />
           <div className="absolute inset-0 sm:inset-4 md:inset-6 flex flex-col bg-white overflow-hidden shadow-2xl sm:rounded-2xl">
             {/* Panel header */}
             <div className="bg-brand-primary px-6 py-4 flex-shrink-0">
@@ -453,7 +458,38 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
               )}
             </div>
           </div>
+
+          {/* Record drawer — fixed, full viewport height, slides in from right */}
+          {recordDrawer != null && (
+            <div className="sm:hidden fixed inset-0 z-[59] bg-black/30" onClick={closeRecord} />
+          )}
+          <div
+            className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden transition-all ease-out ${
+              recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
+            }`}
+            style={{ transitionDuration: '200ms' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {recordDrawer != null && (
+              <>
+                <div className="flex items-center justify-end px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
+                  <button type="button" onClick={closeRecord} className="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <iframe
+                  key={`${recordDrawer.type}-${recordDrawer.id}`}
+                  src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}?embed=true`}
+                  className="flex-1 border-0 w-full"
+                  title={`${recordDrawer.type} record`}
+                />
+              </>
+            )}
+          </div>
         </div>
+        </RecordDrawerCtx.Provider>
       )}
     </>
   );
