@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const result = await db.execute({
       sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, confidence, confirmed, source)
-            VALUES (?, ?, ?, ?, ?, 'high', 0, ?) RETURNING id, insight_type, content, quote, timestamp_seconds, confidence, confirmed, source`,
+            VALUES (?, ?, ?, ?, ?, 'high', 1, ?) RETURNING id, insight_type, content, quote, timestamp_seconds, confidence, confirmed, source`,
       args: [
         meetingId,
         mtg ? Number(mtg.conference_id) : null,
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       quote: null,
       timestamp_seconds: null,
       confidence: 'high',
-      confirmed: false,
+      confirmed: true,
       source: String(row.source ?? 'manual') as 'ai' | 'manual',
     });
   } catch (error) {

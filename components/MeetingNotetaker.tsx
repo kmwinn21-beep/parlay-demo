@@ -849,7 +849,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     if (!trimmed) return;
     // Optimistic insert
     const tempId = -(Date.now());
-    const optimistic: Insight = { id: tempId, insight_type, content: trimmed, quote: null, timestamp_seconds: null, confidence: 'high', confirmed: false, source: 'manual' };
+    const optimistic: Insight = { id: tempId, insight_type, content: trimmed, quote: null, timestamp_seconds: null, confidence: 'high', confirmed: true, source: 'manual' };
     setInsights(prev => [...prev, optimistic]);
     try {
       const res = await fetch(`/api/meetings/${meetingId}/insights`, {
