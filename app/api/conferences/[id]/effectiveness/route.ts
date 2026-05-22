@@ -551,11 +551,12 @@ export async function GET(
        FROM pipeline_influence`
     ))[0] ?? {};
 
-    const netNewLogos = (await runQuery(db, 
+    const netNewLogos = (await runQuery(db,
       `${w},
        prior_companies AS (
          SELECT DISTINCT a.company_id FROM conference_attendees ca
-         JOIN attendees a ON ca.attendee_id=a.id WHERE ca.conference_id != ${cid}
+         JOIN attendees a ON ca.attendee_id=a.id
+         WHERE ca.conference_id != ${cid} AND a.company_id IS NOT NULL
        )
        SELECT
          COUNT(DISTINCT CASE WHEN pi.company_id NOT IN (SELECT company_id FROM prior_companies) THEN pi.company_id END) AS net_new_logos,

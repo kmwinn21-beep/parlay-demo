@@ -377,10 +377,12 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:2fr_1fr_1fr_1fr] gap-3">
+      <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
 
-        {/* Col 1: Cost Efficiency Score card */}
+      {/* ── Top row: 3 metric cards full-width ──────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+        {/* Cost Efficiency Score card */}
         <div className="rounded-xl p-4" style={{ backgroundColor: cardColor + '15', borderLeft: `4px solid ${cardColor}` }}>
           <div className="flex items-start justify-between mb-1">
             <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Cost Efficiency Score</div>
@@ -426,7 +428,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           )}
         </div>
 
-        {/* Col 2: Efficiency Rank */}
+        {/* Efficiency Rank */}
         <button
           type="button"
           onClick={() => setShowRankings(true)}
@@ -441,7 +443,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           <div className="text-xs text-gray-400 mt-2 group-hover:text-brand-secondary transition-colors">View all →</div>
         </button>
 
-        {/* Col 3: Pipeline Multiple */}
+        {/* Pipeline Multiple */}
         <div className="rounded-xl p-3" style={{ border: '1.5px solid #1D9E75', background: '#E1F5EE' }}>
           <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#1D9E75' }}>Influenced Pipeline Multiple</div>
           <div className="text-3xl font-bold" style={{ color: '#1D9E75' }}>
@@ -455,10 +457,13 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Col 4: Budget Breakdown */}
-        <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
+      {/* ── Budget left col spanning KPI tile rows ───────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-3">
+
+        {/* Budget Breakdown — left column spanning both KPI rows */}
+        <div className="lg:row-span-2 rounded-xl border border-gray-200 bg-white p-3 flex flex-col">
           <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1 flex-shrink-0">Budget breakdown</div>
           {lineItems.length === 0 ? (
             <div className="text-xs text-gray-400 italic leading-relaxed">
@@ -470,40 +475,40 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 Total: {fmt$(budget?.totalEffective ?? 0)}
               </div>
 
-              {/* Scrollable line items */}
+              {/* Scrollable line items — grows to fill available height */}
               <div
                 ref={budgetScrollRef}
-                className="budget-items-scroll overflow-y-auto my-1"
-                style={{ scrollbarWidth: 'none', maxHeight: 150 }}
+                className="budget-items-scroll overflow-y-auto my-1 flex-1 min-h-0"
+                style={{ scrollbarWidth: 'none' }}
               >
-                  {lineItems.map((item, i) => {
-                    const itemLabel = String(item.label ?? '');
-                    const itemBudget = Number(item.budget ?? 0);
-                    const itemActual = Number(item.actual ?? 0);
-                    const itemEffective = Number(item.effective ?? itemBudget);
-                    const showVariance = itemBudget > 0 && itemActual > 0;
-                    const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
-                    return (
-                      <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
-                        <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
-                        <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
-                        {variancePct != null && (
-                          <span
-                            className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
-                            style={{
-                              background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
-                              color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
-                            }}
-                          >
-                            {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                {lineItems.map((item, i) => {
+                  const itemLabel = String(item.label ?? '');
+                  const itemBudget = Number(item.budget ?? 0);
+                  const itemActual = Number(item.actual ?? 0);
+                  const itemEffective = Number(item.effective ?? itemBudget);
+                  const showVariance = itemBudget > 0 && itemActual > 0;
+                  const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
+                  return (
+                    <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
+                      <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
+                      <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
+                      {variancePct != null && (
+                        <span
+                          className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
+                          style={{
+                            background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
+                            color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
+                          }}
+                        >
+                          {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Show more button — only visible when more items exist below */}
+              {/* Show more button */}
               {budgetCanScrollMore && (
                 <button
                   type="button"
@@ -515,7 +520,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               )}
 
               {/* Static summary */}
-              <div className="flex-shrink-0 pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
+              <div className="flex-shrink-0 pt-2 space-y-0.5 mt-auto" style={{ borderTop: '1px solid #f3f4f6' }}>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Budgeted</span>
                   <span className="text-gray-600">{fmt$(budget?.totalBudget ?? 0)}</span>
@@ -541,49 +546,54 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             </>
           )}
         </div>
-      </div>
 
-      {/* ── KPI tiles — 2 rows of 3 ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <BenchmarkTile
-          label="Cost per ICP company engaged"
-          value={costPerIcp}
-          secondaryText="Benchmark: $800–$1,200"
-          benchmarkMin={800}
-          benchmarkMax={1200}
-          lowerIsBetter={true}
-        />
-        <BenchmarkTile
-          label="Cost per meeting held"
-          value={costPerMeeting}
-          secondaryText="Benchmark: $1,500–$2,000"
-          benchmarkMin={1500}
-          benchmarkMax={2000}
-          lowerIsBetter={true}
-        />
-        <BenchmarkTile
-          label="Pipeline per $1k spent"
-          value={pipelinePer1k}
-          secondaryText="Benchmark: $5,000–$8,000"
-          benchmarkMin={5000}
-          benchmarkMax={8000}
-          lowerIsBetter={false}
-        />
-        <BenchmarkTile
-          label="Cost per net-new company"
-          value={costPerNetNewCompany}
-          secondaryText={netNewCompaniesTotal > 0 ? `${fmtNum(netNewCompaniesTotal)} net-new companies engaged` : 'No net-new companies'}
-        />
-        <BenchmarkTile
-          label="Cost per net-new contact"
-          value={costPerNetNewContact}
-          secondaryText={netNewContactsTotal > 0 ? `${fmtNum(netNewContactsTotal)} net-new contacts engaged` : 'No net-new contacts'}
-        />
-        <BenchmarkTile
-          label="Cost per completed follow-up"
-          value={costPerCompletedFollowup}
-          secondaryText={followupsCompleted > 0 ? `${fmtNum(followupsCompleted)} completed tasks` : 'No completed follow-ups'}
-        />
+        {/* Right side — KPI tiles row 1 */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <BenchmarkTile
+            label="Cost per ICP company engaged"
+            value={costPerIcp}
+            secondaryText="Benchmark: $800–$1,200"
+            benchmarkMin={800}
+            benchmarkMax={1200}
+            lowerIsBetter={true}
+          />
+          <BenchmarkTile
+            label="Cost per meeting held"
+            value={costPerMeeting}
+            secondaryText="Benchmark: $1,500–$2,000"
+            benchmarkMin={1500}
+            benchmarkMax={2000}
+            lowerIsBetter={true}
+          />
+          <BenchmarkTile
+            label="Pipeline per $1k spent"
+            value={pipelinePer1k}
+            secondaryText="Benchmark: $5,000–$8,000"
+            benchmarkMin={5000}
+            benchmarkMax={8000}
+            lowerIsBetter={false}
+          />
+        </div>
+
+        {/* Right side — KPI tiles row 2 */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <BenchmarkTile
+            label="Cost per net-new company"
+            value={costPerNetNewCompany}
+            secondaryText={netNewCompaniesTotal > 0 ? `${fmtNum(netNewCompaniesTotal)} net-new companies engaged` : 'No net-new companies'}
+          />
+          <BenchmarkTile
+            label="Cost per net-new contact"
+            value={costPerNetNewContact}
+            secondaryText={netNewContactsTotal > 0 ? `${fmtNum(netNewContactsTotal)} net-new contacts engaged` : 'No net-new contacts'}
+          />
+          <BenchmarkTile
+            label="Cost per completed follow-up"
+            value={costPerCompletedFollowup}
+            secondaryText={followupsCompleted > 0 ? `${fmtNum(followupsCompleted)} completed tasks` : 'No completed follow-ups'}
+          />
+        </div>
+
       </div>
 
       {/* ── Rep efficiency — 5-col grid ──────────────────────────────────── */}

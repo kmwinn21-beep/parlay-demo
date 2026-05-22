@@ -68,10 +68,12 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
   const [showRankings, setShowRankings] = useState(false);
   const [cardRank, setCardRank] = useState<number | null>(sx?.sales_execution_rank ?? null);
   const [cardTotal, setCardTotal] = useState<number | null>(sx?.sales_execution_rank_total ?? null);
+  const [rankLoading, setRankLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const currentId = Number((data as any)?.conference?.id ?? 0);
+    setRankLoading(true);
     fetch('/api/conferences?nav=1')
       .then(r => r.ok ? r.json() : [])
       .then(async (confs: Array<{ id: number }>) => {
@@ -87,9 +89,10 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
         if (!cancelled) {
           setCardTotal((idx >= 0 ? ranked.length : cardTotal) || null);
           setCardRank(idx >= 0 ? idx + 1 : cardRank);
+          setRankLoading(false);
         }
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setRankLoading(false); });
     return () => { cancelled = true; };
   }, [data, cardRank, cardTotal]);
   if (!sx) return <div className="p-6 text-sm text-gray-500">Sales execution data unavailable.</div>;
@@ -272,7 +275,12 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           ))}
         </div>
       </div>
-      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group">
+      <button type="button" onClick={() => setShowRankings(true)} title="View full rankings" className="lg:col-span-1 rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group relative">
+        {rankLoading && (
+          <svg className="absolute top-2 right-2 w-3.5 h-3.5 animate-spin text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        )}
         <div className="text-xs text-gray-500 font-medium mb-1">Sales Execution Rank</div>
         {cardRank ? <><div className="text-3xl font-bold text-brand-secondary">#{cardRank}</div><div className="text-xs text-gray-400">of {cardTotal} conferences</div></> : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400">Ranking requires at least two scored conferences.</div></>}
       <div className="text-[10px] text-gray-400 mt-1.5 group-hover:text-brand-secondary transition-colors">View all →</div></button>
@@ -331,8 +339,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 items-stretch">
-      <div className="card p-5 w-full lg:col-span-1 flex flex-col">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-stretch">
+      <div className="card p-5 w-full lg:col-span-2 flex flex-col">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
           <button
@@ -396,14 +404,34 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Directional</span>
         </div>
         <p className="text-[11px] text-gray-500 mt-1">Directional pipeline influence attributed to each rep</p>
+
+        {/* Influenced Pipeline vs Goal — top of card */}
+        <div className="py-3 border-b border-gray-100 mb-3">
+          <div className="text-[11px] font-semibold text-brand-primary mb-1">Influenced Pipeline vs Goal</div>
+          {totalPipelineInfluence == null ? (
+            <div className="text-[11px] text-gray-500">Influenced pipeline unavailable</div>
+          ) : (requiredPipelineAmount == null || requiredPipelineAmount <= 0) ? (
+            <div className="text-[11px] text-gray-500">Required pipeline goal not configured</div>
+          ) : (
+            <>
+              <div className="text-[11px] text-gray-500">{fmt$(totalPipelineInfluence)} actual</div>
+              <div className="text-[11px] text-gray-500">{fmt$(requiredPipelineAmount)} goal</div>
+              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
+                <div className="h-full rounded-full bg-red-500" style={{ width: `${influencedPipelineGoalWidthPercent ?? 0}%` }} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">{influencedPipelineGoalPercent == null ? '—' : `${influencedPipelineGoalPercent.toFixed(1)}%`} of goal</div>
+            </>
+          )}
+        </div>
+
         {showNoRepData ? (
-          <div className="text-xs text-gray-500 mt-3">No rep-level pipeline influence available for this conference.</div>
+          <div className="text-xs text-gray-500">No rep-level pipeline influence available for this conference.</div>
         ) : showNoAttributedPipeline ? (
-          <div className="text-xs text-gray-500 mt-3">No pipeline influence attributed yet.</div>
+          <div className="text-xs text-gray-500">No pipeline influence attributed yet.</div>
         ) : (
-          <div className="mt-3 space-y-2">
+          <div className="space-y-2">
             {topPipelineInfluenceByRep.map((rep) => (
-              <div key={rep.rep_id} className="space-y-1">
+              <div key={rep.rep_id} className="space-y-2">
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <div className="text-gray-700 truncate" title={rep.rep_name}>{rep.rep_name}</div>
                   <div className="text-gray-500 font-medium">{fmtRepCurrency(rep.pipeline_influence)} · {Math.round(rep.contribution_percent)}%</div>
@@ -416,25 +444,6 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
             {hiddenRepCount > 0 && <div className="text-[11px] text-gray-400">+{hiddenRepCount} more reps</div>}
           </div>
         )}
-        <div className="py-5 mt-auto">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold text-brand-primary">Influenced Pipeline vs Goal</div>
-          </div>
-          {totalPipelineInfluence == null ? (
-            <div className="text-[11px] text-gray-500 mt-1">Influenced pipeline unavailable</div>
-          ) : (requiredPipelineAmount == null || requiredPipelineAmount <= 0) ? (
-            <div className="text-[11px] text-gray-500 mt-1">Required pipeline goal not configured</div>
-          ) : (
-            <>
-              <div className="text-[11px] text-gray-500 mt-1">{fmt$(totalPipelineInfluence)} actual</div>
-              <div className="text-[11px] text-gray-500">{fmt$(requiredPipelineAmount)} goal</div>
-              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
-                <div className="h-full rounded-full bg-red-500" style={{ width: `${influencedPipelineGoalWidthPercent ?? 0}%` }} />
-              </div>
-              <div className="text-[11px] text-gray-500 mt-1">{influencedPipelineGoalPercent == null ? '—' : `${influencedPipelineGoalPercent.toFixed(1)}%`} of goal</div>
-            </>
-          )}
-        </div>
       </div>
 
       <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col relative">
