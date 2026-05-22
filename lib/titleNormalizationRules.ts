@@ -4,6 +4,8 @@ import { buildTitleMetadata, conservativeTitleSimilarity, normalizeTitleKey, typ
 // Ordering matters — findSystemAlias uses .find() so more specific entries must come first.
 // VP+function entries must precede generic C-Suite so "VP of Finance" ≠ CFO.
 // Director+function entries must precede the generic Director fallback.
+const titleResolutionCache = new Map<string, TitleMatchMetadata>();
+
 const SYSTEM_ALIASES: Array<{ aliases: string[]; normalized_title: string; function_value: string; seniority_value: string; buyer_role: BuyerRoleKey }> = [
   // ── C-Suite ──────────────────────────────────────────────────────────────
   { aliases: ['ceo', 'chief executive officer'], normalized_title: 'CEO', function_value: 'Operations', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
@@ -263,7 +265,7 @@ async function exactOrFuzzyFromConfig(rawTitle: string): Promise<TitleMatchMetad
   return buildTitleMetadata({ originalTitle: rawTitle, matchType: 'none', confidence: 'low', source: 'none' });
 }
 
-export async function resolveAttendeeTitleMetadata(rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
+async function resolveAttendeeTitleMetadataUncached(rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
   await ensureTitleNormalizationSchema();
   const title = String(rawTitle ?? '').trim();
   if (!title) return buildTitleMetadata({ originalTitle: null, matchType: 'none', confidence: 'low', source: 'none' });
@@ -290,6 +292,16 @@ export async function resolveAttendeeTitleMetadata(rawTitle: string | null | und
   if (systemAlias) return systemAlias;
 
   return exactOrFuzzyFromConfig(title);
+}
+
+export async function resolveAttendeeTitleMetadata(rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
+  const title = String(rawTitle ?? '').trim();
+  const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
+  const cached = titleResolutionCache.get(cacheKey);
+  if (cached) return cached;
+  const result = await resolveAttendeeTitleMetadataUncached(rawTitle, organizationId);
+  titleResolutionCache.set(cacheKey, result);
+  return result;
 }
 
 export async function applyRuleToExactTitle(rule: TitleNormalizationRuleLike): Promise<{ attendeeCount: number; companyCount: number }> {

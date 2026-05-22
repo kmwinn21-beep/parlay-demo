@@ -64,7 +64,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
   effectiveness_modal: [
     { key: 'summary',     label: 'Summary' },
     { key: 'sales',       label: 'Sales Execution' },
-    { key: 'audience',    label: 'Audience & Messaging' },
+    { key: 'audience',    label: 'Marketing Coverage' },
     { key: 'roi',         label: 'Operational ROI' },
     { key: 'definitions', label: 'Definitions' },
   ],

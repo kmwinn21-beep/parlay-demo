@@ -823,4 +823,5 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('meeting_type', 'Booth Demo', 1, 0)`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('meeting_type', 'Booth Meeting', 2, 0)`,
   `ALTER TABLE quick_notes ADD COLUMN product_suggestions TEXT`,
+  `ALTER TABLE meeting_insights ADD COLUMN source TEXT DEFAULT 'ai'`,
 ];

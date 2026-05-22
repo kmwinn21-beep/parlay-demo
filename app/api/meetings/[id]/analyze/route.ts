@@ -49,6 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         insight_type TEXT NOT NULL, content TEXT NOT NULL,
         quote TEXT, timestamp_seconds INTEGER, icp_match_id INTEGER,
         confidence TEXT DEFAULT 'medium', confirmed INTEGER DEFAULT 0,
+        source TEXT DEFAULT 'ai',
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_meeting_insights_meeting ON meeting_insights(meeting_id);
@@ -367,41 +368,41 @@ RULES
       }
     }
 
-    // Delete existing insights for this meeting
-    await db.execute({ sql: `DELETE FROM meeting_insights WHERE meeting_id = ?`, args: [meetingId] });
+    // Delete existing AI insights for this meeting (preserve manual insights)
+    await db.execute({ sql: `DELETE FROM meeting_insights WHERE meeting_id = ? AND (source = 'ai' OR source IS NULL)`, args: [meetingId] });
 
-    const insertedInsights: Array<{ id: number; insight_type: string; content: string; quote: string | null; timestamp_seconds: number | null; confidence: string; confirmed: boolean }> = [];
+    const insertedInsights: Array<{ id: number; insight_type: string; content: string; quote: string | null; timestamp_seconds: number | null; confidence: string; confirmed: boolean; source: string }> = [];
 
     for (const signal of analysis.buying_signals ?? []) {
       const result = await db.execute({
-        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, quote, timestamp_seconds, confidence)
-              VALUES (?, ?, ?, 'buying_signal', ?, ?, ?, ?) RETURNING id`,
+        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, quote, timestamp_seconds, confidence, source)
+              VALUES (?, ?, ?, 'buying_signal', ?, ?, ?, ?, 'ai') RETURNING id`,
         args: [meetingId, Number(mtg.conference_id), Number(mtg.attendee_id), signal.label, signal.quote ?? null, signal.timestamp_seconds ?? null, signal.confidence ?? 'medium'],
       });
       if (result.rows[0]) {
-        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'buying_signal', content: signal.label, quote: signal.quote ?? null, timestamp_seconds: signal.timestamp_seconds ?? null, confidence: signal.confidence ?? 'medium', confirmed: false });
+        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'buying_signal', content: signal.label, quote: signal.quote ?? null, timestamp_seconds: signal.timestamp_seconds ?? null, confidence: signal.confidence ?? 'medium', confirmed: false, source: 'ai' });
       }
     }
 
     for (const pp of analysis.pain_points ?? []) {
       const result = await db.execute({
-        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, quote, timestamp_seconds, confidence)
-              VALUES (?, ?, ?, 'pain_point', ?, ?, ?, ?) RETURNING id`,
+        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, quote, timestamp_seconds, confidence, source)
+              VALUES (?, ?, ?, 'pain_point', ?, ?, ?, ?, 'ai') RETURNING id`,
         args: [meetingId, Number(mtg.conference_id), Number(mtg.attendee_id), pp.label, pp.quote ?? null, pp.timestamp_seconds ?? null, pp.confidence ?? 'medium'],
       });
       if (result.rows[0]) {
-        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'pain_point', content: pp.label, quote: pp.quote ?? null, timestamp_seconds: pp.timestamp_seconds ?? null, confidence: pp.confidence ?? 'medium', confirmed: false });
+        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'pain_point', content: pp.label, quote: pp.quote ?? null, timestamp_seconds: pp.timestamp_seconds ?? null, confidence: pp.confidence ?? 'medium', confirmed: false, source: 'ai' });
       }
     }
 
     for (const step of analysis.next_steps ?? []) {
       const result = await db.execute({
-        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, timestamp_seconds, confidence)
-              VALUES (?, ?, ?, 'next_step', ?, ?, ?) RETURNING id`,
+        sql: `INSERT INTO meeting_insights (meeting_id, conference_id, attendee_id, insight_type, content, timestamp_seconds, confidence, source)
+              VALUES (?, ?, ?, 'next_step', ?, ?, ?, 'ai') RETURNING id`,
         args: [meetingId, Number(mtg.conference_id), Number(mtg.attendee_id), step.task_text, step.timestamp_seconds ?? null, step.confidence ?? 'medium'],
       });
       if (result.rows[0]) {
-        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'next_step', content: step.task_text, quote: null, timestamp_seconds: step.timestamp_seconds ?? null, confidence: step.confidence ?? 'medium', confirmed: false });
+        insertedInsights.push({ id: Number(result.rows[0].id), insight_type: 'next_step', content: step.task_text, quote: null, timestamp_seconds: step.timestamp_seconds ?? null, confidence: step.confidence ?? 'medium', confirmed: false, source: 'ai' });
       }
     }
 

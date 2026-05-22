@@ -64,7 +64,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     const insightsResult = await db.execute({
-      sql: `SELECT id, insight_type, content, quote, timestamp_seconds, confidence, confirmed
+      sql: `SELECT id, insight_type, content, quote, timestamp_seconds, confidence, confirmed, source
             FROM meeting_insights WHERE meeting_id = ? ORDER BY id ASC`,
       args: [meetingId],
     });
@@ -84,6 +84,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         timestamp_seconds: r.timestamp_seconds != null ? Number(r.timestamp_seconds) : null,
         confidence: String(r.confidence ?? 'medium'),
         confirmed: Number(r.confirmed) === 1,
+        source: String(r.source ?? 'ai') as 'ai' | 'manual',
       })),
     });
   } catch (error) {

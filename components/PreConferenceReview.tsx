@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { RecordDrawerCtx } from './pre-conference/RecordDrawerContext';
 import { LandscapeTab } from './pre-conference/LandscapeTab';
@@ -231,6 +231,28 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
   const openRecord = useCallback((type: 'attendee' | 'company', id: number) => setRecordDrawer({ type, id }), []);
   const closeRecord = useCallback(() => setRecordDrawer(null), []);
 
+  // Cache: avoid reloading if data is less than 5 minutes old
+  const loadedAtRef = useRef<number | null>(null);
+  const CACHE_TTL_MS = 5 * 60 * 1000;
+
+  // Cycling loading text
+  const LOADING_LINES = ['Your Pre-Conference Score is Loading', 'Compiling Relevant Data', 'Scoring Attendee Targets'];
+  const [loadingLineIdx, setLoadingLineIdx] = useState(0);
+  const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (loading && !data) {
+      setLoadingLineIdx(0);
+      loadingIntervalRef.current = setInterval(() => {
+        setLoadingLineIdx(i => (i + 1) % LOADING_LINES.length);
+      }, 1800);
+    } else {
+      if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current);
+    }
+    return () => { if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, data]);
+
   const tabConfig = useSectionConfig('pre_conference_review');
   const visibleTabs = useMemo(() => {
     if (tabConfig.orderedKeys.length === 0) return TABS;
@@ -242,9 +264,13 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
   }, [tabConfig]);
 
   const load = useCallback(async () => {
+    setOpen(true);
+    // Use cached data if fresh
+    if (data && loadedAtRef.current && Date.now() - loadedAtRef.current < CACHE_TTL_MS) {
+      return;
+    }
     setLoading(true);
     setError(null);
-    setOpen(true);
     try {
       const [confRes, targetsRes] = await Promise.all([
         fetch(`/api/conferences/${conferenceId}/pre-conference`),
@@ -253,6 +279,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
       if (!confRes.ok) throw new Error('Failed to load');
       const json: PreConferenceData = await confRes.json();
       setData(json);
+      loadedAtRef.current = Date.now();
       if (targetsRes.ok) {
         const tArr = await targetsRes.json() as TargetEntry[];
         setTargetMap(new Map(tArr.map(t => [t.attendeeId, t])));
@@ -262,7 +289,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
     } finally {
       setLoading(false);
     }
-  }, [conferenceId]);
+  }, [conferenceId, data, CACHE_TTL_MS]);
 
   const toggleTarget = useCallback(async (entry: Omit<TargetEntry, 'tier'>) => {
     const isTarget = targetMap.has(entry.attendeeId);
@@ -346,7 +373,8 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
         <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
           <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
           <div className="absolute inset-0 bg-black/40" onClick={() => { setOpen(false); closeRecord(); }} />
-          <div className="absolute inset-0 sm:inset-4 md:inset-6 flex flex-col bg-white overflow-hidden shadow-2xl sm:rounded-2xl">
+          <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+            <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
             {/* Panel header */}
             <div className="bg-brand-primary px-6 py-4 flex-shrink-0">
               <div className="flex items-start justify-between gap-4">
@@ -388,6 +416,19 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
               <div className="flex-shrink-0 h-1 bg-gray-100 overflow-hidden">
                 <div className="h-full bg-brand-secondary animate-[loadingBar_1.8s_ease-in-out_infinite]" />
                 <style>{`@keyframes loadingBar { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }`}</style>
+              </div>
+            )}
+
+            {/* Centered loading animation */}
+            {loading && !data && (
+              <div className="flex-1 flex flex-col items-center justify-center gap-4">
+                <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <p className="text-sm font-medium text-gray-500 transition-all duration-500">
+                  {LOADING_LINES[loadingLineIdx]}
+                </p>
               </div>
             )}
 
@@ -501,6 +542,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                 />
               </>
             )}
+            </div>
           </div>
         </div>
         </RecordDrawerCtx.Provider>
