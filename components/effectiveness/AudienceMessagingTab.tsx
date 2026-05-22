@@ -245,7 +245,31 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
               <DetailRow label="ICP companies attending" value={fmtNum(det.icp_attending)} />
               <DetailRow label="ICP companies engaged" value={fmtNum(det.icp_engaged)} />
               <DetailRow label="Coverage rate" value={fmtPct(det.coverage_rate)} valueColor={compScoreColor(sc)} />
-              <DetailRow label="Industry benchmark" value="~30% avg" />
+              <div className="flex justify-between text-xs py-1 border-b border-gray-50">
+                <span className="text-gray-500 flex items-center gap-1">
+                  Rep-adjusted benchmark
+                  {det.benchmark_is_rep_adjusted && (
+                    <span
+                      className="text-gray-400 cursor-help"
+                      title={`Benchmark adjusted for ${det.reps_count} rep${det.reps_count !== 1 ? 's' : ''} over ${det.days_count} day${det.days_count !== 1 ? 's' : ''} covering ${det.icp_attending} ICP companies. Industry average is 30% but rep bandwidth limits realistic coverage to ${Math.round(det.rep_adjusted_benchmark ?? 30)}%.`}
+                    >
+                      <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </span>
+                  )}
+                </span>
+                <span className="font-medium">
+                  {det.benchmark_is_rep_adjusted
+                    ? `~${Math.round(det.rep_adjusted_benchmark ?? 30)}% (rep-adjusted)`
+                    : '~30% avg (industry)'}
+                </span>
+              </div>
+              <DetailRow
+                label="Coverage vs benchmark"
+                value={det.coverage_ratio != null ? `${Math.round(det.coverage_ratio)}% of benchmark` : '—'}
+                valueColor={(det.coverage_ratio ?? 0) >= 100 ? '#059669' : '#d97706'}
+              />
               <DetailRow label="ICP companies missed" value={fmtNum(det.icp_missed)} valueColor="#dc2626" />
             </div>
           );

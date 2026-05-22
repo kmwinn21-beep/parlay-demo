@@ -1842,18 +1842,36 @@ export async function GET(
         }
         const buyerAccessQuality = baqDenominator > 0 ? baqNumerator / baqDenominator : 0;
 
+        // ── Rep-adjusted ICP coverage benchmark ──────────────────────────────
+        const repsForBenchmark = internalAttendeeIds.size > 0 ? internalAttendeeIds.size : 1;
+        const confStartMs = confInfo.start_date ? new Date(String(confInfo.start_date)).getTime() : null;
+        const confEndMsForDuration = confInfo.end_date ? new Date(String(confInfo.end_date)).getTime() : null;
+        const confDurationDays = (confStartMs != null && confEndMsForDuration != null)
+          ? Math.max(1, Math.round((confEndMsForDuration - confStartMs) / (1000 * 60 * 60 * 24)) + 1)
+          : 2;
+        const repAdjustedBenchmark = icpAttending > 0
+          ? Math.min(0.30, (repsForBenchmark * confDurationDays * 8 * 0.6) / icpAttending)
+          : 0.30;
+
         // ── Scoring functions ─────────────────────────────────────────────────
-        function scoreIcpCoverage(pctCovered: number): number {
-          const breakpoints = [[0,0],[10,20],[20,35],[30,50],[40,65],[50,75],[60,83],[70,90],[80,95],[90,100]] as [number,number][];
-          if (pctCovered <= 0) return 0;
-          if (pctCovered >= 90) return 100;
-          for (let i = 1; i < breakpoints.length; i++) {
-            const [x0,y0] = breakpoints[i-1], [x1,y1] = breakpoints[i];
-            if (pctCovered <= x1) {
-              return Math.round(y0 + (pctCovered - x0) / (x1 - x0) * (y1 - y0));
-            }
+        function scoreIcpCoverageByRatio(ratio: number): number {
+          const bp: [number, number][] = [[0,0],[0.25,15],[0.50,28],[0.75,40],[1.00,50],[1.25,62],[1.50,72],[1.75,82],[2.00,90],[2.50,100]];
+          if (ratio <= 0) return 0;
+          if (ratio >= 2.50) return 100;
+          for (let i = 1; i < bp.length; i++) {
+            const [x0,y0] = bp[i-1], [x1,y1] = bp[i];
+            if (ratio <= x1) return Math.round(y0 + (ratio - x0) / (x1 - x0) * (y1 - y0));
           }
           return 100;
+        }
+
+        function icpCoverageTier(s: number | null): string {
+          if (s == null) return '—';
+          if (s >= 80) return 'Strong';
+          if (s >= 60) return 'Acceptable';
+          if (s >= 40) return 'Below average';
+          if (s >= 25) return 'Weak';
+          return 'Ineffective';
         }
 
         function compTier(s: number | null): string {
@@ -1916,7 +1934,9 @@ export async function GET(
 
         // Compute component scores
         const icpCoverageRatePct = icpAttending > 0 ? icpEngaged / icpAttending * 100 : 0;
-        const comp1Score = icpAttending > 0 ? scoreIcpCoverage(icpCoverageRatePct) : 0;
+        const actualCoverageRate = icpAttending > 0 ? icpEngaged / icpAttending : 0;
+        const icpCoverageRatio = repAdjustedBenchmark > 0 ? actualCoverageRate / repAdjustedBenchmark : 0;
+        const comp1Score = icpAttending > 0 ? scoreIcpCoverageByRatio(icpCoverageRatio) : 0;
 
         const comp2Score = Math.round(buyerAccessQuality);
 
@@ -1997,7 +2017,7 @@ export async function GET(
           insights_available: insightsAvailable,
           pain_points_available: painPointsAvailable,
           components: {
-            icp_coverage_rate:           { score: comp1Score, weight: 0.25, tier: compTier(comp1Score) },
+            icp_coverage_rate:           { score: comp1Score, weight: 0.25, tier: icpCoverageTier(comp1Score) },
             buyer_access_quality:        { score: comp2Score, weight: 0.25, tier: compTier(comp2Score) },
             conversation_quality_signal: { score: comp3Score, weight: 0.20, tier: insightsAvailable ? compTier(comp3Score) : 'Neutral', insights_available: insightsAvailable },
             market_intelligence_yield:   { score: comp4Score, weight: 0.15, tier: painPointsAvailable ? compTier(comp4Score) : 'Neutral', pain_points_available: painPointsAvailable },
@@ -2036,6 +2056,11 @@ export async function GET(
             icp_engaged: icpEngaged,
             coverage_rate: Math.round(icpCoverageRatePct * 10) / 10,
             icp_missed: Math.max(icpAttending - icpEngaged, 0),
+            rep_adjusted_benchmark: Math.round(repAdjustedBenchmark * 1000) / 10,
+            benchmark_is_rep_adjusted: repAdjustedBenchmark < 0.30,
+            coverage_ratio: Math.round(icpCoverageRatio * 1000) / 10,
+            reps_count: repsForBenchmark,
+            days_count: confDurationDays,
           },
           buyer_access_detail: {
             dm_via_meeting: dmViaContactMeeting,
