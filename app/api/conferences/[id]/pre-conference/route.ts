@@ -7,6 +7,9 @@ import { computeStrategyAssessment, buildDefaultTierConfig } from '@/lib/strateg
 import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
 import { normalizeTitleKey } from '@/lib/titleNormalization';
 
+const PRE_CONF_CACHE = new Map<string, { data: unknown; cachedAt: number }>();
+const PRE_CONF_CACHE_TTL = 5 * 60 * 1000;
+
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
   const out: number[] = [];
@@ -32,6 +35,12 @@ export async function GET(
   const { id } = await params;
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
+
+  const cacheKey = `${authResult?.accountId ?? 'anon'}:${confId}`;
+  const cached = PRE_CONF_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < PRE_CONF_CACHE_TTL) {
+    return NextResponse.json(cached.data);
+  }
 
 
   const confRow = await db.execute({
@@ -820,5 +829,7 @@ export async function GET(
     icpCompanies: icpCompaniesForScoring,
   });
 
-  return NextResponse.json({ summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment });
+  const responseData = { summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment };
+  PRE_CONF_CACHE.set(cacheKey, { data: responseData, cachedAt: Date.now() });
+  return NextResponse.json(responseData);
 }
