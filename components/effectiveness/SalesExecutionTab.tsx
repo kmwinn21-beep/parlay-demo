@@ -339,8 +339,8 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
       {[['Meeting Hold Rate', fmtPct(sx.kpis.meeting_hold_rate)], ['Follow-up Completion', fmtPct(sx.kpis.followup_completion_rate)], ['Follow-up Attachment', fmtPct(sx.kpis.followup_attachment_rate)], ['Pipeline / Meeting', fmt$(sx.kpis.pipeline_per_meeting)], ['Pipeline / Company', fmt$(sx.kpis.pipeline_per_company)], ['Avg Influenced Deal', fmt$(sx.kpis.average_influenced_deal_size)]].map(([l,v]) => <div key={String(l)} className="rounded-lg border border-gray-100 bg-gray-50 p-3"><div className="text-xs text-gray-500">{l}</div><div className="text-lg font-bold text-brand-secondary">{v}</div></div>)}
     </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 items-stretch">
-      <div className="card p-5 w-full lg:col-span-1 flex flex-col">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-stretch">
+      <div className="card p-5 w-full lg:col-span-2 flex flex-col">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide">Rep Execution Quadrant</h3>
           <button
@@ -404,14 +404,34 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
           <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Directional</span>
         </div>
         <p className="text-[11px] text-gray-500 mt-1">Directional pipeline influence attributed to each rep</p>
+
+        {/* Influenced Pipeline vs Goal — top of card */}
+        <div className="py-3 border-b border-gray-100 mb-3">
+          <div className="text-[11px] font-semibold text-brand-primary mb-1">Influenced Pipeline vs Goal</div>
+          {totalPipelineInfluence == null ? (
+            <div className="text-[11px] text-gray-500">Influenced pipeline unavailable</div>
+          ) : (requiredPipelineAmount == null || requiredPipelineAmount <= 0) ? (
+            <div className="text-[11px] text-gray-500">Required pipeline goal not configured</div>
+          ) : (
+            <>
+              <div className="text-[11px] text-gray-500">{fmt$(totalPipelineInfluence)} actual</div>
+              <div className="text-[11px] text-gray-500">{fmt$(requiredPipelineAmount)} goal</div>
+              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
+                <div className="h-full rounded-full bg-red-500" style={{ width: `${influencedPipelineGoalWidthPercent ?? 0}%` }} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">{influencedPipelineGoalPercent == null ? '—' : `${influencedPipelineGoalPercent.toFixed(1)}%`} of goal</div>
+            </>
+          )}
+        </div>
+
         {showNoRepData ? (
-          <div className="text-xs text-gray-500 mt-3">No rep-level pipeline influence available for this conference.</div>
+          <div className="text-xs text-gray-500">No rep-level pipeline influence available for this conference.</div>
         ) : showNoAttributedPipeline ? (
-          <div className="text-xs text-gray-500 mt-3">No pipeline influence attributed yet.</div>
+          <div className="text-xs text-gray-500">No pipeline influence attributed yet.</div>
         ) : (
-          <div className="mt-3 space-y-2">
+          <div className="space-y-2">
             {topPipelineInfluenceByRep.map((rep) => (
-              <div key={rep.rep_id} className="space-y-1">
+              <div key={rep.rep_id} className="space-y-2">
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <div className="text-gray-700 truncate" title={rep.rep_name}>{rep.rep_name}</div>
                   <div className="text-gray-500 font-medium">{fmtRepCurrency(rep.pipeline_influence)} · {Math.round(rep.contribution_percent)}%</div>
@@ -424,25 +444,6 @@ export function SalesExecutionTab({ data }: { data: EffectivenessData }) {
             {hiddenRepCount > 0 && <div className="text-[11px] text-gray-400">+{hiddenRepCount} more reps</div>}
           </div>
         )}
-        <div className="py-5 mt-auto">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold text-brand-primary">Influenced Pipeline vs Goal</div>
-          </div>
-          {totalPipelineInfluence == null ? (
-            <div className="text-[11px] text-gray-500 mt-1">Influenced pipeline unavailable</div>
-          ) : (requiredPipelineAmount == null || requiredPipelineAmount <= 0) ? (
-            <div className="text-[11px] text-gray-500 mt-1">Required pipeline goal not configured</div>
-          ) : (
-            <>
-              <div className="text-[11px] text-gray-500 mt-1">{fmt$(totalPipelineInfluence)} actual</div>
-              <div className="text-[11px] text-gray-500">{fmt$(requiredPipelineAmount)} goal</div>
-              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
-                <div className="h-full rounded-full bg-red-500" style={{ width: `${influencedPipelineGoalWidthPercent ?? 0}%` }} />
-              </div>
-              <div className="text-[11px] text-gray-500 mt-1">{influencedPipelineGoalPercent == null ? '—' : `${influencedPipelineGoalPercent.toFixed(1)}%`} of goal</div>
-            </>
-          )}
-        </div>
       </div>
 
       <div className="card p-5 w-full lg:col-span-2 overflow-x-auto flex flex-col relative">
