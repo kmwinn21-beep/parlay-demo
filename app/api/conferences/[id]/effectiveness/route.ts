@@ -81,7 +81,7 @@ function buildCTEs(cid: number): string {
       (COALESCE(cm.meetings_held, 0) +
        COALESCE(ct.touchpoints, 0) +
        COALESCE(cha.hosted_events_attended, 0)) AS total_interactions,
-      CASE WHEN COALESCE(cm.meetings_scheduled,0)
+      CASE WHEN COALESCE(cm.meetings_held,0)
                 + COALESCE(ct.touchpoints,0)
                 + COALESCE(cha.hosted_events_attended,0) > 0
            THEN 1 ELSE 0 END                    AS is_engaged
@@ -1424,7 +1424,7 @@ export async function GET(
         LEFT JOIN company_meetings cm ON cm.company_id = cc.company_id
         LEFT JOIN company_touchpoints ct ON ct.company_id = cc.company_id
         LEFT JOIN company_hosted_attendance cha ON cha.company_id = cc.company_id
-        WHERE (COALESCE(cm.meetings_scheduled,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0)) > 0
+        WHERE (COALESCE(cm.meetings_held,0)+COALESCE(ct.touchpoints,0)+COALESCE(cha.hosted_events_attended,0)) > 0
       `);
     } catch {
       engagedContacts = [];
@@ -1855,7 +1855,7 @@ export async function GET(
 
         // ── Scoring functions ─────────────────────────────────────────────────
         function scoreIcpCoverageByRatio(ratio: number): number {
-          const bp: [number, number][] = [[0,0],[0.25,15],[0.50,28],[0.75,40],[1.00,50],[1.25,62],[1.50,72],[1.75,82],[2.00,90],[2.50,100]];
+          const bp: [number, number][] = [[0,0],[0.25,12],[0.50,28],[0.75,45],[1.00,62],[1.25,73],[1.50,82],[1.75,90],[2.00,95],[2.50,100]];
           if (ratio <= 0) return 0;
           if (ratio >= 2.50) return 100;
           for (let i = 1; i < bp.length; i++) {
@@ -1868,9 +1868,9 @@ export async function GET(
         function icpCoverageTier(s: number | null): string {
           if (s == null) return '—';
           if (s >= 80) return 'Strong';
-          if (s >= 60) return 'Acceptable';
-          if (s >= 40) return 'Below average';
-          if (s >= 25) return 'Weak';
+          if (s >= 62) return 'Acceptable';
+          if (s >= 45) return 'Below average';
+          if (s >= 28) return 'Weak';
           return 'Ineffective';
         }
 

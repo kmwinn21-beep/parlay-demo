@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
@@ -167,8 +167,8 @@ function ScatterPlot({
   const maxMeetings = Math.max(...reps.map(r => r.meetings), 1);
   const maxPipeline = Math.max(...reps.map(r => r.pipeline), 1);
 
-  const PAD_L = 48; const PAD_R = 16; const PAD_T = 16; const PAD_B = 36;
-  const W = 600; const H = 200;
+  const PAD_L = 56; const PAD_R = 16; const PAD_T = 20; const PAD_B = 42;
+  const W = 600; const H = 320;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
 
@@ -179,28 +179,38 @@ function ScatterPlot({
   const midY = cy(maxPipeline / 2);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200 }}>
-      {/* Quadrant lines */}
-      <line x1={midX} y1={PAD_T} x2={midX} y2={PAD_T + plotH} stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4 4" />
-      <line x1={PAD_L} y1={midY} x2={PAD_L + plotW} y2={midY} stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4 4" />
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 320 }}>
+      {/* Quadrant shading */}
+      {/* Top-left: Low activity · High pipeline — amber (decent but underutilized) */}
+      <rect x={PAD_L} y={PAD_T} width={midX - PAD_L} height={midY - PAD_T} fill="#fef9c3" opacity={0.6} />
+      {/* Top-right: High activity · High pipeline — green (best) */}
+      <rect x={midX} y={PAD_T} width={PAD_L + plotW - midX} height={midY - PAD_T} fill="#dcfce7" opacity={0.6} />
+      {/* Bottom-left: Low activity · Low pipeline — red (worst) */}
+      <rect x={PAD_L} y={midY} width={midX - PAD_L} height={PAD_T + plotH - midY} fill="#fee2e2" opacity={0.6} />
+      {/* Bottom-right: High activity · Low pipeline — orange (busy but ineffective) */}
+      <rect x={midX} y={midY} width={PAD_L + plotW - midX} height={PAD_T + plotH - midY} fill="#ffedd5" opacity={0.6} />
+
+      {/* Quadrant divider lines */}
+      <line x1={midX} y1={PAD_T} x2={midX} y2={PAD_T + plotH} stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 4" />
+      <line x1={PAD_L} y1={midY} x2={PAD_L + plotW} y2={midY} stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 4" />
 
       {/* Quadrant labels */}
-      <text x={midX + 4} y={PAD_T + 10} fontSize={7} fill="#d1d5db" fontFamily="sans-serif">High activity · High pipeline</text>
-      <text x={PAD_L + 4} y={PAD_T + 10} fontSize={7} fill="#d1d5db" fontFamily="sans-serif">Low activity · High pipeline</text>
-      <text x={midX + 4} y={PAD_T + plotH - 4} fontSize={7} fill="#d1d5db" fontFamily="sans-serif">High activity · Low pipeline</text>
-      <text x={PAD_L + 4} y={PAD_T + plotH - 4} fontSize={7} fill="#d1d5db" fontFamily="sans-serif">Low activity · Low pipeline</text>
+      <text x={midX + 6} y={PAD_T + 14} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">High activity · High pipeline</text>
+      <text x={PAD_L + 6} y={PAD_T + 14} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">Low activity · High pipeline</text>
+      <text x={midX + 6} y={PAD_T + plotH - 6} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">High activity · Low pipeline</text>
+      <text x={PAD_L + 6} y={PAD_T + plotH - 6} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">Low activity · Low pipeline</text>
 
       {/* Axes */}
-      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T + plotH} stroke="#e5e7eb" strokeWidth={1} />
-      <line x1={PAD_L} y1={PAD_T + plotH} x2={PAD_L + plotW} y2={PAD_T + plotH} stroke="#e5e7eb" strokeWidth={1} />
+      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T + plotH} stroke="#6b7280" strokeWidth={1.5} />
+      <line x1={PAD_L} y1={PAD_T + plotH} x2={PAD_L + plotW} y2={PAD_T + plotH} stroke="#6b7280" strokeWidth={1.5} />
 
       {/* Axis labels */}
-      <text x={PAD_L - 4} y={H - 2} fontSize={8} fill="#9ca3af" textAnchor="middle" fontFamily="sans-serif">Meetings held</text>
-      <text x={8} y={H / 2} fontSize={8} fill="#9ca3af" textAnchor="middle" fontFamily="sans-serif"
-        transform={`rotate(-90, 8, ${H / 2})`}>Pipeline ($)</text>
+      <text x={PAD_L + plotW / 2} y={H - 4} fontSize={11} fill="#374151" textAnchor="middle" fontFamily="sans-serif" fontWeight="500">Meetings held</text>
+      <text x={12} y={PAD_T + plotH / 2} fontSize={11} fill="#374151" textAnchor="middle" fontFamily="sans-serif" fontWeight="500"
+        transform={`rotate(-90, 12, ${PAD_T + plotH / 2})`}>Pipeline ($)</text>
 
       {/* Y-axis tick */}
-      <text x={PAD_L - 4} y={PAD_T + 4} fontSize={7} fill="#d1d5db" textAnchor="end" fontFamily="sans-serif">
+      <text x={PAD_L - 6} y={PAD_T + 6} fontSize={10} fill="#6b7280" textAnchor="end" fontFamily="sans-serif">
         ${Math.round(maxPipeline / 1000)}k
       </text>
 
@@ -211,8 +221,8 @@ function ScatterPlot({
         const color = repColors[rep.name] ?? '#1B76BC';
         return (
           <g key={rep.name}>
-            <circle cx={x} cy={y} r={14} fill={color} opacity={0.9} />
-            <text x={x} y={y + 4} fontSize={8} fill="white" textAnchor="middle" fontWeight="bold" fontFamily="sans-serif">
+            <circle cx={x} cy={y} r={16} fill={color} opacity={0.9} />
+            <text x={x} y={y + 4} fontSize={10} fill="white" textAnchor="middle" fontWeight="bold" fontFamily="sans-serif">
               {rep.initials}
             </text>
             <title>{rep.name}: {rep.meetings} meetings · ${Math.round(rep.pipeline / 1000)}k pipeline</title>
@@ -321,9 +331,28 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const costPerMeeting = costs.cost_per_meeting_held != null ? Number(costs.cost_per_meeting_held) : null;
   const pipelinePer1k = costs.pipeline_influence_per_1k_spent != null ? Number(costs.pipeline_influence_per_1k_spent) : null;
 
-  // Budget breakdown
+  // Budget breakdown (totals only — line items rendered individually)
   const budget = lineItems.length > 0 ? categorizeBudget(lineItems) : null;
   const budgetVariance = budget ? budget.totalBudget - budget.totalActual : 0;
+
+  // Budget line-item scroll
+  const budgetScrollRef = useRef<HTMLDivElement>(null);
+  const [budgetCanScrollMore, setBudgetCanScrollMore] = useState(false);
+
+  useEffect(() => {
+    const el = budgetScrollRef.current;
+    if (!el) return;
+    const check = () => setBudgetCanScrollMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+    check();
+    el.addEventListener('scroll', check);
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro.disconnect(); };
+  }, [lineItems.length]);
+
+  function scrollBudgetDown() {
+    budgetScrollRef.current?.scrollBy({ top: 60, behavior: 'smooth' });
+  }
 
   // Rep colors (stable per-rep)
   const repNames = repRows.map(r => String(r.rep ?? ''));
@@ -414,7 +443,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
 
         {/* Col 3: Pipeline Multiple */}
         <div className="rounded-xl p-3" style={{ border: '1.5px solid #1D9E75', background: '#E1F5EE' }}>
-          <div className="text-xs font-semibold mb-1" style={{ color: '#1D9E75' }}>Pipeline multiple</div>
+          <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#1D9E75' }}>Influenced Pipeline Multiple</div>
           <div className="text-3xl font-bold" style={{ color: '#1D9E75' }}>
             {pipelineMultiple != null ? `${pipelineMultiple.toFixed(1)}×` : '—'}
           </div>
@@ -428,47 +457,85 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
         </div>
 
         {/* Col 4: Budget Breakdown */}
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Budget breakdown</div>
-          {!budget || budget.categories.length === 0 ? (
+        <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
+        <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col">
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1 flex-shrink-0">Budget breakdown</div>
+          {lineItems.length === 0 ? (
             <div className="text-xs text-gray-400 italic leading-relaxed">
               No budget data entered. Add budget details in the Budget vs. Actual tab.
             </div>
           ) : (
             <>
-              <div className="text-xs font-semibold text-gray-700 text-right mb-2">
-                Total: {fmt$(budget.totalEffective)}
+              <div className="text-xs font-semibold text-gray-700 text-right mb-1 flex-shrink-0">
+                Total: {fmt$(budget?.totalEffective ?? 0)}
               </div>
-              <div className="space-y-1.5 mb-3">
-                {budget.categories.map(cat => {
-                  const pct = budget.totalEffective > 0 ? (cat.effective / budget.totalEffective) * 100 : 0;
-                  return (
-                    <div key={cat.key}>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span className="text-gray-600 truncate">{cat.label}</span>
-                        <span className="text-gray-500 ml-1 flex-shrink-0">{fmt$(cat.effective)} · {Math.round(pct)}%</span>
+
+              {/* Scrollable line items */}
+              <div className="flex-1 min-h-0 relative">
+                <div
+                  ref={budgetScrollRef}
+                  className="budget-items-scroll absolute inset-0 overflow-y-auto"
+                  style={{ scrollbarWidth: 'none' }}
+                >
+                  {lineItems.map((item, i) => {
+                    const itemLabel = String(item.label ?? '');
+                    const itemBudget = Number(item.budget ?? 0);
+                    const itemActual = Number(item.actual ?? 0);
+                    const itemEffective = Number(item.effective ?? itemBudget);
+                    const showVariance = itemBudget > 0 && itemActual > 0;
+                    const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
+                    return (
+                      <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
+                        <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
+                        <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
+                        {variancePct != null && (
+                          <span
+                            className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
+                            style={{
+                              background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
+                              color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
+                            }}
+                          >
+                            {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
+                          </span>
+                        )}
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: cat.color }} />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-              <div className="pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
+
+              {/* Show more button — only visible when more items exist below */}
+              {budgetCanScrollMore && (
+                <button
+                  type="button"
+                  onClick={scrollBudgetDown}
+                  className="flex-shrink-0 w-full text-center text-[10px] text-gray-400 hover:text-gray-600 transition-colors py-0.5 leading-none"
+                >
+                  ↓ more
+                </button>
+              )}
+
+              {/* Static summary */}
+              <div className="flex-shrink-0 pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Budgeted</span>
-                  <span className="text-gray-600">{fmt$(budget.totalBudget)}</span>
+                  <span className="text-gray-600">{fmt$(budget?.totalBudget ?? 0)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Actual</span>
-                  <span className="text-gray-600">{budget.totalActual > 0 ? fmt$(budget.totalActual) : '—'}</span>
+                  <span className="text-gray-600">{(budget?.totalActual ?? 0) > 0 ? fmt$(budget!.totalActual) : '—'}</span>
                 </div>
-                {budget.totalActual > 0 && (
+                {(budget?.totalActual ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400">Variance</span>
                     <span className="font-semibold" style={{ color: budgetVariance >= 0 ? '#059669' : '#dc2626' }}>
                       {budgetVariance >= 0 ? '+' : ''}{fmt$(Math.abs(budgetVariance))} {budgetVariance >= 0 ? 'under' : 'over'}
+                      {(budget?.totalBudget ?? 0) > 0 && (
+                        <span className="font-normal">
+                          {' '}({budgetVariance >= 0 ? '+' : '-'}{Math.round(Math.abs(budgetVariance) / budget!.totalBudget * 100)}%)
+                        </span>
+                      )}
                     </span>
                   </div>
                 )}
@@ -521,91 +588,96 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
         />
       </div>
 
-      {/* ── Rep efficiency — full width ───────────────────────────────────── */}
-      <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-        <div className="px-4 pt-4 pb-2 flex items-start justify-between">
-          <div>
-            <div className="text-sm font-semibold text-brand-primary uppercase tracking-wide">Rep efficiency — activity vs pipeline</div>
-            <div className="text-xs text-gray-400 mt-0.5">Meetings held vs pipeline influenced — reps in the top right are your most efficient conference assets.</div>
-          </div>
-          {repAllocatedCost > 0 && (
-            <span className="text-xs text-gray-400 flex-shrink-0 ml-4">
-              Allocated cost/rep: <span className="font-semibold text-gray-600">{fmt$(repAllocatedCost)}</span>
-            </span>
-          )}
+      {/* ── Rep efficiency — 5-col grid ──────────────────────────────────── */}
+      {repRows.length === 0 ? (
+        <div className="rounded-xl border border-gray-100 bg-white p-4">
+          <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
         </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
 
-        {repRows.length === 0 ? (
-          <div className="px-4 pb-4">
-            <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-              {/* Left column: Rep table */}
-              <div className="overflow-x-auto border-r border-gray-100">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-t border-gray-100">
-                      <th className="text-left px-4 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
-                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
-                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
-                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
-                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Net-new Co.</th>
-                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {repRows.map((r, i) => {
-                      const repName = String(r.rep ?? '—');
-                      const color = repColorMap[repName] ?? '#9ca3af';
-                      const overallScore = r.rep_cost_efficiency_score_raw != null ? Number(r.rep_cost_efficiency_score_raw) : null;
-                      const repNetNewCostVal = r.rep_cost_per_net_new_company != null ? Number(r.rep_cost_per_net_new_company) : null;
-                      return (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                              <span className="font-medium text-gray-800">{repName}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap font-medium text-gray-700">
-                            {repNetNewCostVal != null ? fmt$(repNetNewCostVal) : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            {overallScore != null ? (
-                              <span className="font-bold" style={{ color: repTierColor(overallScore) }}>
-                                {overallScore}
-                                <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
-                              </span>
-                            ) : <span className="text-gray-300">—</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          {/* Table card — spans 3 columns */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-hidden" style={{ gridColumn: 'span 3' }}>
+            <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-brand-primary uppercase tracking-wide">Rep efficiency</div>
+                <div className="text-xs text-gray-400 mt-0.5">Activity vs pipeline influenced</div>
               </div>
-
-              {/* Right column: Scatter plot */}
-              {scatterReps.length > 0 && (
-                <div className="p-4 flex items-center">
-                  <ScatterPlot reps={scatterReps} repColors={repColorMap} />
-                </div>
+              {repAllocatedCost > 0 && (
+                <span className="text-xs text-gray-400 flex-shrink-0 ml-4">
+                  Allocated cost/rep: <span className="font-semibold text-gray-600">{fmt$(repAllocatedCost)}</span>
+                </span>
               )}
             </div>
-          </>
-        )}
-      </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-t border-gray-100">
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Cost / Net-new Co.</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {repRows.map((r, i) => {
+                    const repName = String(r.rep ?? '—');
+                    const color = repColorMap[repName] ?? '#9ca3af';
+                    const overallScore = r.rep_cost_efficiency_score_raw != null ? Number(r.rep_cost_efficiency_score_raw) : null;
+                    const repNetNewCostVal = r.rep_cost_per_net_new_company != null ? Number(r.rep_cost_per_net_new_company) : null;
+                    return (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                            <span className="font-medium text-gray-800">{repName}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap font-medium text-gray-700">
+                          {repNetNewCostVal != null ? fmt$(repNetNewCostVal) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          {overallScore != null ? (
+                            <span className="font-bold" style={{ color: repTierColor(overallScore) }}>
+                              {overallScore}
+                              <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Scatter plot card — spans 2 columns */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4 flex flex-col" style={{ gridColumn: 'span 2' }}>
+            <div className="text-sm font-semibold text-brand-primary uppercase tracking-wide mb-0.5">Activity vs Pipeline</div>
+            <div className="text-xs text-gray-400 mb-3">Reps in top right are most efficient</div>
+            {scatterReps.length > 0 ? (
+              <div className="flex-1 flex items-center">
+                <ScatterPlot reps={scatterReps} repColors={repColorMap} />
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Not enough data to plot.</p>
+            )}
+          </div>
+
+        </div>
+      )}
 
       {showRankings && (
         <ConferenceRankingsModal
