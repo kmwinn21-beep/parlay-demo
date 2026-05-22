@@ -106,15 +106,18 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   return (
     <div className="p-6 space-y-6">
       {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '0.6fr 1fr 1fr 1fr', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr .5fr .5fr .5fr', gap: '12px' }}>
         {/* Score card */}
-        <div className="rounded-xl p-4 relative" style={{ backgroundColor: '#E1F5EE', borderLeft: '4px solid #1D9E75' }}>
+        {(() => {
+          const cardColor = overallScore >= 70 ? '#059669' : overallScore >= 40 ? '#d97706' : '#dc2626';
+          return (
+        <div className="rounded-xl p-4 relative" style={{ backgroundColor: cardColor + '15', borderLeft: '4px solid ' + cardColor }}>
           <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Marketing Coverage Score</div>
           <div className="flex items-end gap-1 mb-0.5">
-            <div className="text-4xl font-bold" style={{ color: '#1D9E75' }}>{overallScore}</div>
+            <div className="text-4xl font-bold" style={{ color: cardColor }}>{overallScore}</div>
             <div className="text-sm text-gray-400 mb-0.5">/100</div>
           </div>
-          <div className="text-xs font-semibold mb-2" style={{ color: '#1D9E75' }}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
+          <div className="text-xs font-semibold mb-2" style={{ color: cardColor }}>{m.marketing_audience_signal_interpretation ?? 'Not scored'}</div>
 
           <div className="flex items-center justify-between mb-1">
             <div className="text-[11px] text-gray-500">Conference Strategy: {strategyLabel}</div>
@@ -134,7 +137,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           )}
           <StrategyWeightNotice applied={(data as any).sales_execution?.strategy_modifier_applied} strategyLabel={strategyLabel} />
 
-          <div className="mt-3 pt-3 border-t border-green-200 space-y-1">
+          <div className="mt-3 pt-3 space-y-1" style={{ borderTop: '1px solid ' + cardColor + '40' }}>
             {COMP_KEYS.map(key => {
               const comp = comps[key] as any;
               const sc = comp?.score != null ? Math.round(comp.score) : '—';
@@ -149,6 +152,8 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
             })}
           </div>
         </div>
+          );
+        })()}
 
         {/* Rank card */}
         <button type="button" onClick={() => setShowRankings(true)} title="View full rankings"
@@ -167,13 +172,13 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
             <span className="text-xs font-semibold" style={{ color: '#534AB7' }}>Net-new contacts</span>
             <i className="ti ti-user-plus" style={{ color: '#534AB7', fontSize: 15 }} />
           </div>
-          <div className="text-[10px] text-gray-500 mb-1">First time in Parlay</div>
+          <div className="text-xs text-gray-500 mb-1">First time in Parlay</div>
           <div className="text-3xl font-bold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.total)}</div>
           <div className="mt-2 pt-2 border-t space-y-0.5" style={{ borderColor: '#C4C0F0' }}>
-            <div className="flex justify-between text-[10px]"><span style={{ color: '#534AB7' }}>From ICP companies</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.icp_count)}</span></div>
-            <div className="flex justify-between text-[10px]"><span style={{ color: '#534AB7' }}>Decision makers</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.decision_maker_count)}</span></div>
-            <div className="flex justify-between text-[10px]"><span style={{ color: '#534AB7' }}>Influencers</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.influencer_count)}</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-gray-500">Non-ICP</span><span className="font-medium text-gray-600">{fmtNum(m.net_new_contacts?.non_icp_count)}</span></div>
+            <div className="flex justify-between text-xs"><span style={{ color: '#534AB7' }}>From ICP companies</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.icp_count)}</span></div>
+            <div className="flex justify-between text-xs"><span style={{ color: '#534AB7' }}>Decision makers</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.decision_maker_count)}</span></div>
+            <div className="flex justify-between text-xs"><span style={{ color: '#534AB7' }}>Influencers</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_contacts?.influencer_count)}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Non-ICP</span><span className="font-medium text-gray-600">{fmtNum(m.net_new_contacts?.non_icp_count)}</span></div>
           </div>
         </div>
 
@@ -183,13 +188,13 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
             <span className="text-xs font-semibold" style={{ color: '#534AB7' }}>Net-new companies</span>
             <i className="ti ti-building-plus" style={{ color: '#534AB7', fontSize: 15 }} />
           </div>
-          <div className="text-[10px] text-gray-500 mb-1">No prior relationship history</div>
+          <div className="text-xs text-gray-500 mb-1">No prior relationship history</div>
           <div className="text-3xl font-bold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.total)}</div>
           <div className="mt-2 pt-2 border-t space-y-0.5" style={{ borderColor: '#C4C0F0' }}>
-            <div className="flex justify-between text-[10px]"><span style={{ color: '#534AB7' }}>ICP-matching</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.icp_count)} ({m.net_new_companies?.icp_pct ?? 0}%)</span></div>
-            <div className="flex justify-between text-[10px]"><span style={{ color: '#534AB7' }}>With follow-up</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.with_followup)}</span></div>
-            <div className="flex justify-between text-[10px]"><span style={{ color: '#534AB7' }}>With meeting held</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.with_meeting)}</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-gray-500">Non-ICP</span><span className="font-medium text-gray-600">{fmtNum(m.net_new_companies?.non_icp_count)}</span></div>
+            <div className="flex justify-between text-xs"><span style={{ color: '#534AB7' }}>ICP-matching</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.icp_count)} ({m.net_new_companies?.icp_pct ?? 0}%)</span></div>
+            <div className="flex justify-between text-xs"><span style={{ color: '#534AB7' }}>With follow-up</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.with_followup)}</span></div>
+            <div className="flex justify-between text-xs"><span style={{ color: '#534AB7' }}>With meeting held</span><span className="font-semibold" style={{ color: '#534AB7' }}>{fmtNum(m.net_new_companies?.with_meeting)}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Non-ICP</span><span className="font-medium text-gray-600">{fmtNum(m.net_new_companies?.non_icp_count)}</span></div>
           </div>
         </div>
       </div>
