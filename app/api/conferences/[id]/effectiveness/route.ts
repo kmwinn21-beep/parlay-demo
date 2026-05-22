@@ -1123,6 +1123,11 @@ export async function GET(
       if (repMeetingScore != null)  { rS += repMeetingScore.score  * 0.20; rW += 0.20; }
       const repRawScore = rW > 0 ? Math.max(0, Math.min(100, Math.round(rS / rW))) : 0;
 
+      const repAccForCost = repAccMap.get(String(rep.rep ?? ''));
+      const repNetNewCompaniesEngaged = repAccForCost?.netNewCompanies.size ?? 0;
+      const repCostPerNetNew = repAllocatedCost > 0 && repNetNewCompaniesEngaged > 0
+        ? Math.round(repAllocatedCost / repNetNewCompaniesEngaged) : null;
+
       return {
         rep: rep.rep,
         rep_allocated_cost: Math.round(repAllocatedCost),
@@ -1132,6 +1137,8 @@ export async function GET(
         rep_cost_per_company_engaged: repCPCE != null ? Math.round(repCPCE) : null,
         rep_cost_per_meeting_held: repCPMH != null ? Math.round(repCPMH) : null,
         rep_pipeline_influence_per_1000: repPIper1k != null ? Math.round(repPIper1k) : null,
+        rep_net_new_companies_engaged: repNetNewCompaniesEngaged,
+        rep_cost_per_net_new_company: repCostPerNetNew,
         rep_company_score: repCompanyScore?.score ?? null,
         rep_company_score_tier: repCompanyScore?.tier ?? null,
         rep_meeting_score: repMeetingScore?.score ?? null,
