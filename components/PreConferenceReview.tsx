@@ -245,7 +245,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
       setLoadingLineIdx(0);
       loadingIntervalRef.current = setInterval(() => {
         setLoadingLineIdx(i => (i + 1) % LOADING_LINES.length);
-      }, 1800);
+      }, 5000);
     } else {
       if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current);
     }
