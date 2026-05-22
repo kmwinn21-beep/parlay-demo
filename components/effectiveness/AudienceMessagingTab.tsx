@@ -106,7 +106,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   return (
     <div className="p-6 space-y-6">
       {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr .5fr .5fr .5fr', gap: '12px' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:1fr_0.5fr_0.5fr_0.5fr] gap-3">
         {/* Score card */}
         {(() => {
           const cardColor = overallScore >= 70 ? '#059669' : overallScore >= 40 ? '#d97706' : '#dc2626';
@@ -200,7 +200,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
       </div>
 
       {/* ── KPI tiles ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
           <div className="text-xs text-gray-500">ICP companies engaged</div>
           <div className="text-lg font-bold text-brand-secondary">{fmtNum(m.kpis?.icp_companies_engaged)} / {fmtNum(m.kpis?.icp_companies_attending)}</div>
@@ -229,7 +229,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
       </div>
 
       {/* ── Component cards: 3-col row 1, then Market Intel + Engagement Momentum ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* ICP Coverage Rate */}
         {(() => {
           const comp = comps.icp_coverage_rate as any ?? {};
@@ -325,7 +325,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           const det = m.market_intelligence_detail ?? {};
           const noData = !painPointsAvailable;
           return (
-            <div className="card p-4" style={{ ...(noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : {}), gridColumn: 'span 1' }}>
+            <div className="card p-4" style={noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : undefined}>
               <div className="flex justify-between items-start mb-1">
                 <h3 className="text-sm font-semibold" style={{ color: noData ? '#92400E' : undefined }}>Market Intelligence Yield</h3>
                 <span className="text-xs font-semibold" style={{ color: noData ? '#d97706' : compScoreColor(sc) }}>
@@ -346,7 +346,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           const comp = comps.engagement_momentum as any ?? {};
           const sc = Number(comp.score ?? 0);
           return (
-            <div className="card p-4" style={{ gridColumn: 'span 2' }}>
+            <div className="card p-4 lg:col-span-2">
               <div className="flex justify-between items-start mb-1">
                 <h3 className="text-sm font-semibold text-brand-primary">Engagement Momentum</h3>
                 <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
@@ -357,7 +357,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
                   Follow-up completion window still open — conference ended less than 7 days ago.
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4 mt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                 <div>
                   <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Creation</div>
                   <DetailRow label="ICP companies engaged" value={fmtNum(mom.icp_companies_engaged)} />

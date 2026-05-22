@@ -378,7 +378,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
     <div className="p-6 space-y-6">
 
       {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:2fr_1fr_1fr_1fr] gap-3">
 
         {/* Col 1: Cost Efficiency Score card */}
         <div className="rounded-xl p-4" style={{ backgroundColor: cardColor + '15', borderLeft: `4px solid ${cardColor}` }}>
@@ -458,7 +458,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
 
         {/* Col 4: Budget Breakdown */}
         <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
-        <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col">
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
           <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1 flex-shrink-0">Budget breakdown</div>
           {lineItems.length === 0 ? (
             <div className="text-xs text-gray-400 italic leading-relaxed">
@@ -471,12 +471,11 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               </div>
 
               {/* Scrollable line items */}
-              <div className="flex-1 min-h-0 relative">
-                <div
-                  ref={budgetScrollRef}
-                  className="budget-items-scroll absolute inset-0 overflow-y-auto"
-                  style={{ scrollbarWidth: 'none' }}
-                >
+              <div
+                ref={budgetScrollRef}
+                className="budget-items-scroll overflow-y-auto my-1"
+                style={{ scrollbarWidth: 'none', maxHeight: 150 }}
+              >
                   {lineItems.map((item, i) => {
                     const itemLabel = String(item.label ?? '');
                     const itemBudget = Number(item.budget ?? 0);
@@ -502,7 +501,6 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                       </div>
                     );
                   })}
-                </div>
               </div>
 
               {/* Show more button — only visible when more items exist below */}
@@ -546,7 +544,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
       </div>
 
       {/* ── KPI tiles — 2 rows of 3 ──────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <BenchmarkTile
           label="Cost per ICP company engaged"
           value={costPerIcp}
@@ -594,10 +592,10 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           <p className="text-xs text-gray-400 italic">No rep engagement data yet.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
+        <div className="grid grid-cols-1 lg:[grid-template-columns:repeat(5,1fr)] gap-3">
 
           {/* Table card — spans 3 columns */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-hidden" style={{ gridColumn: 'span 3' }}>
+          <div className="rounded-xl border border-gray-100 bg-white overflow-hidden lg:col-span-3">
             <div className="px-4 pt-4 pb-2 flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold text-brand-primary uppercase tracking-wide">Rep efficiency</div>
@@ -664,7 +662,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           </div>
 
           {/* Scatter plot card — spans 2 columns */}
-          <div className="rounded-xl border border-gray-100 bg-white p-4 flex flex-col" style={{ gridColumn: 'span 2' }}>
+          <div className="rounded-xl border border-gray-100 bg-white p-4 flex flex-col lg:col-span-2">
             <div className="text-sm font-semibold text-brand-primary uppercase tracking-wide mb-0.5">Activity vs Pipeline</div>
             <div className="text-xs text-gray-400 mb-3">Reps in top right are most efficient</div>
             {scatterReps.length > 0 ? (
