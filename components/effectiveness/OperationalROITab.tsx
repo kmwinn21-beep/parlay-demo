@@ -377,88 +377,12 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:2fr_1fr_1fr_1fr] gap-3">
+      {/* ── Budget + metric cards: budget left col spans both rows ─────── */}
+      <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
+      <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-3">
 
-        {/* Col 1: Cost Efficiency Score card */}
-        <div className="rounded-xl p-4" style={{ backgroundColor: cardColor + '15', borderLeft: `4px solid ${cardColor}` }}>
-          <div className="flex items-start justify-between mb-1">
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Cost Efficiency Score</div>
-            <div className="text-[11px] text-gray-400 text-right">Conference Strategy: {strategyLabel}</div>
-          </div>
-          <div className="flex items-end gap-1 mb-0.5">
-            <div className="text-4xl font-bold" style={{ color: cardColor }}>{cesScore}</div>
-            <div className="text-sm text-gray-400 mb-0.5">/100</div>
-          </div>
-          <div className="text-xs font-semibold mb-2" style={{ color: cardColor }}>
-            {String(costs.cost_efficiency_interpretation ?? costs.cost_efficiency_tier ?? '—')}
-          </div>
-          <StrategyWeightNotice applied={(data as any).operational?.cost_efficiency?.strategy_modifier_applied} strategyLabel={strategyLabel} />
-
-          <div className="mt-3 pt-3 space-y-1.5" style={{ borderTop: `1px solid ${cardColor}40` }}>
-            {pipelineScore != null && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Pipeline Influence per $1k <span className="text-gray-300">(50%)</span></span>
-                <span className="font-semibold" style={{ color: subScoreColor(pipelineScore) }}>{pipelineScore} <span className="text-gray-400">· {pipelineTier}</span></span>
-              </div>
-            )}
-            {companyScore != null && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Cost per Company <span className="text-gray-300">(30%)</span></span>
-                <span className="font-semibold" style={{ color: subScoreColor(companyScore) }}>{companyScore} <span className="text-gray-400">· {companyTier}</span></span>
-              </div>
-            )}
-            {meetingScore != null && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Cost per Meeting <span className="text-gray-300">(20%)</span></span>
-                <span className="font-semibold" style={{ color: subScoreColor(meetingScore) }}>{meetingScore} <span className="text-gray-400">· {meetingTier}</span></span>
-              </div>
-            )}
-          </div>
-          {modifier !== 0 && (
-            <div className="mt-2 pt-2 text-xs text-gray-400" style={{ borderTop: `1px solid ${cardColor}20` }}>
-              Raw: {rawScore} · Modifier: {modifier > 0 ? '+' : ''}{modifier} · {eventType.replace(/_/g, ' ')}
-              {modifierReason && <span className="block text-gray-400">{modifierReason}</span>}
-            </div>
-          )}
-          {confidence !== 'full' && (
-            <div className="mt-1 text-xs text-amber-600">⚠ Partial data ({confidence} confidence)</div>
-          )}
-        </div>
-
-        {/* Col 2: Efficiency Rank */}
-        <button
-          type="button"
-          onClick={() => setShowRankings(true)}
-          className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group"
-          title="View full rankings"
-        >
-          <div className="text-xs text-gray-500 font-medium mb-1 group-hover:text-brand-secondary transition-colors">Efficiency Rank</div>
-          {rank
-            ? <><div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div><div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div></>
-            : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400 leading-tight">Needs 2+ conferences</div></>
-          }
-          <div className="text-xs text-gray-400 mt-2 group-hover:text-brand-secondary transition-colors">View all →</div>
-        </button>
-
-        {/* Col 3: Pipeline Multiple */}
-        <div className="rounded-xl p-3" style={{ border: '1.5px solid #1D9E75', background: '#E1F5EE' }}>
-          <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#1D9E75' }}>Influenced Pipeline Multiple</div>
-          <div className="text-3xl font-bold" style={{ color: '#1D9E75' }}>
-            {pipelineMultiple != null ? `${pipelineMultiple.toFixed(1)}×` : '—'}
-          </div>
-          <div className="text-xs text-gray-500 mt-0.5">return on conference spend</div>
-          {totalSpend > 0 && (
-            <div className="mt-2 pt-2 text-xs text-gray-500 space-y-0.5" style={{ borderTop: '1px solid #A7F3D0' }}>
-              <div>{fmt$(totalPI)} influenced ÷</div>
-              <div>{fmt$(totalSpend)} total spend</div>
-            </div>
-          )}
-        </div>
-
-        {/* Col 4: Budget Breakdown */}
-        <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
+        {/* Budget Breakdown — left column, spans metric cards + KPI tiles */}
+        <div className="lg:row-span-2 rounded-xl border border-gray-200 bg-white p-3 flex flex-col">
           <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1 flex-shrink-0">Budget breakdown</div>
           {lineItems.length === 0 ? (
             <div className="text-xs text-gray-400 italic leading-relaxed">
@@ -470,40 +394,40 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 Total: {fmt$(budget?.totalEffective ?? 0)}
               </div>
 
-              {/* Scrollable line items */}
+              {/* Scrollable line items — grows to fill available height */}
               <div
                 ref={budgetScrollRef}
-                className="budget-items-scroll overflow-y-auto my-1"
-                style={{ scrollbarWidth: 'none', maxHeight: 150 }}
+                className="budget-items-scroll overflow-y-auto my-1 flex-1 min-h-0"
+                style={{ scrollbarWidth: 'none' }}
               >
-                  {lineItems.map((item, i) => {
-                    const itemLabel = String(item.label ?? '');
-                    const itemBudget = Number(item.budget ?? 0);
-                    const itemActual = Number(item.actual ?? 0);
-                    const itemEffective = Number(item.effective ?? itemBudget);
-                    const showVariance = itemBudget > 0 && itemActual > 0;
-                    const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
-                    return (
-                      <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
-                        <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
-                        <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
-                        {variancePct != null && (
-                          <span
-                            className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
-                            style={{
-                              background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
-                              color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
-                            }}
-                          >
-                            {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                {lineItems.map((item, i) => {
+                  const itemLabel = String(item.label ?? '');
+                  const itemBudget = Number(item.budget ?? 0);
+                  const itemActual = Number(item.actual ?? 0);
+                  const itemEffective = Number(item.effective ?? itemBudget);
+                  const showVariance = itemBudget > 0 && itemActual > 0;
+                  const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
+                  return (
+                    <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
+                      <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
+                      <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
+                      {variancePct != null && (
+                        <span
+                          className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
+                          style={{
+                            background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
+                            color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
+                          }}
+                        >
+                          {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Show more button — only visible when more items exist below */}
+              {/* Show more button */}
               {budgetCanScrollMore && (
                 <button
                   type="button"
@@ -515,7 +439,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               )}
 
               {/* Static summary */}
-              <div className="flex-shrink-0 pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
+              <div className="flex-shrink-0 pt-2 space-y-0.5 mt-auto" style={{ borderTop: '1px solid #f3f4f6' }}>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Budgeted</span>
                   <span className="text-gray-600">{fmt$(budget?.totalBudget ?? 0)}</span>
@@ -541,49 +465,130 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             </>
           )}
         </div>
-      </div>
 
-      {/* ── KPI tiles — 2 rows of 3 ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <BenchmarkTile
-          label="Cost per ICP company engaged"
-          value={costPerIcp}
-          secondaryText="Benchmark: $800–$1,200"
-          benchmarkMin={800}
-          benchmarkMax={1200}
-          lowerIsBetter={true}
-        />
-        <BenchmarkTile
-          label="Cost per meeting held"
-          value={costPerMeeting}
-          secondaryText="Benchmark: $1,500–$2,000"
-          benchmarkMin={1500}
-          benchmarkMax={2000}
-          lowerIsBetter={true}
-        />
-        <BenchmarkTile
-          label="Pipeline per $1k spent"
-          value={pipelinePer1k}
-          secondaryText="Benchmark: $5,000–$8,000"
-          benchmarkMin={5000}
-          benchmarkMax={8000}
-          lowerIsBetter={false}
-        />
-        <BenchmarkTile
-          label="Cost per net-new company"
-          value={costPerNetNewCompany}
-          secondaryText={netNewCompaniesTotal > 0 ? `${fmtNum(netNewCompaniesTotal)} net-new companies engaged` : 'No net-new companies'}
-        />
-        <BenchmarkTile
-          label="Cost per net-new contact"
-          value={costPerNetNewContact}
-          secondaryText={netNewContactsTotal > 0 ? `${fmtNum(netNewContactsTotal)} net-new contacts engaged` : 'No net-new contacts'}
-        />
-        <BenchmarkTile
-          label="Cost per completed follow-up"
-          value={costPerCompletedFollowup}
-          secondaryText={followupsCompleted > 0 ? `${fmtNum(followupsCompleted)} completed tasks` : 'No completed follow-ups'}
-        />
+        {/* Right side — top: 3 metric cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+          {/* Cost Efficiency Score card */}
+          <div className="rounded-xl p-4" style={{ backgroundColor: cardColor + '15', borderLeft: `4px solid ${cardColor}` }}>
+            <div className="flex items-start justify-between mb-1">
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Cost Efficiency Score</div>
+              <div className="text-[11px] text-gray-400 text-right">Conference Strategy: {strategyLabel}</div>
+            </div>
+            <div className="flex items-end gap-1 mb-0.5">
+              <div className="text-4xl font-bold" style={{ color: cardColor }}>{cesScore}</div>
+              <div className="text-sm text-gray-400 mb-0.5">/100</div>
+            </div>
+            <div className="text-xs font-semibold mb-2" style={{ color: cardColor }}>
+              {String(costs.cost_efficiency_interpretation ?? costs.cost_efficiency_tier ?? '—')}
+            </div>
+            <StrategyWeightNotice applied={(data as any).operational?.cost_efficiency?.strategy_modifier_applied} strategyLabel={strategyLabel} />
+
+            <div className="mt-3 pt-3 space-y-1.5" style={{ borderTop: `1px solid ${cardColor}40` }}>
+              {pipelineScore != null && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Pipeline Influence per $1k <span className="text-gray-300">(50%)</span></span>
+                  <span className="font-semibold" style={{ color: subScoreColor(pipelineScore) }}>{pipelineScore} <span className="text-gray-400">· {pipelineTier}</span></span>
+                </div>
+              )}
+              {companyScore != null && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Cost per Company <span className="text-gray-300">(30%)</span></span>
+                  <span className="font-semibold" style={{ color: subScoreColor(companyScore) }}>{companyScore} <span className="text-gray-400">· {companyTier}</span></span>
+                </div>
+              )}
+              {meetingScore != null && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Cost per Meeting <span className="text-gray-300">(20%)</span></span>
+                  <span className="font-semibold" style={{ color: subScoreColor(meetingScore) }}>{meetingScore} <span className="text-gray-400">· {meetingTier}</span></span>
+                </div>
+              )}
+            </div>
+            {modifier !== 0 && (
+              <div className="mt-2 pt-2 text-xs text-gray-400" style={{ borderTop: `1px solid ${cardColor}20` }}>
+                Raw: {rawScore} · Modifier: {modifier > 0 ? '+' : ''}{modifier} · {eventType.replace(/_/g, ' ')}
+                {modifierReason && <span className="block text-gray-400">{modifierReason}</span>}
+              </div>
+            )}
+            {confidence !== 'full' && (
+              <div className="mt-1 text-xs text-amber-600">⚠ Partial data ({confidence} confidence)</div>
+            )}
+          </div>
+
+          {/* Efficiency Rank */}
+          <button
+            type="button"
+            onClick={() => setShowRankings(true)}
+            className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center hover:border-brand-secondary hover:bg-blue-50 transition-colors group"
+            title="View full rankings"
+          >
+            <div className="text-xs text-gray-500 font-medium mb-1 group-hover:text-brand-secondary transition-colors">Efficiency Rank</div>
+            {rank
+              ? <><div className="text-3xl font-bold text-brand-secondary leading-tight">#{rank}</div><div className="text-xs text-gray-400 mt-0.5">of {total} conferences</div></>
+              : <><div className="text-sm font-semibold text-gray-500">Not ranked</div><div className="text-xs text-gray-400 leading-tight">Needs 2+ conferences</div></>
+            }
+            <div className="text-xs text-gray-400 mt-2 group-hover:text-brand-secondary transition-colors">View all →</div>
+          </button>
+
+          {/* Pipeline Multiple */}
+          <div className="rounded-xl p-3" style={{ border: '1.5px solid #1D9E75', background: '#E1F5EE' }}>
+            <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#1D9E75' }}>Influenced Pipeline Multiple</div>
+            <div className="text-3xl font-bold" style={{ color: '#1D9E75' }}>
+              {pipelineMultiple != null ? `${pipelineMultiple.toFixed(1)}×` : '—'}
+            </div>
+            <div className="text-xs text-gray-500 mt-0.5">return on conference spend</div>
+            {totalSpend > 0 && (
+              <div className="mt-2 pt-2 text-xs text-gray-500 space-y-0.5" style={{ borderTop: '1px solid #A7F3D0' }}>
+                <div>{fmt$(totalPI)} influenced ÷</div>
+                <div>{fmt$(totalSpend)} total spend</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right side — bottom: KPI tiles */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <BenchmarkTile
+            label="Cost per ICP company engaged"
+            value={costPerIcp}
+            secondaryText="Benchmark: $800–$1,200"
+            benchmarkMin={800}
+            benchmarkMax={1200}
+            lowerIsBetter={true}
+          />
+          <BenchmarkTile
+            label="Cost per meeting held"
+            value={costPerMeeting}
+            secondaryText="Benchmark: $1,500–$2,000"
+            benchmarkMin={1500}
+            benchmarkMax={2000}
+            lowerIsBetter={true}
+          />
+          <BenchmarkTile
+            label="Pipeline per $1k spent"
+            value={pipelinePer1k}
+            secondaryText="Benchmark: $5,000–$8,000"
+            benchmarkMin={5000}
+            benchmarkMax={8000}
+            lowerIsBetter={false}
+          />
+          <BenchmarkTile
+            label="Cost per net-new company"
+            value={costPerNetNewCompany}
+            secondaryText={netNewCompaniesTotal > 0 ? `${fmtNum(netNewCompaniesTotal)} net-new companies engaged` : 'No net-new companies'}
+          />
+          <BenchmarkTile
+            label="Cost per net-new contact"
+            value={costPerNetNewContact}
+            secondaryText={netNewContactsTotal > 0 ? `${fmtNum(netNewContactsTotal)} net-new contacts engaged` : 'No net-new contacts'}
+          />
+          <BenchmarkTile
+            label="Cost per completed follow-up"
+            value={costPerCompletedFollowup}
+            secondaryText={followupsCompleted > 0 ? `${fmtNum(followupsCompleted)} completed tasks` : 'No completed follow-ups'}
+          />
+        </div>
+
       </div>
 
       {/* ── Rep efficiency — 5-col grid ──────────────────────────────────── */}
