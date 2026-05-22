@@ -357,6 +357,9 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showReplaceRecordingDialog, setShowReplaceRecordingDialog] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(false);
+  const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company' | 'conference'; id: number } | null>(null);
+  const openRecord = useCallback((type: 'attendee' | 'company' | 'conference', id: number) => setRecordDrawer({ type, id }), []);
+  const closeRecord = useCallback(() => setRecordDrawer(null), []);
   const [mobileTab, setMobileTab] = useState<'context' | 'notes' | 'summary'>('notes');
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
@@ -1123,16 +1126,30 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 {/* Conference */}
                 <div>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Conference</p>
-                  <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => openRecord('conference', meeting.conference_id)}
+                    className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+                  >
                     {meeting.conference_name}
-                  </span>
+                  </button>
                 </div>
 
                 {/* Company */}
                 <div>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Company</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-medium text-gray-800">{meeting.company_name ?? '—'}</span>
+                    {meeting.company_id ? (
+                      <button
+                        type="button"
+                        onClick={() => openRecord('company', meeting.company_id!)}
+                        className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors text-left"
+                      >
+                        {meeting.company_name}
+                      </button>
+                    ) : (
+                      <span className="text-xs font-medium text-gray-800">{meeting.company_name ?? '—'}</span>
+                    )}
                     <IcpBadge icp={meeting.company_icp} />
                   </div>
                 </div>
@@ -1144,10 +1161,14 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   {/* Primary attendee */}
                   <div className="flex items-center gap-2 mb-1.5">
                     <Avatar name={`${meeting.first_name} ${meeting.last_name}`} size={7} />
-                    <div>
+                    <button
+                      type="button"
+                      onClick={() => openRecord('attendee', meeting.attendee_id)}
+                      className="text-left hover:text-brand-secondary transition-colors"
+                    >
                       <p className="text-xs font-medium text-gray-800">{meeting.first_name} {meeting.last_name}</p>
                       {meeting.title && <p className="text-[10px] text-gray-500">{meeting.title}</p>}
-                    </div>
+                    </button>
                   </div>
 
                   {/* Additional external attendees */}
@@ -1746,6 +1767,36 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
 
         </div>
+      </div>
+
+      {/* Record drawer — fixed, full viewport height, slides in from right */}
+      {recordDrawer != null && (
+        <div className="sm:hidden fixed inset-0 z-[60] bg-black/30" onClick={closeRecord} />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[61] flex flex-col overflow-hidden transition-all ease-out ${
+          recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
+        }`}
+        style={{ transitionDuration: '200ms' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {recordDrawer != null && (
+          <>
+            <div className="flex items-center justify-end px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
+              <button type="button" onClick={closeRecord} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              key={`${recordDrawer.type}-${recordDrawer.id}`}
+              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : recordDrawer.type === 'company' ? 'companies' : 'conferences'}/${recordDrawer.id}?embed=true`}
+              className="flex-1 border-0 w-full"
+              title={`${recordDrawer.type} record`}
+            />
+          </>
+        )}
       </div>
     </div>
   );

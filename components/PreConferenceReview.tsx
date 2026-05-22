@@ -244,6 +244,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setOpen(true);
     try {
       const [confRes, targetsRes] = await Promise.all([
         fetch(`/api/conferences/${conferenceId}/pre-conference`),
@@ -256,7 +257,6 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
         const tArr = await targetsRes.json() as TargetEntry[];
         setTargetMap(new Map(tArr.map(t => [t.attendeeId, t])));
       }
-      setOpen(true);
     } catch {
       setError('Failed to load pre-conference data.');
     } finally {
@@ -332,23 +332,16 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
 
   return (
     <>
-      <button onClick={load} disabled={loading} className="flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-wait">
-        {loading ? (
-          <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        ) : (
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-        )}
+      <button onClick={load} disabled={loading || open} className="flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-wait">
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
         Pre-Conference
       </button>
 
       {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
 
-      {open && data && (
+      {open && (
         <RecordDrawerCtx.Provider value={openRecord}>
         <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
           <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
@@ -362,7 +355,6 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                   <h2 className="text-lg font-bold text-white leading-tight">{conferenceName}</h2>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  {/* Collapse toggle — mobile only */}
                   <button
                     onClick={() => setStatsOpen(v => !v)}
                     className="sm:hidden text-white/70 hover:text-white transition-colors"
@@ -372,38 +364,60 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors">
+                  <button onClick={() => { setOpen(false); setData(null); }} className="text-white/70 hover:text-white transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
               </div>
-              <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
-                <StatPill label="Attendees" value={data.summary.totalAttendees} />
-                <StatPill label="Companies" value={data.summary.totalCompanies} />
-                <StatPill label="ICP" value={data.summary.icpCount} />
-                <StatPill label="Targets" value={targetMap.size} />
-                <StatPill label="Meetings" value={data.summary.meetingCount} />
-                <StatPill label="Open Follow-ups" value={data.summary.openFollowUps} />
-              </div>
+              {data && (
+                <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
+                  <StatPill label="Attendees" value={data.summary.totalAttendees} />
+                  <StatPill label="Companies" value={data.summary.totalCompanies} />
+                  <StatPill label="ICP" value={data.summary.icpCount} />
+                  <StatPill label="Targets" value={targetMap.size} />
+                  <StatPill label="Meetings" value={data.summary.meetingCount} />
+                  <StatPill label="Open Follow-ups" value={data.summary.openFollowUps} />
+                </div>
+              )}
             </div>
 
-            {/* Tab nav */}
-            <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
-              <nav className="flex gap-0 px-4">
-                {visibleTabs.map((t) => (
-                  <button key={t.key} onClick={() => setActiveTab(t.key)}
-                    className={`py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                      ${activeTab === t.key ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
+            {/* Loading bar */}
+            {loading && (
+              <div className="flex-shrink-0 h-1 bg-gray-100 overflow-hidden">
+                <div className="h-full bg-brand-secondary animate-[loadingBar_1.8s_ease-in-out_infinite]" />
+                <style>{`@keyframes loadingBar { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }`}</style>
+              </div>
+            )}
+
+            {/* Error state */}
+            {error && !loading && (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-gray-500 mb-3">{error}</p>
+                  <button onClick={load} className="btn-primary text-sm">Try again</button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab nav — only when data is ready */}
+            {data && (
+              <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
+                <nav className="flex gap-0 px-4">
+                  {visibleTabs.map((t) => (
+                    <button key={t.key} onClick={() => setActiveTab(t.key)}
+                      className={`py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap
+                        ${activeTab === t.key ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            )}
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {data && <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {activeTab === 'landscape' && (
                 <LandscapeTab
                   data={data.landscape}
@@ -456,7 +470,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                   onToggleTarget={toggleTarget}
                 />
               )}
-            </div>
+            </div>}
           </div>
 
           {/* Record drawer — fixed, full viewport height, slides in from right */}
