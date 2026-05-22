@@ -114,8 +114,15 @@ function UnhideNavOverlay({ onDismiss }: { onDismiss: () => void }) {
 export function FloatingNavHiddenProvider({ children }: { children: React.ReactNode }) {
   const [navHidden, setNavHiddenState] = useState(false);
   const [showUnhideHint, setShowUnhideHint] = useState(false);
+  const [isEmbed, setIsEmbed] = useState(false);
 
   useEffect(() => {
+    const embed = new URLSearchParams(window.location.search).get('embed') === 'true';
+    setIsEmbed(embed);
+    if (embed) {
+      setNavHiddenState(true);
+      return;
+    }
     try {
       if (localStorage.getItem(KEY) === 'true') setNavHiddenState(true);
     } catch {}
@@ -124,8 +131,11 @@ export function FloatingNavHiddenProvider({ children }: { children: React.ReactN
   const setNavHidden = useCallback((v: boolean) => {
     setNavHiddenState(v);
     if (v) setShowUnhideHint(true);
-    try { localStorage.setItem(KEY, v ? 'true' : 'false'); } catch {}
-  }, []);
+    // Don't persist to localStorage when in embed mode
+    if (!isEmbed) {
+      try { localStorage.setItem(KEY, v ? 'true' : 'false'); } catch {}
+    }
+  }, [isEmbed]);
 
   const dismissHint = useCallback(() => setShowUnhideHint(false), []);
 
