@@ -1574,85 +1574,481 @@ export async function GET(
         rep_ces: repCES,
       },
 
-      marketing_audience: (() => {
-        const companiesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+      marketing_audience: await (async () => {
+        // Net-new contacts (attendees first seen at this conference)
+        const netNewContactsRows = await runQuery(db,
+          `SELECT
+             a.id AS attendee_id, a.company_id,
+             co.icp, co.name AS company_name,
+             LOWER(TRIM(COALESCE(a.title,''))) AS title
+           FROM conference_attendees ca
+           JOIN attendees a ON ca.attendee_id = a.id
+           LEFT JOIN companies co ON a.company_id = co.id
+           WHERE ca.conference_id = ${cid}
+             AND a.company_id IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM conference_attendees ca2
+               WHERE ca2.attendee_id = a.id AND ca2.conference_id != ${cid}
+             )`
+        );
+
+        // Net-new companies (companies first seen at this conference)
+        const netNewCompanyRows = await runQuery(db,
+          `SELECT
+             co.id AS company_id, co.name, co.icp,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM follow_ups fu JOIN attendees a ON fu.attendee_id = a.id
+               WHERE a.company_id = co.id AND fu.conference_id = ${cid}
+             ) THEN 1 ELSE 0 END AS has_followup,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM meetings m JOIN attendees a ON m.attendee_id = a.id
+               LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+               WHERE a.company_id = co.id AND m.conference_id = ${cid} AND cop.action_key='meeting_held'
+             ) THEN 1 ELSE 0 END AS has_meeting
+           FROM companies co
+           WHERE co.id IN (
+             SELECT DISTINCT a.company_id FROM conference_attendees ca
+             JOIN attendees a ON ca.attendee_id = a.id
+             WHERE ca.conference_id = ${cid} AND a.company_id IS NOT NULL
+           )
+           AND co.id NOT IN (
+             SELECT DISTINCT a2.company_id FROM conference_attendees ca2
+             JOIN attendees a2 ON ca2.attendee_id = a2.id
+             WHERE ca2.conference_id != ${cid} AND a2.company_id IS NOT NULL
+           )`
+        );
+
+        // Meeting insights for this conference (buying signals, pain points)
+        const meetingInsightsRows = await runQuery(db,
+          `SELECT mi.insight_type, mi.content, mi.meeting_id, m.attendee_id,
+                  a.company_id
+           FROM meeting_insights mi
+           JOIN meetings m ON mi.meeting_id = m.id
+           JOIN attendees a ON m.attendee_id = a.id
+           WHERE m.conference_id = ${cid}
+             AND mi.insight_type IN ('buying_signal','pain_point')`
+        );
+
+        // Decision makers reached via meeting vs touchpoint (ICP companies only)
+        const dmReachRows = await runQuery(db,
+          `SELECT
+             COUNT(DISTINCT CASE WHEN m.id IS NOT NULL AND cop.action_key='meeting_held' THEN a.id END) AS dm_via_meeting,
+             COUNT(DISTINCT CASE WHEN atp.id IS NOT NULL AND m.id IS NULL THEN a.id END) AS dm_via_touchpoint
+           FROM conference_attendees ca
+           JOIN attendees a ON ca.attendee_id = a.id
+           JOIN companies co ON a.company_id = co.id
+           LEFT JOIN meetings m ON m.attendee_id = a.id AND m.conference_id = ${cid}
+           LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+           LEFT JOIN attendee_touchpoints atp ON atp.attendee_id = a.id AND atp.conference_id = ${cid}
+           WHERE ca.conference_id = ${cid} AND co.icp = 'Yes'`
+        );
+
+        // Follow-up data for ICP companies
+        const icpFollowupRows = await runQuery(db,
+          `SELECT
+             COUNT(DISTINCT a.company_id) AS icp_companies_with_followup,
+             COUNT(DISTINCT fu.id) AS total_followups,
+             COUNT(DISTINCT CASE WHEN COALESCE(fu.completed,0)=1 THEN fu.id END) AS completed_followups
+           FROM follow_ups fu
+           JOIN attendees a ON fu.attendee_id = a.id
+           JOIN companies co ON a.company_id = co.id
+           WHERE fu.conference_id = ${cid} AND co.icp = 'Yes'`
+        );
+
+        // Buyer access quality: for each DM/influencer at ICP companies, get their interaction level
+        const buyerAccessRows = await runQuery(db,
+          `SELECT
+             a.id AS attendee_id, a.company_id, a.title,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM meetings m
+               LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+               WHERE m.attendee_id = a.id AND m.conference_id = ${cid} AND cop.action_key='meeting_held'
+             ) THEN 1 ELSE 0 END AS has_meeting_held,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM meetings m
+               LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+               JOIN meeting_notes mn ON mn.meeting_id = m.id
+               WHERE m.attendee_id = a.id AND m.conference_id = ${cid} AND cop.action_key='meeting_held'
+             ) THEN 1 ELSE 0 END AS has_meeting_with_notes,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM attendee_touchpoints atp
+               WHERE atp.attendee_id = a.id AND atp.conference_id = ${cid}
+             ) THEN 1 ELSE 0 END AS has_touchpoint
+           FROM conference_attendees ca
+           JOIN attendees a ON ca.attendee_id = a.id
+           JOIN companies co ON a.company_id = co.id
+           WHERE ca.conference_id = ${cid} AND co.icp = 'Yes' AND a.company_id IS NOT NULL`
+        );
+
+        // Per-company account table data
+        const companyAccountRows = await runQuery(db,
+          `${w}
+           SELECT
+             cc.company_id,
+             co.name AS company_name,
+             co.icp,
+             CASE WHEN co.id NOT IN (
+               SELECT DISTINCT a2.company_id FROM conference_attendees ca2
+               JOIN attendees a2 ON ca2.attendee_id = a2.id
+               WHERE ca2.conference_id != ${cid} AND a2.company_id IS NOT NULL
+             ) THEN 1 ELSE 0 END AS is_net_new,
+             COALESCE(cm.meetings_held, 0) AS meetings_held,
+             COALESCE(ct.touchpoints, 0) AS touchpoints,
+             CASE WHEN COALESCE(cf.followups_created,0) > 0 AND COALESCE(cf.followups_completed,0) = COALESCE(cf.followups_created,0)
+                  THEN 'done'
+                  WHEN COALESCE(cf.followups_created,0) > 0 THEN 'pending'
+                  ELSE 'none' END AS followup_status
+           FROM conf_companies cc
+           JOIN companies co ON cc.company_id = co.id
+           LEFT JOIN company_meetings cm ON cc.company_id = cm.company_id
+           LEFT JOIN company_touchpoints ct ON cc.company_id = ct.company_id
+           LEFT JOIN company_followups cf ON cc.company_id = cf.company_id`
+        );
+
+        // Buying signals per company (for account table)
+        const companySignalsRows = await runQuery(db,
+          `SELECT a.company_id, COUNT(mi.id) AS signals_count
+           FROM meeting_insights mi
+           JOIN meetings m ON mi.meeting_id = m.id
+           JOIN attendees a ON m.attendee_id = a.id
+           WHERE m.conference_id = ${cid} AND mi.insight_type = 'buying_signal'
+             AND a.company_id IS NOT NULL
+           GROUP BY a.company_id`
+        );
+
+        // ── Raw counts from existing variables ──────────────────────────────
+        const icpAttending = Number(icpCoverage.icp_companies_total ?? 0);
         const icpEngaged = Number(icpCoverage.icp_companies_engaged ?? 0);
-        const icpDen = Number(icpCoverage.icp_companies_total ?? 0) || null;
-        const targetEng = Number(targetEngagement.target_companies_engaged ?? 0);
-        const targetDen = Number(targetEngagement.targets_total ?? 0) || null;
-        const icpRate = icpDen ? pct(icpEngaged, icpDen) : (companiesEngaged > 0 ? pct(icpEngaged, companiesEngaged) : null);
-        const targetRate = targetDen ? pct(targetEng, targetDen) : null;
-        const icpTargetQuality = icpRate != null && targetRate != null ? icpRate * 0.5 + targetRate * 0.5 : (icpRate ?? targetRate ?? null);
+        const companiesEngaged = Number(engagementSummary.companies_engaged ?? 0);
+        const meetingsHeld = Number(engagementSummary.total_held ?? 0);
 
-        const companyRows = Array.from(byCompany.values());
-        const companyTable = Array.from(byCompany.entries()).map(([company_id, info]) => ({
-          company_id,
-          company: info.name,
-          decision_maker_engaged: info.decision,
-          influencer_engaged: info.influencer,
-          highest_seniority_match: info.seniorityScore,
-          highest_function_match: info.functionScore,
-        }));
-        const companiesWithDecision = companyRows.filter(c => c.decision).length;
-        const companiesWithInfluencer = companyRows.filter(c => c.influencer).length;
-        const decisionRate = pct(companiesWithDecision, companiesEngaged);
-        const influencerRate = pct(companiesWithInfluencer, companiesEngaged);
-        const seniorityFit = companyRows.filter(c => c.seniorityScore != null).length ? companyRows.filter(c => c.seniorityScore != null).reduce((a,c)=>a+Number(c.seniorityScore),0)/companyRows.filter(c => c.seniorityScore != null).length : null;
-        const functionFit = companyRows.filter(c => c.functionScore != null).length ? companyRows.filter(c => c.functionScore != null).reduce((a,c)=>a+Number(c.functionScore),0)/companyRows.filter(c => c.functionScore != null).length : null;
-        const buyerRoleParts = [
-          decisionRate != null ? { value: decisionRate, weight: 0.4 } : null,
-          influencerRate != null ? { value: influencerRate, weight: 0.2 } : null,
-          seniorityFit != null ? { value: seniorityFit, weight: 0.2 } : null,
-          functionFit != null ? { value: functionFit, weight: 0.2 } : null,
-        ].filter((p): p is { value: number; weight: number } => p != null);
-        const buyerRoleAccess = buyerRoleParts.length
-          ? buyerRoleParts.reduce((sum, p) => sum + (p.value * p.weight), 0) / buyerRoleParts.reduce((sum, p) => sum + p.weight, 0)
-          : null;
+        // ── Net-new contacts ─────────────────────────────────────────────────
+        let nnContactsIcp = 0, nnContactsDM = 0, nnContactsInfluencer = 0, nnContactsNonIcp = 0;
+        for (const row of netNewContactsRows) {
+          const isIcp = String(row.icp ?? '') === 'Yes';
+          if (isIcp) nnContactsIcp++; else nnContactsNonIcp++;
+          const titleKey = normalizeTitleKey(String(row.title ?? ''));
+          const rule = confirmedTitleRules.get(titleKey);
+          const titleStr = rule?.normalizedTitle || String(row.title ?? '');
+          if (rule?.buyerRole === 'decision_maker' || (decisionMakerTitles.length && titleStr && decisionMakerTitles.some((t: string) => titleStr.includes(t)))) nnContactsDM++;
+          else if (rule?.buyerRole === 'influencer' || rule?.buyerRole === 'target_title' || (influencerTitles.length && titleStr && influencerTitles.some((t: string) => titleStr.includes(t)))) nnContactsInfluencer++;
+        }
+        const netNewContactsTotal = netNewContactsRows.length;
 
-        const netNew = Number(netNewLogos.net_new_logos ?? 0);
-        const netNewRate = pct(netNew, companiesEngaged);
-        const multi = Number(pipelineSummary.high_engagement_companies ?? 0);
-        const two = Number(pipelineSummary.two_touch_companies ?? 0);
-        const single = Number(pipelineSummary.single_touch_companies ?? 0);
-        const depth = companiesEngaged > 0 ? ((multi/companiesEngaged*100)*0.5)+((two/companiesEngaged*100)*0.3)+((single/companiesEngaged*100)*0.2) : null;
-        const companiesWithMeeting = Number(engagementSummary.companies_with_meeting ?? 0);
-        const companiesWithMeetingFollowup = Number(engagementSummary.companies_with_meeting_and_followup ?? 0);
-        const meetingRate = pct(companiesWithMeeting, companiesEngaged);
-        const followAttach = pct(companiesWithMeetingFollowup, companiesWithMeeting);
-        const multiRate = pct(multi, companiesEngaged);
-        const resonance = (meetingRate != null && followAttach != null && multiRate != null) ? (meetingRate*0.4)+(followAttach*0.3)+(multiRate*0.3) : null;
+        // ── Net-new companies ─────────────────────────────────────────────────
+        const nnCompaniesIcp = netNewCompanyRows.filter((r: any) => String(r.icp ?? '') === 'Yes').length;
+        const nnCompaniesNonIcp = netNewCompanyRows.filter((r: any) => String(r.icp ?? '') !== 'Yes').length;
+        const nnCompaniesWithFollowup = netNewCompanyRows.filter((r: any) => Number(r.has_followup ?? 0) === 1).length;
+        const nnCompaniesWithMeeting = netNewCompanyRows.filter((r: any) => Number(r.has_meeting ?? 0) === 1).length;
+        const netNewCompaniesTotal = netNewCompanyRows.length;
+        const nnIcpPct = netNewCompaniesTotal > 0 ? Math.round(nnCompaniesIcp / netNewCompaniesTotal * 100) : 0;
 
-        const marketingPreset = getPreset('marketing_audience_signal', strategyKey);
-        const rw = reweight([
-          { key: 'icp_target_quality', score: icpTargetQuality, weight: marketingPreset.icp_target_quality ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.icp_target_quality },
-          { key: 'buyer_role_access', score: buyerRoleAccess, weight: marketingPreset.buyer_role_access ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.buyer_role_access },
-          { key: 'net_new_market_reach', score: netNewRate, weight: marketingPreset.net_new_market_reach ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.net_new_market_reach },
-          { key: 'engagement_depth', score: depth, weight: marketingPreset.engagement_depth ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.engagement_depth },
-          { key: 'message_resonance_proxy', score: resonance, weight: marketingPreset.message_resonance_proxy ?? DEFAULT_MARKETING_AUDIENCE_WEIGHTS.message_resonance_proxy },
-        ]);
+        // ── Meeting insights ────────────────────────────────────────────────
+        const buyingSignalRows = meetingInsightsRows.filter((r: any) => String(r.insight_type) === 'buying_signal');
+        const painPointRows = meetingInsightsRows.filter((r: any) => String(r.insight_type) === 'pain_point');
+        const buyingSignalsCount = buyingSignalRows.length;
+        const painPointsCount = painPointRows.length;
+        const insightsAvailable = meetingInsightsRows.length > 0;
+        const painPointsAvailable = painPointRows.length > 0;
+
+        const meetingsWithBuyingSignal = new Set(buyingSignalRows.map((r: any) => String(r.meeting_id))).size;
+        const meetingsWithPainPoint = new Set(painPointRows.map((r: any) => String(r.meeting_id))).size;
+        const buyingSignalsPerMeeting = meetingsHeld > 0 ? buyingSignalsCount / meetingsHeld : 0;
+        const painPointCoveragePct = meetingsHeld > 0 ? meetingsWithPainPoint / meetingsHeld * 100 : 0;
+
+        const painPointThemes = new Map<string, number>();
+        for (const r of painPointRows) {
+          const theme = String((r as any).content ?? '').toLowerCase().trim().substring(0, 60);
+          if (theme) painPointThemes.set(theme, (painPointThemes.get(theme) ?? 0) + 1);
+        }
+        const distinctThemeCount = painPointThemes.size;
+        const topThemeCount = painPointThemes.size > 0 ? Math.max(...Array.from(painPointThemes.values())) : 0;
+        const topTheme = painPointThemes.size > 0 ? Array.from(painPointThemes.entries()).sort((a,b) => b[1]-a[1])[0][0] : null;
+        const topThemeConcentrationPct = meetingsWithPainPoint > 0 ? topThemeCount / meetingsWithPainPoint * 100 : 0;
+
+        // ── DM reach ─────────────────────────────────────────────────────────
+        const dmViaMeeting = Number((dmReachRows[0] as any)?.dm_via_meeting ?? 0);
+        const dmViaTouchpoint = Number((dmReachRows[0] as any)?.dm_via_touchpoint ?? 0);
+        const totalDMsReached = dmViaMeeting + dmViaTouchpoint;
+
+        // ── ICP follow-up ─────────────────────────────────────────────────────
+        const icpCompaniesWithFollowup = Number((icpFollowupRows[0] as any)?.icp_companies_with_followup ?? 0);
+        const followupsTotal = Number((icpFollowupRows[0] as any)?.total_followups ?? 0);
+        const followupsCompleted = Number((icpFollowupRows[0] as any)?.completed_followups ?? 0);
+        const followupCompletionRate = followupsTotal > 0 ? followupsCompleted / followupsTotal * 100 : 0;
+        const icpFollowupCreationRate = icpEngaged > 0 ? icpCompaniesWithFollowup / icpEngaged * 100 : 0;
+
+        const confEndDate = confInfo.end_date ? new Date(String(confInfo.end_date)) : null;
+        const today = new Date();
+        const daysSinceEnd = confEndDate ? Math.floor((today.getTime() - confEndDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+        const completionWindowOpen = daysSinceEnd < 7;
+
+        // ── Buyer access quality ─────────────────────────────────────────────
+        let baqNumerator = 0, baqDenominator = 0;
+        let dmViaContactMeeting = 0, dmViaContactTouchpoint = 0, influencersReached = 0;
+        const icpCompaniesNoDM = new Set<number>();
+        const icpCompanyDMReached = new Set<number>();
+
+        for (const row of buyerAccessRows) {
+          const titleKey = normalizeTitleKey(String((row as any).title ?? ''));
+          const rule = confirmedTitleRules.get(titleKey);
+          const titleStr = rule?.normalizedTitle || String((row as any).title ?? '');
+          const isDM = rule?.buyerRole === 'decision_maker' || (decisionMakerTitles.length && titleStr && decisionMakerTitles.some((t: string) => titleStr.includes(t)));
+          const isInfluencer = !isDM && (rule?.buyerRole === 'influencer' || rule?.buyerRole === 'target_title' || (influencerTitles.length && titleStr && influencerTitles.some((t: string) => titleStr.includes(t))));
+
+          if (!isDM && !isInfluencer) continue;
+          baqDenominator++;
+
+          const hasMeetingWithNotes = Number((row as any).has_meeting_with_notes ?? 0) === 1;
+          const hasMeetingHeld = Number((row as any).has_meeting_held ?? 0) === 1;
+          const hasTouchpoint = Number((row as any).has_touchpoint ?? 0) === 1;
+
+          let accessScore = 15;
+          if (hasMeetingWithNotes) { accessScore = 100; }
+          else if (hasMeetingHeld) { accessScore = 70; }
+          else if (hasTouchpoint) { accessScore = 40; }
+          baqNumerator += accessScore;
+
+          if (isDM) {
+            if (hasMeetingHeld) { dmViaContactMeeting++; icpCompanyDMReached.add(Number((row as any).company_id)); }
+            else if (hasTouchpoint) { dmViaContactTouchpoint++; icpCompanyDMReached.add(Number((row as any).company_id)); }
+          }
+          if (isInfluencer && (hasMeetingHeld || hasTouchpoint)) influencersReached++;
+        }
+        const icpCompanyIds = buyerAccessRows.filter((r: any) => r.company_id).map((r: any) => Number(r.company_id));
+        for (const compId of icpCompanyIds) {
+          if (!icpCompanyDMReached.has(compId)) icpCompaniesNoDM.add(compId);
+        }
+        const buyerAccessQuality = baqDenominator > 0 ? baqNumerator / baqDenominator : 0;
+
+        // ── Scoring functions ─────────────────────────────────────────────────
+        function scoreIcpCoverage(pctCovered: number): number {
+          const breakpoints = [[0,0],[10,20],[20,35],[30,50],[40,65],[50,75],[60,83],[70,90],[80,95],[90,100]] as [number,number][];
+          if (pctCovered <= 0) return 0;
+          if (pctCovered >= 90) return 100;
+          for (let i = 1; i < breakpoints.length; i++) {
+            const [x0,y0] = breakpoints[i-1], [x1,y1] = breakpoints[i];
+            if (pctCovered <= x1) {
+              return Math.round(y0 + (pctCovered - x0) / (x1 - x0) * (y1 - y0));
+            }
+          }
+          return 100;
+        }
+
+        function compTier(s: number | null): string {
+          if (s == null) return '—';
+          if (s >= 80) return 'Strong';
+          if (s >= 60) return 'Acceptable';
+          if (s >= 40) return 'Weak';
+          return 'Ineffective';
+        }
+
+        function scoreBuyingSignalDensity(bspm: number): number {
+          if (bspm <= 0) return 20;
+          if (bspm < 1) return Math.round(20 + bspm * 30);
+          if (bspm < 2) return Math.round(50 + (bspm - 1) * 30);
+          if (bspm < 3) return Math.round(80 + (bspm - 2) * 20);
+          return 100;
+        }
+
+        function scorePainPointCoverage(pct2: number): number {
+          if (pct2 <= 0) return 20;
+          if (pct2 < 30) return Math.round(20 + pct2 / 30 * 30);
+          if (pct2 < 60) return Math.round(50 + (pct2 - 30) / 30 * 30);
+          if (pct2 < 80) return Math.round(80 + (pct2 - 60) / 20 * 20);
+          return 100;
+        }
+
+        function scoreDistinctThemes(count: number): number {
+          if (count <= 0) return 0;
+          if (count === 1) return 30;
+          if (count <= 3) return 50;
+          if (count <= 6) return 70;
+          return 90;
+        }
+
+        function scoreTopConcentration(pct2: number): number {
+          if (pct2 < 20) return 40;
+          if (pct2 < 40) return 60;
+          if (pct2 < 60) return 75;
+          return 90;
+        }
+
+        function scoreFollowupCreation(pct2: number): number {
+          if (pct2 <= 0) return 0;
+          if (pct2 < 50) return Math.round(pct2 / 50 * 40);
+          if (pct2 < 70) return Math.round(40 + (pct2-50) / 20 * 25);
+          if (pct2 < 85) return Math.round(65 + (pct2-70) / 15 * 20);
+          if (pct2 < 95) return Math.round(85 + (pct2-85) / 10 * 15);
+          return 100;
+        }
+
+        function scoreFollowupCompletion(pct2: number): number {
+          if (pct2 <= 0) return 0;
+          if (pct2 < 30) return Math.round(pct2 / 30 * 30);
+          if (pct2 < 50) return Math.round(30 + (pct2-30) / 20 * 20);
+          if (pct2 < 70) return Math.round(50 + (pct2-50) / 20 * 20);
+          if (pct2 < 85) return Math.round(70 + (pct2-70) / 15 * 15);
+          if (pct2 < 95) return Math.round(85 + (pct2-85) / 10 * 15);
+          return 100;
+        }
+
+        // Compute component scores
+        const icpCoverageRatePct = icpAttending > 0 ? icpEngaged / icpAttending * 100 : 0;
+        const comp1Score = icpAttending > 0 ? scoreIcpCoverage(icpCoverageRatePct) : 0;
+
+        const comp2Score = Math.round(buyerAccessQuality);
+
+        let comp3Score: number;
+        if (!insightsAvailable) {
+          comp3Score = 50;
+        } else {
+          const bsDensityScore = scoreBuyingSignalDensity(buyingSignalsPerMeeting);
+          const ppCoverageScore = scorePainPointCoverage(painPointCoveragePct);
+          const boothSentimentScore = 50;
+          comp3Score = Math.round(bsDensityScore * 0.5 + ppCoverageScore * 0.3 + boothSentimentScore * 0.2);
+        }
+
+        let comp4Score: number;
+        if (!painPointsAvailable) {
+          comp4Score = 50;
+        } else {
+          const themeScore = scoreDistinctThemes(distinctThemeCount);
+          const meetCoverageScore = scorePainPointCoverage(painPointCoveragePct);
+          const concentrationScore = scoreTopConcentration(topThemeConcentrationPct);
+          comp4Score = Math.round(themeScore * 0.3 + meetCoverageScore * 0.4 + concentrationScore * 0.3);
+        }
+
+        const creationScore = scoreFollowupCreation(icpFollowupCreationRate);
+        const completionScoreRaw = completionWindowOpen ? 50 : scoreFollowupCompletion(followupCompletionRate);
+        const comp5Score = Math.round(creationScore * 0.5 + completionScoreRaw * 0.5);
+
+        const overallScore = Math.round(
+          comp1Score * 0.25 +
+          comp2Score * 0.25 +
+          comp3Score * 0.20 +
+          comp4Score * 0.15 +
+          comp5Score * 0.15
+        );
+
+        function overallTier(s: number): string {
+          if (s >= 80) return 'Strong Audience Fit';
+          if (s >= 65) return 'Good Audience Fit';
+          if (s >= 50) return 'Acceptable Audience Fit';
+          if (s >= 35) return 'Weak Audience Fit';
+          return 'Ineffective Audience Fit';
+        }
+
+        // ── Account-level table ──────────────────────────────────────────────
+        const signalsMap = new Map<number, number>();
+        for (const r of companySignalsRows) signalsMap.set(Number((r as any).company_id), Number((r as any).signals_count ?? 0));
+        const netNewCompanySet = new Set(netNewCompanyRows.map((r: any) => Number(r.company_id)));
+        const dmReachedCompanySet = icpCompanyDMReached;
+
+        const accountTable = companyAccountRows.map((r: any) => {
+          const compId = Number(r.company_id);
+          const mtgHeld = Number(r.meetings_held ?? 0);
+          const tps = Number(r.touchpoints ?? 0);
+          let accessDepth: string;
+          if (mtgHeld > 0) accessDepth = 'meeting';
+          else if (tps > 0) accessDepth = 'touchpoint';
+          else accessDepth = 'scan_only';
+
+          return {
+            company_id: compId,
+            company: String(r.company_name ?? '—'),
+            icp: String(r.icp ?? ''),
+            is_net_new: netNewCompanySet.has(compId),
+            dm_reached: dmReachedCompanySet.has(compId),
+            access_depth: accessDepth,
+            followup_status: String(r.followup_status ?? 'none'),
+            signals_count: signalsMap.get(compId) ?? 0,
+          };
+        });
+
         return {
-          marketing_audience_signal_score: rw.score,
-          strategy_modifier_applied: true,
-          marketing_audience_signal_tier: tierFromScore(rw.score),
-          marketing_audience_signal_interpretation: rw.score != null ? `${tierFromScore(rw.score)} Audience Fit` : null,
+          marketing_audience_signal_score: overallScore,
+          marketing_audience_signal_tier: overallTier(overallScore),
+          marketing_audience_signal_interpretation: overallTier(overallScore),
           audience_quality_rank: null,
           audience_quality_rank_total: null,
-          components: { icp_target_quality: { score: icpTargetQuality, weight: 0.3, tier: tierFromScore(icpTargetQuality), confidence: 'Medium', metrics: { icp_companies_engaged: icpEngaged, icp_companies_denominator: icpDen, icp_engagement_rate: icpRate, target_accounts_engaged: targetEng, target_accounts_denominator: targetDen, target_engagement_rate: targetRate } }, buyer_role_access: { score: buyerRoleAccess, weight: 0.25, tier: tierFromScore(buyerRoleAccess), confidence: 'Medium', metrics: { companies_with_decision_maker_engaged: companiesWithDecision, decision_maker_access_rate: decisionRate, companies_with_influencer_engaged: companiesWithInfluencer, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit }, admin_settings_used: { decision_maker_titles_count: decisionMakerTitles.length, influencer_titles_count: influencerTitles.length, seniority_priority_map: seniorityPriorityMap, function_priority_map: functionPriorityMap, source_of_truth: 'effectiveness_defaults (ICP JSON keys)' } }, net_new_market_reach: { score: netNewRate, weight: 0.2, tier: tierFromScore(netNewRate), confidence: 'Medium', metrics: { net_new_companies_engaged: netNew, total_companies_engaged: companiesEngaged, net_new_market_reach_rate: netNewRate } }, engagement_depth: { score: depth, weight: 0.15, tier: tierFromScore(depth), confidence: 'Medium', metrics: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_engaged: companiesEngaged, engagement_depth_score: depth } }, message_resonance_proxy: { score: resonance, weight: 0.1, tier: tierFromScore(resonance), confidence: 'Medium', provenance: 'Proxy', metrics: { companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, meeting_rate: meetingRate, followup_attachment_rate: followAttach, multi_touch_rate: multiRate } } },
-        kpis: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, net_new_market_reach_rate: netNewRate, message_resonance_proxy: resonance },
-        audience_fit: { icp_engagement_rate: icpRate, target_engagement_rate: targetRate, decision_maker_access_rate: decisionRate, influencer_access_rate: influencerRate, seniority_priority_fit: seniorityFit, function_priority_fit: functionFit },
-        reach_and_mix: { total_companies_engaged: companiesEngaged, net_new_companies_engaged: netNew, known_companies_engaged: companiesEngaged-netNew, icp_companies_engaged: icpEngaged, target_accounts_engaged: targetEng, companies_with_decision_maker_engaged: companiesWithDecision, companies_with_influencer_engaged: companiesWithInfluencer },
-        engagement_resonance: { multi_touch_companies: multi, two_touch_companies: two, single_touch_companies: single, companies_with_meeting: companiesWithMeeting, companies_with_meeting_and_followup: companiesWithMeetingFollowup, engagement_depth_score: depth, message_resonance_proxy: resonance },
-        opportunities_gaps: [
-          { label: 'High-fit companies without decision maker access', count: Math.max(companiesEngaged - companiesWithDecision, 0), severity: 'medium', description: 'Improve executive meeting access planning.' },
-          { label: 'Target accounts with shallow interactions', count: single, severity: 'medium', description: 'Increase multi-touch engagement for targets.' }
-        ],
-        unavailable_components: rw.unavailable,
-        unavailable_metrics: [],
-        original_weights: rw.originalWeights,
-        effective_weights: rw.effectiveWeights,
-        calculation_confidence: rw.confidence,
-        account_level_table: companyTable,
-      }; })(),
+          strategy_modifier_applied: false,
+          insights_available: insightsAvailable,
+          pain_points_available: painPointsAvailable,
+          components: {
+            icp_coverage_rate:           { score: comp1Score, weight: 0.25, tier: compTier(comp1Score) },
+            buyer_access_quality:        { score: comp2Score, weight: 0.25, tier: compTier(comp2Score) },
+            conversation_quality_signal: { score: comp3Score, weight: 0.20, tier: insightsAvailable ? compTier(comp3Score) : 'Neutral', insights_available: insightsAvailable },
+            market_intelligence_yield:   { score: comp4Score, weight: 0.15, tier: painPointsAvailable ? compTier(comp4Score) : 'Neutral', pain_points_available: painPointsAvailable },
+            engagement_momentum:         { score: comp5Score, weight: 0.15, tier: compTier(comp5Score), completion_window_open: completionWindowOpen },
+          },
+          net_new_contacts: {
+            total: netNewContactsTotal,
+            icp_count: nnContactsIcp,
+            decision_maker_count: nnContactsDM,
+            influencer_count: nnContactsInfluencer,
+            non_icp_count: nnContactsNonIcp,
+          },
+          net_new_companies: {
+            total: netNewCompaniesTotal,
+            icp_count: nnCompaniesIcp,
+            icp_pct: nnIcpPct,
+            with_followup: nnCompaniesWithFollowup,
+            with_meeting: nnCompaniesWithMeeting,
+            non_icp_count: nnCompaniesNonIcp,
+          },
+          kpis: {
+            icp_companies_attending: icpAttending,
+            icp_companies_engaged: icpEngaged,
+            icp_coverage_rate: Math.round(icpCoverageRatePct * 10) / 10,
+            decision_makers_reached: totalDMsReached,
+            decision_makers_via_meeting: dmViaMeeting,
+            decision_makers_via_touchpoint: dmViaTouchpoint,
+            buying_signals_count: buyingSignalsCount,
+            buying_signals_across_meetings: meetingsWithBuyingSignal,
+            followup_completion_rate: Math.round(followupCompletionRate * 10) / 10,
+            followup_total: followupsTotal,
+            followup_completed: followupsCompleted,
+          },
+          icp_coverage_detail: {
+            icp_attending: icpAttending,
+            icp_engaged: icpEngaged,
+            coverage_rate: Math.round(icpCoverageRatePct * 10) / 10,
+            icp_missed: Math.max(icpAttending - icpEngaged, 0),
+          },
+          buyer_access_detail: {
+            dm_via_meeting: dmViaContactMeeting,
+            dm_via_touchpoint: dmViaContactTouchpoint,
+            influencers_reached: influencersReached,
+            icp_companies_no_dm: icpCompaniesNoDM.size,
+          },
+          conversation_quality_detail: {
+            buying_signals_per_meeting: Math.round(buyingSignalsPerMeeting * 10) / 10,
+            meetings_with_pain_points: meetingsWithPainPoint,
+            meetings_held: meetingsHeld,
+            pain_point_coverage_pct: Math.round(painPointCoveragePct * 10) / 10,
+            booth_sentiment_pct: null,
+          },
+          market_intelligence_detail: {
+            distinct_pain_point_themes: distinctThemeCount,
+            meetings_with_pain_points: meetingsWithPainPoint,
+            meetings_held: meetingsHeld,
+            meeting_coverage_pct: Math.round(painPointCoveragePct * 10) / 10,
+            top_theme_concentration_pct: Math.round(topThemeConcentrationPct * 10) / 10,
+            top_theme: topTheme,
+          },
+          engagement_momentum_detail: {
+            icp_companies_with_followup: icpCompaniesWithFollowup,
+            icp_companies_engaged: icpEngaged,
+            followup_creation_rate: Math.round(icpFollowupCreationRate * 10) / 10,
+            followups_total: followupsTotal,
+            followups_completed: followupsCompleted,
+            followup_completion_rate: Math.round(followupCompletionRate * 10) / 10,
+            completion_window_open: completionWindowOpen,
+          },
+          account_level_table: accountTable,
+        };
+      })(),
       sales_execution: {
         sales_effectiveness_score: salesWeighted.score,
         strategy_modifier_applied: true,
