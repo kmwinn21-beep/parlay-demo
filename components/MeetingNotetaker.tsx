@@ -18,6 +18,14 @@ interface Insight {
   timestamp_seconds: number | null;
   confidence: string;
   confirmed: boolean;
+  source: 'ai' | 'manual';
+}
+
+interface ConfigOption {
+  id: number;
+  value: string;
+  is_active: number;
+  sort_order: number;
 }
 
 interface NextStepItem {
@@ -375,15 +383,26 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Upload popover
+  const [uploadPopoverOpen, setUploadPopoverOpen] = useState(false);
+  const uploadBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Templates for manual capture
+  const [painPointTemplates, setPainPointTemplates] = useState<ConfigOption[]>([]);
+  const [buyingSignalTemplates, setBuyingSignalTemplates] = useState<ConfigOption[]>([]);
+  const [manualInsightText, setManualInsightText] = useState<{ pain_point: string; buying_signal: string }>({ pain_point: '', buying_signal: '' });
+
   // Load initial data
   useEffect(() => {
     async function load() {
       try {
-        const [meetingDetailRes, notesRes, usersRes, tasksRes] = await Promise.all([
+        const [meetingDetailRes, notesRes, usersRes, tasksRes, ppTemplatesRes, bsTemplatesRes] = await Promise.all([
           fetch(`/api/meetings/${meetingId}`),
           fetch(`/api/meetings/${meetingId}/notes`),
           fetch('/api/config?category=user'),
           fetch(`/api/meetings/${meetingId}/tasks`),
+          fetch('/api/config?category=pain_point_template'),
+          fetch('/api/config?category=buying_signal_template'),
         ]);
 
         if (meetingDetailRes.ok) {
@@ -421,6 +440,15 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         if (usersRes.ok) {
           const users: { id: number; value: string }[] = await usersRes.json();
           setAllUsers(users);
+        }
+
+        if (ppTemplatesRes.ok) {
+          const pp: ConfigOption[] = await ppTemplatesRes.json();
+          setPainPointTemplates(pp.filter(t => t.is_active !== 0));
+        }
+        if (bsTemplatesRes.ok) {
+          const bs: ConfigOption[] = await bsTemplatesRes.json();
+          setBuyingSignalTemplates(bs.filter(t => t.is_active !== 0));
         }
 
         if (tasksRes.ok) {
@@ -651,7 +679,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       if (!analyzeRes.ok) throw new Error((await analyzeRes.json().catch(() => ({}))).error ?? 'Analysis failed');
 
       const data = await analyzeRes.json();
-      setInsights(data.insights ?? []);
+      // Preserve manual insights — backend only deletes source='ai' rows
+      setInsights(prev => [
+        ...prev.filter(i => i.source === 'manual'),
+        ...(data.insights ?? []),
+      ]);
       setSummary(data.summary ?? '');
       if (data.transcript?.length) setTranscript(data.transcript);
       // Enrich next_steps with their DB insight IDs so delete works correctly
@@ -812,9 +844,36 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [meetingId, onClose]);
 
+  const handleAddManualInsight = useCallback(async (insight_type: 'pain_point' | 'buying_signal', content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    // Optimistic insert
+    const tempId = -(Date.now());
+    const optimistic: Insight = { id: tempId, insight_type, content: trimmed, quote: null, timestamp_seconds: null, confidence: 'high', confirmed: false, source: 'manual' };
+    setInsights(prev => [...prev, optimistic]);
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ insight_type, content: trimmed, source: 'manual' }),
+      });
+      if (!res.ok) throw new Error();
+      const created: Insight = await res.json();
+      setInsights(prev => prev.map(i => i.id === tempId ? created : i));
+    } catch {
+      setInsights(prev => prev.filter(i => i.id !== tempId));
+      toast.error('Failed to save insight.');
+    }
+  }, [meetingId]);
+
   const sortConfirmedFirst = (a: Insight, b: Insight) => (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0);
-  const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal').sort(sortConfirmedFirst);
-  const painPoints = insights.filter(i => i.insight_type === 'pain_point').sort(sortConfirmedFirst);
+  // Manual entries first, then AI; within each group confirmed first
+  const sortManualFirst = (a: Insight, b: Insight) => {
+    if (a.source !== b.source) return a.source === 'manual' ? -1 : 1;
+    return (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0);
+  };
+  const buyingSignals = insights.filter(i => i.insight_type === 'buying_signal').sort(sortManualFirst);
+  const painPoints = insights.filter(i => i.insight_type === 'pain_point').sort(sortManualFirst);
   const hasAudioOrTranscript = !!(audioUrl || audioBlob || transcript.length);
 
   // Use recorded elapsed time as fallback when the webm blob lacks duration metadata (Infinity)
@@ -891,6 +950,87 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           </div>
         </div>
         <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
+          {/* Record button */}
+          <button
+            onClick={() => {
+              if (recordingState !== 'idle') return;
+              if (audioUrl) setShowReplaceRecordingDialog(true);
+              else startRecording();
+            }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
+              recordingState === 'recording' ? 'border-red-400 bg-red-50 text-red-600' :
+              recordingState === 'paused' ? 'border-yellow-400 bg-yellow-50 text-yellow-700' :
+              'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+            title={recordingState === 'recording' ? `Recording — ${formatTime(recordingElapsed)}` : 'Record audio'}
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+            {recordingState === 'recording' ? formatTime(recordingElapsed) : recordingState === 'paused' ? 'Paused' : 'Record'}
+          </button>
+
+          {/* Recording controls when active */}
+          {(recordingState === 'recording' || recordingState === 'paused') && (
+            <div className="flex items-center gap-1">
+              {recordingState === 'recording'
+                ? <button onClick={pauseRecording} className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">Pause</button>
+                : <button onClick={resumeRecording} className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors">Resume</button>
+              }
+              <button onClick={stopRecording} className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors">Stop</button>
+            </div>
+          )}
+
+          {/* Upload button with popover */}
+          <div className="relative">
+            <button
+              ref={uploadBtnRef}
+              onClick={() => setUploadPopoverOpen(o => !o)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload
+            </button>
+            {uploadPopoverOpen && (
+              <>
+                <div className="fixed inset-0 z-[30]" onClick={() => setUploadPopoverOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-[31] bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[200px]">
+                  <button
+                    onClick={() => { fileInputRef.current?.click(); setUploadPopoverOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="font-medium">Audio file</span>
+                    <span className="block text-gray-400 text-[10px] mt-0.5">MP3, MP4, M4A, WAV, WebM</span>
+                  </button>
+                  <button
+                    onClick={() => { textFileInputRef.current?.click(); setUploadPopoverOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="font-medium">Text transcript</span>
+                    <span className="block text-gray-400 text-[10px] mt-0.5">.txt, .vtt, .srt</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Generate AI Summary */}
+          <button
+            onClick={handleAnalyze}
+            disabled={analysisLoading || (!hasAudioOrTranscript)}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+            title="Generate AI summary from audio or transcript"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            {analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}
+          </button>
+
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
+
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
@@ -1307,147 +1447,141 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 />
               </div>
 
-              {/* Recording */}
+              {/* Hidden file inputs — kept in DOM for Upload button in header */}
+              <input ref={fileInputRef} type="file" accept=".mp3,.mp4,.m4a,.wav,.webm,audio/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleAudioFile(f); }} />
+              <input ref={textFileInputRef} type="file" accept=".txt,.text,.vtt,.srt" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleTextFile(f); }} />
+
+              {/* ── Pain Points ── */}
               <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Recording</p>
-                {recordingState === 'idle' && !audioUrl && (
-                  <div className="flex flex-col items-center gap-2">
-                    <button
-                      onClick={startRecording}
-                      className="w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
-                      title="Start Recording"
-                    >
-                      <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                      </svg>
-                    </button>
-                    <p className="text-xs text-gray-400">Tap to record</p>
-                  </div>
-                )}
-                {/* Re-record button when audio exists and not currently recording */}
-                {recordingState === 'idle' && audioUrl && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setShowReplaceRecordingDialog(true)}
-                      className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors"
-                    >
-                      Re-record
-                    </button>
-                  </div>
-                )}
-                {(recordingState === 'recording' || recordingState === 'paused') && (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      {recordingState === 'recording' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-                      <span className="text-sm font-mono text-gray-700">{formatTime(recordingElapsed)}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {recordingState === 'recording'
-                        ? <button onClick={pauseRecording} className="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-lg hover:bg-yellow-200">Pause</button>
-                        : <button onClick={resumeRecording} className="px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-lg hover:bg-green-200">Resume</button>
-                      }
-                      <button onClick={stopRecording} className="px-3 py-1.5 bg-red-100 text-red-700 text-xs font-semibold rounded-lg hover:bg-red-200">Stop</button>
-                    </div>
-                  </div>
-                )}
-                {(recordingState === 'stopped' || (audioUrl && recordingState === 'idle')) && (
-                  <div className="space-y-3">
-                    <div className="h-10 bg-gray-100 rounded-lg flex items-center px-3 gap-0.5 overflow-hidden">
-                      {Array.from({ length: 40 }).map((_, i) => (
-                        <div key={i} className="flex-1 rounded-full bg-brand-secondary opacity-60"
-                          style={{ height: `${20 + Math.sin(i * 0.8) * 12 + Math.cos(i * 1.2) * 8}%` }} />
-                      ))}
-                    </div>
-                    {recordingState === 'stopped' && (
-                      <div className="flex justify-end">
-                        <button onClick={() => setShowReplaceRecordingDialog(true)} className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors">
-                          Re-record
+                <div className="flex items-center gap-1.5 mb-2">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="#E24B4A" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <span className="text-[11px] font-medium text-gray-600">Pain points</span>
+                </div>
+
+                {/* Quick-tap templates */}
+                {painPointTemplates.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {painPointTemplates.map(t => {
+                      const alreadyAdded = insights.some(i => i.source === 'manual' && i.insight_type === 'pain_point' && i.content === t.value);
+                      return (
+                        <button
+                          key={t.id}
+                          disabled={alreadyAdded}
+                          onClick={() => handleAddManualInsight('pain_point', t.value)}
+                          style={{ background: '#FAECE7', border: '0.5px solid #F5C4B3', color: '#993C1D', opacity: alreadyAdded ? 0.4 : 1 }}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-opacity"
+                        >
+                          {t.value}
                         </button>
-                      </div>
-                    )}
-                    {!analysisLoading && (
-                      <button
-                        onClick={handleAnalyze}
-                        disabled={!hasAudioOrTranscript}
-                        className="w-full py-2 bg-brand-highlight text-brand-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        Generate Meeting Summary
-                      </button>
-                    )}
+                      );
+                    })}
                   </div>
                 )}
+
+                {/* Manual chips */}
+                {insights.filter(i => i.source === 'manual' && i.insight_type === 'pain_point').length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {insights.filter(i => i.source === 'manual' && i.insight_type === 'pain_point').map(ins => (
+                      <span
+                        key={ins.id}
+                        style={{ background: '#FAECE7', border: '0.5px solid #F5C4B3', color: '#993C1D' }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                      >
+                        {ins.content}
+                        <button
+                          onClick={() => handleDeleteInsight(ins.id)}
+                          className="hover:opacity-70 transition-opacity leading-none"
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Free-text input */}
+                <input
+                  type="text"
+                  value={manualInsightText.pain_point}
+                  onChange={e => setManualInsightText(prev => ({ ...prev, pain_point: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualInsight('pain_point', manualInsightText.pain_point);
+                      setManualInsightText(prev => ({ ...prev, pain_point: '' }));
+                    }
+                  }}
+                  placeholder="Type a pain point and press Enter…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 placeholder-gray-300"
+                />
               </div>
 
-              {/* Upload section — audio + text side by side */}
+              {/* ── Buying Signals ── */}
               <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Or Upload</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Audio upload */}
-                  <div>
-                    <p className="text-[10px] text-gray-400 mb-1.5 font-medium">Audio File</p>
-                    <div
-                      className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors cursor-pointer ${dragOver ? 'border-brand-secondary bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                      onDragLeave={() => setDragOver(false)}
-                      onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleAudioFile(f); }}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <svg className="w-5 h-5 text-gray-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <p className="text-[10px] text-gray-500">Drag & drop or click</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">MP3, MP4, M4A, WAV, WebM</p>
-                    </div>
-                    <input ref={fileInputRef} type="file" accept=".mp3,.mp4,.m4a,.wav,.webm,audio/*" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleAudioFile(f); }} />
-                  </div>
-
-                  {/* Text transcript upload */}
-                  <div>
-                    <p className="text-[10px] text-gray-400 mb-1.5 font-medium">Text Transcript</p>
-                    <div
-                      className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors cursor-pointer ${dragOverText ? 'border-brand-secondary bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                      onDragOver={e => { e.preventDefault(); setDragOverText(true); }}
-                      onDragLeave={() => setDragOverText(false)}
-                      onDrop={e => { e.preventDefault(); setDragOverText(false); const f = e.dataTransfer.files[0]; if (f) handleTextFile(f); }}
-                      onClick={() => textFileInputRef.current?.click()}
-                    >
-                      <svg className="w-5 h-5 text-gray-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <p className="text-[10px] text-gray-500">Drag & drop or click</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">.txt, .vtt, .srt</p>
-                    </div>
-                    <input ref={textFileInputRef} type="file" accept=".txt,.text,.vtt,.srt" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleTextFile(f); }} />
-                  </div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="#1D9E75" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  <span className="text-[11px] font-medium text-gray-600">Buying signals</span>
                 </div>
+
+                {/* Quick-tap templates */}
+                {buyingSignalTemplates.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {buyingSignalTemplates.map(t => {
+                      const alreadyAdded = insights.some(i => i.source === 'manual' && i.insight_type === 'buying_signal' && i.content === t.value);
+                      return (
+                        <button
+                          key={t.id}
+                          disabled={alreadyAdded}
+                          onClick={() => handleAddManualInsight('buying_signal', t.value)}
+                          style={{ background: '#E1F5EE', border: '0.5px solid #9FE1CB', color: '#0F6E56', opacity: alreadyAdded ? 0.4 : 1 }}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-opacity"
+                        >
+                          {t.value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Manual chips */}
+                {insights.filter(i => i.source === 'manual' && i.insight_type === 'buying_signal').length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {insights.filter(i => i.source === 'manual' && i.insight_type === 'buying_signal').map(ins => (
+                      <span
+                        key={ins.id}
+                        style={{ background: '#E1F5EE', border: '0.5px solid #9FE1CB', color: '#0F6E56' }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                      >
+                        {ins.content}
+                        <button
+                          onClick={() => handleDeleteInsight(ins.id)}
+                          className="hover:opacity-70 transition-opacity leading-none"
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Free-text input */}
+                <input
+                  type="text"
+                  value={manualInsightText.buying_signal}
+                  onChange={e => setManualInsightText(prev => ({ ...prev, buying_signal: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualInsight('buying_signal', manualInsightText.buying_signal);
+                      setManualInsightText(prev => ({ ...prev, buying_signal: '' }));
+                    }
+                  }}
+                  placeholder="Type a buying signal and press Enter…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-300 placeholder-gray-300"
+                />
               </div>
-
-              {/* Analyze button when no audio recorded yet but has transcript */}
-              {transcript.length > 0 && !audioUrl && recordingState === 'idle' && (
-                <div className="border-t border-gray-100 pt-4">
-                  {!analysisLoading ? (
-                    <button
-                      onClick={handleAnalyze}
-                      className="w-full py-2 bg-brand-highlight text-brand-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      Generate Meeting Summary
-                    </button>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 py-2">
-                      <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-xs text-gray-500">Analyzing…</span>
-                    </div>
-                  )}
-                </div>
-              )}
 
             </div>
           </div>
@@ -1465,11 +1599,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <p className="text-sm text-gray-400 max-w-[200px]">Record or upload audio, then click Generate Meeting Summary to extract insights.</p>
+                  <p className="text-sm text-gray-400 max-w-[200px]">Add pain points or buying signals on the left, or record / upload audio to generate an AI summary.</p>
                 </div>
               )}
 
-              {!analysisLoading && (insights.length > 0 || nextSteps.length > 0 || summary || notesText) && (
+              {!analysisLoading && (insights.length > 0 || nextSteps.length > 0 || summary || notesText || buyingSignals.length > 0 || painPoints.length > 0) && (
                 <div className="space-y-5">
 
                   {/* 1. Meeting Summary */}
@@ -1566,7 +1700,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     </div>
                   )}
 
-                  {/* 4. Buying Signals (collapsible, default collapsed, 2-col grid) */}
+                  {/* 4. Buying Signals */}
                   {buyingSignals.length > 0 && (
                     <div>
                       <button
@@ -1581,66 +1715,74 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                         </svg>
                       </button>
                       {buyingSignalsOpen && (
-                        <>
-                          <p className="text-[10px] text-gray-400 mt-0.5 mb-2">Check signals to mark them as priority. Unchecked signals are still saved.</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {buyingSignals.map(ins => (
-                              <div key={ins.id} className={`p-2.5 rounded-lg border text-xs flex flex-col ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                                <div className="flex items-start justify-between gap-1 mb-1.5">
-                                  <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    {ins.timestamp_seconds != null && displayDuration > 0 && (
-                                      <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
-                                        ▶{formatTime(ins.timestamp_seconds)}
-                                      </button>
-                                    )}
-                                    <button onClick={() => handleDeleteInsight(ins.id)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {buyingSignals.map(ins => (
+                            <div key={ins.id} className={`p-2.5 rounded-lg border text-xs flex flex-col ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                              <div className="flex items-start justify-between gap-1 mb-1.5">
+                                <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
+                                <div className="flex items-center gap-0.5 flex-shrink-0">
+                                  {ins.timestamp_seconds != null && displayDuration > 0 && (
+                                    <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
+                                      ▶{formatTime(ins.timestamp_seconds)}
                                     </button>
-                                  </div>
-                                </div>
-                                {ins.quote && (
-                                  <div className="mb-2">
-                                    {expandedQuotes.has(ins.id) && (
-                                      <blockquote className="text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 mb-0.5">
-                                        &ldquo;{ins.quote}&rdquo;
-                                      </blockquote>
-                                    )}
-                                    <button
-                                      onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
-                                      className="text-[10px] text-blue-500 hover:underline"
-                                    >
-                                      {expandedQuotes.has(ins.id) ? 'Hide Quote' : 'Show Quote'}
-                                    </button>
-                                  </div>
-                                )}
-                                <div className="flex items-center justify-between mt-auto pt-1">
-                                  <span className="text-[10px] text-gray-400">{ins.confidence}</span>
-                                  <button
-                                    onClick={() => handleConfirmInsight(ins.id)}
-                                    title={ins.confirmed ? 'Unmark priority' : 'Mark as priority'}
-                                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                                      ins.confirmed
-                                        ? 'bg-green-500 border-green-500 text-white'
-                                        : 'bg-white border-green-400 text-green-400 hover:border-green-500'
-                                    }`}
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill={ins.confirmed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  )}
+                                  <button onClick={() => handleDeleteInsight(ins.id)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                     </svg>
                                   </button>
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        </>
+                              {/* Source label */}
+                              <p className="text-[10px] text-gray-400 mb-1">
+                                {ins.source === 'manual' ? 'Added manually' : (
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    AI extracted
+                                  </span>
+                                )}
+                              </p>
+                              {ins.quote && (
+                                <div className="mb-2">
+                                  {expandedQuotes.has(ins.id) && (
+                                    <blockquote className="text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 mb-0.5">
+                                      &ldquo;{ins.quote}&rdquo;
+                                    </blockquote>
+                                  )}
+                                  <button
+                                    onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
+                                    className="text-[10px] text-blue-500 hover:underline"
+                                  >
+                                    {expandedQuotes.has(ins.id) ? 'Hide Quote' : 'Show Quote'}
+                                  </button>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between mt-auto pt-1">
+                                <span className="text-[10px] text-gray-400">{ins.confidence}</span>
+                                <button
+                                  onClick={() => handleConfirmInsight(ins.id)}
+                                  title={ins.confirmed ? 'Unmark priority' : 'Mark as priority'}
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                    ins.confirmed
+                                      ? 'bg-green-500 border-green-500 text-white'
+                                      : 'bg-white border-green-400 text-green-400 hover:border-green-500'
+                                  }`}
+                                >
+                                  <svg className="w-3.5 h-3.5" fill={ins.confirmed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
 
-                  {/* 5. Pain Points (collapsible, default collapsed, 2-col grid) */}
+                  {/* 5. Pain Points */}
                   {painPoints.length > 0 && (
                     <div>
                       <button
@@ -1655,61 +1797,69 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                         </svg>
                       </button>
                       {painPointsOpen && (
-                        <>
-                          <p className="text-[10px] text-gray-400 mt-0.5 mb-2">Check pain points to mark them as priority. Unchecked pain points are still saved.</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {painPoints.map(ins => (
-                              <div key={ins.id} className={`p-2.5 rounded-lg border text-xs flex flex-col ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                                <div className="flex items-start justify-between gap-1 mb-1.5">
-                                  <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    {ins.timestamp_seconds != null && displayDuration > 0 && (
-                                      <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
-                                        ▶{formatTime(ins.timestamp_seconds)}
-                                      </button>
-                                    )}
-                                    <button onClick={() => handleDeleteInsight(ins.id)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {painPoints.map(ins => (
+                            <div key={ins.id} className={`p-2.5 rounded-lg border text-xs flex flex-col ${ins.confirmed ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                              <div className="flex items-start justify-between gap-1 mb-1.5">
+                                <span className="font-semibold text-gray-800 flex-1 leading-tight">{ins.content}</span>
+                                <div className="flex items-center gap-0.5 flex-shrink-0">
+                                  {ins.timestamp_seconds != null && displayDuration > 0 && (
+                                    <button onClick={() => scrubTo(ins.timestamp_seconds!)} className="text-[10px] font-mono text-blue-500 hover:underline">
+                                      ▶{formatTime(ins.timestamp_seconds)}
                                     </button>
-                                  </div>
-                                </div>
-                                {ins.quote && (
-                                  <div className="mb-2">
-                                    {expandedQuotes.has(ins.id) && (
-                                      <blockquote className="text-[10px] text-gray-500 italic border-l-2 border-orange-200 pl-2 mb-0.5">
-                                        &ldquo;{ins.quote}&rdquo;
-                                      </blockquote>
-                                    )}
-                                    <button
-                                      onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
-                                      className="text-[10px] text-blue-500 hover:underline"
-                                    >
-                                      {expandedQuotes.has(ins.id) ? 'Hide Quote' : 'Show Quote'}
-                                    </button>
-                                  </div>
-                                )}
-                                <div className="flex items-center justify-between mt-auto pt-1">
-                                  <span className="text-[10px] text-gray-400">{ins.confidence}</span>
-                                  <button
-                                    onClick={() => handleConfirmInsight(ins.id)}
-                                    title={ins.confirmed ? 'Unmark priority' : 'Mark as priority'}
-                                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                                      ins.confirmed
-                                        ? 'bg-green-500 border-green-500 text-white'
-                                        : 'bg-white border-green-400 text-green-400 hover:border-green-500'
-                                    }`}
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill={ins.confirmed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  )}
+                                  <button onClick={() => handleDeleteInsight(ins.id)} title="Delete" className="p-0.5 rounded text-gray-300 hover:text-red-400 transition-colors">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                     </svg>
                                   </button>
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        </>
+                              {/* Source label */}
+                              <p className="text-[10px] text-gray-400 mb-1">
+                                {ins.source === 'manual' ? 'Added manually' : (
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    AI extracted
+                                  </span>
+                                )}
+                              </p>
+                              {ins.quote && (
+                                <div className="mb-2">
+                                  {expandedQuotes.has(ins.id) && (
+                                    <blockquote className="text-[10px] text-gray-500 italic border-l-2 border-orange-200 pl-2 mb-0.5">
+                                      &ldquo;{ins.quote}&rdquo;
+                                    </blockquote>
+                                  )}
+                                  <button
+                                    onClick={() => setExpandedQuotes(prev => { const n = new Set(prev); if (n.has(ins.id)) n.delete(ins.id); else n.add(ins.id); return n; })}
+                                    className="text-[10px] text-blue-500 hover:underline"
+                                  >
+                                    {expandedQuotes.has(ins.id) ? 'Hide Quote' : 'Show Quote'}
+                                  </button>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between mt-auto pt-1">
+                                <span className="text-[10px] text-gray-400">{ins.confidence}</span>
+                                <button
+                                  onClick={() => handleConfirmInsight(ins.id)}
+                                  title={ins.confirmed ? 'Unmark priority' : 'Mark as priority'}
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                    ins.confirmed
+                                      ? 'bg-green-500 border-green-500 text-white'
+                                      : 'bg-white border-green-400 text-green-400 hover:border-green-500'
+                                  }`}
+                                >
+                                  <svg className="w-3.5 h-3.5" fill={ins.confirmed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
