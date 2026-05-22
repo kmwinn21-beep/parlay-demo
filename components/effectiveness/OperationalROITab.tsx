@@ -541,65 +541,67 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           </div>
         ) : (
           <>
-            {/* Scatter plot */}
-            {scatterReps.length > 0 && (
-              <div className="px-4 pb-2">
-                <ScatterPlot reps={scatterReps} repColors={repColorMap} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+              {/* Left column: Rep table */}
+              <div className="overflow-x-auto border-r border-gray-100">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-t border-gray-100">
+                      <th className="text-left px-4 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Net-new Co.</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {repRows.map((r, i) => {
+                      const repName = String(r.rep ?? '—');
+                      const color = repColorMap[repName] ?? '#9ca3af';
+                      const overallScore = r.rep_cost_efficiency_score_raw != null ? Number(r.rep_cost_efficiency_score_raw) : null;
+                      const repNetNewCostVal = r.rep_cost_per_net_new_company != null ? Number(r.rep_cost_per_net_new_company) : null;
+                      return (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                              <span className="font-medium text-gray-800">{repName}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap font-medium text-gray-700">
+                            {repNetNewCostVal != null ? fmt$(repNetNewCostVal) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            {overallScore != null ? (
+                              <span className="font-bold" style={{ color: repTierColor(overallScore) }}>
+                                {overallScore}
+                                <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
 
-            {/* Rep table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-t border-gray-100">
-                    <th className="text-left px-4 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Net-new Co.</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {repRows.map((r, i) => {
-                    const repName = String(r.rep ?? '—');
-                    const color = repColorMap[repName] ?? '#9ca3af';
-                    const overallScore = r.rep_cost_efficiency_score_raw != null ? Number(r.rep_cost_efficiency_score_raw) : null;
-                    const repNetNewCostVal = r.rep_cost_per_net_new_company != null ? Number(r.rep_cost_per_net_new_company) : null;
-                    return (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                            <span className="font-medium text-gray-800">{repName}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
-                        </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
-                        </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
-                        </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap font-medium text-gray-700">
-                          {repNetNewCostVal != null ? fmt$(repNetNewCostVal) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          {overallScore != null ? (
-                            <span className="font-bold" style={{ color: repTierColor(overallScore) }}>
-                              {overallScore}
-                              <span className="text-xs font-normal text-gray-400 ml-1">· {String(r.rep_cost_efficiency_tier ?? '')}</span>
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {/* Right column: Scatter plot */}
+              {scatterReps.length > 0 && (
+                <div className="p-4 flex items-center">
+                  <ScatterPlot reps={scatterReps} repColors={repColorMap} />
+                </div>
+              )}
             </div>
           </>
         )}
