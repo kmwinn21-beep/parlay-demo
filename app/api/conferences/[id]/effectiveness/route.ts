@@ -1589,6 +1589,13 @@ export async function GET(
              AND NOT EXISTS (
                SELECT 1 FROM conference_attendees ca2
                WHERE ca2.attendee_id = a.id AND ca2.conference_id != ${cid}
+             )
+             AND (
+               EXISTS (SELECT 1 FROM meetings m
+                 LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                 WHERE m.attendee_id = a.id AND m.conference_id = ${cid} AND cop.action_key='meeting_held')
+               OR EXISTS (SELECT 1 FROM attendee_touchpoints atp
+                 WHERE atp.attendee_id = a.id AND atp.conference_id = ${cid})
              )`
         );
 
@@ -1610,6 +1617,13 @@ export async function GET(
              SELECT DISTINCT a.company_id FROM conference_attendees ca
              JOIN attendees a ON ca.attendee_id = a.id
              WHERE ca.conference_id = ${cid} AND a.company_id IS NOT NULL
+               AND (
+                 EXISTS (SELECT 1 FROM meetings m
+                   LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                   WHERE m.attendee_id = a.id AND m.conference_id = ${cid} AND cop.action_key='meeting_held')
+                 OR EXISTS (SELECT 1 FROM attendee_touchpoints atp
+                   WHERE atp.attendee_id = a.id AND atp.conference_id = ${cid})
+               )
            )
            AND co.id NOT IN (
              SELECT DISTINCT a2.company_id FROM conference_attendees ca2
@@ -1932,11 +1946,11 @@ export async function GET(
         );
 
         function overallTier(s: number): string {
-          if (s >= 80) return 'Strong Audience Fit';
-          if (s >= 65) return 'Good Audience Fit';
-          if (s >= 50) return 'Acceptable Audience Fit';
-          if (s >= 35) return 'Weak Audience Fit';
-          return 'Ineffective Audience Fit';
+          if (s >= 80) return 'Strong coverage';
+          if (s >= 65) return 'Good coverage';
+          if (s >= 50) return 'Acceptable coverage';
+          if (s >= 35) return 'Weak coverage';
+          return 'Insufficient coverage';
         }
 
         // ── Account-level table ──────────────────────────────────────────────

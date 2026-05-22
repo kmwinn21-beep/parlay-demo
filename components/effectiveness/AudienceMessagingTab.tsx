@@ -77,7 +77,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
     ? `Conversation Quality and Market Intelligence components are active — based on ${m.kpis?.buying_signals_count ?? 0} buying signals and ${m.conversation_quality_detail?.meetings_with_pain_points ?? 0} pain points captured across ${m.conversation_quality_detail?.meetings_held ?? 0} meetings.`
     : 'No meeting insights captured for this conference. Use the meeting notetaker to log pain points and buying signals — these two components will score automatically and your overall score could increase significantly.';
 
-  const accountRows: any[] = m.account_level_table ?? [];
+  const accountRows: any[] = (m.account_level_table ?? []).filter((r: any) => r.access_depth !== 'scan_only');
   const filteredRows = tableFilter === 'net_new' ? accountRows.filter(r => r.is_net_new) : accountRows;
 
   const COMP_LABELS: Record<string, string> = {
@@ -106,10 +106,10 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   return (
     <div className="p-6 space-y-6">
       {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 160px 160px', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '0.6fr 1fr 1fr 1fr', gap: '12px' }}>
         {/* Score card */}
         <div className="rounded-xl p-4 relative" style={{ backgroundColor: '#E1F5EE', borderLeft: '4px solid #1D9E75' }}>
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Audience & Messaging Score</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Marketing Coverage Score</div>
           <div className="flex items-end gap-1 mb-0.5">
             <div className="text-4xl font-bold" style={{ color: '#1D9E75' }}>{overallScore}</div>
             <div className="text-sm text-gray-400 mb-0.5">/100</div>
@@ -223,8 +223,8 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         </div>
       </div>
 
-      {/* ── 2x2 component cards ───────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ── Component cards: 3-col row 1, then Market Intel + Engagement Momentum ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
         {/* ICP Coverage Rate */}
         {(() => {
           const comp = comps.icp_coverage_rate as any ?? {};
@@ -296,7 +296,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           const det = m.market_intelligence_detail ?? {};
           const noData = !painPointsAvailable;
           return (
-            <div className="card p-4" style={noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : undefined}>
+            <div className="card p-4" style={{ ...(noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : {}), gridColumn: 'span 1' }}>
               <div className="flex justify-between items-start mb-1">
                 <h3 className="text-sm font-semibold" style={{ color: noData ? '#92400E' : undefined }}>Market Intelligence Yield</h3>
                 <span className="text-xs font-semibold" style={{ color: noData ? '#d97706' : compScoreColor(sc) }}>
@@ -311,41 +311,41 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
             </div>
           );
         })()}
-      </div>
 
-      {/* ── Engagement Momentum (full width) ──────────────────────────── */}
-      {(() => {
-        const comp = comps.engagement_momentum as any ?? {};
-        const sc = Number(comp.score ?? 0);
-        return (
-          <div className="card p-4">
-            <div className="flex justify-between items-start mb-1">
-              <h3 className="text-sm font-semibold text-brand-primary">Engagement Momentum</h3>
-              <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+        {/* Engagement Momentum — spans 2 columns in the 3-col grid */}
+        {(() => {
+          const comp = comps.engagement_momentum as any ?? {};
+          const sc = Number(comp.score ?? 0);
+          return (
+            <div className="card p-4" style={{ gridColumn: 'span 2' }}>
+              <div className="flex justify-between items-start mb-1">
+                <h3 className="text-sm font-semibold text-brand-primary">Engagement Momentum</h3>
+                <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+              </div>
+              <ProgressBar score={sc} color={compScoreColor(sc)} />
+              {comp.completion_window_open && (
+                <div className="text-[11px] rounded px-2 py-1 mb-2" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                  Follow-up completion window still open — conference ended less than 7 days ago.
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div>
+                  <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Creation</div>
+                  <DetailRow label="ICP companies engaged" value={fmtNum(mom.icp_companies_engaged)} />
+                  <DetailRow label="ICP companies with follow-up" value={fmtNum(mom.icp_companies_with_followup)} />
+                  <DetailRow label="Creation rate" value={fmtPct(mom.followup_creation_rate)} valueColor={compScoreColor(sc)} />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Completion</div>
+                  <DetailRow label="Total follow-ups" value={fmtNum(mom.followups_total)} />
+                  <DetailRow label="Completed" value={fmtNum(mom.followups_completed)} />
+                  <DetailRow label="Completion rate" value={fmtPct(mom.followup_completion_rate)} valueColor={compScoreColor(sc)} />
+                </div>
+              </div>
             </div>
-            <ProgressBar score={sc} color={compScoreColor(sc)} />
-            {comp.completion_window_open && (
-              <div className="text-[11px] rounded px-2 py-1 mb-2" style={{ background: '#FEF3C7', color: '#92400E' }}>
-                Follow-up completion window still open — conference ended less than 7 days ago.
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4 mt-2">
-              <div>
-                <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Creation</div>
-                <DetailRow label="ICP companies engaged" value={fmtNum(mom.icp_companies_engaged)} />
-                <DetailRow label="ICP companies with follow-up" value={fmtNum(mom.icp_companies_with_followup)} />
-                <DetailRow label="Creation rate" value={fmtPct(mom.followup_creation_rate)} valueColor={compScoreColor(sc)} />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Completion</div>
-                <DetailRow label="Total follow-ups" value={fmtNum(mom.followups_total)} />
-                <DetailRow label="Completed" value={fmtNum(mom.followups_completed)} />
-                <DetailRow label="Completion rate" value={fmtPct(mom.followup_completion_rate)} valueColor={compScoreColor(sc)} />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
+      </div>
 
       {/* ── Account-level table ────────────────────────────────────────── */}
       <div className="card p-4">
