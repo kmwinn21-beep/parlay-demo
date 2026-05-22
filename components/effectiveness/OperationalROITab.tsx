@@ -443,7 +443,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
 
         {/* Col 3: Pipeline Multiple */}
         <div className="rounded-xl p-3" style={{ border: '1.5px solid #1D9E75', background: '#E1F5EE' }}>
-          <div className="text-xs font-semibold mb-1" style={{ color: '#1D9E75' }}>Pipeline multiple</div>
+          <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#1D9E75' }}>Influenced Pipeline Multiple</div>
           <div className="text-3xl font-bold" style={{ color: '#1D9E75' }}>
             {pipelineMultiple != null ? `${pipelineMultiple.toFixed(1)}×` : '—'}
           </div>
