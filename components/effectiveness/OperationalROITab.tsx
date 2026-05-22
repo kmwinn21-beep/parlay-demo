@@ -167,8 +167,8 @@ function ScatterPlot({
   const maxMeetings = Math.max(...reps.map(r => r.meetings), 1);
   const maxPipeline = Math.max(...reps.map(r => r.pipeline), 1);
 
-  const PAD_L = 48; const PAD_R = 16; const PAD_T = 16; const PAD_B = 36;
-  const W = 600; const H = 200;
+  const PAD_L = 56; const PAD_R = 16; const PAD_T = 20; const PAD_B = 42;
+  const W = 600; const H = 320;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
 
@@ -179,28 +179,38 @@ function ScatterPlot({
   const midY = cy(maxPipeline / 2);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200 }}>
-      {/* Quadrant lines */}
-      <line x1={midX} y1={PAD_T} x2={midX} y2={PAD_T + plotH} stroke="#9ca3af" strokeWidth={1} strokeDasharray="4 4" />
-      <line x1={PAD_L} y1={midY} x2={PAD_L + plotW} y2={midY} stroke="#9ca3af" strokeWidth={1} strokeDasharray="4 4" />
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 320 }}>
+      {/* Quadrant shading */}
+      {/* Top-left: Low activity · High pipeline — amber (decent but underutilized) */}
+      <rect x={PAD_L} y={PAD_T} width={midX - PAD_L} height={midY - PAD_T} fill="#fef9c3" opacity={0.6} />
+      {/* Top-right: High activity · High pipeline — green (best) */}
+      <rect x={midX} y={PAD_T} width={PAD_L + plotW - midX} height={midY - PAD_T} fill="#dcfce7" opacity={0.6} />
+      {/* Bottom-left: Low activity · Low pipeline — red (worst) */}
+      <rect x={PAD_L} y={midY} width={midX - PAD_L} height={PAD_T + plotH - midY} fill="#fee2e2" opacity={0.6} />
+      {/* Bottom-right: High activity · Low pipeline — orange (busy but ineffective) */}
+      <rect x={midX} y={midY} width={PAD_L + plotW - midX} height={PAD_T + plotH - midY} fill="#ffedd5" opacity={0.6} />
+
+      {/* Quadrant divider lines */}
+      <line x1={midX} y1={PAD_T} x2={midX} y2={PAD_T + plotH} stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 4" />
+      <line x1={PAD_L} y1={midY} x2={PAD_L + plotW} y2={midY} stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 4" />
 
       {/* Quadrant labels */}
-      <text x={midX + 4} y={PAD_T + 10} fontSize={7} fill="#6b7280" fontFamily="sans-serif">High activity · High pipeline</text>
-      <text x={PAD_L + 4} y={PAD_T + 10} fontSize={7} fill="#6b7280" fontFamily="sans-serif">Low activity · High pipeline</text>
-      <text x={midX + 4} y={PAD_T + plotH - 4} fontSize={7} fill="#6b7280" fontFamily="sans-serif">High activity · Low pipeline</text>
-      <text x={PAD_L + 4} y={PAD_T + plotH - 4} fontSize={7} fill="#6b7280" fontFamily="sans-serif">Low activity · Low pipeline</text>
+      <text x={midX + 6} y={PAD_T + 14} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">High activity · High pipeline</text>
+      <text x={PAD_L + 6} y={PAD_T + 14} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">Low activity · High pipeline</text>
+      <text x={midX + 6} y={PAD_T + plotH - 6} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">High activity · Low pipeline</text>
+      <text x={PAD_L + 6} y={PAD_T + plotH - 6} fontSize={10} fill="#374151" fontFamily="sans-serif" fontWeight="600">Low activity · Low pipeline</text>
 
       {/* Axes */}
-      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T + plotH} stroke="#9ca3af" strokeWidth={1} />
-      <line x1={PAD_L} y1={PAD_T + plotH} x2={PAD_L + plotW} y2={PAD_T + plotH} stroke="#9ca3af" strokeWidth={1} />
+      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T + plotH} stroke="#6b7280" strokeWidth={1.5} />
+      <line x1={PAD_L} y1={PAD_T + plotH} x2={PAD_L + plotW} y2={PAD_T + plotH} stroke="#6b7280" strokeWidth={1.5} />
 
       {/* Axis labels */}
-      <text x={PAD_L - 4} y={H - 2} fontSize={8} fill="#4b5563" textAnchor="middle" fontFamily="sans-serif">Meetings held</text>
-      <text x={8} y={H / 2} fontSize={8} fill="#4b5563" textAnchor="middle" fontFamily="sans-serif"
-        transform={`rotate(-90, 8, ${H / 2})`}>Pipeline ($)</text>
+      <text x={PAD_L + plotW / 2} y={H - 4} fontSize={11} fill="#374151" textAnchor="middle" fontFamily="sans-serif" fontWeight="500">Meetings held</text>
+      <text x={12} y={PAD_T + plotH / 2} fontSize={11} fill="#374151" textAnchor="middle" fontFamily="sans-serif" fontWeight="500"
+        transform={`rotate(-90, 12, ${PAD_T + plotH / 2})`}>Pipeline ($)</text>
 
       {/* Y-axis tick */}
-      <text x={PAD_L - 4} y={PAD_T + 4} fontSize={7} fill="#6b7280" textAnchor="end" fontFamily="sans-serif">
+      <text x={PAD_L - 6} y={PAD_T + 6} fontSize={10} fill="#6b7280" textAnchor="end" fontFamily="sans-serif">
         ${Math.round(maxPipeline / 1000)}k
       </text>
 
@@ -211,8 +221,8 @@ function ScatterPlot({
         const color = repColors[rep.name] ?? '#1B76BC';
         return (
           <g key={rep.name}>
-            <circle cx={x} cy={y} r={14} fill={color} opacity={0.9} />
-            <text x={x} y={y + 4} fontSize={8} fill="white" textAnchor="middle" fontWeight="bold" fontFamily="sans-serif">
+            <circle cx={x} cy={y} r={16} fill={color} opacity={0.9} />
+            <text x={x} y={y + 4} fontSize={10} fill="white" textAnchor="middle" fontWeight="bold" fontFamily="sans-serif">
               {rep.initials}
             </text>
             <title>{rep.name}: {rep.meetings} meetings · ${Math.round(rep.pipeline / 1000)}k pipeline</title>
@@ -546,12 +556,12 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-gray-50 border-t border-gray-100">
-                    <th className="text-left px-4 py-2 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Cost / Net-new Co.</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Score</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 whitespace-nowrap">Rep</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Pipeline / $1k</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Cost / Company</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Cost / Meeting</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Cost / Net-new Co.</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Score</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -562,25 +572,25 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                     const repNetNewCostVal = r.rep_cost_per_net_new_company != null ? Number(r.rep_cost_per_net_new_company) : null;
                     return (
                       <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 whitespace-nowrap">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                             <span className="font-medium text-gray-800">{repName}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
                           <RepMetricCell value={r.rep_pipeline_influence_per_1000} score={r.rep_pipeline_score} tier={r.rep_pipeline_score_tier} />
                         </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
                           <RepMetricCell value={r.rep_cost_per_company_engaged} score={r.rep_company_score} tier={r.rep_company_score_tier} />
                         </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
                           <RepMetricCell value={r.rep_cost_per_meeting_held} score={r.rep_meeting_score} tier={r.rep_meeting_score_tier} />
                         </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap font-medium text-gray-700">
+                        <td className="px-3 py-3 text-right whitespace-nowrap font-medium text-gray-700">
                           {repNetNewCostVal != null ? fmt$(repNetNewCostVal) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
                           {overallScore != null ? (
                             <span className="font-bold" style={{ color: repTierColor(overallScore) }}>
                               {overallScore}
