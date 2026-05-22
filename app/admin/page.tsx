@@ -54,6 +54,8 @@ const CATEGORIES = [
   { key: 'services', label: 'Services' },
   { key: 'icp', label: 'ICP' },
   { key: 'meeting_type', label: 'Meeting Type' },
+  { key: 'pain_point_template', label: 'Pain Point Templates' },
+  { key: 'buying_signal_template', label: 'Buying Signal Templates' },
   { key: 'event_type', label: 'Event Type' },
   { key: 'conference_strategy_type', label: 'Conference Strategy Type' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
