@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { RelationshipRow, TargetEntry } from '../PreConferenceReview';
 
 function HealthDot({ score }: { score: number }) {
@@ -20,6 +20,7 @@ export function RelationshipsTab({
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   readOnly?: boolean;
 }) {
+  const openRecord = useRecordDrawer();
   if (relationships.length === 0) {
     return (
       <div className="text-center py-16">
@@ -36,9 +37,9 @@ export function RelationshipsTab({
           <div key={rel.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all flex flex-col gap-3 overflow-hidden min-w-0">
             {/* Header */}
             <div className="min-w-0">
-              <Link href={`/companies/${rel.company_id}`} className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate">
+              <button type="button" onClick={() => openRecord('company', rel.company_id)} className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate text-left w-full">
                 {rel.company_name}
-              </Link>
+              </button>
               {rel.relationship_status && (
                 <span className="text-xs text-gray-500 truncate block">{rel.relationship_status}</span>
               )}
@@ -84,12 +85,13 @@ export function RelationshipsTab({
                     return (
                       <div key={String(a.id)} className="flex items-center gap-2 text-xs">
                         <HealthDot score={a.health} />
-                        <Link
-                          href={`/attendees/${a.id}`}
-                          className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors"
+                        <button
+                          type="button"
+                          onClick={() => openRecord('attendee', Number(a.id))}
+                          className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors text-left"
                         >
                           {String(a.first_name)} {String(a.last_name)}{a.title ? ` · ${String(a.title)}` : ''}
-                        </Link>
+                        </button>
                         <TargetBtn
                           isTarget={isTarget}
                           disabled={readOnly}

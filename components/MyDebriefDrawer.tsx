@@ -1422,7 +1422,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
             </div>
             <iframe
               key={`${recordDrawer.type}-${recordDrawer.id}`}
-              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}`}
+              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}?embed=true`}
               className="flex-1 border-0 w-full"
               title={`${recordDrawer.type} record`}
             />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { SocialEventRow, SocialEventGuest } from '../PreConferenceReview';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
@@ -66,6 +66,7 @@ function GuestRow({ guest, eventId, onUpdate }: {
   eventId: number;
   onUpdate: (attendeeId: number, newStatus: string) => void;
 }) {
+  const openRecord = useRecordDrawer();
   const statuses = parseStatuses(guest.rsvp_status);
   const has = (s: RsvpStatus) => statuses.includes(s);
 
@@ -86,14 +87,14 @@ function GuestRow({ guest, eventId, onUpdate }: {
   return (
     <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
       <td className="py-2 pr-3 min-w-0">
-        <Link href={`/attendees/${guest.attendee_id}`} className="font-medium text-xs text-brand-primary hover:underline whitespace-nowrap">
+        <button type="button" onClick={() => openRecord('attendee', guest.attendee_id)} className="font-medium text-xs text-brand-primary hover:underline whitespace-nowrap text-left">
           {guest.first_name} {guest.last_name}
-        </Link>
+        </button>
         {guest.title && <p className="text-[10px] text-gray-400 leading-tight">{guest.title}</p>}
       </td>
       <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap hidden sm:table-cell">
         {guest.company_id
-          ? <Link href={`/companies/${guest.company_id}`} className="hover:underline text-brand-primary">{guest.company_name}</Link>
+          ? <button type="button" onClick={() => openRecord('company', guest.company_id!)} className="hover:underline text-brand-primary text-left">{guest.company_name}</button>
           : <span>{guest.company_name || '—'}</span>
         }
       </td>

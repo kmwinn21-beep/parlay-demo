@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany, RelationshipRow } from '../PreConferenceReview';
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
@@ -377,6 +377,7 @@ function hexAlpha(hex: string, alpha: number): string {
 }
 
 function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor: string }) {
+  const openRecord = useRecordDrawer();
   const [expanded, setExpanded] = useState(false);
   return (
     <div
@@ -408,13 +409,13 @@ function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor:
         >
           {co.attendees.map(a => (
             <div key={a.id} className="px-3 py-1.5 bg-white">
-              <Link
-                href={`/attendees/${a.id}`}
-                className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate"
-                onClick={e => e.stopPropagation()}
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); openRecord('attendee', a.id); }}
+                className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate text-left w-full"
               >
                 {a.firstName} {a.lastName}
-              </Link>
+              </button>
               {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
             </div>
           ))}
@@ -744,6 +745,7 @@ function AttendeeRelCard({
   const [expanded, setExpanded] = useState(false);
   const hasRels = rels.length > 0;
 
+  const openRecord = useRecordDrawer();
   // Deduplicated rep list for collapsed rep-pills-only row
   const uniqueReps = Array.from(new Set(rels.flatMap(r => r.rep_names)));
 
@@ -757,13 +759,13 @@ function AttendeeRelCard({
       >
         {/* Row 1: name (content-width link) + spacer + health score label + chevron */}
         <div className="flex items-center gap-2">
-          <Link
-            href={`/attendees/${attendee.id}`}
-            className="text-xs font-medium text-gray-800 hover:text-brand-secondary underline-offset-2 hover:underline truncate"
-            onClick={e => e.stopPropagation()}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); openRecord('attendee', attendee.id); }}
+            className="text-xs font-medium text-gray-800 hover:text-brand-secondary underline-offset-2 hover:underline truncate text-left"
           >
             {String(attendee.first_name)} {String(attendee.last_name)}
-          </Link>
+          </button>
           <div className="flex-1" />
           <span className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
             Relationship Health Score:{' '}
@@ -843,6 +845,7 @@ function RelationshipHeatmapPanel({
 }) {
   const [view, setView] = useState<'internal' | 'coverage'>('internal');
   const [drillInternal, setDrillInternal] = useState<DrillInternalState | null>(null);
+  const openRecord = useRecordDrawer();
   const [drillCoverage, setDrillCoverage] = useState<IcpCompany | null>(null);
 
   // ── Internal relationships matrix ──────────────────────────────────────────
@@ -1047,7 +1050,7 @@ function RelationshipHeatmapPanel({
                 </svg>
                 Back
               </button>
-              <Link href={`/companies/${drillCoverage.id}`} className="text-xs font-semibold text-gray-700 hover:text-brand-secondary block mb-0.5">{drillCoverage.name}</Link>
+              <button type="button" onClick={() => openRecord('company', drillCoverage.id)} className="text-xs font-semibold text-gray-700 hover:text-brand-secondary block mb-0.5 text-left">{drillCoverage.name}</button>
               <p className="text-xs text-gray-400 mb-3">
                 Avg health: {drillCoverage.avgHealth} · {drillCoverage.attendees.length} attendee{drillCoverage.attendees.length !== 1 ? 's' : ''}
               </p>

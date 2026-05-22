@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { ProductIcpEntry, TargetEntry } from '../PreConferenceReview';
 
 function HealthDot({ score }: { score: number }) {
@@ -20,6 +20,7 @@ function ProductColumn({
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   readOnly: boolean;
 }) {
+  const openRecord = useRecordDrawer();
   const totalAttendees = entry.companies.reduce((sum, c) => sum + c.attendees.length, 0);
   const hex = entry.color ?? null;
   const headerStyle = hex
@@ -45,12 +46,13 @@ function ProductColumn({
         >
           <div className="min-w-0">
             {company.companyId > 0 ? (
-              <Link
-                href={`/companies/${company.companyId}`}
-                className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate"
+              <button
+                type="button"
+                onClick={() => openRecord('company', company.companyId)}
+                className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm block truncate text-left w-full"
               >
                 {company.companyName}
-              </Link>
+              </button>
             ) : (
               <span className="font-semibold text-gray-900 text-sm block truncate">
                 {company.companyName || 'Unknown Company'}
@@ -74,15 +76,16 @@ function ProductColumn({
               return (
                 <div key={a.id} className="flex items-center gap-2 text-xs min-w-0">
                   <HealthDot score={a.health} />
-                  <Link
-                    href={`/attendees/${a.id}`}
-                    className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors min-w-0"
+                  <button
+                    type="button"
+                    onClick={() => openRecord('attendee', a.id)}
+                    className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors min-w-0 text-left"
                   >
                     <span className="font-medium">{a.firstName} {a.lastName}</span>
                     {subtitleParts.length > 0 && (
                       <span className="text-gray-400"> · {subtitleParts.join(' · ')}</span>
                     )}
-                  </Link>
+                  </button>
                   <TargetBtn
                     isTarget={isTarget}
                     disabled={readOnly}

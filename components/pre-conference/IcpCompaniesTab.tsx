@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { IcpCompany, TargetEntry } from '../PreConferenceReview';
 
 function HealthBadge({ score }: { score: number }) {
@@ -39,6 +39,7 @@ export function IcpCompaniesTab({
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   readOnly?: boolean;
 }) {
+  const openRecord = useRecordDrawer();
   if (companies.length === 0) {
     return (
       <div className="text-center py-16">
@@ -87,12 +88,13 @@ export function IcpCompaniesTab({
                 const isTarget = targetMap.has(Number(a.id));
                 return (
                   <div key={Number(a.id)} className="flex items-center justify-between text-xs gap-1">
-                    <Link
-                      href={`/attendees/${a.id}`}
-                      className="truncate text-gray-700 hover:text-brand-secondary transition-colors flex-1 min-w-0"
+                    <button
+                      type="button"
+                      onClick={() => openRecord('attendee', Number(a.id))}
+                      className="truncate text-gray-700 hover:text-brand-secondary transition-colors flex-1 min-w-0 text-left"
                     >
                       {a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}
-                    </Link>
+                    </button>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <span className="text-gray-400">{a.health}</span>
                       <TargetBtn

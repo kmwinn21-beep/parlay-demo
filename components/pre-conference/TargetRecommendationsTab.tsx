@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useRecordDrawer } from './RecordDrawerContext';
 import toast from 'react-hot-toast';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey } from '@/lib/titleNormalization';
 import { formatValuePill, useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
@@ -329,6 +329,7 @@ function CompanyDetails({
   onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
 }) {
   const reasons = (company.why_this_target ?? []).slice(0, 5);
+  const openRecord = useRecordDrawer();
   const confidenceReasons = (company.confidence_reasons ?? []).slice(0, 3);
   const attendees = (company.top_attendees ?? []).slice(0, 3);
   const conferenceTier = companyTierToConferenceTier(company.target_priority_tier_key || company.target_priority_tier);
@@ -355,9 +356,9 @@ function CompanyDetails({
               };
               return (
                 <div key={attendee.attendee_id} className="text-xs text-gray-600 min-w-0">
-                  <Link href={`/attendees/${attendee.attendee_id}`} className="font-semibold text-gray-800 hover:text-brand-secondary transition-colors">
+                  <button type="button" onClick={() => openRecord('attendee', attendee.attendee_id)} className="font-semibold text-gray-800 hover:text-brand-secondary transition-colors text-left">
                     {attendee.attendee_name}
-                  </Link>
+                  </button>
                   <span>{attendee.title ? ` — ${attendee.title}` : ''}</span>
                   {titleNeedsReview(attendee) && (
                     <button type="button" onClick={() => onReviewTitle(attendee)} className="ml-1 text-amber-600 hover:text-amber-700" title="Needs title review" aria-label="Needs title review">⚠️</button>

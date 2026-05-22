@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { ByRepEntry, ByRepCompany, TargetEntry } from '../PreConferenceReview';
 
 interface CompanyNote {
@@ -80,6 +80,7 @@ function CompanyNotesPanel({ companyId, companyName, conferenceName }: { company
 type PopupType = 'company' | 'notes' | 'attendees';
 
 function CompanyRecordPopup({ company, onClose }: { company: ByRepCompany; onClose: () => void }) {
+  const openRecord = useRecordDrawer();
   const servicesList = company.services ? company.services.split(',').map(s => s.trim()).filter(Boolean) : [];
   const icpValue = String(company.icp || '').toLowerCase();
   const isIcp = icpValue === 'yes' || icpValue === '1' || icpValue === 'true';
@@ -160,14 +161,15 @@ function CompanyRecordPopup({ company, onClose }: { company: ByRepCompany; onClo
         </div>
       )}
 
-      <Link href={`/companies/${company.company_id}`} className="inline-block text-xs text-brand-secondary hover:underline">
+      <button type="button" onClick={() => { openRecord('company', company.company_id); onClose(); }} className="inline-block text-xs text-brand-secondary hover:underline text-left">
         View Full Company Record →
-      </Link>
+      </button>
     </div>
   );
 }
 
 function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onToggleTarget, readOnly = false }: { company: ByRepCompany; type: PopupType; conferenceName: string; onClose: () => void; targetMap?: Map<number, TargetEntry>; onToggleTarget?: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>; readOnly?: boolean }) {
+  const openRecord = useRecordDrawer();
   const titles: Record<PopupType, string> = { company: 'Company Record', notes: 'Notes', attendees: 'Attendees' };
 
   return (
@@ -200,10 +202,10 @@ function CompanyPopup({ company, type, conferenceName, onClose, targetMap, onTog
                 const isTarget = targetMap?.has(Number(a.id)) ?? false;
                 return (
                   <div key={String(a.id)} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
-                    <Link href={`/attendees/${a.id}`} className="flex-1 min-w-0">
+                    <button type="button" onClick={() => { openRecord('attendee', Number(a.id)); onClose(); }} className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-medium text-gray-800">{String(a.first_name)} {String(a.last_name)}</p>
                       {a.title && <p className="text-xs text-gray-500">{String(a.title)}</p>}
-                    </Link>
+                    </button>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {a.status && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">{String(a.status)}</span>}
                       {onToggleTarget && <TargetBtn

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Link from 'next/link';
 import { TargetBtn } from './TargetBtn';
+import { useRecordDrawer } from './RecordDrawerContext';
 import type { TargetEntry } from '../PreConferenceReview';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
@@ -111,6 +111,7 @@ function TargetCard({
   onScheduleMeeting: (entry: TargetEntry) => void;
   readOnly?: boolean;
 }) {
+  const openRecord = useRecordDrawer();
   const valuePill = (entry.companyWse != null && avgCostPerUnit > 0)
     ? '$' + Math.round(entry.companyWse * avgCostPerUnit).toLocaleString('en-US')
     : null;
@@ -125,14 +126,14 @@ function TargetCard({
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1">
-          <Link href={`/attendees/${entry.attendeeId}`}
-            className="text-sm font-semibold text-brand-primary hover:text-brand-secondary leading-tight block truncate"
-            onClick={e => e.stopPropagation()}>
+          <button type="button"
+            onClick={e => { e.stopPropagation(); openRecord('attendee', entry.attendeeId); }}
+            className="text-sm font-semibold text-brand-primary hover:text-brand-secondary leading-tight block truncate text-left w-full">
             {entry.firstName} {entry.lastName}
             {entry.title && (
               <span className="font-normal text-xs text-gray-500">, {entry.title}</span>
             )}
-          </Link>
+          </button>
           {entry.companyName && (
             <p className="text-xs text-gray-400 truncate mt-0.5">{entry.companyName}</p>
           )}
