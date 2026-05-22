@@ -349,7 +349,17 @@ export async function GET(
        FROM company_engagement`
     ) ?? {};
 
-    const targetEngagement = (await runQuery(db, 
+    const meetingsWithoutNotesRow = (await runQuery(db,
+      `SELECT COUNT(DISTINCT m.id) AS meetings_held_without_notes
+       FROM meetings m
+       LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+       LEFT JOIN meeting_notes mn ON mn.meeting_id = m.id
+       WHERE m.conference_id = ${cid}
+         AND cop.action_key = 'meeting_held'
+         AND mn.id IS NULL`
+    ))[0] ?? {};
+
+    const targetEngagement = (await runQuery(db,
       `${w}
        SELECT
          COUNT(DISTINCT ct.attendee_id) AS targets_total,
@@ -1547,6 +1557,7 @@ export async function GET(
         hosted_attendance: hostedAttendance,
         contacts_engaged: Number(contactsEngagementRow.contacts_engaged ?? 0),
         operator_contacts_total: Number(contactsEngagementRow.operator_contacts_total ?? 0),
+        meetings_held_without_notes: Number(meetingsWithoutNotesRow.meetings_held_without_notes ?? 0),
       },
       pipeline: {
         ...pipelineSummary,
