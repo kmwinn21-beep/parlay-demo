@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { EffectivenessData } from '../ConferenceEffectivenessModal';
 import { StrategyWeightNotice } from './StrategyWeightNotice';
 import { ConferenceRankingsModal } from './ConferenceRankingsModal';
@@ -331,9 +331,28 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const costPerMeeting = costs.cost_per_meeting_held != null ? Number(costs.cost_per_meeting_held) : null;
   const pipelinePer1k = costs.pipeline_influence_per_1k_spent != null ? Number(costs.pipeline_influence_per_1k_spent) : null;
 
-  // Budget breakdown
+  // Budget breakdown (totals only — line items rendered individually)
   const budget = lineItems.length > 0 ? categorizeBudget(lineItems) : null;
   const budgetVariance = budget ? budget.totalBudget - budget.totalActual : 0;
+
+  // Budget line-item scroll
+  const budgetScrollRef = useRef<HTMLDivElement>(null);
+  const [budgetCanScrollMore, setBudgetCanScrollMore] = useState(false);
+
+  useEffect(() => {
+    const el = budgetScrollRef.current;
+    if (!el) return;
+    const check = () => setBudgetCanScrollMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+    check();
+    el.addEventListener('scroll', check);
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro.disconnect(); };
+  }, [lineItems.length]);
+
+  function scrollBudgetDown() {
+    budgetScrollRef.current?.scrollBy({ top: 60, behavior: 'smooth' });
+  }
 
   // Rep colors (stable per-rep)
   const repNames = repRows.map(r => String(r.rep ?? ''));
@@ -438,47 +457,85 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
         </div>
 
         {/* Col 4: Budget Breakdown */}
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Budget breakdown</div>
-          {!budget || budget.categories.length === 0 ? (
+        <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
+        <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col">
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1 flex-shrink-0">Budget breakdown</div>
+          {lineItems.length === 0 ? (
             <div className="text-xs text-gray-400 italic leading-relaxed">
               No budget data entered. Add budget details in the Budget vs. Actual tab.
             </div>
           ) : (
             <>
-              <div className="text-xs font-semibold text-gray-700 text-right mb-2">
-                Total: {fmt$(budget.totalEffective)}
+              <div className="text-xs font-semibold text-gray-700 text-right mb-1 flex-shrink-0">
+                Total: {fmt$(budget?.totalEffective ?? 0)}
               </div>
-              <div className="space-y-1.5 mb-3">
-                {budget.categories.map(cat => {
-                  const pct = budget.totalEffective > 0 ? (cat.effective / budget.totalEffective) * 100 : 0;
-                  return (
-                    <div key={cat.key}>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span className="text-gray-600 truncate">{cat.label}</span>
-                        <span className="text-gray-500 ml-1 flex-shrink-0">{fmt$(cat.effective)} · {Math.round(pct)}%</span>
+
+              {/* Scrollable line items */}
+              <div className="flex-1 min-h-0 relative">
+                <div
+                  ref={budgetScrollRef}
+                  className="budget-items-scroll absolute inset-0 overflow-y-auto"
+                  style={{ scrollbarWidth: 'none' }}
+                >
+                  {lineItems.map((item, i) => {
+                    const itemLabel = String(item.label ?? '');
+                    const itemBudget = Number(item.budget ?? 0);
+                    const itemActual = Number(item.actual ?? 0);
+                    const itemEffective = Number(item.effective ?? itemBudget);
+                    const showVariance = itemBudget > 0 && itemActual > 0;
+                    const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
+                    return (
+                      <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
+                        <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
+                        <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
+                        {variancePct != null && (
+                          <span
+                            className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
+                            style={{
+                              background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
+                              color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
+                            }}
+                          >
+                            {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
+                          </span>
+                        )}
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: cat.color }} />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-              <div className="pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
+
+              {/* Show more button — only visible when more items exist below */}
+              {budgetCanScrollMore && (
+                <button
+                  type="button"
+                  onClick={scrollBudgetDown}
+                  className="flex-shrink-0 w-full text-center text-[10px] text-gray-400 hover:text-gray-600 transition-colors py-0.5 leading-none"
+                >
+                  ↓ more
+                </button>
+              )}
+
+              {/* Static summary */}
+              <div className="flex-shrink-0 pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Budgeted</span>
-                  <span className="text-gray-600">{fmt$(budget.totalBudget)}</span>
+                  <span className="text-gray-600">{fmt$(budget?.totalBudget ?? 0)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Actual</span>
-                  <span className="text-gray-600">{budget.totalActual > 0 ? fmt$(budget.totalActual) : '—'}</span>
+                  <span className="text-gray-600">{(budget?.totalActual ?? 0) > 0 ? fmt$(budget!.totalActual) : '—'}</span>
                 </div>
-                {budget.totalActual > 0 && (
+                {(budget?.totalActual ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400">Variance</span>
                     <span className="font-semibold" style={{ color: budgetVariance >= 0 ? '#059669' : '#dc2626' }}>
                       {budgetVariance >= 0 ? '+' : ''}{fmt$(Math.abs(budgetVariance))} {budgetVariance >= 0 ? 'under' : 'over'}
+                      {(budget?.totalBudget ?? 0) > 0 && (
+                        <span className="font-normal">
+                          {' '}({budgetVariance >= 0 ? '+' : '-'}{Math.round(Math.abs(budgetVariance) / budget!.totalBudget * 100)}%)
+                        </span>
+                      )}
                     </span>
                   </div>
                 )}
