@@ -110,8 +110,8 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
   const hiPI = Number(pipeline.high_engagement_influence ?? 0);
 
   // Engagement funnel data
-  const totalCompanies = Number(engagement.total_companies ?? 0);
-  const companiesEngaged = Number(engagement.companies_engaged ?? 0);
+  const icpCompaniesTotal = Number(data.audience.icp_coverage.icp_companies_total ?? 0);
+  const icpCompaniesEngaged = Number(data.audience.icp_coverage.icp_companies_engaged ?? 0);
   const held = Number(engagement.total_held ?? 0);
   const followupsCreated = Number(engagement.total_followups_created ?? 0);
   const followupsCompleted = Number(engagement.total_followups_completed ?? 0);
@@ -332,9 +332,9 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
           <h3 className="font-semibold text-brand-primary text-sm uppercase tracking-wide mb-4">Engagement Funnel</h3>
           <div className="space-y-0">
             {[
-              { label: 'Companies at conference', value: totalCompanies, pct: null, color: '#64748b' },
-              { label: 'Companies engaged', value: companiesEngaged, pct: totalCompanies > 0 ? Math.round(companiesEngaged / totalCompanies * 100) : null, color: '#1B76BC' },
-              { label: 'Meetings held', value: held, pct: companiesEngaged > 0 ? Math.round(held / companiesEngaged * 100) : null, color: '#8b5cf6' },
+              { label: 'ICP companies attended', value: icpCompaniesTotal, pct: null, color: '#64748b' },
+              { label: 'ICP companies engaged', value: icpCompaniesEngaged, pct: icpCompaniesTotal > 0 ? Math.round(icpCompaniesEngaged / icpCompaniesTotal * 100) : null, color: '#1B76BC' },
+              { label: 'Meetings held', value: held, pct: icpCompaniesEngaged > 0 ? Math.round(held / icpCompaniesEngaged * 100) : null, color: '#8b5cf6' },
               { label: 'Follow-ups created', value: followupsCreated, pct: held > 0 ? Math.round(followupsCreated / held * 100) : null, color: '#059669' },
               { label: 'Follow-ups completed', value: followupsCompleted, pct: followupsCreated > 0 ? Math.round(followupsCompleted / followupsCreated * 100) : null, color: '#0891b2' },
             ].map((step, i, arr) => {
