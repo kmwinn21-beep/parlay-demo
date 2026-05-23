@@ -380,7 +380,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
       <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
 
       {/* ── Top row: 3 metric cards full-width ──────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:[grid-template-columns:2fr_1fr_1fr] gap-3">
 
         {/* Cost Efficiency Score card */}
         <div className="rounded-xl p-4" style={{ backgroundColor: cardColor + '15', borderLeft: `4px solid ${cardColor}` }}>
@@ -460,7 +460,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
       </div>
 
       {/* ── Budget left col spanning KPI tile rows ───────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3">
 
         {/* Budget Breakdown — left column spanning both KPI rows */}
         <div className="lg:row-span-2 rounded-xl border border-gray-200 bg-white p-3 flex flex-col">
@@ -489,20 +489,22 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                   const showVariance = itemBudget > 0 && itemActual > 0;
                   const variancePct = showVariance ? ((itemActual - itemBudget) / itemBudget) * 100 : null;
                   return (
-                    <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
-                      <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
-                      <span className="text-gray-700 font-medium flex-shrink-0 ml-1">{fmt$(itemEffective)}</span>
-                      {variancePct != null && (
-                        <span
-                          className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
-                          style={{
-                            background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
-                            color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
-                          }}
-                        >
-                          {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
-                        </span>
-                      )}
+                    <div key={i} className="py-1 text-xs border-b border-gray-50 last:border-0 items-center" style={{ display: 'grid', gridTemplateColumns: '1fr 4.5rem 2.5rem' }}>
+                      <span className="text-gray-600 truncate min-w-0">{itemLabel}</span>
+                      <span className="text-gray-700 font-medium tabular-nums">{fmt$(itemEffective)}</span>
+                      <span className="text-right">
+                        {variancePct != null && (
+                          <span
+                            className="rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
+                            style={{
+                              background: variancePct > 1 ? '#fee2e2' : variancePct < -1 ? '#dcfce7' : '#f3f4f6',
+                              color: variancePct > 1 ? '#dc2626' : variancePct < -1 ? '#059669' : '#9ca3af',
+                            }}
+                          >
+                            {variancePct > 0 ? '+' : ''}{Math.round(variancePct)}%
+                          </span>
+                        )}
+                      </span>
                     </div>
                   );
                 })}
