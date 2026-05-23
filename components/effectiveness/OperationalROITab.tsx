@@ -491,7 +491,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                   return (
                     <div key={i} className="flex items-center gap-1 py-1 text-xs border-b border-gray-50 last:border-0">
                       <span className="text-gray-600 truncate flex-1 min-w-0">{itemLabel}</span>
-                      <span className="text-gray-700 font-medium flex-shrink-0 w-16 text-right tabular-nums">{fmt$(itemEffective)}</span>
+                      <span className="text-gray-700 font-medium flex-shrink-0 w-16 text-left tabular-nums">{fmt$(itemEffective)}</span>
                       {variancePct != null && (
                         <span
                           className="flex-shrink-0 rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none"
