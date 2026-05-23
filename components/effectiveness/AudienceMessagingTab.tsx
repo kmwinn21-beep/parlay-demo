@@ -393,12 +393,12 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
               onClick={() => setTableFilter('net_new')}
               className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
               style={tableFilter === 'net_new' ? { background: '#534AB7', color: '#fff' } : { background: '#F3F4F6', color: '#6B7280' }}
-            >Net-new only</button>
+            >Net-New</button>
             <button
               onClick={() => setTableFilter('all')}
               className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
               style={tableFilter === 'all' ? { background: '#534AB7', color: '#fff' } : { background: '#F3F4F6', color: '#6B7280' }}
-            >All accounts</button>
+            >All</button>
           </div>
         </div>
         <div className="overflow-x-auto">
