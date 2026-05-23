@@ -380,7 +380,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
       <style>{`.budget-items-scroll::-webkit-scrollbar{display:none}`}</style>
 
       {/* ── Top row: 3 metric cards full-width ──────────────────────────── */}
-      <div className="grid grid-cols-1 lg:[grid-template-columns:2fr_1fr_1.5fr] gap-3">
+      <div className="grid grid-cols-1 lg:[grid-template-columns:2fr_1fr_1fr] gap-3">
 
         {/* Cost Efficiency Score card */}
         <div className="rounded-xl p-4" style={{ backgroundColor: cardColor + '15', borderLeft: `4px solid ${cardColor}` }}>
