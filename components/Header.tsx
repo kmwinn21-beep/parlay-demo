@@ -17,6 +17,7 @@ import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
+import { SetConferenceButton } from '@/components/SetConferenceButton';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',
@@ -166,6 +167,10 @@ export function Header() {
             </svg>
           </button>
         )}
+        {/* Set Active Conference — desktop only */}
+        <div className="hidden lg:block">
+          <SetConferenceButton />
+        </div>
         {/* Notification Bell */}
         <NotificationBell />
         {/* Outstanding Follow Ups */}
