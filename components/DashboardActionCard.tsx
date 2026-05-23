@@ -10,6 +10,7 @@ import { QuickNoteInlineModal } from './QuickNotesSection';
 import { getPreset } from '@/lib/colors';
 import Link from 'next/link';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
+import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
 
@@ -775,6 +776,9 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
 
   return (
     <div className="card flex flex-col justify-center">
+      <div className="lg:hidden mb-3">
+        <SetConferenceButton />
+      </div>
       <div className="flex flex-row gap-1">
 
         {/* Left — mobile: Scan camera, desktop: Follow Up */}
