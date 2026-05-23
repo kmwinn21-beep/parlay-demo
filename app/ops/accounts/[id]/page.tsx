@@ -165,15 +165,16 @@ function trialStatusLabel(account: AccountDetail): { label: string; color: strin
 }
 
 function HealthBar({ score }: { score: number }) {
-  const color = score >= 70 ? '#16a34a' : score >= 40 ? '#d97706' : '#dc2626';
-  const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Needs attention' : 'At risk';
+  const clamped = Math.min(Math.max(score, 0), 100);
+  const color = clamped >= 70 ? '#16a34a' : clamped >= 40 ? '#d97706' : '#dc2626';
+  const label = clamped >= 70 ? 'Healthy' : clamped >= 40 ? 'Needs attention' : 'At risk';
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 bg-gray-100 rounded-full h-2">
-        <div className="h-2 rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: color }} />
+      <div className="flex-1 min-w-0 bg-gray-100 rounded-full h-2 overflow-hidden">
+        <div className="h-2 rounded-full transition-all" style={{ width: `${clamped}%`, backgroundColor: color }} />
       </div>
-      <span className="text-sm font-semibold tabular-nums" style={{ color }}>{score}%</span>
-      <span className="text-xs font-medium px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{label}</span>
+      <span className="text-sm font-semibold tabular-nums flex-shrink-0" style={{ color }}>{clamped}%</span>
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full text-white flex-shrink-0" style={{ backgroundColor: color }}>{label}</span>
     </div>
   );
 }
@@ -369,10 +370,10 @@ export default function AccountDetailPage() {
       </Link>
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{account.company_name}</h1>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badge.cls}`}>
               {badge.label}
             </span>
@@ -384,7 +385,7 @@ export default function AccountDetailPage() {
         </div>
         <button
           onClick={startImpersonation}
-          className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-700"
+          className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-700 self-start sm:self-auto flex-shrink-0"
         >
           View as customer →
         </button>
@@ -397,7 +398,7 @@ export default function AccountDetailPage() {
           <span className="text-xs text-gray-400">Based on setup, activity, feature usage & engagement</span>
         </div>
         <HealthBar score={healthScore} />
-        <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900 tabular-nums">{tenantMetrics.conferences_count}</div>
             <div className="text-xs text-gray-500">Conferences</div>
@@ -450,7 +451,7 @@ export default function AccountDetailPage() {
             <span>{new Date(dailySessions[0]?.day + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             <span>Today</span>
           </div>
-          <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+          <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 text-center sm:text-left">
             <div>
               <div className="text-base font-bold text-gray-900 tabular-nums">{sessionSummary.totalSessions}</div>
               <div className="text-[10px] text-gray-400">Sessions (30d)</div>
@@ -520,7 +521,7 @@ export default function AccountDetailPage() {
         {/* Account info + plan controls */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h2 className="font-semibold text-gray-900 mb-4">Account info</h2>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
             {[
               ['ID', account.id],
               ['Email', account.admin_email],
@@ -622,7 +623,7 @@ export default function AccountDetailPage() {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <h2 className="font-semibold text-gray-900 mb-4">Signup responses</h2>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
               {[
                 ['Role', account.signup_role],
                 ['Industry', account.signup_industry],
@@ -711,56 +712,95 @@ export default function AccountDetailPage() {
         {users.length === 0 ? (
           <p className="text-sm text-gray-400">No user data available (tenant DB not connected).</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
-                  <th className="pb-2 pr-4">Name</th>
-                  <th className="pb-2 pr-4">Email</th>
-                  <th className="pb-2 pr-4">Role</th>
-                  <th className="pb-2 pr-4">Last active</th>
-                  <th className="pb-2 pr-4 text-right">Logins</th>
-                  <th className="pb-2 pr-4">Status</th>
-                  <th className="pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(users as TenantUser[]).map(u => (
-                  <tr key={u.id} className="border-b border-gray-50">
-                    <td className="py-2 pr-4 font-medium">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</td>
-                    <td className="py-2 pr-4 text-gray-600">{u.email}</td>
-                    <td className="py-2 pr-4 text-gray-600 capitalize">{u.role}</td>
-                    <td className="py-2 pr-4 text-gray-500 text-xs">{relativeTime(u.last_seen_at)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{u.login_count ?? '—'}</td>
-                    <td className="py-2 pr-4">
-                      <span className={u.active ? 'text-green-700' : 'text-gray-400'}>{u.active ? 'Active' : 'Inactive'}</span>
-                    </td>
-                    <td className="py-2 text-right">
-                      {userMsg[u.id] ? (
-                        <span className="text-xs text-gray-500">{userMsg[u.id]}</span>
-                      ) : !userConfirm[u.id] ? (
-                        <button
-                          onClick={() => setUserConfirm(c => ({ ...c, [u.id]: true }))}
-                          className="text-xs text-gray-500 hover:text-gray-800 underline"
-                        >
-                          {u.active ? 'Deactivate' : 'Reactivate'}
-                        </button>
-                      ) : (
-                        <span className="flex items-center gap-1 justify-end text-xs">
-                          <span>Sure?</span>
-                          <button onClick={() => toggleUser(u.id, u.active)} disabled={userWorking[u.id]}
-                            className="text-red-600 hover:text-red-800 disabled:opacity-40 underline">
-                            {userWorking[u.id] ? '...' : 'Yes'}
-                          </button>
-                          <button onClick={() => setUserConfirm(c => ({ ...c, [u.id]: false }))} className="text-gray-400 hover:text-gray-600">No</button>
-                        </span>
-                      )}
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
+                    <th className="pb-2 pr-4">Name</th>
+                    <th className="pb-2 pr-4">Email</th>
+                    <th className="pb-2 pr-4">Role</th>
+                    <th className="pb-2 pr-4">Last active</th>
+                    <th className="pb-2 pr-4 text-right">Logins</th>
+                    <th className="pb-2 pr-4">Status</th>
+                    <th className="pb-2"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {(users as TenantUser[]).map(u => (
+                    <tr key={u.id} className="border-b border-gray-50">
+                      <td className="py-2 pr-4 font-medium">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</td>
+                      <td className="py-2 pr-4 text-gray-600">{u.email}</td>
+                      <td className="py-2 pr-4 text-gray-600 capitalize">{u.role}</td>
+                      <td className="py-2 pr-4 text-gray-500 text-xs">{relativeTime(u.last_seen_at)}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{u.login_count ?? '—'}</td>
+                      <td className="py-2 pr-4">
+                        <span className={u.active ? 'text-green-700' : 'text-gray-400'}>{u.active ? 'Active' : 'Inactive'}</span>
+                      </td>
+                      <td className="py-2 text-right">
+                        {userMsg[u.id] ? (
+                          <span className="text-xs text-gray-500">{userMsg[u.id]}</span>
+                        ) : !userConfirm[u.id] ? (
+                          <button onClick={() => setUserConfirm(c => ({ ...c, [u.id]: true }))}
+                            className="text-xs text-gray-500 hover:text-gray-800 underline">
+                            {u.active ? 'Deactivate' : 'Reactivate'}
+                          </button>
+                        ) : (
+                          <span className="flex items-center gap-1 justify-end text-xs">
+                            <span>Sure?</span>
+                            <button onClick={() => toggleUser(u.id, u.active)} disabled={userWorking[u.id]}
+                              className="text-red-600 hover:text-red-800 disabled:opacity-40 underline">
+                              {userWorking[u.id] ? '...' : 'Yes'}
+                            </button>
+                            <button onClick={() => setUserConfirm(c => ({ ...c, [u.id]: false }))} className="text-gray-400 hover:text-gray-600">No</button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile card list */}
+            <div className="sm:hidden space-y-3">
+              {(users as TenantUser[]).map(u => (
+                <div key={u.id} className="border border-gray-100 rounded-lg p-3 text-sm">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <div className="font-medium text-gray-900">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{u.email}</div>
+                    </div>
+                    <span className={`text-xs font-medium ${u.active ? 'text-green-700' : 'text-gray-400'}`}>{u.active ? 'Active' : 'Inactive'}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-500 mb-2">
+                    <span className="capitalize">{u.role}</span>
+                    <span>Last active {relativeTime(u.last_seen_at)}</span>
+                    <span>{u.login_count ?? 0} logins</span>
+                  </div>
+                  <div className="text-right">
+                    {userMsg[u.id] ? (
+                      <span className="text-xs text-gray-500">{userMsg[u.id]}</span>
+                    ) : !userConfirm[u.id] ? (
+                      <button onClick={() => setUserConfirm(c => ({ ...c, [u.id]: true }))}
+                        className="text-xs text-gray-500 underline">
+                        {u.active ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    ) : (
+                      <span className="flex items-center gap-1 justify-end text-xs">
+                        <span>Sure?</span>
+                        <button onClick={() => toggleUser(u.id, u.active)} disabled={userWorking[u.id]}
+                          className="text-red-600 underline disabled:opacity-40">
+                          {userWorking[u.id] ? '...' : 'Yes'}
+                        </button>
+                        <button onClick={() => setUserConfirm(c => ({ ...c, [u.id]: false }))} className="text-gray-400">No</button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

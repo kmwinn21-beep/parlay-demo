@@ -248,8 +248,8 @@ export async function GET(
   const engagementScore = Math.min(thisWeek / 10, 1); // 10+ events this week = full score
 
   const healthScore = Math.round(
-    (setupScore * 30 + activityScore * 30 + featureScore * 20 + engagementScore * 20) * 100
-  ) / 100;
+    setupScore * 30 + activityScore * 30 + featureScore * 20 + engagementScore * 20
+  );
 
   // Build daily sessions map for last 14 days
   const dailySessionMap: Record<string, number> = {};
@@ -273,7 +273,7 @@ export async function GET(
     account: safeAccount,
     users,
     timeline,
-    healthScore: Math.round(healthScore * 100),
+    healthScore,
     tenantMetrics,
     setupProgress,
     eventSummary: eventsRes.rows,
