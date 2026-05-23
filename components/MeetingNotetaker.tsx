@@ -387,6 +387,9 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [uploadPopoverOpen, setUploadPopoverOpen] = useState(false);
   const uploadBtnRef = useRef<HTMLButtonElement>(null);
 
+  // Mobile tools popover
+  const [showMobileTools, setShowMobileTools] = useState(false);
+
   // Templates for manual capture
   const [painPointTemplates, setPainPointTemplates] = useState<ConfigOption[]>([]);
   const [buyingSignalTemplates, setBuyingSignalTemplates] = useState<ConfigOption[]>([]);
@@ -949,6 +952,100 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             )}
           </div>
         </div>
+        {/* Mobile tools icon — opens a popover with Record / Upload / AI Summary */}
+        <div className="lg:hidden relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowMobileTools(v => !v)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            title="Recording & AI tools"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+            </svg>
+          </button>
+          {showMobileTools && (
+            <>
+              <div className="fixed inset-0 z-[30]" onClick={() => setShowMobileTools(false)} />
+              <div className="absolute right-0 top-full mt-1 z-[31] bg-white border border-gray-200 rounded-xl shadow-xl py-2 min-w-[220px]">
+                {/* Record */}
+                <button
+                  onClick={() => {
+                    setShowMobileTools(false);
+                    if (recordingState !== 'idle') return;
+                    if (audioUrl) setShowReplaceRecordingDialog(true);
+                    else startRecording();
+                  }}
+                  className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors ${
+                    recordingState === 'recording' ? 'text-red-600 bg-red-50' :
+                    recordingState === 'paused' ? 'text-yellow-700 bg-yellow-50' :
+                    'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                  </svg>
+                  <span className="font-medium">
+                    {recordingState === 'recording' ? `Recording — ${formatTime(recordingElapsed)}` : recordingState === 'paused' ? 'Paused' : 'Record Audio'}
+                  </span>
+                </button>
+
+                {/* Pause / Resume / Stop when recording */}
+                {(recordingState === 'recording' || recordingState === 'paused') && (
+                  <div className="flex items-center gap-2 px-4 py-2 border-t border-gray-50">
+                    {recordingState === 'recording' ? (
+                      <button onClick={() => { pauseRecording(); setShowMobileTools(false); }} className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-yellow-100 text-yellow-700">Pause</button>
+                    ) : (
+                      <button onClick={() => { resumeRecording(); setShowMobileTools(false); }} className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">Resume</button>
+                    )}
+                    <button onClick={() => { stopRecording(); setShowMobileTools(false); }} className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-100 text-red-700">Stop</button>
+                  </div>
+                )}
+
+                {/* Upload Audio */}
+                <button
+                  onClick={() => { fileInputRef.current?.click(); setShowMobileTools(false); }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-3 border-t border-gray-50"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <div>
+                    <span className="font-medium block">Upload Audio</span>
+                    <span className="text-[10px] text-gray-400">MP3, MP4, M4A, WAV, WebM</span>
+                  </div>
+                </button>
+
+                {/* Upload Transcript */}
+                <button
+                  onClick={() => { textFileInputRef.current?.click(); setShowMobileTools(false); }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <div>
+                    <span className="font-medium block">Upload Transcript</span>
+                    <span className="text-[10px] text-gray-400">.txt, .vtt, .srt</span>
+                  </div>
+                </button>
+
+                {/* Generate AI Summary */}
+                <button
+                  onClick={() => { handleAnalyze(); setShowMobileTools(false); }}
+                  disabled={analysisLoading || !hasAudioOrTranscript}
+                  className="w-full text-left px-4 py-2.5 text-sm text-teal-700 hover:bg-teal-50 transition-colors flex items-center gap-3 border-t border-gray-100 disabled:opacity-40"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span className="font-medium">{analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
           {/* Record button */}
           <button
