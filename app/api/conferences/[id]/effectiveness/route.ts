@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Client } from '@libsql/client';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
+import { trackFeature } from '@/lib/trackEvent';
 import { DEFAULT_SALES_WEIGHTS, pct, reweight, tierFromScore } from '@/lib/effectiveness/salesExecution';
 import { DEFAULT_MARKETING_AUDIENCE_WEIGHTS, PRIORITY_SCORE, titleMatch, norm as normText } from '@/lib/effectiveness/marketingAudience';
 import { getPreset, resolveStrategyKey } from '@/lib/effectiveness/strategyWeights';
@@ -236,6 +237,8 @@ export async function GET(
     const db = await getDb(user?.accountId);
     const cid = Number(params.id);
     if (!cid || isNaN(cid)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+
+    trackFeature(user?.accountId, 'effectiveness', user?.id).catch(() => {});
 
     const ctes = buildCTEs(cid);
     const w = `WITH ${ctes}`;

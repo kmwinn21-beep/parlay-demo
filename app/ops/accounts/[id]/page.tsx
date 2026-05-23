@@ -33,13 +33,64 @@ interface TenantUser {
   email: string;
   role: string;
   active: number;
-  last_active_at: string | null;
+  last_seen_at: string | null;
+  login_count?: number;
 }
 
 interface TimelineEvent {
-  type: string;
-  label: string;
-  at: string;
+  event: string;
+  timestamp: string;
+}
+
+interface SetupProgress {
+  account_created: boolean;
+  conference_added: boolean;
+  attendees_uploaded: boolean;
+  icp_configured: boolean;
+  team_invited: boolean;
+  budget_saved: boolean;
+}
+
+interface TenantMetrics {
+  conferences_count: number;
+  attendees_count: number;
+  meetings_count: number;
+  followups_completed: number;
+  companies_count: number;
+  first_conf_at: string | null;
+  first_upload_at: string | null;
+  first_invite_at: string | null;
+}
+
+interface EventSummaryRow {
+  event_type: string;
+  count: number;
+  last_at: string;
+}
+
+interface FeatureUsageRow {
+  feature_key: string;
+  total_uses: number;
+  last_used: string;
+}
+
+interface DaySession {
+  day: string;
+  logins: number;
+}
+
+interface AccountData {
+  account: AccountDetail;
+  users: TenantUser[];
+  timeline: TimelineEvent[];
+  healthScore: number;
+  tenantMetrics: TenantMetrics;
+  setupProgress: SetupProgress;
+  eventSummary: EventSummaryRow[];
+  featureUsage: FeatureUsageRow[];
+  dailySessions: DaySession[];
+  weekOverWeek: { thisWeek: number; lastWeek: number };
+  sessionSummary: { totalSessions: number; activeDays: number; lastSession: string | null };
 }
 
 const PLAN_IDS = ['trial', 'essentials', 'professional', 'enterprise'] as const;
@@ -50,7 +101,34 @@ const PLAN_BADGE: Record<string, { label: string; cls: string }> = {
   enterprise: { label: 'Enterprise', cls: 'bg-green-100 text-green-800' },
 };
 
-function relativeTime(dateStr: string | null): string {
+const FEATURE_LABELS: Record<string, string> = {
+  effectiveness: 'Conference Effectiveness',
+  budget: 'Budget',
+  icp_rules: 'ICP Rules',
+  floor_notes: 'Floor Notes',
+  meetings: 'Meetings',
+  meeting_ai: 'Meeting AI',
+  badge_scan: 'Badge Scan',
+  booth_capture: 'Booth Capture',
+  ai_effectiveness_summary: 'AI Summary',
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  user_login: 'Logins',
+  conference_created: 'Conferences created',
+  attendee_list_uploaded: 'Attendee uploads',
+  budget_saved: 'Budget saves',
+  icp_saved: 'ICP saves',
+  note_created: 'Notes created',
+  meeting_created: 'Meetings created',
+  ai_analysis: 'AI analyses',
+  followup_completed: 'Follow-ups completed',
+  user_invited: 'Users invited',
+  badge_scan: 'Badge scans',
+  booth_scan: 'Booth scans',
+};
+
+function relativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   const now = Date.now();
   const then = new Date(dateStr).getTime();
@@ -60,7 +138,13 @@ function relativeTime(dateStr: string | null): string {
   if (abs < 60_000) return rtf.format(-Math.round(diff / 1000), 'second');
   if (abs < 3_600_000) return rtf.format(-Math.round(diff / 60_000), 'minute');
   if (abs < 86_400_000) return rtf.format(-Math.round(diff / 3_600_000), 'hour');
-  return rtf.format(-Math.round(diff / 86_400_000), 'day');
+  if (abs < 30 * 86_400_000) return rtf.format(-Math.round(diff / 86_400_000), 'day');
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function trialStatusLabel(account: AccountDetail): { label: string; color: string } {
@@ -80,13 +164,60 @@ function trialStatusLabel(account: AccountDetail): { label: string; color: strin
   return { label: 'Expired', color: 'text-red-600' };
 }
 
+function HealthBar({ score }: { score: number }) {
+  const color = score >= 70 ? '#16a34a' : score >= 40 ? '#d97706' : '#dc2626';
+  const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Needs attention' : 'At risk';
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex-1 bg-gray-100 rounded-full h-2">
+        <div className="h-2 rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: color }} />
+      </div>
+      <span className="text-sm font-semibold tabular-nums" style={{ color }}>{score}%</span>
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{label}</span>
+    </div>
+  );
+}
+
+function SetupStep({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${done ? 'bg-green-500' : 'bg-gray-200'}`}>
+        {done ? (
+          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <div className="w-2 h-2 rounded-full bg-gray-400" />
+        )}
+      </div>
+      <span className={done ? 'text-gray-700' : 'text-gray-400'}>{label}</span>
+    </div>
+  );
+}
+
+function ActivityBar({ day, logins, max }: { day: string; logins: number; max: number }) {
+  const height = max > 0 ? Math.max((logins / max) * 48, logins > 0 ? 4 : 0) : 0;
+  const label = new Date(day + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return (
+    <div className="flex flex-col items-center gap-1 flex-1">
+      <div className="w-full flex items-end justify-center" style={{ height: 52 }}>
+        <div
+          className="w-full max-w-[20px] rounded-t transition-all"
+          style={{ height, backgroundColor: logins > 0 ? '#3b82f6' : '#e5e7eb' }}
+          title={`${label}: ${logins} login${logins !== 1 ? 's' : ''}`}
+        />
+      </div>
+      {/* Only show label on first/last/mid */}
+      <span className="text-[9px] text-gray-400 leading-none hidden" aria-hidden="true">{label}</span>
+    </div>
+  );
+}
+
 export default function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
-  const [account, setAccount] = useState<AccountDetail | null>(null);
-  const [users, setUsers] = useState<TenantUser[]>([]);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+  const [data, setData] = useState<AccountData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,13 +254,11 @@ export default function AccountDetailPage() {
     setLoading(true);
     fetch(`/api/ops/accounts/${id}`)
       .then(r => r.json())
-      .then(data => {
-        if (data.error) { setError(data.error); setLoading(false); return; }
-        setAccount(data.account);
-        setUsers(data.users ?? []);
-        setTimeline(data.timeline ?? []);
-        if (data.account?.admin_email) setTestTo(data.account.admin_email);
-        if (data.account?.onboarding_track === 'track_b') setTestTrack('track_b');
+      .then((d: AccountData & { error?: string }) => {
+        if (d.error) { setError(d.error); setLoading(false); return; }
+        setData(d);
+        if (d.account?.admin_email) setTestTo(d.account.admin_email);
+        if (d.account?.onboarding_track === 'track_b') setTestTrack('track_b');
         setLoading(false);
       })
       .catch(() => { setError('Failed to load.'); setLoading(false); });
@@ -138,7 +267,7 @@ export default function AccountDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   async function changePlan() {
-    if (!pendingPlan || !account) return;
+    if (!pendingPlan || !data?.account) return;
     setPlanWorking(true);
     const res = await fetch(`/api/ops/accounts/${id}/plan`, {
       method: 'PATCH',
@@ -213,25 +342,34 @@ export default function AccountDetailPage() {
 
   async function startImpersonation() {
     const res = await fetch(`/api/ops/accounts/${id}/impersonate`, { method: 'POST' });
-    if (res.ok) {
-      router.push('/');
-    }
+    if (res.ok) router.push('/');
   }
 
-  if (loading) return <div className="text-gray-500 text-sm py-8">Loading...</div>;
-  if (error || !account) return <div className="text-red-600 text-sm py-8">{error ?? 'Not found.'}</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading…</div>
+  );
+  if (error || !data) return (
+    <div className="text-red-600 text-sm py-8">{error ?? 'Not found.'}</div>
+  );
 
+  const { account, users, timeline, healthScore, tenantMetrics, setupProgress, eventSummary, featureUsage, dailySessions, weekOverWeek, sessionSummary } = data;
   const badge = PLAN_BADGE[account.plan_id] ?? { label: account.plan_id, cls: 'bg-gray-100 text-gray-700' };
   const trial = trialStatusLabel(account);
+  const maxLogins = Math.max(...dailySessions.map(d => d.logins), 1);
+  const setupDone = Object.values(setupProgress).filter(Boolean).length;
+  const setupTotal = Object.keys(setupProgress).length;
+  const wowDelta = weekOverWeek.lastWeek > 0
+    ? Math.round(((weekOverWeek.thisWeek - weekOverWeek.lastWeek) / weekOverWeek.lastWeek) * 100)
+    : weekOverWeek.thisWeek > 0 ? 100 : 0;
 
   return (
-    <div className="max-w-5xl">
-      <Link href="/ops/accounts" className="text-sm text-gray-500 hover:text-gray-800 mb-4 inline-block">
+    <div className="max-w-6xl space-y-6">
+      <Link href="/ops/accounts" className="text-sm text-gray-500 hover:text-gray-800 inline-block">
         ← All accounts
       </Link>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{account.company_name}</h1>
           <div className="flex items-center gap-3 mt-2">
@@ -241,6 +379,7 @@ export default function AccountDetailPage() {
             {trial.label && (
               <span className={`text-sm font-medium ${trial.color}`}>{trial.label}</span>
             )}
+            <span className="text-xs text-gray-400">Created {relativeTime(account.created_at)}</span>
           </div>
         </div>
         <button
@@ -251,8 +390,134 @@ export default function AccountDetailPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Account info card */}
+      {/* Health Banner */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Account Health</h2>
+          <span className="text-xs text-gray-400">Based on setup, activity, feature usage & engagement</span>
+        </div>
+        <HealthBar score={healthScore} />
+        <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
+          <div className="text-center">
+            <div className="text-lg font-bold text-gray-900 tabular-nums">{tenantMetrics.conferences_count}</div>
+            <div className="text-xs text-gray-500">Conferences</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-gray-900 tabular-nums">{tenantMetrics.attendees_count.toLocaleString()}</div>
+            <div className="text-xs text-gray-500">Attendees</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-gray-900 tabular-nums">{tenantMetrics.meetings_count}</div>
+            <div className="text-xs text-gray-500">Meetings</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-gray-900 tabular-nums">{tenantMetrics.followups_completed}</div>
+            <div className="text-xs text-gray-500">Follow-ups done</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3-col grid: Setup Progress, Login Activity, Feature Adoption */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Setup Progress */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Setup Progress</h2>
+            <span className="text-xs text-gray-500 tabular-nums">{setupDone}/{setupTotal}</span>
+          </div>
+          <div className="space-y-2.5">
+            <SetupStep label="Account created" done={setupProgress.account_created} />
+            <SetupStep label="Conference added" done={setupProgress.conference_added} />
+            <SetupStep label="Attendees uploaded" done={setupProgress.attendees_uploaded} />
+            <SetupStep label="ICP configured" done={setupProgress.icp_configured} />
+            <SetupStep label="Team invited" done={setupProgress.team_invited} />
+            <SetupStep label="Budget saved" done={setupProgress.budget_saved} />
+          </div>
+        </div>
+
+        {/* Login Activity Chart */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Login Activity</h2>
+            <span className="text-xs text-gray-400">Last 14 days</span>
+          </div>
+          <div className="flex items-end gap-0.5 mb-2" style={{ height: 64 }}>
+            {dailySessions.map(d => (
+              <ActivityBar key={d.day} day={d.day} logins={d.logins} max={maxLogins} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-gray-400 mb-3">
+            <span>{new Date(dailySessions[0]?.day + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+            <span>Today</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+            <div>
+              <div className="text-base font-bold text-gray-900 tabular-nums">{sessionSummary.totalSessions}</div>
+              <div className="text-[10px] text-gray-400">Sessions (30d)</div>
+            </div>
+            <div>
+              <div className="text-base font-bold text-gray-900 tabular-nums">{sessionSummary.activeDays}</div>
+              <div className="text-[10px] text-gray-400">Active days</div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-base font-bold text-gray-900 tabular-nums">{weekOverWeek.thisWeek}</span>
+                {weekOverWeek.lastWeek > 0 && (
+                  <span className={`text-[10px] font-semibold ${wowDelta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {wowDelta >= 0 ? '+' : ''}{wowDelta}%
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-gray-400">Events (7d)</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Feature Adoption */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Feature Adoption</h2>
+            <span className="text-xs text-gray-400">{featureUsage.length} feature{featureUsage.length !== 1 ? 's' : ''} used</span>
+          </div>
+          {featureUsage.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No feature usage recorded yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {featureUsage.slice(0, 7).map(f => (
+                <div key={f.feature_key}>
+                  <div className="flex items-center justify-between text-xs mb-0.5">
+                    <span className="text-gray-700">{FEATURE_LABELS[f.feature_key] ?? f.feature_key}</span>
+                    <span className="text-gray-500 tabular-nums">{f.total_uses}</span>
+                  </div>
+                  <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-1 bg-blue-400 rounded-full"
+                      style={{ width: `${Math.min((f.total_uses / (featureUsage[0]?.total_uses ?? 1)) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {eventSummary.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-gray-100">
+              <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">30-day events</div>
+              <div className="space-y-1">
+                {eventSummary.slice(0, 5).map(e => (
+                  <div key={e.event_type} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-600">{EVENT_LABELS[e.event_type] ?? e.event_type}</span>
+                    <span className="font-medium text-gray-900 tabular-nums">{e.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main 2-col grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Account info + plan controls */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h2 className="font-semibold text-gray-900 mb-4">Account info</h2>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -260,15 +525,14 @@ export default function AccountDetailPage() {
               ['ID', account.id],
               ['Email', account.admin_email],
               ['Name', [account.admin_first_name, account.admin_last_name].filter(Boolean).join(' ') || '—'],
-              ['Deployment URL', account.deployment_url ?? '—'],
               ['Onboarding track', account.onboarding_track ?? '—'],
               ['Onboarding', account.onboarding_completed ? 'Complete' : 'Pending'],
               ['Last active', relativeTime(account.last_active_at)],
-              ['Created', relativeTime(account.created_at)],
+              ['Member since', formatDate(account.created_at)],
             ].map(([label, value]) => (
               <div key={String(label)}>
-                <dt className="text-gray-500">{label}</dt>
-                <dd className="font-medium text-gray-900 break-all">{value}</dd>
+                <dt className="text-gray-500 text-xs">{label}</dt>
+                <dd className="font-medium text-gray-900 break-all text-sm">{value}</dd>
               </div>
             ))}
           </dl>
@@ -300,16 +564,10 @@ export default function AccountDetailPage() {
               ) : (
                 <div className="flex items-center gap-2 text-sm">
                   <span>Confirm change to <strong>{pendingPlan}</strong>?</span>
-                  <button
-                    onClick={changePlan}
-                    disabled={planWorking}
-                    className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 disabled:opacity-40"
-                  >
+                  <button onClick={changePlan} disabled={planWorking} className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 disabled:opacity-40">
                     {planWorking ? '...' : 'Confirm'}
                   </button>
-                  <button onClick={() => setPlanConfirming(false)} className="text-gray-500 hover:text-gray-800">
-                    Cancel
-                  </button>
+                  <button onClick={() => setPlanConfirming(false)} className="text-gray-500 hover:text-gray-800">Cancel</button>
                 </div>
               )}
               {planMsg && <div className="text-xs mt-1 text-gray-600">{planMsg}</div>}
@@ -320,34 +578,22 @@ export default function AccountDetailPage() {
               {!extendConfirming ? (
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={extendDays}
+                    type="number" min={1} max={365} value={extendDays}
                     onChange={e => setExtendDays(Number(e.target.value))}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-20 focus:outline-none"
                   />
                   <span className="text-sm text-gray-500">days</span>
-                  <button
-                    onClick={() => setExtendConfirming(true)}
-                    className="text-sm bg-amber-500 text-white px-3 py-1.5 rounded-md hover:bg-amber-600"
-                  >
+                  <button onClick={() => setExtendConfirming(true)} className="text-sm bg-amber-500 text-white px-3 py-1.5 rounded-md hover:bg-amber-600">
                     Extend
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-sm">
                   <span>Add <strong>{extendDays} days</strong>?</span>
-                  <button
-                    onClick={extendTrial}
-                    disabled={extendWorking}
-                    className="bg-amber-500 text-white px-3 py-1 rounded-md hover:bg-amber-600 disabled:opacity-40"
-                  >
+                  <button onClick={extendTrial} disabled={extendWorking} className="bg-amber-500 text-white px-3 py-1 rounded-md hover:bg-amber-600 disabled:opacity-40">
                     {extendWorking ? '...' : 'Confirm'}
                   </button>
-                  <button onClick={() => setExtendConfirming(false)} className="text-gray-500 hover:text-gray-800">
-                    Cancel
-                  </button>
+                  <button onClick={() => setExtendConfirming(false)} className="text-gray-500 hover:text-gray-800">Cancel</button>
                 </div>
               )}
               {trialMsg && <div className="text-xs mt-1 text-gray-600">{trialMsg}</div>}
@@ -356,163 +602,138 @@ export default function AccountDetailPage() {
             <div>
               <div className="text-sm font-medium text-gray-700 mb-2">Expire trial now</div>
               {!expireConfirming ? (
-                <button
-                  onClick={() => setExpireConfirming(true)}
-                  className="text-sm bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700"
-                >
+                <button onClick={() => setExpireConfirming(true)} className="text-sm bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700">
                   Expire trial
                 </button>
               ) : (
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-red-600 font-medium">Are you sure?</span>
-                  <button
-                    onClick={expireTrial}
-                    disabled={expireWorking}
-                    className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 disabled:opacity-40"
-                  >
+                  <button onClick={expireTrial} disabled={expireWorking} className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 disabled:opacity-40">
                     {expireWorking ? '...' : 'Confirm'}
                   </button>
-                  <button onClick={() => setExpireConfirming(false)} className="text-gray-500 hover:text-gray-800">
-                    Cancel
-                  </button>
+                  <button onClick={() => setExpireConfirming(false)} className="text-gray-500 hover:text-gray-800">Cancel</button>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Signup responses card */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Signup responses</h2>
-          <dl className="space-y-3 text-sm">
-            {[
-              ['Role', account.signup_role],
-              ['Industry', account.signup_industry],
-              ['Team size', account.signup_team_size],
-              ['Conferences / year', account.signup_conferences_per_year],
-              ['Primary goal', account.signup_primary_goal],
-              ['Current tool', account.signup_current_tool],
-            ].map(([label, value]) => (
-              <div key={String(label)}>
-                <dt className="text-gray-500 text-xs mb-0.5">{label}</dt>
-                <dd className={value ? 'font-medium text-gray-900' : 'text-gray-400 italic'}>
-                  {value || 'Not provided'}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+        {/* Signup responses + test email */}
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <h2 className="font-semibold text-gray-900 mb-4">Signup responses</h2>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              {[
+                ['Role', account.signup_role],
+                ['Industry', account.signup_industry],
+                ['Team size', account.signup_team_size],
+                ['Conf. / year', account.signup_conferences_per_year],
+                ['Primary goal', account.signup_primary_goal],
+                ['Current tool', account.signup_current_tool],
+              ].map(([label, value]) => (
+                <div key={String(label)}>
+                  <dt className="text-gray-500 text-xs">{label}</dt>
+                  <dd className={value ? 'font-medium text-gray-900 text-sm' : 'text-gray-400 italic text-sm'}>
+                    {value || 'Not provided'}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
 
-        {/* Test email card */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Send test email</h2>
-          <div className="space-y-3 text-sm">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Template</label>
-              <select
-                value={testTemplate}
-                onChange={e => { setTestTemplate(e.target.value as typeof testTemplate); setTestMsg(null); }}
-                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
-              >
-                <option value="welcome">Welcome email</option>
-                <option value="trial_reminder">Trial reminder</option>
-                <option value="invite">Team invite</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">To</label>
-              <input
-                type="email"
-                value={testTo}
-                onChange={e => setTestTo(e.target.value)}
-                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
-              />
-            </div>
-            {testTemplate === 'welcome' && (
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <h2 className="font-semibold text-gray-900 mb-4">Send test email</h2>
+            <div className="space-y-3 text-sm">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Track</label>
+                <label className="block text-xs text-gray-500 mb-1">Template</label>
                 <select
-                  value={testTrack}
-                  onChange={e => setTestTrack(e.target.value as 'track_a' | 'track_b')}
+                  value={testTemplate}
+                  onChange={e => { setTestTemplate(e.target.value as typeof testTemplate); setTestMsg(null); }}
                   className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
                 >
-                  <option value="track_a">Track A — upcoming conference</option>
-                  <option value="track_b">Track B — planning calendar</option>
+                  <option value="welcome">Welcome email</option>
+                  <option value="trial_reminder">Trial reminder</option>
+                  <option value="invite">Team invite</option>
                 </select>
               </div>
-            )}
-            {testTemplate === 'trial_reminder' && (
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Days remaining (1–3)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={3}
-                  value={testDays}
-                  onChange={e => setTestDays(Number(e.target.value))}
-                  className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
-                />
+                <label className="block text-xs text-gray-500 mb-1">To</label>
+                <input type="email" value={testTo} onChange={e => setTestTo(e.target.value)}
+                  className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm" />
               </div>
-            )}
-            <button
-              disabled={testWorking || !testTo}
-              onClick={async () => {
-                setTestWorking(true);
-                setTestMsg(null);
-                try {
-                  const res = await fetch(`/api/ops/accounts/${id}/test-email`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ template: testTemplate, to: testTo, track: testTrack, days: testDays }),
-                  });
-                  const data = await res.json() as { success?: boolean; error?: string };
-                  setTestMsg(data.success ? '✓ Sent — check your inbox' : `Error: ${data.error ?? 'Unknown'}`);
-                } catch {
-                  setTestMsg('Error: request failed');
-                } finally {
-                  setTestWorking(false);
-                }
-              }}
-              className="w-full py-1.5 bg-gray-700 text-white text-sm rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {testWorking ? 'Sending…' : 'Send test email'}
-            </button>
-            {testMsg && (
-              <p className={`text-xs ${testMsg.startsWith('✓') ? 'text-green-700' : 'text-red-600'}`}>
-                {testMsg}
-              </p>
-            )}
+              {testTemplate === 'welcome' && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Track</label>
+                  <select value={testTrack} onChange={e => setTestTrack(e.target.value as 'track_a' | 'track_b')}
+                    className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm">
+                    <option value="track_a">Track A — upcoming conference</option>
+                    <option value="track_b">Track B — planning calendar</option>
+                  </select>
+                </div>
+              )}
+              {testTemplate === 'trial_reminder' && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Days remaining (1–3)</label>
+                  <input type="number" min={1} max={3} value={testDays} onChange={e => setTestDays(Number(e.target.value))}
+                    className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm" />
+                </div>
+              )}
+              <button
+                disabled={testWorking || !testTo}
+                onClick={async () => {
+                  setTestWorking(true); setTestMsg(null);
+                  try {
+                    const res = await fetch(`/api/ops/accounts/${id}/test-email`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ template: testTemplate, to: testTo, track: testTrack, days: testDays }),
+                    });
+                    const d = await res.json() as { success?: boolean; error?: string };
+                    setTestMsg(d.success ? '✓ Sent — check your inbox' : `Error: ${d.error ?? 'Unknown'}`);
+                  } catch { setTestMsg('Error: request failed'); }
+                  finally { setTestWorking(false); }
+                }}
+                className="w-full py-1.5 bg-gray-700 text-white text-sm rounded-md hover:bg-gray-800 disabled:opacity-50 transition-colors"
+              >
+                {testWorking ? 'Sending…' : 'Send test email'}
+              </button>
+              {testMsg && (
+                <p className={`text-xs ${testMsg.startsWith('✓') ? 'text-green-700' : 'text-red-600'}`}>{testMsg}</p>
+              )}
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Users card */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 lg:col-span-2">
-          <h2 className="font-semibold text-gray-900 mb-4">Users</h2>
-          {users.length === 0 ? (
-            <p className="text-sm text-gray-400">No user data available (tenant DB not connected).</p>
-          ) : (
+      {/* Users table */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">Users</h2>
+        {users.length === 0 ? (
+          <p className="text-sm text-gray-400">No user data available (tenant DB not connected).</p>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
-                  <th className="pb-2">Name</th>
-                  <th className="pb-2">Email</th>
-                  <th className="pb-2">Role</th>
-                  <th className="pb-2">Last active</th>
-                  <th className="pb-2">Status</th>
+                  <th className="pb-2 pr-4">Name</th>
+                  <th className="pb-2 pr-4">Email</th>
+                  <th className="pb-2 pr-4">Role</th>
+                  <th className="pb-2 pr-4">Last active</th>
+                  <th className="pb-2 pr-4 text-right">Logins</th>
+                  <th className="pb-2 pr-4">Status</th>
                   <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => (
+                {(users as TenantUser[]).map(u => (
                   <tr key={u.id} className="border-b border-gray-50">
-                    <td className="py-2">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</td>
-                    <td className="py-2 text-gray-600">{u.email}</td>
-                    <td className="py-2 text-gray-600 capitalize">{u.role}</td>
-                    <td className="py-2 text-gray-500 text-xs">{relativeTime(u.last_active_at)}</td>
-                    <td className="py-2">
-                      <span className={u.active ? 'text-green-700' : 'text-gray-400'}>
-                        {u.active ? 'Active' : 'Inactive'}
-                      </span>
+                    <td className="py-2 pr-4 font-medium">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</td>
+                    <td className="py-2 pr-4 text-gray-600">{u.email}</td>
+                    <td className="py-2 pr-4 text-gray-600 capitalize">{u.role}</td>
+                    <td className="py-2 pr-4 text-gray-500 text-xs">{relativeTime(u.last_seen_at)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{u.login_count ?? '—'}</td>
+                    <td className="py-2 pr-4">
+                      <span className={u.active ? 'text-green-700' : 'text-gray-400'}>{u.active ? 'Active' : 'Inactive'}</span>
                     </td>
                     <td className="py-2 text-right">
                       {userMsg[u.id] ? (
@@ -527,19 +748,11 @@ export default function AccountDetailPage() {
                       ) : (
                         <span className="flex items-center gap-1 justify-end text-xs">
                           <span>Sure?</span>
-                          <button
-                            onClick={() => toggleUser(u.id, u.active)}
-                            disabled={userWorking[u.id]}
-                            className="text-red-600 hover:text-red-800 disabled:opacity-40 underline"
-                          >
+                          <button onClick={() => toggleUser(u.id, u.active)} disabled={userWorking[u.id]}
+                            className="text-red-600 hover:text-red-800 disabled:opacity-40 underline">
                             {userWorking[u.id] ? '...' : 'Yes'}
                           </button>
-                          <button
-                            onClick={() => setUserConfirm(c => ({ ...c, [u.id]: false }))}
-                            className="text-gray-400 hover:text-gray-600"
-                          >
-                            No
-                          </button>
+                          <button onClick={() => setUserConfirm(c => ({ ...c, [u.id]: false }))} className="text-gray-400 hover:text-gray-600">No</button>
                         </span>
                       )}
                     </td>
@@ -547,28 +760,62 @@ export default function AccountDetailPage() {
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        {/* Timeline card */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 lg:col-span-2">
-          <h2 className="font-semibold text-gray-900 mb-4">Timeline</h2>
-          {timeline.length === 0 ? (
-            <p className="text-sm text-gray-400">No events available.</p>
-          ) : (
-            <ol className="space-y-3">
-              {timeline.map((event, i) => (
-                <li key={i} className="flex items-start gap-3 text-sm">
-                  <div className="mt-1.5 w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
-                  <div>
-                    <span className="font-medium text-gray-800">{event.label}</span>
-                    <span className="ml-2 text-xs text-gray-400">{relativeTime(event.at)}</span>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
+      {/* Timeline */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">Timeline</h2>
+        {timeline.length === 0 ? (
+          <p className="text-sm text-gray-400">No events available.</p>
+        ) : (
+          <ol className="relative border-l border-gray-200 ml-2 space-y-4">
+            {timeline.map((event, i) => (
+              <li key={i} className="ml-4">
+                <div className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full bg-gray-300 border-2 border-white" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-medium text-gray-800">{event.event}</span>
+                  <span className="text-xs text-gray-400">{relativeTime(event.timestamp)}</span>
+                  <span className="text-xs text-gray-300">{formatDate(event.timestamp)}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {/* Pending milestones */}
+        {(!setupProgress.conference_added || !setupProgress.attendees_uploaded || !setupProgress.icp_configured) && (
+          <div className="mt-6 pt-4 border-t border-gray-100">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Pending milestones</div>
+            <div className="space-y-2">
+              {!setupProgress.conference_added && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="w-2 h-2 rounded-full border-2 border-dashed border-gray-300" />
+                  First conference not yet added
+                </div>
+              )}
+              {!setupProgress.attendees_uploaded && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="w-2 h-2 rounded-full border-2 border-dashed border-gray-300" />
+                  No attendee list uploaded yet
+                </div>
+              )}
+              {!setupProgress.icp_configured && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="w-2 h-2 rounded-full border-2 border-dashed border-gray-300" />
+                  ICP rules not configured
+                </div>
+              )}
+              {!setupProgress.team_invited && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="w-2 h-2 rounded-full border-2 border-dashed border-gray-300" />
+                  No team members invited yet
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

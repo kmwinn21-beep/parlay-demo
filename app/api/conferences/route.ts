@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import type { Client } from '@libsql/client';
+import { trackEvent } from '@/lib/trackEvent';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
@@ -418,6 +419,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    trackEvent(authResult?.accountId, 'conference_created', authResult?.id).catch(() => {});
     return NextResponse.json(
       { ...conference, id: conferenceId, parsed_count: parsedCount },
       { status: 201 }

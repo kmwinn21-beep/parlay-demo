@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
+import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
 export const maxDuration = 300;
 
@@ -440,6 +441,8 @@ RULES
       });
     } catch { /* non-blocking — analysis result is still returned */ }
 
+    trackEvent(user?.accountId, 'ai_analysis', user?.id).catch(() => {});
+    trackFeature(user?.accountId, 'meeting_ai', user?.id).catch(() => {});
     return NextResponse.json({
       insights: insertedInsights,
       transcript: segments,

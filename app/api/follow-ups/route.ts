@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
+import { trackEvent } from '@/lib/trackEvent';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -201,6 +202,9 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    if (completed === 1 || completed === true) {
+      trackEvent(user?.accountId, 'followup_completed', user?.id).catch(() => {});
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('PATCH /api/follow-ups error:', error);

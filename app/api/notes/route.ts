@@ -8,6 +8,7 @@ import {
   notifyConferenceInternalAttendees,
   notifyMentionedUsers,
 } from '@/lib/notifications';
+import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -256,6 +257,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    trackEvent(user?.accountId, 'note_created', user?.id).catch(() => {});
+    trackFeature(user?.accountId, 'floor_notes', user?.id).catch(() => {});
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('POST /api/notes error:', error);

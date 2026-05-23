@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
+import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -183,6 +184,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    trackEvent(user?.accountId, 'meeting_created', user?.id).catch(() => {});
+    trackFeature(user?.accountId, 'meetings', user?.id).catch(() => {});
     return NextResponse.json(result.rows[0]);
   } catch (error) {
     console.error('POST /api/meetings error:', error);
