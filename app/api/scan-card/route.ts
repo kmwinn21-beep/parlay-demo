@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
+import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
 export interface CardScanResult {
   first_name: string | null;
@@ -70,6 +71,8 @@ Return only the JSON object — no markdown fences, no explanation, no extra tex
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     const clean = jsonMatch ? jsonMatch[0] : '{}';
     const data: CardScanResult = JSON.parse(clean);
+    trackEvent(authResult?.accountId, 'badge_scan', authResult?.id).catch(() => {});
+    trackFeature(authResult?.accountId, 'badge_scan', authResult?.id).catch(() => {});
     return NextResponse.json(data);
   } catch (error) {
     console.error('POST /api/scan-card error:', error);

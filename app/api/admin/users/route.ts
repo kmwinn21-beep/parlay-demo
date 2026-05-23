@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, VALID_ROLES, type UserRole } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { sendInviteEmail } from '@/lib/email';
+import { trackEvent } from '@/lib/trackEvent';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAdmin(request);
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
     console.error('Failed to send invite email:', err);
   }
 
+  trackEvent(authResult?.accountId, 'user_invited', authResult?.id).catch(() => {});
   return NextResponse.json({
     id: userId,
     email,

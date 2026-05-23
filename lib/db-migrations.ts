@@ -824,4 +824,30 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('meeting_type', 'Booth Meeting', 2, 0)`,
   `ALTER TABLE quick_notes ADD COLUMN product_suggestions TEXT`,
   `ALTER TABLE meeting_insights ADD COLUMN source TEXT DEFAULT 'ai'`,
+  `CREATE TABLE IF NOT EXISTS account_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    user_id INTEGER,
+    metadata TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_account_events_account ON account_events(account_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_account_events_type ON account_events(account_id, event_type)`,
+  `CREATE TABLE IF NOT EXISTS account_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    user_id INTEGER,
+    ip_address TEXT,
+    started_at TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_account_sessions_account ON account_sessions(account_id, started_at)`,
+  `CREATE TABLE IF NOT EXISTS account_feature_usage (
+    account_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL DEFAULT -1,
+    feature_key TEXT NOT NULL,
+    last_used_at TEXT DEFAULT (datetime('now')),
+    use_count INTEGER DEFAULT 1,
+    PRIMARY KEY (account_id, user_id, feature_key)
+  )`,
 ];

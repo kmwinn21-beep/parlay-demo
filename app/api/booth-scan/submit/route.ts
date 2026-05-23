@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -219,6 +220,8 @@ export async function POST(request: NextRequest) {
       await db.execute({ sql: 'DELETE FROM quick_notes WHERE id = ?', args: [quick_note_id] });
     }
 
+    trackEvent(authResult?.accountId, 'booth_scan', authResult?.id).catch(() => {});
+    trackFeature(authResult?.accountId, 'booth_capture', authResult?.id).catch(() => {});
     return NextResponse.json({ success: true, ...results });
   } catch (error) {
     console.error('POST /api/booth-scan/submit error:', error);

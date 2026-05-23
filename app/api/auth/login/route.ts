@@ -6,6 +6,7 @@ import { resolvePlanState } from '@/lib/trialState';
 import { sendTrialReminderEmail } from '@/lib/email';
 import { createTenantDb } from '@/lib/tenantDb';
 import type { Client } from '@libsql/client';
+import { trackEvent, trackSession } from '@/lib/trackEvent';
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,6 +66,9 @@ export async function POST(request: NextRequest) {
       emailVerified: Boolean(user.email_verified),
       accountId,
     };
+
+    trackSession(accountId, Number(user.id), request.headers.get('x-forwarded-for')).catch(() => {});
+    trackEvent(accountId, 'user_login', Number(user.id)).catch(() => {});
 
     const token = await signToken(sessionUser);
 

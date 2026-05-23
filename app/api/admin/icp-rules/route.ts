@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getIcpConfig } from '@/lib/icpRules';
+import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,8 @@ export async function POST(request: NextRequest) {
     }
 
     await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now')", args: [] }).catch(() => {});
+    trackEvent(auth?.accountId, 'icp_saved', auth?.id).catch(() => {});
+    trackFeature(auth?.accountId, 'icp_rules', auth?.id).catch(() => {});
     return NextResponse.json({ id: ruleId, category, sort_order, conditions: conditions ?? [] });
   } catch (e) {
     console.error('POST /api/admin/icp-rules error:', e);
