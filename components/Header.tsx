@@ -167,12 +167,12 @@ export function Header() {
             </svg>
           </button>
         )}
-        {/* Notification Bell */}
-        <NotificationBell />
         {/* Set Active Conference — desktop only */}
         <div className="hidden lg:block">
           <SetConferenceButton />
         </div>
+        {/* Notification Bell */}
+        <NotificationBell />
         {/* Outstanding Follow Ups */}
         <OutstandingFollowUps />
         {/* Global Search — desktop only; mobile uses FloatingNav */}
