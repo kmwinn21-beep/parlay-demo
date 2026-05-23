@@ -8,7 +8,7 @@ import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { getPreset } from '@/lib/colors';
-import { SetConferenceButton } from '@/components/SetConferenceButton';
+import Link from 'next/link';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
@@ -625,7 +625,7 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId }: { onClose
 
 // ── DashboardActionCard ───────────────────────────────────────────────────────
 
-export function DashboardActionCard() {
+export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 'upcoming' | 'none' }) {
   const { user } = useUser();
   const { activeConference } = useActiveConference();
   const [showCameraMenu, setShowCameraMenu] = useState(false);
@@ -775,9 +775,6 @@ export function DashboardActionCard() {
 
   return (
     <div className="card flex flex-col justify-center">
-      <div className="mb-2">
-        <SetConferenceButton />
-      </div>
       <div className="flex flex-row gap-1">
 
         {/* Left — mobile: Scan camera, desktop: Follow Up */}
@@ -826,18 +823,32 @@ export function DashboardActionCard() {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowFollowUpModal(true)}
-          className="hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group"
-        >
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-brand-secondary transition-colors flex-shrink-0">
-            <svg className="w-4 h-4 text-brand-secondary group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          </div>
-          <p className="text-xs text-gray-500 leading-tight">Follow Up</p>
-        </button>
+        {bannerState === 'active' && activeConference ? (
+          <Link
+            href={`/conferences/${activeConference.id}?fieldreport=true`}
+            className="hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-purple-50 transition-colors group"
+          >
+            <div className="w-8 h-8 rounded-full flex items-center justify-center group-hover:bg-purple-500 transition-colors flex-shrink-0" style={{ backgroundColor: '#f5f3ff' }}>
+              <svg className="w-4 h-4 group-hover:text-white transition-colors" style={{ color: '#7c3aed' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <p className="text-xs text-gray-500 leading-tight">Field Report</p>
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowFollowUpModal(true)}
+            className="hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group"
+          >
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-brand-secondary transition-colors flex-shrink-0">
+              <svg className="w-4 h-4 text-brand-secondary group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 112 2m-6 9l2 2 4-4" />
+              </svg>
+            </div>
+            <p className="text-xs text-gray-500 leading-tight">Follow Up</p>
+          </button>
+        )}
 
         {/* Middle — Quick Note */}
         <button
