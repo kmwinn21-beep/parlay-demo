@@ -63,6 +63,33 @@ export async function fileToBase64(file: File): Promise<string> {
   });
 }
 
+// Resize and compress an image file to JPEG before sending to the API.
+// Mobile camera photos can be 5–15 MB; this keeps them under 1 MB.
+async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<{ base64: string; mediaType: 'image/jpeg' }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width >= height) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else { width = Math.round(width * maxDim / height); height = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 export function formatCardAsText(draft: CardDraft): string {
   return [
     `Name: ${[draft.first_name, draft.last_name].filter(Boolean).join(' ') || '—'}`,
@@ -659,10 +686,10 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const handleBadgeFile = useCallback(async (file: File) => {
     setScanningBadge(true); setShowCameraMenu(false);
     try {
-      const base64 = await fileToBase64(file);
+      const { base64, mediaType } = await compressImage(file);
       const scanRes = await fetch('/api/scan-card/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: base64, media_type: file.type || 'image/jpeg' }),
+        body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
       });
       if (!scanRes.ok) throw new Error();
       const { cards: rawCards } = await scanRes.json() as { cards: Partial<CardDraft>[] };
