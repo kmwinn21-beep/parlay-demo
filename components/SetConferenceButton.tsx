@@ -43,18 +43,51 @@ export function SetConferenceButton() {
     void (async () => {
       try {
         const data: ConferenceRow[] = await fetch('/api/conferences?nav=1').then(r => r.json());
-        const inProgress = data.filter(c => safeConferenceStage(c) === 'in_progress');
-        if (inProgress.length !== 1) return;
-        const conf = inProgress[0];
-        const internalAttendees = conf.internal_attendees
-          ? conf.internal_attendees.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-          : [];
-        const userNames = [user.displayName, user.repName].filter(Boolean).map(s => s!.toLowerCase());
-        if (!userNames.some(n => internalAttendees.includes(n))) return;
-        setActiveConference(
-          { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: null },
-          false,
-        );
+        const userNames = [user.displayName, user.repName]
+          .filter(Boolean)
+          .map(s => s!.trim().toLowerCase());
+        if (userNames.length === 0) return;
+
+        const isUserInternal = (conf: ConferenceRow) => {
+          if (!conf.internal_attendees) return false;
+          const attendees = conf.internal_attendees.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          return userNames.some(n => attendees.includes(n));
+        };
+
+        // Priority 1: in-progress conference where user is internal attendee
+        const inProgress = data
+          .filter(c => !c.is_historical && safeConferenceStage(c) === 'in_progress' && isUserInternal(c));
+        if (inProgress.length > 0) {
+          const conf = inProgress.sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+          setActiveConference(
+            { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: conf.location ?? null },
+            false,
+          );
+          return;
+        }
+
+        // Priority 2: earliest upcoming conference where user is internal attendee
+        const upcoming = data
+          .filter(c => !c.is_historical && safeConferenceStage(c) === 'planning' && isUserInternal(c));
+        if (upcoming.length > 0) {
+          const conf = upcoming.sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+          setActiveConference(
+            { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: conf.location ?? null },
+            false,
+          );
+          return;
+        }
+
+        // Priority 3: most recent past conference where user is internal attendee
+        const past = data
+          .filter(c => isUserInternal(c) && (c.is_historical || ['post_conference', 'closed'].includes(safeConferenceStage(c))));
+        if (past.length > 0) {
+          const conf = past.sort((a, b) => b.start_date.localeCompare(a.start_date))[0];
+          setActiveConference(
+            { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: conf.location ?? null },
+            false,
+          );
+        }
       } catch {}
     })();
   }, [user, isManuallySet, setActiveConference]);
