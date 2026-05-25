@@ -303,7 +303,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
               </button>
             </div>
             <iframe
-              src={`/conferences/${drawerConfId}?tab=follow-ups&filter=open`}
+              src={`/conferences/${drawerConfId}?tab=follow-ups&filter=open&embed=true`}
               className="flex-1 w-full border-0"
               title={`Follow-ups for ${drawerConfName}`}
             />
