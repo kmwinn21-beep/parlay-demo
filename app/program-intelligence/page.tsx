@@ -1250,7 +1250,340 @@ export default function ProgramIntelligencePage() {
 
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && (
+        {/* ── Conference Trends tab ─────────────────────────────────────────── */}
+        {activeTab === 'trends' && (() => {
+          const SENIORITY_COLORS: Record<string, string> = {
+            'C-Suite': '#7c3aed',
+            'VP/SVP': '#1B76BC',
+            'Director': '#059669',
+            'Manager': '#f59e0b',
+            'Unknown': '#6b7280',
+          };
+          const seniorityColor = (s: string) => SENIORITY_COLORS[s] ?? '#6b7280';
+
+          // Conferences sorted ASC for the bar chart (most recent 12)
+          const chartConfs = trendsData
+            ? [...trendsData.conferences].sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(-12)
+            : [];
+
+          // Top ICP company in overlap list
+          const topIcpOverlap = trendsData?.companyOverlap.find(c => c.icp === 'Yes');
+
+          // Seniority mix totals
+          const seniorityTotal = (trendsData?.seniorityMix ?? []).reduce((s, r) => s + r.count, 0);
+
+          // Drill-down seniority total
+          const ddSeniorityTotal = (trendsConfData?.seniorityBreakdown ?? []).reduce((s, r) => s + r.count, 0);
+
+          // Title keywords: normalize font size 10–18px
+          const keywords = trendsConfData?.titleKeywords ?? [];
+          const maxKw = keywords[0]?.count ?? 1;
+          const minKw = keywords[keywords.length - 1]?.count ?? 1;
+          const kwFontSize = (count: number) => {
+            if (maxKw === minKw) return 14;
+            return Math.round(10 + ((count - minKw) / (maxKw - minKw)) * 8);
+          };
+
+          const selectedConf = trendsData?.conferences.find(c => c.id === trendsConfId);
+
+          return (
+            <div className="space-y-6">
+              {/* ── Section A: Portfolio Overview ── */}
+              {trendsLoading ? (
+                <div className="card space-y-4 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-1/3" />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[0,1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-lg" />)}
+                  </div>
+                  <div className="h-48 bg-gray-100 rounded-lg" />
+                </div>
+              ) : trendsData ? (
+                <>
+                  {/* KPI tiles */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Conferences Tracked</p>
+                      <p className="text-3xl font-bold text-brand-primary">{trendsData.totalConferences}</p>
+                    </div>
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Avg ICP Density</p>
+                      <p className="text-3xl font-bold text-brand-primary">{trendsData.avgIcpDensity}%</p>
+                    </div>
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Recurring Companies</p>
+                      <p className="text-3xl font-bold text-brand-primary">{trendsData.companyOverlap.length}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">at 2+ conferences</p>
+                    </div>
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Top ICP Overlap</p>
+                      {topIcpOverlap ? (
+                        <>
+                          <p className="text-sm font-semibold text-brand-primary leading-tight mt-1 truncate" title={topIcpOverlap.name}>{topIcpOverlap.name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{topIcpOverlap.conf_count} conferences</p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-400 mt-2">—</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ICP Density bar chart */}
+                  <div className="card">
+                    <h3 className="text-sm font-semibold text-brand-primary mb-0.5">ICP Density by Conference</h3>
+                    <p className="text-xs text-gray-400 mb-4">% ICP companies in attendance list — avg line shown</p>
+                    {chartConfs.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-6 text-center">No conference data available.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {chartConfs.map(conf => {
+                          const pct = conf.icp_density_pct;
+                          const aboveAvg = pct > trendsData.avgIcpDensity;
+                          return (
+                            <div key={conf.id} className="flex items-center gap-3">
+                              <span className="text-xs text-gray-500 w-32 shrink-0 truncate text-right" title={conf.name}>{conf.name}</span>
+                              <div className="relative flex-1 h-5 bg-gray-100 rounded overflow-visible">
+                                {/* bar */}
+                                <div
+                                  className="absolute left-0 top-0 h-full rounded transition-all duration-300"
+                                  style={{
+                                    width: `${pct}%`,
+                                    backgroundColor: aboveAvg ? '#059669' : '#1B76BC',
+                                  }}
+                                />
+                                {/* avg line */}
+                                <div
+                                  className="absolute top-0 h-full w-px bg-gray-400 z-10"
+                                  style={{ left: `${trendsData.avgIcpDensity}%` }}
+                                  title={`Avg: ${trendsData.avgIcpDensity}%`}
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-gray-600 w-8 shrink-0">{pct}%</span>
+                            </div>
+                          );
+                        })}
+                        <p className="text-xs text-gray-400 mt-2 text-right">
+                          <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: '#059669' }} />above avg
+                          <span className="inline-block w-2 h-2 rounded-full ml-3 mr-1" style={{ backgroundColor: '#1B76BC' }} />at/below avg
+                          <span className="ml-3">avg line = {trendsData.avgIcpDensity}%</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recurring companies + Seniority mix */}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {/* Recurring Companies */}
+                    <div className="card">
+                      <h3 className="text-sm font-semibold text-brand-primary mb-3">Recurring Companies</h3>
+                      {trendsData.companyOverlap.length === 0 ? (
+                        <p className="text-sm text-gray-400">No companies found at multiple conferences.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {trendsData.companyOverlap.slice(0, 10).map((co, i) => (
+                            <div key={co.id} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-4 shrink-0 text-right">{i + 1}.</span>
+                              <span className="text-sm text-gray-800 flex-1 truncate" title={co.name}>{co.name}</span>
+                              {co.icp === 'Yes' && (
+                                <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full shrink-0">ICP</span>
+                              )}
+                              <span className="px-2 py-0.5 text-xs font-semibold bg-brand-primary/10 text-brand-primary rounded-full shrink-0">
+                                {co.conf_count}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Portfolio Seniority Mix */}
+                    <div className="card">
+                      <h3 className="text-sm font-semibold text-brand-primary mb-3">Portfolio Seniority Mix</h3>
+                      {trendsData.seniorityMix.length === 0 ? (
+                        <p className="text-sm text-gray-400">No seniority data available.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {trendsData.seniorityMix.map(row => {
+                            const pct = seniorityTotal > 0 ? Math.round(row.count / seniorityTotal * 100) : 0;
+                            return (
+                              <div key={row.seniority} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-600 w-20 shrink-0">{row.seniority}</span>
+                                <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+                                  <div
+                                    className="h-full rounded transition-all duration-300"
+                                    style={{ width: `${pct}%`, backgroundColor: seniorityColor(row.seniority) }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-500 w-16 shrink-0 text-right">{row.count.toLocaleString()} ({pct}%)</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {/* ── Section B: Conference Drill-Down ── */}
+              {trendsData && (
+                <div className="card space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <h3 className="text-sm font-semibold text-brand-primary">Conference Detail</h3>
+                    <select
+                      className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-secondary/40"
+                      value={trendsConfId ?? ''}
+                      onChange={e => setTrendsConfId(Number(e.target.value))}
+                    >
+                      {[...trendsData.conferences]
+                        .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                        .map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.start_date.slice(0, 4)})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {selectedConf && (
+                    <p className="text-xs text-gray-400">
+                      {selectedConf.start_date} · {selectedConf.total_attendees} attendees · {selectedConf.total_companies} companies
+                    </p>
+                  )}
+
+                  {trendsConfLoading ? (
+                    <div className="space-y-3 animate-pulse">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[0,1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-lg" />)}
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="h-40 bg-gray-100 rounded-lg" />
+                        <div className="h-40 bg-gray-100 rounded-lg" />
+                      </div>
+                    </div>
+                  ) : trendsConfData ? (
+                    <div className="space-y-4">
+                      {/* KPI tiles */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">Attendees</p>
+                          <p className="text-2xl font-bold text-brand-primary">{trendsConfData.totalAttendees.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">Companies</p>
+                          <p className="text-2xl font-bold text-brand-primary">{trendsConfData.totalCompanies.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">ICP Companies</p>
+                          <p className="text-2xl font-bold text-green-600">{trendsConfData.icpCompanies.toLocaleString()}</p>
+                          <p className="text-xs text-gray-400">{trendsConfData.icpDensityPct}% of total</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">Meetings</p>
+                          <p className="text-2xl font-bold text-brand-primary">{trendsConfData.meetingsTotal.toLocaleString()}</p>
+                        </div>
+                      </div>
+
+                      {/* Seniority breakdown + Title keywords */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {/* Seniority breakdown */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Seniority Breakdown</h4>
+                          {trendsConfData.seniorityBreakdown.length === 0 ? (
+                            <p className="text-sm text-gray-400">No data.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {trendsConfData.seniorityBreakdown.map(row => {
+                                const pct = ddSeniorityTotal > 0 ? Math.round(row.count / ddSeniorityTotal * 100) : 0;
+                                return (
+                                  <div key={row.seniority} className="flex items-center gap-2">
+                                    <div
+                                      className="w-2 h-2 rounded-full shrink-0"
+                                      style={{ backgroundColor: seniorityColor(row.seniority) }}
+                                    />
+                                    <span className="text-xs text-gray-600 w-20 shrink-0">{row.seniority}</span>
+                                    <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+                                      <div
+                                        className="h-full rounded"
+                                        style={{ width: `${pct}%`, backgroundColor: seniorityColor(row.seniority) }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-gray-500 w-20 shrink-0 text-right">{row.count} ({pct}%)</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Title Keywords */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Title Keywords</h4>
+                          {keywords.length === 0 ? (
+                            <p className="text-sm text-gray-400">No title data.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {keywords.map(kw => (
+                                <span
+                                  key={kw.word}
+                                  className="px-2 py-0.5 bg-brand-primary/8 text-brand-primary rounded-full font-medium capitalize"
+                                  style={{ fontSize: `${kwFontSize(kw.count)}px` }}
+                                  title={`${kw.word}: ${kw.count}`}
+                                >
+                                  {kw.word}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Cross-Conference Company Presence */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cross-Conference Company Presence</h4>
+                        {trendsConfData.crossConfPresence.length === 0 ? (
+                          <p className="text-sm text-gray-400">No cross-conference data.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-gray-100">
+                                  <th className="text-left text-xs font-medium text-gray-400 py-2 pr-4">Company</th>
+                                  <th className="text-center text-xs font-medium text-gray-400 py-2 pr-4">ICP</th>
+                                  <th className="text-right text-xs font-medium text-gray-400 py-2">Conferences</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {trendsConfData.crossConfPresence.slice(0, 15).map(co => (
+                                  <tr key={co.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                                    <td className="py-1.5 pr-4 text-gray-800 font-medium">{co.name}</td>
+                                    <td className="py-1.5 pr-4 text-center">
+                                      {co.icp === 'Yes' && (
+                                        <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">ICP</span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 text-right">
+                                      <span className="px-2 py-0.5 text-xs font-semibold bg-brand-primary/10 text-brand-primary rounded-full">
+                                        {co.total_confs}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : !trendsConfId ? (
+                    <p className="text-sm text-gray-400 py-4 text-center">Select a conference above.</p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && activeTab !== 'trends' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
