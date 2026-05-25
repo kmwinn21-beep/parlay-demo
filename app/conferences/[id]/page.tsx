@@ -288,6 +288,15 @@ export default function ConferenceDetailPage() {
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
+  const [followUpFilter, setFollowUpFilter] = useState<'all' | 'open' | 'completed'>(() => {
+    // Read filter param from URL for iframe embedding
+    if (typeof window !== 'undefined') {
+      const filterParam = new URLSearchParams(window.location.search).get('filter');
+      if (filterParam === 'open') return 'open';
+      if (filterParam === 'completed') return 'completed';
+    }
+    return 'all';
+  });
   const [confNotes, setConfNotes] = useState<EntityNote[]>([]);
   const [confPinnedNoteIds, setConfPinnedNoteIds] = useState<Set<number>>(new Set());
   const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
@@ -2337,7 +2346,7 @@ export default function ConferenceDetailPage() {
 
       {activeTab === 'follow-ups' && (
         <div className="card p-0 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="text-lg font-semibold text-brand-primary font-serif">Follow Ups</h2>
               {confFollowUps.length > 0 && (
@@ -2346,9 +2355,29 @@ export default function ConferenceDetailPage() {
                 </p>
               )}
             </div>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {(['all', 'open', 'completed'] as const).map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setFollowUpFilter(opt)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize ${
+                    followUpFilter === opt ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {opt === 'open' ? 'Open' : opt === 'completed' ? 'Completed' : 'All'}
+                </button>
+              ))}
+            </div>
           </div>
+          {(() => {
+            const filteredFollowUps = followUpFilter === 'open'
+              ? confFollowUps.filter(f => !f.completed)
+              : followUpFilter === 'completed'
+                ? confFollowUps.filter(f => f.completed)
+                : confFollowUps;
+            return (
           <FollowUpsTable
-            followUps={confFollowUps}
+            followUps={filteredFollowUps}
             onToggle={async (id, completed) => {
               setConfFollowUps(prev =>
                 prev.map(fu =>
@@ -2409,6 +2438,8 @@ export default function ConferenceDetailPage() {
               }
             }}
           />
+            );
+          })()}
         </div>
       )}
 
