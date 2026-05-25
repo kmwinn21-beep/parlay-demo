@@ -20,7 +20,6 @@ import type { BudgetCompletionStatus } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass } from '@/lib/colors';
-import { useFloatingNavHidden } from '@/components/FloatingNavHiddenContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -819,7 +818,6 @@ export default function ProgramIntelligencePage() {
   const capabilities = useCapabilities();
   const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
   const configColors = useConfigColors();
-  const { setNavHidden } = useFloatingNavHidden();
 
   const [activeTab, setActiveTab] = useState<TabId>('performance');
   const [preset, setPreset] = useState<DatePreset>('this_year');
@@ -1584,15 +1582,15 @@ export default function ProgramIntelligencePage() {
                           <div>
                             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cross-Conference Company Presence</h4>
-                              <div className="flex items-center gap-1 flex-wrap">
+                              <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5">
                                 {(['icp', ...(primaryType ? ['primary'] : []), 'other', 'all'] as const).map(f => (
                                   <button
                                     key={f}
                                     onClick={() => setTrendsTableFilter(f as typeof trendsTableFilter)}
-                                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
                                       trendsTableFilter === f
-                                        ? 'bg-brand-primary text-white border-brand-primary'
-                                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
                                     }`}
                                   >
                                     {f === 'icp' ? 'ICP' : f === 'primary' ? primaryType! : f === 'other' ? 'Other' : 'All'}
@@ -1619,7 +1617,7 @@ export default function ProgramIntelligencePage() {
                                           <button
                                             type="button"
                                             className="text-sm font-medium text-brand-primary hover:underline text-left"
-                                            onClick={() => { setTrendsDrawerCompanyId(co.id); setTrendsDrawerCompanyName(co.name); setNavHidden(true); }}
+                                            onClick={() => { setTrendsDrawerCompanyId(co.id); setTrendsDrawerCompanyName(co.name); }}
                                           >
                                             {co.name}
                                           </button>
@@ -1645,8 +1643,8 @@ export default function ProgramIntelligencePage() {
                                             </button>
                                             {trendsPopoverId === co.id && co.conference_names.length > 0 && (
                                               <div
-                                                className="absolute right-0 bottom-full mb-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl text-left"
-                                                style={{ minWidth: 200, maxHeight: 200, overflowY: 'auto' }}
+                                                className="fixed z-[200] bg-white border border-gray-200 rounded-lg shadow-xl text-left"
+                                                style={{ minWidth: 200, maxHeight: 200, overflowY: 'auto', right: 24, marginTop: 4 }}
                                                 onClick={e => e.stopPropagation()}
                                               >
                                                 <div className="px-3 py-2">
@@ -1680,7 +1678,7 @@ export default function ProgramIntelligencePage() {
                   <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
                   <div
                     className="fixed inset-0 z-40 bg-black/30"
-                    onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setNavHidden(false); setTrendsPopoverId(null); }}
+                    onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setTrendsPopoverId(null); }}
                   />
                   <div
                     className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
@@ -1693,7 +1691,7 @@ export default function ProgramIntelligencePage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setNavHidden(false); setTrendsPopoverId(null); }}
+                        onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setTrendsPopoverId(null); }}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
