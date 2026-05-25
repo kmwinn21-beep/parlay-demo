@@ -280,13 +280,17 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
 
       {drawerConfId !== null && (
         <>
+          <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           {/* Backdrop */}
           <div
             className="fixed inset-0 z-40 bg-black/30"
             onClick={() => setDrawerConfId(null)}
           />
           {/* Drawer */}
-          <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[520px] bg-white shadow-2xl flex flex-col">
+          <div
+            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[520px] bg-white shadow-2xl flex flex-col"
+            style={{ animation: 'slideInRight 0.25s ease-out' }}
+          >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <div>
                 <h3 className="text-sm font-semibold text-gray-800">{drawerConfName}</h3>
