@@ -37,26 +37,38 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     args: [conferenceId],
   });
 
-  // Company cross-conference presence: for each company at this conf, count all conferences
+  // Company cross-conference presence: company_type + conference names list
   const crossConfRows = await db.execute({
     sql: `
       SELECT
         co.id,
         co.name,
         co.icp,
-        COUNT(DISTINCT ca2.conference_id) as total_confs
+        co.company_type,
+        COUNT(DISTINCT ca2.conference_id) as total_confs,
+        GROUP_CONCAT(DISTINCT c2.name) as conference_names
       FROM conference_attendees ca
       JOIN attendees a ON a.id = ca.attendee_id AND a.company_id IS NOT NULL
       JOIN companies co ON co.id = a.company_id
       JOIN attendees a2 ON a2.company_id = co.id
       JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+      JOIN conferences c2 ON c2.id = ca2.conference_id
       WHERE ca.conference_id = ?
-      GROUP BY co.id, co.name, co.icp
+      GROUP BY co.id, co.name, co.icp, co.company_type
       ORDER BY total_confs DESC, co.name ASC
-      LIMIT 30
     `,
     args: [conferenceId],
   });
+
+  // Primary company type label
+  const primaryTypeRows = await db.execute(`
+    SELECT value FROM config_options
+    WHERE category = 'company_type' AND is_primary = 1
+    LIMIT 1
+  `);
+  const primaryCompanyType = primaryTypeRows.rows.length > 0
+    ? String(primaryTypeRows.rows[0].value)
+    : null;
 
   // Seniority breakdown for this conference
   const seniorityBreakdown: Record<string, number> = {};
@@ -65,7 +77,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     seniorityBreakdown[s] = (seniorityBreakdown[s] ?? 0) + 1;
   }
 
-  // Title keyword frequency (split titles into words, filter stop words)
+  // Title keyword frequency
   const STOP_WORDS = new Set(['of', 'and', 'the', 'a', 'an', 'in', 'at', 'to', 'for', 'on', 'with', 'by', 'or', 'de', 'du', 'la', 'le', 'senior', 'junior', 'associate', 'assistant', 'executive', 'global', 'head', 'chief', 'principal']);
   const titleWords: Record<string, number> = {};
   for (const r of attendeeRows.rows) {
@@ -91,13 +103,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     icpCompanies: icpCompanies.size,
     icpDensityPct: uniqueCompanies.size > 0 ? Math.round(icpCompanies.size / uniqueCompanies.size * 100) : 0,
     meetingsTotal,
+    primaryCompanyType,
     seniorityBreakdown: Object.entries(seniorityBreakdown).sort((a, b) => b[1] - a[1]).map(([seniority, count]) => ({ seniority, count })),
     titleKeywords: topTitleWords,
     crossConfPresence: crossConfRows.rows.map(r => ({
       id: Number(r.id),
       name: String(r.name),
       icp: String(r.icp ?? 'No'),
+      company_type: r.company_type ? String(r.company_type) : null,
       total_confs: Number(r.total_confs),
+      conference_names: r.conference_names ? String(r.conference_names).split(',') : [],
     })),
   });
 }

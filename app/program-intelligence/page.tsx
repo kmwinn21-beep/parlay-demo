@@ -18,6 +18,9 @@ import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import type { BudgetCompletionStatus } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass } from '@/lib/colors';
+import { useFloatingNavHidden } from '@/components/FloatingNavHiddenContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,6 +186,7 @@ interface TrendsPortfolioData {
   conferences: TrendsConferenceItem[];
   avgIcpDensity: number;
   totalConferences: number;
+  primaryCompanyType: string | null;
   companyOverlap: { id: number; name: string; icp: string; conf_count: number }[];
   seniorityMix: { seniority: string; count: number }[];
 }
@@ -195,7 +199,8 @@ interface TrendsConferenceData {
   meetingsTotal: number;
   seniorityBreakdown: { seniority: string; count: number }[];
   titleKeywords: { word: string; count: number }[];
-  crossConfPresence: { id: number; name: string; icp: string; total_confs: number }[];
+  primaryCompanyType: string | null;
+  crossConfPresence: { id: number; name: string; icp: string; company_type: string | null; total_confs: number; conference_names: string[] }[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -813,6 +818,8 @@ export default function ProgramIntelligencePage() {
   const router = useRouter();
   const capabilities = useCapabilities();
   const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
+  const configColors = useConfigColors();
+  const { setNavHidden } = useFloatingNavHidden();
 
   const [activeTab, setActiveTab] = useState<TabId>('performance');
   const [preset, setPreset] = useState<DatePreset>('this_year');
@@ -853,6 +860,10 @@ export default function ProgramIntelligencePage() {
   const [trendsConfId, setTrendsConfId] = useState<number | null>(null);
   const [trendsConfData, setTrendsConfData] = useState<TrendsConferenceData | null>(null);
   const [trendsConfLoading, setTrendsConfLoading] = useState(false);
+  const [trendsTableFilter, setTrendsTableFilter] = useState<'icp' | 'primary' | 'other' | 'all'>('icp');
+  const [trendsDrawerCompanyId, setTrendsDrawerCompanyId] = useState<number | null>(null);
+  const [trendsDrawerCompanyName, setTrendsDrawerCompanyName] = useState('');
+  const [trendsPopoverId, setTrendsPopoverId] = useState<number | null>(null);
 
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
@@ -918,6 +929,22 @@ export default function ProgramIntelligencePage() {
       .finally(() => { if (!cancelled) setRepLoading(false); });
     return () => { cancelled = true; };
   }, [activeTab, startDate, endDate]);
+
+  // Close trends popover on outside click
+  useEffect(() => {
+    if (trendsPopoverId === null) return;
+    const close = () => setTrendsPopoverId(null);
+    const id = window.setTimeout(() => document.addEventListener('click', close), 0);
+    return () => { window.clearTimeout(id); document.removeEventListener('click', close); };
+  }, [trendsPopoverId]);
+
+  // Close trends popover on Escape
+  useEffect(() => {
+    if (trendsPopoverId === null) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setTrendsPopoverId(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [trendsPopoverId]);
 
   // Conference Trends fetch
   useEffect(() => {
@@ -1310,7 +1337,7 @@ export default function ProgramIntelligencePage() {
                       <p className="text-3xl font-bold text-brand-primary">{trendsData.avgIcpDensity}%</p>
                     </div>
                     <div className="card text-center">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Recurring Companies</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Recurring ICP Companies</p>
                       <p className="text-3xl font-bold text-brand-primary">{trendsData.companyOverlap.length}</p>
                       <p className="text-xs text-gray-400 mt-0.5">at 2+ conferences</p>
                     </div>
@@ -1372,20 +1399,17 @@ export default function ProgramIntelligencePage() {
 
                   {/* Recurring companies + Seniority mix */}
                   <div className="grid sm:grid-cols-2 gap-4">
-                    {/* Recurring Companies */}
+                    {/* Recurring ICP Companies */}
                     <div className="card">
-                      <h3 className="text-sm font-semibold text-brand-primary mb-3">Recurring Companies</h3>
+                      <h3 className="text-sm font-semibold text-brand-primary mb-3">Recurring ICP Companies</h3>
                       {trendsData.companyOverlap.length === 0 ? (
-                        <p className="text-sm text-gray-400">No companies found at multiple conferences.</p>
+                        <p className="text-sm text-gray-400">No ICP companies found at multiple conferences.</p>
                       ) : (
                         <div className="space-y-1.5">
                           {trendsData.companyOverlap.slice(0, 10).map((co, i) => (
                             <div key={co.id} className="flex items-center gap-2">
                               <span className="text-xs text-gray-400 w-4 shrink-0 text-right">{i + 1}.</span>
                               <span className="text-sm text-gray-800 flex-1 truncate" title={co.name}>{co.name}</span>
-                              {co.icp === 'Yes' && (
-                                <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full shrink-0">ICP</span>
-                              )}
                               <span className="px-2 py-0.5 text-xs font-semibold bg-brand-primary/10 text-brand-primary rounded-full shrink-0">
                                 {co.conf_count}
                               </span>
@@ -1525,8 +1549,8 @@ export default function ProgramIntelligencePage() {
                               {keywords.map(kw => (
                                 <span
                                   key={kw.word}
-                                  className="px-2 py-0.5 bg-brand-primary/8 text-brand-primary rounded-full font-medium capitalize"
-                                  style={{ fontSize: `${kwFontSize(kw.count)}px` }}
+                                  className="px-2 py-0.5 rounded-full font-medium capitalize"
+                                  style={{ fontSize: `${kwFontSize(kw.count)}px`, background: '#EEEDFE', border: '1px solid #534AB7', color: '#3C3489', fontWeight: 500 }}
                                   title={`${kw.word}: ${kw.count}`}
                                 >
                                   {kw.word}

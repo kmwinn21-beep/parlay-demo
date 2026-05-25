@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     ORDER BY c.start_date DESC
   `);
 
-  // Query 2: Company overlap - companies appearing in multiple conferences
+  // Query 2: ICP-only recurring companies (ICP = 'Yes', appearing in 2+ conferences)
   const overlapRows = await db.execute(`
     SELECT
       co.id,
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     FROM companies co
     JOIN attendees a ON a.company_id = co.id
     JOIN conference_attendees ca ON ca.attendee_id = a.id
+    WHERE co.icp = 'Yes'
     GROUP BY co.id, co.name, co.icp
     HAVING conf_count > 1
     ORDER BY conf_count DESC
@@ -52,6 +53,16 @@ export async function GET(request: NextRequest) {
     GROUP BY a.seniority
     ORDER BY count DESC
   `);
+
+  // Query 4: Primary company type label from config
+  const primaryTypeRows = await db.execute(`
+    SELECT value FROM config_options
+    WHERE category = 'company_type' AND is_primary = 1
+    LIMIT 1
+  `);
+  const primaryCompanyType = primaryTypeRows.rows.length > 0
+    ? String(primaryTypeRows.rows[0].value)
+    : null;
 
   const conferences = confMetrics.rows.map(r => {
     const total = Number(r.total_companies ?? 0);
@@ -75,6 +86,7 @@ export async function GET(request: NextRequest) {
     conferences,
     avgIcpDensity,
     totalConferences: conferences.length,
+    primaryCompanyType,
     companyOverlap: overlapRows.rows.map(r => ({
       id: Number(r.id),
       name: String(r.name),
