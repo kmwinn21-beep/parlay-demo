@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
-import Link from 'next/link';
 import type { DashboardConference } from './RecentSection';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 
@@ -105,10 +104,12 @@ function DashboardTargetCard({
   entry,
   hasMeeting,
   avgCostPerUnit,
+  onAttendeeClick,
 }: {
   entry: TargetEntry;
   hasMeeting: boolean;
   avgCostPerUnit: number;
+  onAttendeeClick: (id: number, name: string) => void;
 }) {
   const valuePill = formatValuePill(entry.companyWse, avgCostPerUnit);
   const tierConfig = TIER_CONFIG.find(t => t.key === entry.tier);
@@ -116,13 +117,14 @@ function DashboardTargetCard({
     <div className={`${tierConfig?.cardBg ?? 'bg-white'} border-2 ${tierConfig?.cardBorder ?? 'border-gray-200'} rounded-xl p-3 hover:shadow-sm transition-all`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1">
-          <Link
-            href={`/attendees/${entry.attendeeId}`}
-            className="text-sm font-semibold text-brand-primary hover:text-brand-secondary leading-tight block truncate"
+          <button
+            type="button"
+            onClick={() => onAttendeeClick(entry.attendeeId, `${entry.firstName} ${entry.lastName}`)}
+            className="text-sm font-semibold text-brand-primary hover:text-brand-secondary leading-tight block truncate text-left w-full"
           >
             {entry.firstName} {entry.lastName}
             {entry.title && <span className="font-normal text-xs text-gray-500">, {entry.title}</span>}
-          </Link>
+          </button>
           {entry.companyName && (
             <p className="text-xs text-gray-400 truncate mt-0.5">{entry.companyName}</p>
           )}
@@ -171,6 +173,8 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set(['1']));
+  const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
+  const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
 
   const fetchTargets = useCallback(async (confId: number) => {
     setLoading(true);
@@ -340,9 +344,43 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               entry={entry}
               hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
               avgCostPerUnit={avgCostPerUnit}
+              onAttendeeClick={(id, name) => { setDrawerAttendeeId(id); setDrawerAttendeeName(name); }}
             />
           ))}
         </div>
+      )}
+
+      {/* Attendee record iframe drawer */}
+      {drawerAttendeeId !== null && (
+        <>
+          <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setDrawerAttendeeId(null)} />
+          <div
+            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
+            style={{ animation: 'slideInRight 0.25s ease-out' }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800">{drawerAttendeeName}</h3>
+                <p className="text-xs text-gray-500">Attendee Record</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerAttendeeId(null)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              src={`/attendees/${drawerAttendeeId}?embed=true`}
+              className="flex-1 w-full border-0"
+              title={drawerAttendeeName}
+            />
+          </div>
+        </>
       )}
     </div>
   );
