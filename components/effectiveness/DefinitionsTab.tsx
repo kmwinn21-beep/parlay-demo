@@ -15,7 +15,7 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       {
         term: 'Rep CES — Conference Effectiveness Score by Rep',
         description: 'A 0–100 composite score measuring how effectively an individual sales rep contributed to a conference\'s performance across the same seven dimensions as the conference-level CES. Uses equal-share conference cost allocation per rep.',
-        calculation: '(ICP & Target Quality × 20%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 30%) + (Engagement Breadth × 5%) + (Cost Efficiency × 10%) + (Follow-up Execution × 10%) + (Net-New Engaged × 5%)',
+        calculation: '(ICP & Target Quality × 20%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 30%) + (Audience Coverage × 5%) + (Cost Efficiency × 10%) + (Follow-up Execution × 10%) + (Net-New Engaged × 5%)',
       },
       {
         term: 'ICP & Target Quality — Rep (20%)',
@@ -33,7 +33,7 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         calculation: 'MIN(rep pipeline influenced / rep allocated required pipeline, 1) × 100',
       },
       {
-        term: 'Engagement Breadth — Rep (5%)',
+        term: 'Audience Coverage — Rep (5%)',
         description: 'The percentage of all companies at the conference that the rep engaged via meetings.',
         calculation: 'rep companies engaged / total companies at conference × 100',
       },
@@ -65,7 +65,7 @@ const SECTIONS: { title: string; items: Def[] }[] = [
       {
         term: 'CES — Conference Effectiveness Score',
         description: 'A 0–100 composite score across 7 dimensions shared across Events, Sales, and Marketing as a common language for conference investment decisions.',
-        calculation: '(ICP & Target Quality × 20%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 30%) + (Engagement Breadth × 5%) + (Cost Efficiency × 10%) + (Follow-up Execution × 10%) + (Net-New Engaged × 5%)',
+        calculation: '(ICP & Target Quality × 20%) + (Meeting Execution × 20%) + (Pipeline Influence Index × 30%) + (Audience Coverage × 5%) + (Cost Efficiency × 10%) + (Follow-up Execution × 10%) + (Net-New Engaged × 5%)',
       },
       {
         term: 'ICP & Target Quality (20%)',
@@ -88,7 +88,7 @@ const SECTIONS: { title: string; items: Def[] }[] = [
         calculation: 'required pipeline = (total budget × expected return on cost multiple) × required pipeline multiple',
       },
       {
-        term: 'Engagement Breadth (5%)',
+        term: 'Audience Coverage (5%)',
         description: 'The percentage of all companies at the conference that received at least one meaningful interaction.',
         calculation: 'engaged companies / total companies × 100',
       },

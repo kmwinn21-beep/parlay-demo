@@ -167,6 +167,37 @@ interface ConferenceSummary {
   total_activities: number;
 }
 
+// ── Conference Trends types ────────────────────────────────────────────────────
+
+interface TrendsConferenceItem {
+  id: number;
+  name: string;
+  start_date: string;
+  total_attendees: number;
+  total_companies: number;
+  icp_companies: number;
+  icp_density_pct: number;
+}
+
+interface TrendsPortfolioData {
+  conferences: TrendsConferenceItem[];
+  avgIcpDensity: number;
+  totalConferences: number;
+  companyOverlap: { id: number; name: string; icp: string; conf_count: number }[];
+  seniorityMix: { seniority: string; count: number }[];
+}
+
+interface TrendsConferenceData {
+  totalAttendees: number;
+  totalCompanies: number;
+  icpCompanies: number;
+  icpDensityPct: number;
+  meetingsTotal: number;
+  seniorityBreakdown: { seniority: string; count: number }[];
+  titleKeywords: { word: string; count: number }[];
+  crossConfPresence: { id: number; name: string; icp: string; total_confs: number }[];
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TABS: { id: TabId; label: string }[] = [
@@ -202,7 +233,7 @@ const DIM_LABELS: Record<string, string> = {
   dim1_icp_target: 'ICP & Target Quality',
   dim2_meeting_exec: 'Meeting Execution',
   dim3_pipeline_index: 'Pipeline Influence',
-  dim4_breadth: 'Engagement Breadth',
+  dim4_breadth: 'Audience Coverage',
   dim7_cost_efficiency: 'Cost Efficiency',
   dim5_followup: 'Follow-up Execution',
   dim6_net_new: 'Net-New Engaged',
@@ -816,6 +847,13 @@ export default function ProgramIntelligencePage() {
   const [drawerScoreView, setDrawerScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
   const REP_PAGE_SIZE = 30;
 
+  // Conference Trends state
+  const [trendsData, setTrendsData] = useState<TrendsPortfolioData | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  const [trendsConfId, setTrendsConfId] = useState<number | null>(null);
+  const [trendsConfData, setTrendsConfData] = useState<TrendsConferenceData | null>(null);
+  const [trendsConfLoading, setTrendsConfLoading] = useState(false);
+
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
     setIsPortrait(mql.matches);
@@ -880,6 +918,33 @@ export default function ProgramIntelligencePage() {
       .finally(() => { if (!cancelled) setRepLoading(false); });
     return () => { cancelled = true; };
   }, [activeTab, startDate, endDate]);
+
+  // Conference Trends fetch
+  useEffect(() => {
+    if (activeTab !== 'trends') return;
+    if (trendsData) return; // already loaded
+    setTrendsLoading(true);
+    fetch('/api/program-intelligence/trends', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: TrendsPortfolioData) => {
+        setTrendsData(data);
+        if (data.conferences.length > 0) setTrendsConfId(data.conferences[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setTrendsLoading(false));
+  }, [activeTab, trendsData]);
+
+  // Per-conference drill-down fetch
+  useEffect(() => {
+    if (!trendsConfId) return;
+    setTrendsConfLoading(true);
+    setTrendsConfData(null);
+    fetch(`/api/program-intelligence/trends/${trendsConfId}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: TrendsConferenceData) => setTrendsConfData(data))
+      .catch(() => {})
+      .finally(() => setTrendsConfLoading(false));
+  }, [trendsConfId]);
 
   // Track B onboarding: mark step complete when user visits calendar or performance tabs
   useEffect(() => {
@@ -1612,7 +1677,7 @@ export default function ProgramIntelligencePage() {
                           { label: 'ICP & Target Quality (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim1_icp_target)) },
                           { label: 'Meeting Execution (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim2_meeting_exec)) },
                           { label: 'Pipeline Influence (30%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim3_pipeline_index)) },
-                          { label: 'Engagement Breadth (5%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim4_breadth)) },
+                          { label: 'Audience Coverage (5%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim4_breadth)) },
                           { label: 'Cost Efficiency (10%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim7_cost_efficiency)) },
                           { label: 'Follow-up Execution (10%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim5_followup)) },
                         ]}
@@ -2182,7 +2247,7 @@ export default function ProgramIntelligencePage() {
                       {(drawerScoreView === 'ces'
                         ? ([
                             ['Meeting Execution', cesComponentAverages.meeting_execution],
-                            ['Engagement Breadth', cesComponentAverages.engagement_breadth],
+                            ['Audience Coverage', cesComponentAverages.engagement_breadth],
                             ['Follow-up Execution', cesComponentAverages.followup_execution],
                           ] as [string, number | null][])
                         : drawerScoreView === 'cost'

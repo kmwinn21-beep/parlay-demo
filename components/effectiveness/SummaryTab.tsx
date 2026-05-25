@@ -128,7 +128,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
     { label: 'ICP & Target Quality',    value: ces.dim1_icp_target,          weight: '20%', color: DIM_COLORS[0] },
     { label: 'Meeting Execution',        value: ces.dim2_meeting_exec,         weight: '20%', color: DIM_COLORS[1] },
     { label: 'Pipeline Influence Index', value: ces.dim3_pipeline_index,       weight: '30%', color: DIM_COLORS[2] },
-    { label: 'Engagement Breadth',       value: ces.dim4_breadth,              weight: '5%',  color: DIM_COLORS[3] },
+    { label: 'Audience Coverage',         value: ces.dim4_breadth,              weight: '5%',  color: DIM_COLORS[3] },
     { label: 'Cost Efficiency',          value: ces.dim7_cost_efficiency ?? 0, weight: '10%', color: DIM_COLORS[4] },
     { label: 'Follow-up Execution',      value: ces.dim5_followup,             weight: '10%', color: DIM_COLORS[5] },
     { label: 'Net-New Engaged',          value: ces.dim6_net_new,              weight: '5%',  color: DIM_COLORS[6] },
@@ -466,7 +466,7 @@ export function SummaryTab({ data, conferenceId }: { data: EffectivenessData; co
                   <th className="text-center px-2 py-2 font-semibold text-gray-500" title="ICP & Target Quality">ICP</th>
                   <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Meeting Execution">Mtg</th>
                   <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Pipeline Influence Index">PI</th>
-                  <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Engagement Breadth">Brd</th>
+                  <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Audience Coverage">Cov</th>
                   <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Cost Efficiency">Cost</th>
                   <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Follow-up Execution">FU</th>
                   <th className="text-center px-2 py-2 font-semibold text-gray-500" title="Net-New Engaged">NN</th>

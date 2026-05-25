@@ -68,7 +68,7 @@ function formatData(data: Record<string, unknown>): string {
   lines.push(`  ICP & Target Quality (20%): ${n(ces.dim1_icp_target, 1)}`);
   lines.push(`  Meeting Execution (20%): ${n(ces.dim2_meeting_exec, 1)}`);
   lines.push(`  Pipeline Influence Index (30%): ${n(ces.dim3_pipeline_index, 1)}`);
-  lines.push(`  Engagement Breadth (5%): ${n(ces.dim4_breadth, 1)}`);
+  lines.push(`  Audience Coverage (5%): ${n(ces.dim4_breadth, 1)}`);
   lines.push(`  Cost Efficiency (10%): ${n(ces.dim7_cost_efficiency, 1)}`);
   lines.push(`  Follow-up Execution (10%): ${n(ces.dim5_followup, 1)}`);
   lines.push(`  Net-New Engaged (5%): ${n(ces.dim6_net_new, 1)}`);
@@ -133,7 +133,7 @@ function formatData(data: Record<string, unknown>): string {
     lines.push('');
     lines.push('## CES BY REP');
     repCES.forEach(r => {
-      lines.push(`${r.rep}: Score ${n(r.rep_ces_score)} (${r.rep_ces_tier ?? ''}) | ICP: ${n(r.rep_dim1_icp_target, 0)} | Mtg: ${n(r.rep_dim2_meeting_exec, 0)} | Pipeline: ${n(r.rep_dim3_pipeline_index, 0)} | Breadth: ${n(r.rep_dim4_breadth, 0)} | Cost: ${n(r.rep_dim5_cost_efficiency, 0)} | FU: ${n(r.rep_dim6_followup, 0)} | Net-New: ${n(r.rep_dim7_net_new, 0)}`);
+      lines.push(`${r.rep}: Score ${n(r.rep_ces_score)} (${r.rep_ces_tier ?? ''}) | ICP: ${n(r.rep_dim1_icp_target, 0)} | Mtg: ${n(r.rep_dim2_meeting_exec, 0)} | Pipeline: ${n(r.rep_dim3_pipeline_index, 0)} | Cov: ${n(r.rep_dim4_breadth, 0)} | Cost: ${n(r.rep_dim5_cost_efficiency, 0)} | FU: ${n(r.rep_dim6_followup, 0)} | Net-New: ${n(r.rep_dim7_net_new, 0)}`);
     });
   }
 
