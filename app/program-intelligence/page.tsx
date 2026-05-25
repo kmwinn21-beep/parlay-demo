@@ -18,6 +18,8 @@ import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import type { BudgetCompletionStatus } from '@/lib/budgetCompleteness';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass } from '@/lib/colors';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -167,6 +169,39 @@ interface ConferenceSummary {
   total_activities: number;
 }
 
+// ── Conference Trends types ────────────────────────────────────────────────────
+
+interface TrendsConferenceItem {
+  id: number;
+  name: string;
+  start_date: string;
+  total_attendees: number;
+  total_companies: number;
+  icp_companies: number;
+  icp_density_pct: number;
+}
+
+interface TrendsPortfolioData {
+  conferences: TrendsConferenceItem[];
+  avgIcpDensity: number;
+  totalConferences: number;
+  primaryCompanyType: string | null;
+  companyOverlap: { id: number; name: string; icp: string; conf_count: number }[];
+  seniorityMix: { seniority: string; count: number }[];
+}
+
+interface TrendsConferenceData {
+  totalAttendees: number;
+  totalCompanies: number;
+  icpCompanies: number;
+  icpDensityPct: number;
+  meetingsTotal: number;
+  seniorityBreakdown: { seniority: string; count: number }[];
+  titleKeywords: { word: string; count: number }[];
+  primaryCompanyType: string | null;
+  crossConfPresence: { id: number; name: string; icp: string; company_type: string | null; total_confs: number; conference_names: string[] }[];
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TABS: { id: TabId; label: string }[] = [
@@ -202,7 +237,7 @@ const DIM_LABELS: Record<string, string> = {
   dim1_icp_target: 'ICP & Target Quality',
   dim2_meeting_exec: 'Meeting Execution',
   dim3_pipeline_index: 'Pipeline Influence',
-  dim4_breadth: 'Engagement Breadth',
+  dim4_breadth: 'Audience Coverage',
   dim7_cost_efficiency: 'Cost Efficiency',
   dim5_followup: 'Follow-up Execution',
   dim6_net_new: 'Net-New Engaged',
@@ -782,6 +817,7 @@ export default function ProgramIntelligencePage() {
   const router = useRouter();
   const capabilities = useCapabilities();
   const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
+  const configColors = useConfigColors();
 
   const [activeTab, setActiveTab] = useState<TabId>('performance');
   const [preset, setPreset] = useState<DatePreset>('this_year');
@@ -815,6 +851,18 @@ export default function ProgramIntelligencePage() {
   const [repScoreView, setRepScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
   const [drawerScoreView, setDrawerScoreView] = useState<'ses' | 'ces' | 'cost'>('ses');
   const REP_PAGE_SIZE = 30;
+
+  // Conference Trends state
+  const [trendsData, setTrendsData] = useState<TrendsPortfolioData | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  const [trendsConfId, setTrendsConfId] = useState<number | null>(null);
+  const [trendsConfData, setTrendsConfData] = useState<TrendsConferenceData | null>(null);
+  const [trendsConfLoading, setTrendsConfLoading] = useState(false);
+  const [trendsTableFilter, setTrendsTableFilter] = useState<'icp' | 'primary' | 'other' | 'all'>('icp');
+  const [trendsDrawerCompanyId, setTrendsDrawerCompanyId] = useState<number | null>(null);
+  const [trendsDrawerCompanyName, setTrendsDrawerCompanyName] = useState('');
+  const [trendsPopoverId, setTrendsPopoverId] = useState<number | null>(null);
+  const [trendsPopoverPos, setTrendsPopoverPos] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
@@ -880,6 +928,49 @@ export default function ProgramIntelligencePage() {
       .finally(() => { if (!cancelled) setRepLoading(false); });
     return () => { cancelled = true; };
   }, [activeTab, startDate, endDate]);
+
+  // Close trends popover on outside click
+  useEffect(() => {
+    if (trendsPopoverId === null) return;
+    const close = () => { setTrendsPopoverId(null); setTrendsPopoverPos(null); };
+    const id = window.setTimeout(() => document.addEventListener('click', close), 0);
+    return () => { window.clearTimeout(id); document.removeEventListener('click', close); };
+  }, [trendsPopoverId]);
+
+  // Close trends popover on Escape
+  useEffect(() => {
+    if (trendsPopoverId === null) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { setTrendsPopoverId(null); setTrendsPopoverPos(null); } };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [trendsPopoverId]);
+
+  // Conference Trends fetch
+  useEffect(() => {
+    if (activeTab !== 'trends') return;
+    if (trendsData) return; // already loaded
+    setTrendsLoading(true);
+    fetch('/api/program-intelligence/trends', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: TrendsPortfolioData) => {
+        setTrendsData(data);
+        if (data.conferences.length > 0) setTrendsConfId(data.conferences[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setTrendsLoading(false));
+  }, [activeTab, trendsData]);
+
+  // Per-conference drill-down fetch
+  useEffect(() => {
+    if (!trendsConfId) return;
+    setTrendsConfLoading(true);
+    setTrendsConfData(null);
+    fetch(`/api/program-intelligence/trends/${trendsConfId}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: TrendsConferenceData) => setTrendsConfData(data))
+      .catch(() => {})
+      .finally(() => setTrendsConfLoading(false));
+  }, [trendsConfId]);
 
   // Track B onboarding: mark step complete when user visits calendar or performance tabs
   useEffect(() => {
@@ -1185,7 +1276,456 @@ export default function ProgramIntelligencePage() {
 
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && (
+        {/* ── Conference Trends tab ─────────────────────────────────────────── */}
+        {activeTab === 'trends' && (() => {
+          const SENIORITY_COLORS: Record<string, string> = {
+            'C-Suite': '#7c3aed',
+            'VP/SVP': '#1B76BC',
+            'Director': '#059669',
+            'Manager': '#f59e0b',
+            'Unknown': '#6b7280',
+          };
+          const seniorityColor = (s: string) => SENIORITY_COLORS[s] ?? '#6b7280';
+
+          // Conferences sorted ASC for the bar chart (most recent 12)
+          const chartConfs = trendsData
+            ? [...trendsData.conferences].sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(-12)
+            : [];
+
+          // Top ICP company in overlap list
+          const topIcpOverlap = trendsData?.companyOverlap.find(c => c.icp === 'Yes');
+
+          // Seniority mix totals
+          const seniorityTotal = (trendsData?.seniorityMix ?? []).reduce((s, r) => s + r.count, 0);
+
+          // Drill-down seniority total
+          const ddSeniorityTotal = (trendsConfData?.seniorityBreakdown ?? []).reduce((s, r) => s + r.count, 0);
+
+          // Title keywords: normalize font size 10–18px
+          const keywords = trendsConfData?.titleKeywords ?? [];
+          const maxKw = keywords[0]?.count ?? 1;
+          const minKw = keywords[keywords.length - 1]?.count ?? 1;
+          const kwFontSize = (count: number) => {
+            if (maxKw === minKw) return 14;
+            return Math.round(10 + ((count - minKw) / (maxKw - minKw)) * 8);
+          };
+
+          const selectedConf = trendsData?.conferences.find(c => c.id === trendsConfId);
+
+          return (
+            <div className="space-y-6">
+              {/* ── Section A: Portfolio Overview ── */}
+              {trendsLoading ? (
+                <div className="card space-y-4 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-1/3" />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[0,1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-lg" />)}
+                  </div>
+                  <div className="h-48 bg-gray-100 rounded-lg" />
+                </div>
+              ) : trendsData ? (
+                <>
+                  {/* KPI tiles */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Conferences Tracked</p>
+                      <p className="text-3xl font-bold text-brand-primary">{trendsData.totalConferences}</p>
+                    </div>
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Avg ICP Density</p>
+                      <p className="text-3xl font-bold text-brand-primary">{trendsData.avgIcpDensity}%</p>
+                    </div>
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Recurring ICP Companies</p>
+                      <p className="text-3xl font-bold text-brand-primary">{trendsData.companyOverlap.length}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">at 2+ conferences</p>
+                    </div>
+                    <div className="card text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Top ICP Overlap</p>
+                      {topIcpOverlap ? (
+                        <>
+                          <p className="text-sm font-semibold text-brand-primary leading-tight mt-1 truncate" title={topIcpOverlap.name}>{topIcpOverlap.name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{topIcpOverlap.conf_count} conferences</p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-400 mt-2">—</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ICP Density bar chart */}
+                  <div className="card">
+                    <h3 className="text-sm font-semibold text-brand-primary mb-0.5">ICP Density by Conference</h3>
+                    <p className="text-xs text-gray-400 mb-4">% ICP companies in attendance list — avg line shown</p>
+                    {chartConfs.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-6 text-center">No conference data available.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {chartConfs.map(conf => {
+                          const pct = conf.icp_density_pct;
+                          const aboveAvg = pct > trendsData.avgIcpDensity;
+                          return (
+                            <div key={conf.id} className="flex items-center gap-3">
+                              <span className="text-xs text-gray-500 w-32 shrink-0 truncate text-right" title={conf.name}>{conf.name}</span>
+                              <div className="relative flex-1 h-5 bg-gray-100 rounded overflow-visible">
+                                {/* bar */}
+                                <div
+                                  className="absolute left-0 top-0 h-full rounded transition-all duration-300"
+                                  style={{
+                                    width: `${pct}%`,
+                                    backgroundColor: aboveAvg ? '#059669' : '#1B76BC',
+                                  }}
+                                />
+                                {/* avg line */}
+                                <div
+                                  className="absolute top-0 h-full w-px bg-gray-400 z-10"
+                                  style={{ left: `${trendsData.avgIcpDensity}%` }}
+                                  title={`Avg: ${trendsData.avgIcpDensity}%`}
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-gray-600 w-8 shrink-0">{pct}%</span>
+                            </div>
+                          );
+                        })}
+                        <p className="text-xs text-gray-400 mt-2 text-right">
+                          <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: '#059669' }} />above avg
+                          <span className="inline-block w-2 h-2 rounded-full ml-3 mr-1" style={{ backgroundColor: '#1B76BC' }} />at/below avg
+                          <span className="ml-3">avg line = {trendsData.avgIcpDensity}%</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recurring companies + Seniority mix */}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {/* Recurring ICP Companies */}
+                    <div className="card">
+                      <h3 className="text-sm font-semibold text-brand-primary mb-3">Recurring ICP Companies</h3>
+                      {trendsData.companyOverlap.length === 0 ? (
+                        <p className="text-sm text-gray-400">No ICP companies found at multiple conferences.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {trendsData.companyOverlap.slice(0, 10).map((co, i) => (
+                            <div key={co.id} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-4 shrink-0 text-right">{i + 1}.</span>
+                              <span className="text-sm text-gray-800 flex-1 truncate" title={co.name}>{co.name}</span>
+                              <span className="px-2 py-0.5 text-xs font-semibold bg-brand-primary/10 text-brand-primary rounded-full shrink-0">
+                                {co.conf_count}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Portfolio Seniority Mix */}
+                    <div className="card">
+                      <h3 className="text-sm font-semibold text-brand-primary mb-3">Portfolio Seniority Mix</h3>
+                      {trendsData.seniorityMix.length === 0 ? (
+                        <p className="text-sm text-gray-400">No seniority data available.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {trendsData.seniorityMix.map(row => {
+                            const pct = seniorityTotal > 0 ? Math.round(row.count / seniorityTotal * 100) : 0;
+                            return (
+                              <div key={row.seniority} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-600 w-20 shrink-0">{row.seniority}</span>
+                                <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+                                  <div
+                                    className="h-full rounded transition-all duration-300"
+                                    style={{ width: `${pct}%`, backgroundColor: seniorityColor(row.seniority) }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-500 w-16 shrink-0 text-right">{row.count.toLocaleString()} ({pct}%)</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {/* ── Section B: Conference Drill-Down ── */}
+              {trendsData && (
+                <div className="card space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <h3 className="text-sm font-semibold text-brand-primary">Conference Detail</h3>
+                    <select
+                      className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-secondary/40"
+                      value={trendsConfId ?? ''}
+                      onChange={e => setTrendsConfId(Number(e.target.value))}
+                    >
+                      {[...trendsData.conferences]
+                        .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                        .map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.start_date.slice(0, 4)})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {selectedConf && (
+                    <p className="text-xs text-gray-400">
+                      {selectedConf.start_date} · {selectedConf.total_attendees} attendees · {selectedConf.total_companies} companies
+                    </p>
+                  )}
+
+                  {trendsConfLoading ? (
+                    <div className="space-y-3 animate-pulse">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[0,1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-lg" />)}
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="h-40 bg-gray-100 rounded-lg" />
+                        <div className="h-40 bg-gray-100 rounded-lg" />
+                      </div>
+                    </div>
+                  ) : trendsConfData ? (
+                    <div className="space-y-4">
+                      {/* KPI tiles */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">Attendees</p>
+                          <p className="text-2xl font-bold text-brand-primary">{trendsConfData.totalAttendees.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">Companies</p>
+                          <p className="text-2xl font-bold text-brand-primary">{trendsConfData.totalCompanies.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">ICP Companies</p>
+                          <p className="text-2xl font-bold text-green-600">{trendsConfData.icpCompanies.toLocaleString()}</p>
+                          <p className="text-xs text-gray-400">{trendsConfData.icpDensityPct}% of total</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-gray-400 mb-1">Meetings</p>
+                          <p className="text-2xl font-bold text-brand-primary">{trendsConfData.meetingsTotal.toLocaleString()}</p>
+                        </div>
+                      </div>
+
+                      {/* Seniority breakdown + Title keywords */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {/* Seniority breakdown */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Seniority Breakdown</h4>
+                          {trendsConfData.seniorityBreakdown.length === 0 ? (
+                            <p className="text-sm text-gray-400">No data.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {trendsConfData.seniorityBreakdown.map(row => {
+                                const pct = ddSeniorityTotal > 0 ? Math.round(row.count / ddSeniorityTotal * 100) : 0;
+                                return (
+                                  <div key={row.seniority} className="flex items-center gap-2">
+                                    <div
+                                      className="w-2 h-2 rounded-full shrink-0"
+                                      style={{ backgroundColor: seniorityColor(row.seniority) }}
+                                    />
+                                    <span className="text-xs text-gray-600 w-20 shrink-0">{row.seniority}</span>
+                                    <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+                                      <div
+                                        className="h-full rounded"
+                                        style={{ width: `${pct}%`, backgroundColor: seniorityColor(row.seniority) }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-gray-500 w-20 shrink-0 text-right">{row.count} ({pct}%)</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Title Keywords */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Title Keywords</h4>
+                          {keywords.length === 0 ? (
+                            <p className="text-sm text-gray-400">No title data.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {keywords.map(kw => (
+                                <span
+                                  key={kw.word}
+                                  className="px-2 py-0.5 rounded-full font-medium capitalize"
+                                  style={{ fontSize: `${kwFontSize(kw.count)}px`, background: '#EEEDFE', border: '1px solid #534AB7', color: '#3C3489', fontWeight: 500 }}
+                                  title={`${kw.word}: ${kw.count}`}
+                                >
+                                  {kw.word}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Cross-Conference Company Presence */}
+                      {(() => {
+                        const primaryType = trendsConfData.primaryCompanyType;
+                        const companyTypeColors = configColors['company_type'] ?? {};
+                        const confCountStyle = (n: number): React.CSSProperties => {
+                          if (n <= 2) return { background: '#F1EFE8', border: '1px solid #D3D1C7', color: '#5F5E5A' };
+                          if (n <= 4) return { background: '#E6F1FB', border: '1px solid #85B7EB', color: '#0C447C' };
+                          if (n <= 6) return { background: '#EEEDFE', border: '1px solid #AFA9EC', color: '#3C3489' };
+                          if (n <= 8) return { background: '#E1F5EE', border: '1px solid #5DCAA5', color: '#085041' };
+                          return { background: '#EAF3DE', border: '1px solid #97C459', color: '#27500A' };
+                        };
+                        const allRows = trendsConfData.crossConfPresence;
+                        const filteredRows = (() => {
+                          let rows = allRows;
+                          if (trendsTableFilter === 'icp') rows = allRows.filter(c => c.icp === 'Yes');
+                          else if (trendsTableFilter === 'primary' && primaryType) rows = allRows.filter(c => c.company_type === primaryType);
+                          else if (trendsTableFilter === 'other') rows = allRows.filter(c => c.icp !== 'Yes' && c.company_type !== primaryType);
+                          return rows.slice(0, 20);
+                        })();
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cross-Conference Company Presence</h4>
+                              <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5">
+                                {(['icp', ...(primaryType ? ['primary'] : []), 'other', 'all'] as const).map(f => (
+                                  <button
+                                    key={f}
+                                    onClick={() => setTrendsTableFilter(f as typeof trendsTableFilter)}
+                                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                                      trendsTableFilter === f
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                                  >
+                                    {f === 'icp' ? 'ICP' : f === 'primary' ? primaryType! : f === 'other' ? 'Other' : 'All'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {filteredRows.length === 0 ? (
+                              <p className="text-sm text-gray-400">No companies match this filter.</p>
+                            ) : (
+                              <div className="overflow-x-auto relative">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-gray-100">
+                                      <th className="text-left text-xs font-medium text-gray-400 py-2 pr-4">Company</th>
+                                      <th className="text-left text-xs font-medium text-gray-400 py-2 pr-4">Type</th>
+                                      <th className="text-right text-xs font-medium text-gray-400 py-2">Conferences</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {filteredRows.map(co => (
+                                      <tr key={co.id} className="border-b border-gray-50 hover:bg-gray-50/50 relative">
+                                        <td className="py-1.5 pr-4">
+                                          <button
+                                            type="button"
+                                            className="text-sm font-medium text-brand-primary hover:underline text-left"
+                                            onClick={() => { setTrendsDrawerCompanyId(co.id); setTrendsDrawerCompanyName(co.name); }}
+                                          >
+                                            {co.name}
+                                          </button>
+                                        </td>
+                                        <td className="py-1.5 pr-4">
+                                          {co.company_type ? (
+                                            <span className={getBadgeClass(co.company_type, companyTypeColors)} style={{ fontSize: '10px', padding: '1px 6px' }}>
+                                              {co.company_type}
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs text-gray-300">—</span>
+                                          )}
+                                        </td>
+                                        <td className="py-1.5 text-right">
+                                          <button
+                                            type="button"
+                                            className="px-2 py-0.5 text-xs font-semibold rounded-full cursor-pointer"
+                                            style={confCountStyle(co.total_confs)}
+                                            onClick={(e) => {
+                                              if (trendsPopoverId === co.id) {
+                                                setTrendsPopoverId(null);
+                                                setTrendsPopoverPos(null);
+                                              } else {
+                                                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                                setTrendsPopoverId(co.id);
+                                                setTrendsPopoverPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                              }
+                                            }}
+                                          >
+                                            {co.total_confs}
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : !trendsConfId ? (
+                    <p className="text-sm text-gray-400 py-4 text-center">Select a conference above.</p>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Conference names popover (fixed to viewport) */}
+              {trendsPopoverId !== null && trendsPopoverPos !== null && (() => {
+                const popoverCompany = trendsConfData?.crossConfPresence.find(c => c.id === trendsPopoverId);
+                if (!popoverCompany || popoverCompany.conference_names.length === 0) return null;
+                return (
+                  <div
+                    className="fixed z-[200] bg-white border border-gray-200 rounded-lg shadow-xl text-left"
+                    style={{ top: trendsPopoverPos.top, right: trendsPopoverPos.right, minWidth: 200, maxHeight: 200, overflowY: 'auto' }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="px-3 py-2">
+                      {popoverCompany.conference_names.map((cn, i) => (
+                        <p key={i} className="text-xs text-gray-700 py-0.5 border-b border-gray-50 last:border-0">{cn}</p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Company record iframe drawer */}
+              {trendsDrawerCompanyId !== null && (
+                <>
+                  <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+                  <div
+                    className="fixed inset-0 z-40 bg-black/30"
+                    onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setTrendsPopoverId(null); }}
+                  />
+                  <div
+                    className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
+                    style={{ animation: 'slideInRight 0.25s ease-out' }}
+                  >
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-800">{trendsDrawerCompanyName}</h3>
+                        <p className="text-xs text-gray-500">Company Record</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setTrendsPopoverId(null); }}
+                        className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <iframe
+                      src={`/companies/${trendsDrawerCompanyId}?embed=true`}
+                      className="flex-1 w-full border-0"
+                      title={trendsDrawerCompanyName}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
+
+        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && activeTab !== 'trends' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
@@ -1612,7 +2152,7 @@ export default function ProgramIntelligencePage() {
                           { label: 'ICP & Target Quality (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim1_icp_target)) },
                           { label: 'Meeting Execution (20%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim2_meeting_exec)) },
                           { label: 'Pipeline Influence (30%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim3_pipeline_index)) },
-                          { label: 'Engagement Breadth (5%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim4_breadth)) },
+                          { label: 'Audience Coverage (5%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim4_breadth)) },
                           { label: 'Cost Efficiency (10%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim7_cost_efficiency)) },
                           { label: 'Follow-up Execution (10%)', value: avgNonNull(activeConferences.map((c) => c.ces_components.dim5_followup)) },
                         ]}
@@ -2182,7 +2722,7 @@ export default function ProgramIntelligencePage() {
                       {(drawerScoreView === 'ces'
                         ? ([
                             ['Meeting Execution', cesComponentAverages.meeting_execution],
-                            ['Engagement Breadth', cesComponentAverages.engagement_breadth],
+                            ['Audience Coverage', cesComponentAverages.engagement_breadth],
                             ['Follow-up Execution', cesComponentAverages.followup_execution],
                           ] as [string, number | null][])
                         : drawerScoreView === 'cost'
