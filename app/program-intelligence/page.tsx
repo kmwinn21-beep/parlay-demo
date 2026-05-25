@@ -1562,46 +1562,152 @@ export default function ProgramIntelligencePage() {
                       </div>
 
                       {/* Cross-Conference Company Presence */}
-                      <div>
-                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cross-Conference Company Presence</h4>
-                        {trendsConfData.crossConfPresence.length === 0 ? (
-                          <p className="text-sm text-gray-400">No cross-conference data.</p>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-100">
-                                  <th className="text-left text-xs font-medium text-gray-400 py-2 pr-4">Company</th>
-                                  <th className="text-center text-xs font-medium text-gray-400 py-2 pr-4">ICP</th>
-                                  <th className="text-right text-xs font-medium text-gray-400 py-2">Conferences</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {trendsConfData.crossConfPresence.slice(0, 15).map(co => (
-                                  <tr key={co.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                                    <td className="py-1.5 pr-4 text-gray-800 font-medium">{co.name}</td>
-                                    <td className="py-1.5 pr-4 text-center">
-                                      {co.icp === 'Yes' && (
-                                        <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">ICP</span>
-                                      )}
-                                    </td>
-                                    <td className="py-1.5 text-right">
-                                      <span className="px-2 py-0.5 text-xs font-semibold bg-brand-primary/10 text-brand-primary rounded-full">
-                                        {co.total_confs}
-                                      </span>
-                                    </td>
-                                  </tr>
+                      {(() => {
+                        const primaryType = trendsConfData.primaryCompanyType;
+                        const companyTypeColors = configColors['company_type'] ?? {};
+                        const confCountStyle = (n: number): React.CSSProperties => {
+                          if (n <= 2) return { background: '#F1EFE8', border: '1px solid #D3D1C7', color: '#5F5E5A' };
+                          if (n <= 4) return { background: '#E6F1FB', border: '1px solid #85B7EB', color: '#0C447C' };
+                          if (n <= 6) return { background: '#EEEDFE', border: '1px solid #AFA9EC', color: '#3C3489' };
+                          if (n <= 8) return { background: '#E1F5EE', border: '1px solid #5DCAA5', color: '#085041' };
+                          return { background: '#EAF3DE', border: '1px solid #97C459', color: '#27500A' };
+                        };
+                        const allRows = trendsConfData.crossConfPresence;
+                        const filteredRows = (() => {
+                          let rows = allRows;
+                          if (trendsTableFilter === 'icp') rows = allRows.filter(c => c.icp === 'Yes');
+                          else if (trendsTableFilter === 'primary' && primaryType) rows = allRows.filter(c => c.company_type === primaryType);
+                          else if (trendsTableFilter === 'other') rows = allRows.filter(c => c.icp !== 'Yes' && c.company_type !== primaryType);
+                          return rows.slice(0, 20);
+                        })();
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cross-Conference Company Presence</h4>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {(['icp', ...(primaryType ? ['primary'] : []), 'other', 'all'] as const).map(f => (
+                                  <button
+                                    key={f}
+                                    onClick={() => setTrendsTableFilter(f as typeof trendsTableFilter)}
+                                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                                      trendsTableFilter === f
+                                        ? 'bg-brand-primary text-white border-brand-primary'
+                                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                    }`}
+                                  >
+                                    {f === 'icp' ? 'ICP' : f === 'primary' ? primaryType! : f === 'other' ? 'Other' : 'All'}
+                                  </button>
                                 ))}
-                              </tbody>
-                            </table>
+                              </div>
+                            </div>
+                            {filteredRows.length === 0 ? (
+                              <p className="text-sm text-gray-400">No companies match this filter.</p>
+                            ) : (
+                              <div className="overflow-x-auto relative">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-gray-100">
+                                      <th className="text-left text-xs font-medium text-gray-400 py-2 pr-4">Company</th>
+                                      <th className="text-left text-xs font-medium text-gray-400 py-2 pr-4">Type</th>
+                                      <th className="text-right text-xs font-medium text-gray-400 py-2">Conferences</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {filteredRows.map(co => (
+                                      <tr key={co.id} className="border-b border-gray-50 hover:bg-gray-50/50 relative">
+                                        <td className="py-1.5 pr-4">
+                                          <button
+                                            type="button"
+                                            className="text-sm font-medium text-brand-primary hover:underline text-left"
+                                            onClick={() => { setTrendsDrawerCompanyId(co.id); setTrendsDrawerCompanyName(co.name); setNavHidden(true); }}
+                                          >
+                                            {co.name}
+                                          </button>
+                                        </td>
+                                        <td className="py-1.5 pr-4">
+                                          {co.company_type ? (
+                                            <span className={getBadgeClass(co.company_type, companyTypeColors)} style={{ fontSize: '10px', padding: '1px 6px' }}>
+                                              {co.company_type}
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs text-gray-300">—</span>
+                                          )}
+                                        </td>
+                                        <td className="py-1.5 text-right">
+                                          <div className="relative inline-block">
+                                            <button
+                                              type="button"
+                                              className="px-2 py-0.5 text-xs font-semibold rounded-full cursor-pointer"
+                                              style={confCountStyle(co.total_confs)}
+                                              onClick={() => setTrendsPopoverId(prev => prev === co.id ? null : co.id)}
+                                            >
+                                              {co.total_confs}
+                                            </button>
+                                            {trendsPopoverId === co.id && co.conference_names.length > 0 && (
+                                              <div
+                                                className="absolute right-0 bottom-full mb-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl text-left"
+                                                style={{ minWidth: 200, maxHeight: 200, overflowY: 'auto' }}
+                                                onClick={e => e.stopPropagation()}
+                                              >
+                                                <div className="px-3 py-2">
+                                                  {co.conference_names.map((cn, i) => (
+                                                    <p key={i} className="text-xs text-gray-700 py-0.5 border-b border-gray-50 last:border-0">{cn}</p>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
                     </div>
                   ) : !trendsConfId ? (
                     <p className="text-sm text-gray-400 py-4 text-center">Select a conference above.</p>
                   ) : null}
                 </div>
+              )}
+
+              {/* Company record iframe drawer */}
+              {trendsDrawerCompanyId !== null && (
+                <>
+                  <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+                  <div
+                    className="fixed inset-0 z-40 bg-black/30"
+                    onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setNavHidden(false); setTrendsPopoverId(null); }}
+                  />
+                  <div
+                    className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
+                    style={{ animation: 'slideInRight 0.25s ease-out' }}
+                  >
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-800">{trendsDrawerCompanyName}</h3>
+                        <p className="text-xs text-gray-500">Company Record</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setNavHidden(false); setTrendsPopoverId(null); }}
+                        className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <iframe
+                      src={`/companies/${trendsDrawerCompanyId}?embed=true`}
+                      className="flex-1 w-full border-0"
+                      title={trendsDrawerCompanyName}
+                    />
+                  </div>
+                </>
               )}
             </div>
           );
