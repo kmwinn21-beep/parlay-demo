@@ -862,6 +862,7 @@ export default function ProgramIntelligencePage() {
   const [trendsDrawerCompanyId, setTrendsDrawerCompanyId] = useState<number | null>(null);
   const [trendsDrawerCompanyName, setTrendsDrawerCompanyName] = useState('');
   const [trendsPopoverId, setTrendsPopoverId] = useState<number | null>(null);
+  const [trendsPopoverPos, setTrendsPopoverPos] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
@@ -931,7 +932,7 @@ export default function ProgramIntelligencePage() {
   // Close trends popover on outside click
   useEffect(() => {
     if (trendsPopoverId === null) return;
-    const close = () => setTrendsPopoverId(null);
+    const close = () => { setTrendsPopoverId(null); setTrendsPopoverPos(null); };
     const id = window.setTimeout(() => document.addEventListener('click', close), 0);
     return () => { window.clearTimeout(id); document.removeEventListener('click', close); };
   }, [trendsPopoverId]);
@@ -939,7 +940,7 @@ export default function ProgramIntelligencePage() {
   // Close trends popover on Escape
   useEffect(() => {
     if (trendsPopoverId === null) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setTrendsPopoverId(null); };
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { setTrendsPopoverId(null); setTrendsPopoverPos(null); } };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [trendsPopoverId]);
@@ -1632,29 +1633,23 @@ export default function ProgramIntelligencePage() {
                                           )}
                                         </td>
                                         <td className="py-1.5 text-right">
-                                          <div className="relative inline-block">
-                                            <button
-                                              type="button"
-                                              className="px-2 py-0.5 text-xs font-semibold rounded-full cursor-pointer"
-                                              style={confCountStyle(co.total_confs)}
-                                              onClick={() => setTrendsPopoverId(prev => prev === co.id ? null : co.id)}
-                                            >
-                                              {co.total_confs}
-                                            </button>
-                                            {trendsPopoverId === co.id && co.conference_names.length > 0 && (
-                                              <div
-                                                className="fixed z-[200] bg-white border border-gray-200 rounded-lg shadow-xl text-left"
-                                                style={{ minWidth: 200, maxHeight: 200, overflowY: 'auto', right: 24, marginTop: 4 }}
-                                                onClick={e => e.stopPropagation()}
-                                              >
-                                                <div className="px-3 py-2">
-                                                  {co.conference_names.map((cn, i) => (
-                                                    <p key={i} className="text-xs text-gray-700 py-0.5 border-b border-gray-50 last:border-0">{cn}</p>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
+                                          <button
+                                            type="button"
+                                            className="px-2 py-0.5 text-xs font-semibold rounded-full cursor-pointer"
+                                            style={confCountStyle(co.total_confs)}
+                                            onClick={(e) => {
+                                              if (trendsPopoverId === co.id) {
+                                                setTrendsPopoverId(null);
+                                                setTrendsPopoverPos(null);
+                                              } else {
+                                                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                                setTrendsPopoverId(co.id);
+                                                setTrendsPopoverPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                              }
+                                            }}
+                                          >
+                                            {co.total_confs}
+                                          </button>
                                         </td>
                                       </tr>
                                     ))}
@@ -1671,6 +1666,25 @@ export default function ProgramIntelligencePage() {
                   ) : null}
                 </div>
               )}
+
+              {/* Conference names popover (fixed to viewport) */}
+              {trendsPopoverId !== null && trendsPopoverPos !== null && (() => {
+                const popoverCompany = trendsConfData?.crossConfPresence.find(c => c.id === trendsPopoverId);
+                if (!popoverCompany || popoverCompany.conference_names.length === 0) return null;
+                return (
+                  <div
+                    className="fixed z-[200] bg-white border border-gray-200 rounded-lg shadow-xl text-left"
+                    style={{ top: trendsPopoverPos.top, right: trendsPopoverPos.right, minWidth: 200, maxHeight: 200, overflowY: 'auto' }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="px-3 py-2">
+                      {popoverCompany.conference_names.map((cn, i) => (
+                        <p key={i} className="text-xs text-gray-700 py-0.5 border-b border-gray-50 last:border-0">{cn}</p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Company record iframe drawer */}
               {trendsDrawerCompanyId !== null && (
