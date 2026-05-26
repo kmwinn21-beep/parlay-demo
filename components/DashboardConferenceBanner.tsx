@@ -107,12 +107,11 @@ function BannerStateActive({ data, collapsed, onToggle }: {
       {!collapsed && (
         <div className="mt-4 flex-1 flex flex-col">
           {/* Quick stats row */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Companies', value: data.stats.companiesEngaged, className: 'text-white' },
               { label: 'Meetings Held', value: data.stats.meetingsHeld, className: 'text-white' },
               { label: 'Touchpoints', value: data.stats.touchpoints, className: 'text-white' },
-              { label: 'Unengaged', value: data.stats.mustTargetUnengaged, className: data.stats.mustTargetUnengaged > 0 ? 'text-red-300' : 'text-white' },
             ].map(stat => (
               <div key={stat.label} className="bg-white/10 rounded-xl p-3 text-center">
                 <p className={`text-2xl font-bold ${stat.className}`}>{stat.value}</p>
