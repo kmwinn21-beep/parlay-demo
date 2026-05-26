@@ -13,6 +13,7 @@ export interface OpenFollowUp {
   conference_id: number;
   first_name: string;
   last_name: string;
+  company_id: number | null;
   company_name: string | null;
   conference_name: string;
   conference_end_date: string;
@@ -34,16 +35,30 @@ function isOverdueConference(endDateStr: string): boolean {
 
 // ── FollowUpRow ───────────────────────────────────────────────────────────────
 
-function FollowUpRow({ item, onDone }: { item: OpenFollowUp; onDone: () => void }) {
+function FollowUpRow({ item, onDone, onCompanyClick }: {
+  item: OpenFollowUp;
+  onDone: () => void;
+  onCompanyClick: (id: number, name: string) => void;
+}) {
+  const displayName = item.company_name ?? `${item.first_name} ${item.last_name}`;
+  const hasCompany = !!item.company_id;
   return (
     <div className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-red-300 bg-red-50 text-red-700 flex-shrink-0 max-w-[120px] truncate">
         {item.next_steps}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-800">
-          {item.company_name ?? `${item.first_name} ${item.last_name}`}
-        </p>
+        {hasCompany ? (
+          <button
+            type="button"
+            onClick={() => onCompanyClick(item.company_id!, displayName)}
+            className="text-xs font-medium text-brand-primary hover:underline text-left"
+          >
+            {displayName}
+          </button>
+        ) : (
+          <p className="text-xs font-medium text-gray-800">{displayName}</p>
+        )}
       </div>
       <button
         onClick={onDone}
@@ -58,7 +73,7 @@ function FollowUpRow({ item, onDone }: { item: OpenFollowUp; onDone: () => void 
 // ── ConferenceGroup ───────────────────────────────────────────────────────────
 
 function ConferenceGroup({
-  confId, group, isCurrentConf, onDone, onMarkAllDone, onMoreClick,
+  confId, group, isCurrentConf, onDone, onMarkAllDone, onMoreClick, onCompanyClick,
 }: {
   confId: number;
   group: OpenFollowUp[];
@@ -66,6 +81,7 @@ function ConferenceGroup({
   onDone: (id: number) => void;
   onMarkAllDone: (confId: number) => void;
   onMoreClick: (confId: number, confName: string) => void;
+  onCompanyClick: (id: number, name: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(true);
   const confName = group[0]?.conference_name ?? '';
@@ -109,7 +125,7 @@ function ConferenceGroup({
       {!collapsed && (
         <div className="px-3 pb-2">
           {group.slice(0, 3).map(f => (
-            <FollowUpRow key={f.id} item={f} onDone={() => onDone(f.id)} />
+            <FollowUpRow key={f.id} item={f} onDone={() => onDone(f.id)} onCompanyClick={onCompanyClick} />
           ))}
           <div className="flex items-center justify-between mt-1">
             {group.length > 3 ? (
@@ -150,6 +166,8 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
   const [items, setItems] = useState<OpenFollowUp[]>(followUps);
   const [drawerConfId, setDrawerConfId] = useState<number | null>(null);
   const [drawerConfName, setDrawerConfName] = useState<string>('');
+  const [companyDrawerId, setCompanyDrawerId] = useState<number | null>(null);
+  const [companyDrawerName, setCompanyDrawerName] = useState<string>('');
 
   const toggle = () => {
     setCollapsed(v => {
@@ -263,6 +281,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
                     onDone={id => void markDone(id)}
                     onMarkAllDone={id => void markAllDone(id)}
                     onMoreClick={(id, name) => { setDrawerConfId(id); setDrawerConfName(name); }}
+                    onCompanyClick={(id, name) => { setCompanyDrawerId(id); setCompanyDrawerName(name); }}
                   />
                 ))}
               </div>
@@ -276,6 +295,41 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             </>
           )}
         </div>
+      )}
+
+      {companyDrawerId !== null && (
+        <>
+          <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          <div
+            className="fixed inset-0 z-40 bg-black/30"
+            onClick={() => setCompanyDrawerId(null)}
+          />
+          <div
+            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
+            style={{ animation: 'slideInRight 0.25s ease-out' }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800">{companyDrawerName}</h3>
+                <p className="text-xs text-gray-500">Company Record</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompanyDrawerId(null)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              src={`/companies/${companyDrawerId}?embed=true`}
+              className="flex-1 w-full border-0"
+              title={companyDrawerName}
+            />
+          </div>
+        </>
       )}
 
       {drawerConfId !== null && (

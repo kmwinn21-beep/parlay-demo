@@ -169,7 +169,8 @@ async function getOpenFollowUps(tenantDb: Client): Promise<OpenFollowUp[]> {
   try {
     const result = await tenantDb.execute({
       sql: `SELECT fu.id, fu.next_steps, fu.completed, fu.conference_id,
-                   a.first_name, a.last_name, co.name AS company_name,
+                   a.first_name, a.last_name, a.company_id,
+                   co.name AS company_name,
                    c.name AS conference_name, c.end_date AS conference_end_date
             FROM follow_ups fu
             JOIN attendees a ON fu.attendee_id = a.id
@@ -186,6 +187,7 @@ async function getOpenFollowUps(tenantDb: Client): Promise<OpenFollowUp[]> {
       conference_id: Number(r.conference_id),
       first_name: String(r.first_name ?? ''),
       last_name: String(r.last_name ?? ''),
+      company_id: r.company_id ? Number(r.company_id) : null,
       company_name: r.company_name ? String(r.company_name) : null,
       conference_name: String(r.conference_name ?? ''),
       conference_end_date: String(r.conference_end_date ?? ''),
