@@ -271,7 +271,7 @@ function CompanyCard({
             <span className="font-semibold text-sm text-gray-900 truncate flex-1 min-w-0">{company.companyName || 'Unknown Company'}</span>
           )}
           {valueLabel && (
-            <span className="flex-shrink-0 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+            <span className="flex-shrink-0 text-[11px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
               {valueLabel}
             </span>
           )}
