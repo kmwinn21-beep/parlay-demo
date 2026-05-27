@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   const metaByKey = new Map<string, TitleMatchMetadata>();
   await Promise.all(
     Array.from(titlesByKey.entries()).map(async ([key, title]) => {
-      const meta = await resolveAttendeeTitleMetadata(title, null);
+      const meta = await resolveAttendeeTitleMetadata(db, title, null);
       metaByKey.set(key, meta);
     })
   );

@@ -23,15 +23,15 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    await ensureTitleNormalizationSchema();
+    await ensureTitleNormalizationSchema(db);
     const { searchParams } = new URL(request.url);
     const rawTitle = searchParams.get('raw_title');
     const organizationId = searchParams.get('organization_id') ? Number(searchParams.get('organization_id')) : null;
 
     if (rawTitle) {
       const [rule, metadata] = await Promise.all([
-        getRuleForTitle(rawTitle, organizationId),
-        resolveAttendeeTitleMetadata(rawTitle, organizationId),
+        getRuleForTitle(db, rawTitle, organizationId),
+        resolveAttendeeTitleMetadata(db, rawTitle, organizationId),
       ]);
       return NextResponse.json({ rule, metadata }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     if (!isBuyerRole(buyerRole)) return NextResponse.json({ error: 'buyer_role must be decision_maker, influencer, target_title, or ignore' }, { status: 400 });
     if (organizationId != null && !Number.isFinite(organizationId)) return NextResponse.json({ error: 'organization_id must be numeric when provided' }, { status: 400 });
 
-    const rule = await upsertTitleNormalizationRule({
+    const rule = await upsertTitleNormalizationRule(db, {
       organization_id: organizationId,
       raw_title: rawTitle,
       normalized_title: normalizedTitle,
@@ -79,8 +79,9 @@ export async function POST(request: NextRequest) {
       user_id: authResult.id,
     });
 
-    const affected = body.apply_all_exact === false ? { attendeeCount: 0, companyCount: 0 } : await applyRuleToExactTitle(rule);
-    const metadata = await resolveAttendeeTitleMetadata(rawTitle, organizationId);
+    const affected = body.apply_all_exact === false ? { attendeeCount: 0, companyCount: 0 } : await applyRuleToExactTitle(db, rule);
+    const metadata = await resolveAttendeeTitleMetadata(db, rawTitle, organizationId);
+    // Invalidate cache entry for this title so next resolve picks up the saved rule
     return NextResponse.json({ rule, metadata, affected });
   } catch (error) {
     console.error('POST /api/title-normalization-rules error:', error);

@@ -155,7 +155,7 @@ async function runTargetingForConference(
   const companyMap = new Map<number, { company: TargetingCompanyInput; attendees: TargetingAttendeeInput[] }>();
   await Promise.all(Array.from(rawCompanyMap.values()).map(async ({ company, attendeeRows }) => {
     const attendees = await Promise.all(attendeeRows.map(async (r): Promise<TargetingAttendeeInput> => {
-      const titleMeta = await resolveAttendeeTitleMetadata(r.title ? String(r.title) : null, null);
+      const titleMeta = await resolveAttendeeTitleMetadata(db, r.title ? String(r.title) : null, null);
       return {
         id: Number(r.id),
         first_name: r.first_name ? String(r.first_name) : '',
