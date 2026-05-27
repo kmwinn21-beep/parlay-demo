@@ -48,14 +48,23 @@ export async function GET(
   }
 
   // Fetch product catalog for metadata (category, color)
-  const productsRes = await db.execute({
-    sql: `SELECT p.id, p.value as name, p.color, p.category_id, p.metadata,
-                 cat.value as category_label, cat.color as category_color
-          FROM config_options p
-          LEFT JOIN config_options cat ON cat.id = p.category_id
-          WHERE p.category = 'products'`,
-    args: [],
-  });
+  // Also fetch the system category label to use as fallback for products with no category_id
+  const [productsRes, sysCatRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT p.id, p.value as name, p.color, p.category_id, p.metadata,
+                   cat.value as category_label, cat.color as category_color
+            FROM config_options p
+            LEFT JOIN config_options cat ON cat.id = p.category_id
+            WHERE p.category = 'products'`,
+      args: [],
+    }),
+    db.execute({
+      sql: `SELECT value, color FROM config_options WHERE category = 'product_category' AND is_system = 1 LIMIT 1`,
+      args: [],
+    }),
+  ]);
+  const systemCategoryLabel = sysCatRes.rows.length > 0 ? String(sysCatRes.rows[0].value ?? 'General') : 'General';
+  const systemCategoryColor = sysCatRes.rows.length > 0 && sysCatRes.rows[0].color ? String(sysCatRes.rows[0].color) : null;
   const productByName = new Map<string, {
     id: number;
     name: string;
@@ -71,8 +80,8 @@ export async function GET(
       name: String(r.name ?? ''),
       color: r.color ? String(r.color) : null,
       categoryId: r.category_id ? Number(r.category_id) : null,
-      categoryLabel: r.category_label ? String(r.category_label) : 'General',
-      categoryColor: r.category_color ? String(r.category_color) : null,
+      categoryLabel: r.category_label ? String(r.category_label) : systemCategoryLabel,
+      categoryColor: r.category_color ? String(r.category_color) : systemCategoryColor,
       meta: r.metadata ? String(r.metadata) : null,
     });
   }
