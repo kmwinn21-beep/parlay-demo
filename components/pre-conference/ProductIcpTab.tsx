@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRecordDrawer } from './RecordDrawerContext';
+import { TargetBtn } from './TargetBtn';
+import { formatValuePill, useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import type { ProductIcpV2Product, ProductIcpV2Attendee, TargetEntry } from '../PreConferenceReview';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,6 +36,7 @@ interface BoardCompany {
   assignedUserNames: string[];
   attendees: BoardAttendee[];
   allUnmapped: boolean;
+  wse: number | null;
 }
 
 interface BoardColumn {
@@ -172,20 +175,49 @@ function BuyerDot({ role }: { role: BuyerRole }) {
 
 // ── AttendeeRow ────────────────────────────────────────────────────────────────
 
-function AttendeeRow({ attendee }: { attendee: BoardAttendee }) {
+function AttendeeRow({
+  attendee,
+  company,
+  isTarget,
+  onToggleTarget,
+  readOnly,
+}: {
+  attendee: BoardAttendee;
+  company: BoardCompany;
+  isTarget: boolean;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly: boolean;
+}) {
   const openRecord = useRecordDrawer();
   const { signals } = attendee;
   return (
     <div className="flex gap-2 py-1.5 border-t border-gray-50 first:border-t-0">
       <BuyerDot role={signals.buyerRole} />
       <div className="flex-1 min-w-0">
-        <button
-          type="button"
-          onClick={() => openRecord('attendee', attendee.id)}
-          className="font-medium text-xs text-gray-800 hover:text-brand-secondary transition-colors text-left w-full truncate block"
-        >
-          {attendee.firstName} {attendee.lastName}
-        </button>
+        <div className="flex items-center gap-1 min-w-0">
+          <button
+            type="button"
+            onClick={() => openRecord('attendee', attendee.id)}
+            className="font-medium text-xs text-gray-800 hover:text-brand-secondary transition-colors text-left truncate flex-1 min-w-0"
+          >
+            {attendee.firstName} {attendee.lastName}
+          </button>
+          <TargetBtn
+            isTarget={isTarget}
+            disabled={readOnly}
+            onClick={() => onToggleTarget({
+              attendeeId: attendee.id,
+              firstName: attendee.firstName,
+              lastName: attendee.lastName,
+              title: attendee.title,
+              seniority: attendee.seniority,
+              companyName: company.companyName,
+              companyId: company.companyId ?? null,
+              companyWse: company.wse,
+              assignedUserNames: company.assignedUserNames,
+            })}
+          />
+        </div>
         {attendee.title && (
           <p className="text-[11px] text-gray-400 truncate leading-tight">{attendee.title}</p>
         )}
@@ -205,44 +237,85 @@ function AttendeeRow({ attendee }: { attendee: BoardAttendee }) {
 
 // ── CompanyCard ────────────────────────────────────────────────────────────────
 
-function CompanyCard({ company, sortMode }: { company: BoardCompany; sortMode: string }) {
+function CompanyCard({
+  company,
+  sortMode,
+  avgCostPerUnit,
+  targetMap,
+  onToggleTarget,
+  readOnly,
+}: {
+  company: BoardCompany;
+  sortMode: string;
+  avgCostPerUnit: number;
+  targetMap: Map<number, TargetEntry>;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly: boolean;
+}) {
   const openRecord = useRecordDrawer();
   const sorted = sortAttendees(company.attendees, sortMode);
+  const valueLabel = formatValuePill(company.wse, avgCostPerUnit);
   return (
-    <div className={`border rounded-xl p-3 bg-white transition-all ${company.allUnmapped ? 'opacity-60 border-gray-150' : 'border-gray-200 hover:shadow-sm'}`}>
+    <div className={`border rounded-xl p-3 bg-white transition-all ${company.allUnmapped ? 'opacity-60 border-gray-100' : 'border-gray-200 hover:shadow-sm'}`}>
       <div className="mb-2">
-        {company.companyId != null && company.companyId > 0 ? (
-          <button
-            type="button"
-            onClick={() => openRecord('company', company.companyId!)}
-            className="font-semibold text-sm text-gray-900 hover:text-brand-secondary transition-colors text-left w-full truncate block"
-          >
-            {company.companyName}
-          </button>
-        ) : (
-          <span className="font-semibold text-sm text-gray-900 block truncate">{company.companyName || 'Unknown Company'}</span>
-        )}
+        <div className="flex items-center gap-2 min-w-0">
+          {company.companyId != null && company.companyId > 0 ? (
+            <button
+              type="button"
+              onClick={() => openRecord('company', company.companyId!)}
+              className="font-semibold text-sm text-gray-900 hover:text-brand-secondary transition-colors text-left truncate flex-1 min-w-0"
+            >
+              {company.companyName}
+            </button>
+          ) : (
+            <span className="font-semibold text-sm text-gray-900 truncate flex-1 min-w-0">{company.companyName || 'Unknown Company'}</span>
+          )}
+          {valueLabel && (
+            <span className="flex-shrink-0 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+              {valueLabel}
+            </span>
+          )}
+        </div>
         <p className="text-[11px] text-gray-400 mt-0.5">
           {company.attendees.length} {company.attendees.length === 1 ? 'attendee' : 'attendees'}
         </p>
       </div>
-      <div className="space-y-0">
-        {sorted.map(a => <AttendeeRow key={a.id} attendee={a} />)}
-      </div>
+      {sorted.map(a => (
+        <AttendeeRow
+          key={a.id}
+          attendee={a}
+          company={company}
+          isTarget={targetMap.has(a.id)}
+          onToggleTarget={onToggleTarget}
+          readOnly={readOnly}
+        />
+      ))}
     </div>
   );
 }
 
 // ── ProductColumn ─────────────────────────────────────────────────────────────
 
-function ProductColumn({ col, sortMode, catStyle }: { col: BoardColumn; sortMode: string; catStyle: { bg: string; border: string; text: string } }) {
+function ProductColumn({
+  col,
+  sortMode,
+  catStyle,
+  avgCostPerUnit,
+  targetMap,
+  onToggleTarget,
+  readOnly,
+}: {
+  col: BoardColumn;
+  sortMode: string;
+  catStyle: { bg: string; border: string; text: string };
+  avgCostPerUnit: number;
+  targetMap: Map<number, TargetEntry>;
+  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly: boolean;
+}) {
   return (
     <div className="flex-shrink-0 w-80 flex flex-col gap-3">
-      {/* Header */}
-      <div
-        className="rounded-xl px-4 py-3 border"
-        style={{ backgroundColor: catStyle.bg, borderColor: catStyle.border }}
-      >
+      <div className="rounded-xl px-4 py-3 border" style={{ backgroundColor: catStyle.bg, borderColor: catStyle.border }}>
         <h3 className="font-semibold text-sm" style={{ color: catStyle.text }}>{col.product.name}</h3>
         {col.product.categoryLabel && col.product.categoryLabel !== 'General' && (
           <p className="text-[11px] mt-0.5 opacity-70" style={{ color: catStyle.text }}>{col.product.categoryLabel}</p>
@@ -252,7 +325,6 @@ function ProductColumn({ col, sortMode, catStyle }: { col: BoardColumn; sortMode
         </p>
       </div>
 
-      {/* No buyer role warning */}
       {!col.hasBuyerRole && (
         <div className="rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
           No buyer roles resolved —{' '}
@@ -262,9 +334,16 @@ function ProductColumn({ col, sortMode, catStyle }: { col: BoardColumn; sortMode
         </div>
       )}
 
-      {/* Company cards */}
       {col.companies.map(company => (
-        <CompanyCard key={company.companyId ?? `unknown-${company.companyName}`} company={company} sortMode={sortMode} />
+        <CompanyCard
+          key={company.companyId ?? `u-${company.companyName}`}
+          company={company}
+          sortMode={sortMode}
+          avgCostPerUnit={avgCostPerUnit}
+          targetMap={targetMap}
+          onToggleTarget={onToggleTarget}
+          readOnly={readOnly}
+        />
       ))}
     </div>
   );
@@ -275,9 +354,9 @@ function ProductColumn({ col, sortMode, catStyle }: { col: BoardColumn; sortMode
 export function ProductIcpTab({
   productCatalog,
   icpAttendees,
-  targetMap: _targetMap,
-  onToggleTarget: _onToggleTarget,
-  readOnly: _readOnly = false,
+  targetMap,
+  onToggleTarget,
+  readOnly = false,
 }: {
   productCatalog: ProductIcpV2Product[];
   icpAttendees: ProductIcpV2Attendee[];
@@ -288,6 +367,13 @@ export function ProductIcpTab({
 }) {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<'buyer_role' | 'function' | 'company_name'>('buyer_role');
+  const avgCostPerUnit = useAvgCostPerUnit();
+
+  // Only ICP = 'Yes' companies
+  const icpYesAttendees = useMemo(
+    () => icpAttendees.filter(a => a.companyIcp?.toLowerCase() === 'yes'),
+    [icpAttendees],
+  );
 
   const boardData = useMemo<BoardColumn[]>(() => {
     const columns: BoardColumn[] = [];
@@ -296,7 +382,7 @@ export function ProductIcpTab({
       if (!meta.active) continue;
 
       const relevantAttendees: BoardAttendee[] = [];
-      for (const a of icpAttendees) {
+      for (const a of icpYesAttendees) {
         const signals = computeSignals(a, meta);
         if (isRelevant(signals)) relevantAttendees.push({ ...a, signals });
       }
@@ -316,6 +402,7 @@ export function ProductIcpTab({
           assignedUserNames: atts[0].companyAssignedUserNames,
           attendees: atts,
           allUnmapped: atts.every((att: BoardAttendee) => !att.signals.buyerRole && att.signals.functionMatches.length === 0),
+          wse: atts[0].companyWse ?? null,
         }))
         .sort((a, b) => a.companyName.localeCompare(b.companyName));
 
@@ -331,7 +418,7 @@ export function ProductIcpTab({
       const catCmp = a.product.categoryLabel.localeCompare(b.product.categoryLabel);
       return catCmp !== 0 ? catCmp : a.product.name.localeCompare(b.product.name);
     });
-  }, [productCatalog, icpAttendees]);
+  }, [productCatalog, icpYesAttendees]);
 
   // Category list for filter chips
   const categoryLabels = useMemo(() => {
@@ -416,17 +503,18 @@ export function ProductIcpTab({
 
       {/* Board */}
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-0 items-start">
-        {visibleColumns.map(col => {
-          const catStyle = getCatStyle(col.product.categoryLabel, col.product.categoryColor);
-          return (
-            <ProductColumn
-              key={col.product.id}
-              col={col}
-              sortMode={sortMode}
-              catStyle={catStyle}
-            />
-          );
-        })}
+        {visibleColumns.map(col => (
+          <ProductColumn
+            key={col.product.id}
+            col={col}
+            sortMode={sortMode}
+            catStyle={getCatStyle(col.product.categoryLabel, col.product.categoryColor)}
+            avgCostPerUnit={avgCostPerUnit}
+            targetMap={targetMap}
+            onToggleTarget={onToggleTarget}
+            readOnly={readOnly}
+          />
+        ))}
       </div>
     </div>
   );

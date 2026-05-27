@@ -195,6 +195,8 @@ export interface ProductIcpV2Attendee {
   companyId: number | null;
   companyName: string;
   companyAssignedUserNames: string[];
+  companyWse: number | null;
+  companyIcp: string | null;
 }
 
 export interface ProductIcpV2Product {

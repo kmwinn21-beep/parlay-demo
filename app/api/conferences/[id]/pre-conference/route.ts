@@ -763,6 +763,8 @@ export async function GET(
     companyId: a.company_id != null ? Number(a.company_id) : null,
     companyName: String(a.company_name ?? ''),
     companyAssignedUserNames: resolveUserIds(a.company_assigned_user),
+    companyWse: a.wse != null ? Number(a.wse) : null,
+    companyIcp: a.icp ? String(a.icp) : null,
   }));
   const industryOptions = (industryOptsRes.rows ?? []).map(r => ({ id: Number(r.id), value: String(r.value) }));
 
