@@ -31,7 +31,7 @@ export async function computeAttendeeProductSignals(
 ): Promise<{ upserted: number }> {
   // Fetch active products
   const productsRes = await db.execute({
-    sql: `SELECT id, value, metadata FROM config_options WHERE category = 'product_category'`,
+    sql: `SELECT id, value, metadata FROM config_options WHERE category = 'products'`,
     args: [],
   });
 
