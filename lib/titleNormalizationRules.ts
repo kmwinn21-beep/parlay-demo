@@ -95,7 +95,7 @@ function rowToRule(row: Record<string, unknown>): TitleNormalizationRuleLike {
 export async function ensureTitleNormalizationSchema(tenantDb?: Client): Promise<void> {
   const client = tenantDb ?? db;
   if (schemaEnsured.has(client)) return;
-  await dbReady;
+  if (!tenantDb) await dbReady;  // only needed when falling back to master db
   await client.execute({
     sql: `CREATE TABLE IF NOT EXISTS title_normalization_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
