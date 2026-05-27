@@ -147,6 +147,7 @@ export default function CompanyDetailPage() {
   const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
   const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
   const [attendeesExpanded, setAttendeesExpanded] = useState(false);
+  const [productsExpanded, setProductsExpanded] = useState(false);
   const ATTENDEE_COLLAPSED_COUNT = 4;
 
   // Dynamic config options
@@ -1504,6 +1505,10 @@ export default function CompanyDetailPage() {
                 </div>
               ) : null,
               products: (() => {
+                // Only show Products for ICP-matching companies
+                const isIcp = icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0];
+                if (!isIcp) return null;
+
                 // Group company attendees by selected products
                 const productAttendeeMap: Record<string, Array<{ name: string; title: string | null }>> = {};
                 for (const a of (company.attendees ?? []) as Array<{ first_name: string; last_name: string; title?: string | null; products?: string | null }>) {
@@ -1515,26 +1520,39 @@ export default function CompanyDetailPage() {
                 const entries = Object.entries(productAttendeeMap);
                 return entries.length === 0 ? null : (
                   <div key="products" className="card">
-                    <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('products')}</h2>
-                    <div className="space-y-3">
-                      {entries.map(([product, attendees]) => {
-                        const preset = getPreset((colorMaps.products ?? {})[product]);
-                        return (
-                          <div key={product} className="rounded-lg border border-gray-200 overflow-hidden">
-                            <div className="px-3 py-2 border-b-2" style={{ backgroundColor: preset.hex + '18', borderColor: preset.hex }}>
-                              <span className="text-sm font-semibold" style={{ color: preset.hex }}>{product}</span>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between"
+                      onClick={() => setProductsExpanded(prev => !prev)}
+                    >
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
+                        {getSectionLabel('products')} <span className="text-gray-400 font-normal text-sm">({entries.length})</span>
+                      </h2>
+                      <svg className={`w-5 h-5 text-gray-400 transition-transform ${productsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {productsExpanded && (
+                      <div className="space-y-3 mt-3">
+                        {entries.map(([product, attendees]) => {
+                          const preset = getPreset((colorMaps.products ?? {})[product]);
+                          return (
+                            <div key={product} className="rounded-lg border border-gray-200 overflow-hidden">
+                              <div className="px-3 py-2 border-b-2" style={{ backgroundColor: preset.hex + '18', borderColor: preset.hex }}>
+                                <span className="text-sm font-semibold" style={{ color: preset.hex }}>{product}</span>
+                              </div>
+                              <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                {attendees.map((a, i) => (
+                                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                    {a.name}{a.title ? ` · ${a.title}` : ''}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
-                            <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                              {attendees.map((a, i) => (
-                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                  {a.name}{a.title ? ` · ${a.title}` : ''}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })(),
