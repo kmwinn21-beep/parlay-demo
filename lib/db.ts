@@ -1394,11 +1394,12 @@ export async function seedFreshDb(client: Client): Promise<void> {
     args: [],
   });
 
-  // Run schema/data migrations in order groups so seeded inserts cannot race ahead of column creation.
-  const ddl = migrations.filter(sql => /^\s*(CREATE|ALTER)/i.test(sql));
-  await Promise.all(ddl.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
-  const dml = migrations.filter(sql => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql));
-  await Promise.all(dml.map(sql => client.execute({ sql, args: [] }).catch(() => {})));
+  // Run migrations in order — sequential is required because later migrations ALTER tables
+  // created by earlier ones (e.g. ALTER TABLE conference_budget must follow CREATE TABLE
+  // conference_budget). Parallel Promise.all has a race that silently drops columns.
+  for (const sql of migrations) {
+    await client.execute({ sql, args: [] }).catch(() => {});
+  }
   await ensureConfigOptionsColumns(client);
 
   // Unit type seed
