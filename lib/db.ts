@@ -942,9 +942,9 @@ export interface ParsedAttendee {
  * Server-side helper: fetch all values for a config category directly from DB.
  * Use this in API routes that need to validate classifier output against live admin options.
  */
-export async function getConfigOptionValues(category: string): Promise<string[]> {
+export async function getConfigOptionValues(category: string, client?: import('@libsql/client').Client): Promise<string[]> {
   await dbReady;
-  const result = await db.execute({
+  const result = await (client ?? db).execute({
     sql: 'SELECT value FROM config_options WHERE category = ? ORDER BY sort_order, value',
     args: [category],
   });

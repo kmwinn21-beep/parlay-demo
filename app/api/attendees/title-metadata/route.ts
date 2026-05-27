@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { normalizeTitleKey, type TitleMatchMetadata } from '@/lib/titleNormalization';
-import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
+import { normalizeTitleKey } from '@/lib/titleNormalization';
+import { resolveAttendeeTitleMetadataBatch } from '@/lib/titleNormalizationRules';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -38,17 +38,21 @@ export async function GET(request: NextRequest) {
     attendeeToKey.set(attendeeId, key);
   }
 
-  // Resolve metadata for each unique title in parallel
-  const metaByKey = new Map<string, TitleMatchMetadata>();
-  await Promise.all(
-    Array.from(titlesByKey.entries()).map(async ([key, title]) => {
-      const meta = await resolveAttendeeTitleMetadata(db, title, null);
-      metaByKey.set(key, meta);
-    })
+  // Resolve all unique titles in a single batch — schema + config fetched once
+  const uniqueTitles = Array.from(titlesByKey.values());
+  const metaResults = await resolveAttendeeTitleMetadataBatch(
+    db,
+    uniqueTitles.map(rawTitle => ({ rawTitle, organizationId: null })),
   );
 
+  const metaByKey = new Map<string, (typeof metaResults)[number]>();
+  uniqueTitles.forEach((title, i) => {
+    const key = normalizeTitleKey(title);
+    if (key) metaByKey.set(key, metaResults[i]);
+  });
+
   // Map attendee IDs to their metadata
-  const output: Record<string, TitleMatchMetadata> = {};
+  const output: Record<string, (typeof metaResults)[number]> = {};
   for (const [attendeeId, key] of Array.from(attendeeToKey.entries())) {
     const meta = metaByKey.get(key);
     if (meta) output[String(attendeeId)] = meta;
