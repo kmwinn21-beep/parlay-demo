@@ -175,6 +175,7 @@ function ColorPicker({ optionId, currentColor, onColorSaved }: { optionId: numbe
 
 function MultiSelectDropdown({ options, selected, onChange, placeholder = 'None' }: { options: string[]; selected: string[]; onChange: (vals: string[]) => void; placeholder?: string }) {
   const [open, setOpen] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -183,11 +184,26 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'None'
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
   const toggle = (val: string) => onChange(selected.includes(val) ? selected.filter(s => s !== val) : [...selected, val]);
-  const label = selected.length === 0 ? placeholder : selected.join(', ');
   return (
     <div ref={ref} className="relative w-full">
       <button type="button" onClick={() => setOpen(p => !p)} className="input-field text-sm py-0.5 w-full text-left flex items-center justify-between gap-1">
-        <span className={`truncate ${selected.length === 0 ? 'text-gray-400' : 'text-gray-800'}`}>{label}</span>
+        {selected.length === 0 ? (
+          <span className="text-gray-400 truncate">{placeholder}</span>
+        ) : selected.length === 1 ? (
+          <span className="truncate text-gray-800">{selected[0]}</span>
+        ) : (
+          <span className="relative inline-flex items-center" onMouseEnter={() => setTooltipVisible(true)} onMouseLeave={() => setTooltipVisible(false)}>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20">
+              {selected.length} products
+            </span>
+            {tooltipVisible && (
+              <span className="absolute bottom-full left-0 mb-1.5 z-[60] bg-gray-900 text-white text-xs rounded-md px-2.5 py-1.5 whitespace-nowrap shadow-lg pointer-events-none">
+                {selected.join(', ')}
+                <span className="absolute top-full left-3 -translate-x-0 border-4 border-transparent border-t-gray-900" />
+              </span>
+            )}
+          </span>
+        )}
         <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
       </button>
       {open && options.length > 0 && (
