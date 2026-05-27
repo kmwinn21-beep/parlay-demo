@@ -204,7 +204,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'None'
   );
 }
 
-function CategorySection({ category, label, options, onRefresh, categoryOptions = [] }: { category: string; label: string; options: ConfigOption[]; onRefresh: () => void; categoryOptions?: ConfigOption[] }) {
+function CategorySection({ category, label, options, onRefresh, categoryOptions = [], defaultCategoryLabel = 'General' }: { category: string; label: string; options: ConfigOption[]; onRefresh: () => void; categoryOptions?: ConfigOption[]; defaultCategoryLabel?: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localOptions, setLocalOptions] = useState<ConfigOption[]>(options);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -600,7 +600,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                 onChange={e => setNewOptionCategoryId(e.target.value ? Number(e.target.value) : null)}
                 className="input-field w-full text-sm"
               >
-                <option value="">Category: General</option>
+                <option value="">Category: {defaultCategoryLabel}</option>
                 {categoryOptions.map(c => (
                   <option key={c.id} value={c.id}>{c.value}</option>
                 ))}
@@ -2079,12 +2079,12 @@ export default function AdminPage() {
             <div className="flex gap-6">
               <div className="flex-1 flex flex-col gap-6">
                 {CATEGORIES.filter((_, i) => i % 2 === 0).map(cat => (
-                  <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} />
+                  <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} defaultCategoryLabel={cat.key === 'products' ? ((optionsByCategory['product_category'] || []).find(c => c.is_system)?.value ?? 'General') : 'General'} />
                 ))}
               </div>
               <div className="flex-1 flex flex-col gap-6">
                 {CATEGORIES.filter((_, i) => i % 2 === 1).map(cat => (
-                  <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} />
+                  <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} defaultCategoryLabel={cat.key === 'products' ? ((optionsByCategory['product_category'] || []).find(c => c.is_system)?.value ?? 'General') : 'General'} />
                 ))}
               </div>
             </div>
