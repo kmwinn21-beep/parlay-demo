@@ -170,6 +170,7 @@ export default function CompanyDetailPage() {
   const [capitalTypeValues, setCapitalTypeValues] = useState<Set<string>>(new Set());
   const [showRelateModal, setShowRelateModal] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
+  const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
   const [opCapRelExpanded, setOpCapRelExpanded] = useState(false);
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [composeTarget, setComposeTarget] = useState<{ email: string; name: string } | null>(null);
@@ -196,7 +197,7 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
@@ -210,6 +211,7 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=rep_relationship_type&form=company_detail'),
         fetch('/api/admin/icp-rules'),
         fetch('/api/config?category=industries&form=company_detail'),
+        fetch('/api/config?category=products'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -261,6 +263,20 @@ export default function CompanyDetailPage() {
       if (icpConfigRes.ok) setIcpConfig(await icpConfigRes.json() as IcpConfig);
       if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+      if (productsRes.ok) {
+        const productsData = await productsRes.json() as Array<{ value: string; metadata?: string | null }>;
+        const configured = new Set<string>();
+        for (const p of productsData) {
+          if (!p.metadata) continue;
+          try {
+            const m = JSON.parse(p.metadata) as { functions?: Record<string, string>; seniority?: Record<string, string> };
+            const hasConfiguredFunction = Object.values(m.functions ?? {}).some(v => v === 'high' || v === 'med');
+            const hasConfiguredSeniority = Object.keys(m.seniority ?? {}).length > 0;
+            if (hasConfiguredFunction || hasConfiguredSeniority) configured.add(p.value);
+          } catch { /* skip */ }
+        }
+        setConfiguredProductNames(configured);
+      }
 
       // For parent companies, include child company IDs in meetings, follow-ups, and notes queries
       const childIds = (data.child_companies || []).map((c: { id: number }) => c.id);
@@ -1509,11 +1525,12 @@ export default function CompanyDetailPage() {
                 const isIcp = icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0];
                 if (!isIcp) return null;
 
-                // Group company attendees by selected products
+                // Group company attendees by selected products (only configured products)
                 const productAttendeeMap: Record<string, Array<{ name: string; title: string | null }>> = {};
                 for (const a of (company.attendees ?? []) as Array<{ first_name: string; last_name: string; title?: string | null; products?: string | null }>) {
                   if (!a.products) continue;
                   for (const prod of String(a.products).split(',').map(s => s.trim()).filter(Boolean)) {
+                    if (configuredProductNames.size > 0 && !configuredProductNames.has(prod)) continue;
                     (productAttendeeMap[prod] ??= []).push({ name: `${a.first_name} ${a.last_name}`, title: a.title ?? null });
                   }
                 }

@@ -234,7 +234,19 @@ export default function AttendeeDetailPage() {
       setRelTypeOptions(relTypeData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       setFunctionOptions(functionData.map((o: { value: string }) => o.value));
       setFunctionOptionRecords(functionData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-      setProductsOptions(productsData.map((o: { value: string; color: string | null }) => ({ value: String(o.value), color: o.color ?? null })));
+      setProductsOptions(
+        productsData
+          .filter((o: { value: string; color: string | null; metadata?: string | null }) => {
+            if (!o.metadata) return false;
+            try {
+              const m = JSON.parse(o.metadata) as { functions?: Record<string, string>; seniority?: Record<string, string> };
+              const hasConfiguredFunction = Object.values(m.functions ?? {}).some(v => v === 'high' || v === 'med');
+              const hasConfiguredSeniority = Object.keys(m.seniority ?? {}).length > 0;
+              return hasConfiguredFunction || hasConfiguredSeniority;
+            } catch { return false; }
+          })
+          .map((o: { value: string; color: string | null }) => ({ value: String(o.value), color: o.color ?? null }))
+      );
       setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '', function: atData.function || '', consent: atData.consent || 'Consent Not Recorded' });
     } catch {
       toast.error('Failed to load attendee');
