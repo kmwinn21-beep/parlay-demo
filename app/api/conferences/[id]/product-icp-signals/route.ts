@@ -53,7 +53,7 @@ export async function GET(
                  cat.value as category_label, cat.color as category_color
           FROM config_options p
           LEFT JOIN config_options cat ON cat.id = p.category_id
-          WHERE p.category = 'product_category'`,
+          WHERE p.category = 'products'`,
     args: [],
   });
   const productByName = new Map<string, {

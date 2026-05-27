@@ -147,6 +147,7 @@ export default function CompanyDetailPage() {
   const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
   const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
   const [attendeesExpanded, setAttendeesExpanded] = useState(false);
+  const [productsExpanded, setProductsExpanded] = useState(false);
   const ATTENDEE_COLLAPSED_COUNT = 4;
 
   // Dynamic config options
@@ -169,6 +170,7 @@ export default function CompanyDetailPage() {
   const [capitalTypeValues, setCapitalTypeValues] = useState<Set<string>>(new Set());
   const [showRelateModal, setShowRelateModal] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
+  const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
   const [opCapRelExpanded, setOpCapRelExpanded] = useState(false);
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [composeTarget, setComposeTarget] = useState<{ email: string; name: string } | null>(null);
@@ -195,7 +197,7 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
@@ -209,6 +211,7 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=rep_relationship_type&form=company_detail'),
         fetch('/api/admin/icp-rules'),
         fetch('/api/config?category=industries&form=company_detail'),
+        fetch('/api/config?category=products'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -260,6 +263,20 @@ export default function CompanyDetailPage() {
       if (icpConfigRes.ok) setIcpConfig(await icpConfigRes.json() as IcpConfig);
       if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+      if (productsRes.ok) {
+        const productsData = await productsRes.json() as Array<{ value: string; metadata?: string | null }>;
+        const configured = new Set<string>();
+        for (const p of productsData) {
+          if (!p.metadata) continue;
+          try {
+            const m = JSON.parse(p.metadata) as { functions?: Record<string, string>; seniority?: Record<string, string> };
+            const hasConfiguredFunction = Object.values(m.functions ?? {}).some(v => v === 'high' || v === 'med');
+            const hasConfiguredSeniority = Object.keys(m.seniority ?? {}).length > 0;
+            if (hasConfiguredFunction || hasConfiguredSeniority) configured.add(p.value);
+          } catch { /* skip */ }
+        }
+        setConfiguredProductNames(configured);
+      }
 
       // For parent companies, include child company IDs in meetings, follow-ups, and notes queries
       const childIds = (data.child_companies || []).map((c: { id: number }) => c.id);
@@ -1504,37 +1521,55 @@ export default function CompanyDetailPage() {
                 </div>
               ) : null,
               products: (() => {
-                // Group company attendees by selected products
+                // Only show Products for ICP-matching companies
+                const isIcp = icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0];
+                if (!isIcp) return null;
+
+                // Group company attendees by selected products (only configured products)
                 const productAttendeeMap: Record<string, Array<{ name: string; title: string | null }>> = {};
                 for (const a of (company.attendees ?? []) as Array<{ first_name: string; last_name: string; title?: string | null; products?: string | null }>) {
                   if (!a.products) continue;
                   for (const prod of String(a.products).split(',').map(s => s.trim()).filter(Boolean)) {
+                    if (configuredProductNames.size > 0 && !configuredProductNames.has(prod)) continue;
                     (productAttendeeMap[prod] ??= []).push({ name: `${a.first_name} ${a.last_name}`, title: a.title ?? null });
                   }
                 }
                 const entries = Object.entries(productAttendeeMap);
                 return entries.length === 0 ? null : (
                   <div key="products" className="card">
-                    <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">{getSectionLabel('products')}</h2>
-                    <div className="space-y-3">
-                      {entries.map(([product, attendees]) => {
-                        const preset = getPreset((colorMaps.products ?? {})[product]);
-                        return (
-                          <div key={product} className="rounded-lg border border-gray-200 overflow-hidden">
-                            <div className="px-3 py-2 border-b-2" style={{ backgroundColor: preset.hex + '18', borderColor: preset.hex }}>
-                              <span className="text-sm font-semibold" style={{ color: preset.hex }}>{product}</span>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between"
+                      onClick={() => setProductsExpanded(prev => !prev)}
+                    >
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
+                        {getSectionLabel('products')} <span className="text-gray-400 font-normal text-sm">({entries.length})</span>
+                      </h2>
+                      <svg className={`w-5 h-5 text-gray-400 transition-transform ${productsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {productsExpanded && (
+                      <div className="space-y-3 mt-3">
+                        {entries.map(([product, attendees]) => {
+                          const preset = getPreset((colorMaps.products ?? {})[product]);
+                          return (
+                            <div key={product} className="rounded-lg border border-gray-200 overflow-hidden">
+                              <div className="px-3 py-2 border-b-2" style={{ backgroundColor: preset.hex + '18', borderColor: preset.hex }}>
+                                <span className="text-sm font-semibold" style={{ color: preset.hex }}>{product}</span>
+                              </div>
+                              <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                {attendees.map((a, i) => (
+                                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                    {a.name}{a.title ? ` · ${a.title}` : ''}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
-                            <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                              {attendees.map((a, i) => (
-                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                  {a.name}{a.title ? ` · ${a.title}` : ''}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })(),
