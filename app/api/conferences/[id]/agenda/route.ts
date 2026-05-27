@@ -174,6 +174,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: 'image_base64 or url required' }, { status: 400 });
     }
 
+    // Fetch conference start_date to provide the year as context for the LLM
+    const confRow = await db.execute({
+      sql: 'SELECT start_date FROM conferences WHERE id = ? LIMIT 1',
+      args: [conferenceId],
+    });
+    const startDate = confRow.rows.length > 0 && confRow.rows[0].start_date
+      ? String(confRow.rows[0].start_date)
+      : null;
+    const conferenceYear = startDate ? new Date(startDate + 'T00:00:00').getFullYear() : null;
+    const yearHint = conferenceYear
+      ? `The conference takes place in ${conferenceYear}. If no year is visible in the agenda, use ${conferenceYear} when constructing day labels.`
+      : '';
+
     const sourceLabel = url ? 'URL' : 'file';
 
     type ContentBlock =
@@ -195,13 +208,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         );
       }
       fileContentBlock = { type: 'text', text: pageText };
-      promptText = `You are parsing a conference agenda from webpage content. Ignore navigation menus, headers, footers, ads, and any non-schedule content — focus only on schedule and session information. If the page has multiple days (even content from hidden tabs that may all be present in the HTML), extract all of them. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
+      promptText = `You are parsing a conference agenda from webpage content. Ignore navigation menus, headers, footers, ads, and any non-schedule content — focus only on schedule and session information. If the page has multiple days (even content from hidden tabs that may all be present in the HTML), extract all of them. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.${yearHint ? '\n\n' + yearHint : ''}
 
 Schema:
 {
   "days": [
     {
-      "day_label": "string (e.g. 'Monday, April 14' or 'Day 1')",
+      "day_label": "string (e.g. 'Monday, June 16, 2026' or 'Day 1')",
       "items": [
         {
           "start_time": "string or null",
@@ -218,6 +231,7 @@ Schema:
 
 Rules:
 - Preserve original time formats (e.g. '9:00 AM', '14:30')
+- Always include the full year in day_label when a date is known (e.g. 'Monday, June 16, 2026' not 'Monday, June 16')
 - If no explicit day labels exist, use 'Day 1', 'Day 2', etc.
 - If the entire agenda is one day, wrap it in a single day object
 - Use null for fields you cannot determine, not empty string
@@ -241,13 +255,13 @@ Rules:
         ? ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64! } })
         : ({ type: 'image', source: { type: 'base64', media_type: safeImageType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: image_base64! } });
 
-      promptText = `You are parsing a conference agenda. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.
+      promptText = `You are parsing a conference agenda. Extract all sessions and return ONLY valid JSON — no prose, no markdown fences.${yearHint ? '\n\n' + yearHint : ''}
 
 Schema:
 {
   "days": [
     {
-      "day_label": "string (e.g. 'Monday, April 14' or 'Day 1')",
+      "day_label": "string (e.g. 'Monday, June 16, 2026' or 'Day 1')",
       "items": [
         {
           "start_time": "string or null",
@@ -264,6 +278,7 @@ Schema:
 
 Rules:
 - Preserve original time formats (e.g. '9:00 AM', '14:30')
+- Always include the full year in day_label when a date is known (e.g. 'Monday, June 16, 2026' not 'Monday, June 16')
 - If no explicit day labels exist, use 'Day 1', 'Day 2', etc.
 - If the entire agenda is one day, wrap it in a single day object
 - Omit fields you cannot determine (use null, not empty string)
@@ -318,7 +333,11 @@ Rules:
     const insertStatements: { sql: string; args: (string | number | null)[] }[] = [];
     let sortOrder = 0;
     for (const day of days) {
-      const dayLabel = String(day.day_label ?? 'Day 1').trim();
+      let dayLabel = String(day.day_label ?? 'Day 1').trim();
+      // Inject conference year into day labels that have a date but no 4-digit year
+      if (conferenceYear && /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(dayLabel) && !/\b\d{4}\b/.test(dayLabel)) {
+        dayLabel = `${dayLabel}, ${conferenceYear}`;
+      }
       const items = Array.isArray(day.items) ? day.items : [];
       for (const item of items) {
         const title = String(item.title ?? '').trim();
