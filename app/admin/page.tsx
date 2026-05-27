@@ -985,6 +985,7 @@ export default function AdminPage() {
   const [basicIcpOpen, setBasicIcpOpen] = useState(true);
   const [advancedIcpOpen, setAdvancedIcpOpen] = useState(false);
   const [competitorsOpen, setCompetitorsOpen] = useState(false);
+  const [recomputingIcp, setRecomputingIcp] = useState(false);
 
   // ── Competitor settings ───────────────────────────────────────────────────
   type CompetitorEntry = { id: number | null; company_name: string; website: string; competitor_type: string; _key: string };
@@ -1290,6 +1291,20 @@ export default function AdminPage() {
       toast.success('Thresholds saved!');
     } catch { toast.error('Failed to save thresholds.'); }
     finally { setSavingThresholds(false); }
+  };
+
+  const handleRecomputeIcp = async () => {
+    setRecomputingIcp(true);
+    try {
+      const res = await fetch('/api/admin/recompute-icp', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Recompute failed');
+      toast.success(`ICP reapplied to ${data.updated} companies`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to reapply ICP');
+    } finally {
+      setRecomputingIcp(false);
+    }
   };
 
   const handleSaveIcpUnitType = async () => {
@@ -2670,6 +2685,34 @@ export default function AdminPage() {
                 </div>
               );
             })()}
+            <div className="card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Reapply ICP to All Companies</h2>
+                  <p className="text-sm text-gray-500">Re-evaluates every company in your database against your current ICP rules and updates their ICP status. Run this after changing ICP settings to apply them retroactively.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRecomputeIcp}
+                  disabled={recomputingIcp}
+                  className="btn-secondary text-sm flex-shrink-0 flex items-center gap-2"
+                >
+                  {recomputingIcp ? (
+                    <>
+                      <span className="animate-spin w-4 h-4 border-2 border-brand-primary border-t-transparent rounded-full inline-block" />
+                      Reapplying…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Reapply ICP to All Companies
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
             <IcpSettingsSection
               title="Basic ICP Settings"
               description="Define your core ICP, buyer persona, pain points, and use case."
