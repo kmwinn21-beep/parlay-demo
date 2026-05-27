@@ -330,6 +330,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Option not found' }, { status: 404 });
     }
 
+    // When product metadata changes, invalidate all persisted signals so the tab
+    // prompts the user to refresh rather than showing stale data.
+    if ('metadata' in body && String(result.rows[0].category ?? '') === 'product_category') {
+      db.execute({
+        sql: `DELETE FROM attendee_product_signals WHERE product_name = ?`,
+        args: [String(result.rows[0].value ?? '')],
+      }).catch(() => {});
+    }
+
     return NextResponse.json(result.rows[0]);
   } catch (error) {
     console.error('PATCH /api/config/[id] error:', error);

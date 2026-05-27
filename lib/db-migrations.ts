@@ -850,4 +850,40 @@ export const migrations: string[] = [
     use_count INTEGER DEFAULT 1,
     PRIMARY KEY (account_id, user_id, feature_key)
   )`,
+  // Industry field on companies
+  `ALTER TABLE companies ADD COLUMN industry TEXT`,
+  // Seed default industry options (skipped if already exist via IGNORE)
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Industrial Manufacturing', 1)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Aerospace & Defense', 2)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Automotive', 3)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Food & Beverage', 4)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Chemicals', 5)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Construction & Engineering', 6)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Distribution', 7)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Fashion & Apparel', 8)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Machinery & Equipment', 9)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Logistics', 10)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Healthcare', 11)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Hospitality', 12)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Public Sector', 13)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Utilities', 14)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Professional Services', 15)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Financial Services', 16)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Retail', 17)`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('industries', 'Technology', 18)`,
+  // Persisted product-ICP signal table for server-side computation
+  `CREATE TABLE IF NOT EXISTS attendee_product_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attendee_id INTEGER NOT NULL REFERENCES attendees(id) ON DELETE CASCADE,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      product_name TEXT NOT NULL,
+      buyer_role TEXT,
+      function_match TEXT,
+      industry_match INTEGER DEFAULT 0,
+      keyword_matches TEXT,
+      computed_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(attendee_id, conference_id, product_name)
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_attendee_product_signals_conf ON attendee_product_signals(conference_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_attendee_product_signals_attendee ON attendee_product_signals(attendee_id)`,
 ];

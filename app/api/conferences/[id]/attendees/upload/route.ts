@@ -5,6 +5,7 @@ import { getDb } from '@/lib/getDb';
 import type { Client } from '@libsql/client';
 import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, classifyFunction, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
+import { computeAttendeeProductSignals } from '@/lib/computeAttendeeProductSignals';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -342,6 +343,7 @@ export async function POST(
       wse?: number;
       services?: string;
       icp?: string;
+      industry?: string;
     };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of valid) {
@@ -361,6 +363,7 @@ export async function POST(
             wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined,
             services: p.services?.trim() || undefined,
             icp: p.icp?.trim() || undefined,
+            industry: p.industry?.trim() || undefined,
           });
         } else {
           // If we don't have an email/website/company_type/assigned_user/services yet for this company, pick it up
@@ -378,6 +381,7 @@ export async function POST(
             }
           }
           if (!existing.icp && p.icp?.trim()) existing.icp = p.icp.trim();
+          if (!existing.industry && p.industry?.trim()) existing.industry = p.industry.trim();
           if (!existing.wse && p.wse?.trim()) {
             const wseVal = parseInt(p.wse.trim(), 10);
             if (!isNaN(wseVal) && wseVal > 0) existing.wse = wseVal;
@@ -476,6 +480,7 @@ export async function POST(
         addCoField('company_type', 'company_type', entry.company_type || null);
         addCoField('website', 'website', entry.website || null);
         addCoField('wse', 'wse', entry.wse ?? null);
+        addCoField('industry', 'industry', entry.industry || null);
 
         // assigned_user: preserve if already has valid user (no conflict resolution for this field)
         const existingValidUserIds = existingCompany?.assigned_user
@@ -525,9 +530,10 @@ export async function POST(
         const assignedUser = entry.assigned_user || null;
         const wse = entry.wse ?? null;
         const services = entry.services || null;
+        const industry = entry.industry || null;
         return {
-          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
-          args: [n, detectedType || null, website, assignedUser, wse, services],
+          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services, industry) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, assignedUser, wse, services, industry],
         };
       });
       for (let i = 0; i < newCoNames.length; i++) {
@@ -962,6 +968,11 @@ export async function POST(
 
     const skippedCount = valid.length - newEntries.length;
     const updatedCount = existingAttendeeUpdates.length;
+
+    // Auto-compute product ICP signals after upload (best-effort, non-blocking)
+    computeAttendeeProductSignals(db, conferenceId).catch((e) =>
+      console.error('computeAttendeeProductSignals after upload error:', e),
+    );
 
     return NextResponse.json({
       success: true,
