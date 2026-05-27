@@ -886,4 +886,5 @@ export const migrations: string[] = [
     )`,
   `CREATE INDEX IF NOT EXISTS idx_attendee_product_signals_conf ON attendee_product_signals(conference_id)`,
   `CREATE INDEX IF NOT EXISTS idx_attendee_product_signals_attendee ON attendee_product_signals(attendee_id)`,
+  `ALTER TABLE companies ADD COLUMN products TEXT`,
 ];
