@@ -41,7 +41,7 @@ function formatMemberSince(raw: string | null): string {
 // ─── Section: Profile & Identity ─────────────────────────────────────────────
 
 function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
-  const { user } = useUser();
+  const { user, patchUser } = useUser();
   const [repOptions, setRepOptions] = useState<ConfigOption[]>([]);
   const [displayName, setDisplayName] = useState<string>(() => user?.displayName ?? '');
   const [configId, setConfigId] = useState<number | ''>(() => user?.configId ?? '');
@@ -97,7 +97,16 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Failed to save profile.'); return; }
       toast.success('Profile saved.');
-      onRefresh(); // refresh context so other parts of the app (header, dashboard) pick up the new display name
+      // Optimistically update context so other parts of the app see the new values immediately,
+      // regardless of Turso replica sync lag on the subsequent me fetch.
+      const savedConfigId = configId !== '' ? Number(configId) : null;
+      const savedRepName = repOptions.find(o => o.id === savedConfigId)?.value ?? null;
+      patchUser({
+        displayName: displayName.trim() || null,
+        configId: savedConfigId,
+        repName: savedRepName,
+      });
+      onRefresh(); // background refresh to pick up any other derived fields
     } catch {
       toast.error('Network error.');
     } finally {
