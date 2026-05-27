@@ -513,9 +513,7 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
               )}
               {activeTab === 'product_icp' && (
                 <ProductIcpTab
-                  productCatalog={data.productCatalog ?? []}
-                  icpAttendees={data.icpAttendees ?? []}
-                  industryOptions={data.industryOptions ?? []}
+                  conferenceId={conferenceId}
                   targetMap={targetMap}
                   onToggleTarget={toggleTarget}
                   readOnly={targetsReadOnly}

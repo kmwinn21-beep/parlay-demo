@@ -176,6 +176,7 @@ function DetailPanel({
 }) {
   const catColor = getProductCategoryColor(product);
   const assignedCategory = categories.find(c => c.id === product.category_id);
+  const systemCatLabel = (categories.find(c => c.is_system === 1)?.value) ?? 'General';
   const catDropRef = useRef<HTMLDivElement>(null);
 
   // Controlled aliases input — reset whenever product changes to avoid stale defaultValue
@@ -223,7 +224,7 @@ function DetailPanel({
               style={catColor ? { backgroundColor: `${catColor}22`, borderColor: catColor, color: catColor } : {}}
             >
               {catColor && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />}
-              {assignedCategory?.value ?? 'General'}
+              {assignedCategory?.value ?? systemCatLabel}
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
@@ -235,7 +236,7 @@ function DetailPanel({
                   onClick={() => { onSaveValue(product.id, product.value, { category_id: null }); setCategoryDropdownOpen(false); }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  General
+                  {systemCatLabel}
                 </button>
                 {categories.map(c => (
                   <button
@@ -444,6 +445,10 @@ export function ProductsSolutionsTab({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [localProducts, setLocalProducts] = useState<ConfigOption[]>(products);
   const [localCategories, setLocalCategories] = useState<ConfigOption[]>(categories);
+
+  // System category is the is_system=1 entry (the default/uncategorized bucket)
+  const systemCategory = localCategories.find(c => c.is_system === 1) ?? null;
+  const systemCategoryLabel = systemCategory?.value ?? 'General';
 
   // Add product form
   const [newName, setNewName] = useState('');
@@ -662,12 +667,21 @@ export function ProductsSolutionsTab({
     for (const c of sortedCats) {
       orderedCats.push({ id: c.id, label: c.value, color: c.color });
     }
-    if (map.has(null)) orderedCats.push({ id: null, label: 'General', color: null });
+    // Null-category products belong to the system category (the default bucket).
+    // Only add a separate fallback entry if there's no system category at all.
+    if (map.has(null) && !systemCategory) {
+      orderedCats.push({ id: null, label: systemCategoryLabel, color: null });
+    }
 
-    return orderedCats.map(cat => ({
-      ...cat,
-      products: map.get(cat.id) ?? [],
-    }));
+    return orderedCats.map(cat => {
+      const directProducts = map.get(cat.id) ?? [];
+      // Merge null-category products into the system category group
+      const nullProducts = (cat.id === systemCategory?.id && map.has(null)) ? (map.get(null) ?? []) : [];
+      return {
+        ...cat,
+        products: [...directProducts, ...nullProducts],
+      };
+    });
   })();
 
   // ── Scan preview derivation ───────────────────────────────────────────────
@@ -773,7 +787,7 @@ export function ProductsSolutionsTab({
               }}
               className="input-field w-full text-sm"
             >
-              <option value="">General</option>
+              <option value="">{systemCategoryLabel}</option>
               {localCategories.filter(c => !c.is_system).map(c => (
                 <option key={c.id} value={c.id}>{c.value}</option>
               ))}

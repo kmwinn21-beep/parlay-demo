@@ -252,7 +252,7 @@ export async function PUT(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, industry } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -268,8 +268,8 @@ export async function PUT(
     const prevAssignedUser = existingResult.rows[0].assigned_user as string | null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, industry = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, params.id],
     });
 
     // Cascade assigned_user to all child companies

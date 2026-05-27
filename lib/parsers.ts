@@ -51,6 +51,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     wse:           findColumn(headers, 'wse', 'wses', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees'),
     services:      findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting'),
     icp:           findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp'),
+    industry:      findColumn(headers, 'industry', 'sector', 'vertical', 'market_segment', 'market segment', 'business_segment', 'business segment', 'industry_vertical', 'industry vertical'),
     function:      findColumn(headers, 'function', 'department', 'dept', 'business_function', 'business function', 'job_function', 'job function', 'functional_area', 'functional area'),
     product:       findColumn(headers, 'product', 'products', 'product_interest', 'product interest', 'product_line', 'product line'),
     consent:       findColumn(headers, 'consent', 'opt_in', 'opt in', 'opt_out', 'opt out', 'optin', 'optout', 'email_consent', 'email consent', 'marketing_consent', 'marketing consent', 'communication_preference', 'communication preference', 'contact_permission', 'contact permission', 'gdpr', 'permission'),
@@ -106,6 +107,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
       if (raw) attendee.services = raw; // stored raw; upload route normalizes against config options
     }
     if (mapping.icp && row[mapping.icp]) attendee.icp = String(row[mapping.icp]).trim();
+    if (mapping.industry && row[mapping.industry]) attendee.industry = String(row[mapping.industry]).trim();
     if (mapping.function && row[mapping.function]) attendee.function = String(row[mapping.function]).trim();
     if (mapping.product && row[mapping.product]) attendee.product = String(row[mapping.product]).trim();
     if (mapping.consent && row[mapping.consent]) attendee.consent = String(row[mapping.consent]).trim();

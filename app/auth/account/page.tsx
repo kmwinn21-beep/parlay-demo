@@ -43,8 +43,8 @@ function formatMemberSince(raw: string | null): string {
 function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
   const { user } = useUser();
   const [repOptions, setRepOptions] = useState<ConfigOption[]>([]);
-  const [displayName, setDisplayName] = useState('');
-  const [configId, setConfigId] = useState<number | ''>('');
+  const [displayName, setDisplayName] = useState<string>(() => user?.displayName ?? '');
+  const [configId, setConfigId] = useState<number | ''>(() => user?.configId ?? '');
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [showEmailForm, setShowEmailForm] = useState(false);

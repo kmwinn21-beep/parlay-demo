@@ -1685,6 +1685,7 @@ export interface ParsedAttendee {
   wse?: string;
   services?: string;
   icp?: string;
+  industry?: string;
   function?: string;
   product?: string;
   consent?: string;

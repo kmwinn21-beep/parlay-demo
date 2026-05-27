@@ -67,6 +67,7 @@ interface Company {
   entity_structure?: string;
   services?: string[];
   icp?: string;
+  industry?: string;
   created_at: string;
   my_user_status_ids?: number[];
   status_markers?: StatusMarker[];
@@ -157,6 +158,7 @@ export default function CompanyDetailPage() {
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
+  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
   const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
   const [touchpointTotal, setTouchpointTotal] = useState<number | null>(null);
@@ -193,7 +195,7 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
@@ -206,6 +208,7 @@ export default function CompanyDetailPage() {
         fetch('/api/companies'),
         fetch('/api/config?category=rep_relationship_type&form=company_detail'),
         fetch('/api/admin/icp-rules'),
+        fetch('/api/config?category=industries&form=company_detail'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -222,6 +225,7 @@ export default function CompanyDetailPage() {
         entity_structure: data.entity_structure || '',
         services: Array.isArray(data.services) ? data.services : [],
         icp: data.icp || null,
+        industry: data.industry || '',
       });
       if (statusRes.ok) {
         const statusData = await statusRes.json() as StatusOptionMeta[];
@@ -251,6 +255,7 @@ export default function CompanyDetailPage() {
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
+      if (industryRes.ok) setIndustryOptions((await industryRes.json()).map((o: { value: string }) => o.value));
       if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value).filter((v: string) => v !== 'True' && v !== 'False'));
       if (icpConfigRes.ok) setIcpConfig(await icpConfigRes.json() as IcpConfig);
       if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
@@ -777,6 +782,19 @@ export default function CompanyDetailPage() {
                   placeholder="Select services..."
                   emptyMessage="No services configured. Add options in the Admin panel."
                 />
+              </div>
+              <div>
+                <label className="label">Industry</label>
+                <select
+                  value={editData.industry || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, industry: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select industry...</option>
+                  {industryOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

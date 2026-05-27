@@ -1,129 +1,104 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { useRecordDrawer } from './RecordDrawerContext';
 import { TargetBtn } from './TargetBtn';
 import { formatValuePill, useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
-import type { ProductIcpV2Product, ProductIcpV2Attendee, TargetEntry } from '../PreConferenceReview';
+import type { TargetEntry } from '../PreConferenceReview';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── API response types ─────────────────────────────────────────────────────────
 
-interface ProductMeta {
-  functions: Record<string, 'high' | 'med' | 'ignore'>;
-  seniority: Record<string, 'decision_maker' | 'influencer' | 'target_title'>;
-  industries: number[];
-  keywords: string[];
-  aliases: string;
-  active: boolean;
-}
-
-type BuyerRole = 'decision_maker' | 'influencer' | 'target_title' | null;
-
-interface AttendeeSignals {
-  buyerRole: BuyerRole;
-  functionMatches: Array<{ fn: string; level: 'high' | 'med' }>;
+interface ApiAttendee {
+  id: number;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  seniority: string | null;
+  function: string | null;
+  buyerRole: string | null;
+  functionMatch: { fn: string; level: 'high' | 'med' } | null;
+  industryMatch: boolean;
   keywordMatches: string[];
 }
 
-interface BoardAttendee extends ProductIcpV2Attendee {
-  signals: AttendeeSignals;
-}
-
-interface BoardCompany {
+interface ApiCompany {
   companyId: number | null;
   companyName: string;
+  companyWse: number | null;
   assignedUserNames: string[];
-  attendees: BoardAttendee[];
-  allUnmapped: boolean;
-  wse: number | null;
+  attendees: ApiAttendee[];
 }
 
-interface BoardColumn {
-  product: ProductIcpV2Product;
-  meta: ProductMeta;
-  companies: BoardCompany[];
+interface ApiColumn {
+  product: {
+    id: number;
+    name: string;
+    color: string | null;
+    categoryId: number | null;
+    categoryLabel: string;
+    categoryColor: string | null;
+    meta: string | null;
+  };
+  companies: ApiCompany[];
   totalAttendees: number;
   hasBuyerRole: boolean;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function parseMeta(s: string | null | undefined): ProductMeta {
-  try {
-    const p = JSON.parse(s ?? '');
-    return {
-      functions: p.functions ?? {},
-      seniority: p.seniority ?? {},
-      industries: Array.isArray(p.industries) ? p.industries : [],
-      keywords: Array.isArray(p.keywords) ? p.keywords : [],
-      aliases: p.aliases ?? '',
-      active: p.active !== false,
-    };
-  } catch {
-    return { functions: {}, seniority: {}, industries: [], keywords: [], aliases: '', active: true };
-  }
+interface ApiResponse {
+  computedAt: string | null;
+  columns: ApiColumn[];
 }
 
-function computeSignals(a: ProductIcpV2Attendee, meta: ProductMeta): AttendeeSignals {
-  const buyerRole: BuyerRole = a.seniority
-    ? ((meta.seniority[a.seniority] as BuyerRole) ?? null)
-    : null;
+type BuyerRole = 'decision_maker' | 'influencer' | 'target_title' | null;
 
-  const functionMatches: Array<{ fn: string; level: 'high' | 'med' }> = [];
-  if (a.function) {
-    const level = meta.functions[a.function];
-    if (level === 'high' || level === 'med') functionMatches.push({ fn: a.function, level });
-  }
+// ── Category color palette ─────────────────────────────────────────────────────
 
-  const titleLower = (a.title ?? '').toLowerCase();
-  const keywordMatches = meta.keywords.filter(kw => kw && titleLower.includes(kw.toLowerCase()));
+const CAT_PALETTE = [
+  { bg: '#EFF6FF', border: '#BFDBFE', text: '#1E40AF' },
+  { bg: '#F5F3FF', border: '#DDD6FE', text: '#5B21B6' },
+  { bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46' },
+  { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E' },
+  { bg: '#FFF1F2', border: '#FECDD3', text: '#9F1239' },
+  { bg: '#F0FDF4', border: '#BBF7D0', text: '#166534' },
+];
 
-  return { buyerRole, functionMatches, keywordMatches };
+function getCatStyle(catLabel: string, catColor: string | null): { bg: string; border: string; text: string } {
+  if (catColor) return { bg: `${catColor}18`, border: `${catColor}55`, text: catColor };
+  let h = 0;
+  for (let i = 0; i < catLabel.length; i++) h = (h * 31 + catLabel.charCodeAt(i)) & 0xffff;
+  return CAT_PALETTE[h % CAT_PALETTE.length];
 }
 
-function isRelevant(signals: AttendeeSignals): boolean {
-  return signals.buyerRole !== null || signals.functionMatches.length > 0 || signals.keywordMatches.length > 0;
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 const BUYER_ROLE_ORDER: Record<string, number> = { decision_maker: 0, influencer: 1, target_title: 2 };
 
-function sortAttendees(attendees: BoardAttendee[], mode: string): BoardAttendee[] {
+function sortAttendees(attendees: ApiAttendee[], mode: string): ApiAttendee[] {
   return [...attendees].sort((a, b) => {
     if (mode === 'buyer_role') {
-      const oa = a.signals.buyerRole ? (BUYER_ROLE_ORDER[a.signals.buyerRole] ?? 3) : 3;
-      const ob = b.signals.buyerRole ? (BUYER_ROLE_ORDER[b.signals.buyerRole] ?? 3) : 3;
+      const oa = a.buyerRole ? (BUYER_ROLE_ORDER[a.buyerRole] ?? 3) : 3;
+      const ob = b.buyerRole ? (BUYER_ROLE_ORDER[b.buyerRole] ?? 3) : 3;
       if (oa !== ob) return oa - ob;
     }
     if (mode === 'function') {
-      const la = a.signals.functionMatches[0]?.level;
-      const lb = b.signals.functionMatches[0]?.level;
+      const la = a.functionMatch?.level;
+      const lb = b.functionMatch?.level;
       const oa = la === 'high' ? 0 : la === 'med' ? 1 : 2;
       const ob = lb === 'high' ? 0 : lb === 'med' ? 1 : 2;
       if (oa !== ob) return oa - ob;
     }
-    return `${a.companyName}${a.lastName}${a.firstName}`.localeCompare(`${b.companyName}${b.lastName}${b.firstName}`);
+    return `${a.lastName}${a.firstName}`.localeCompare(`${b.lastName}${b.firstName}`);
   });
-}
-
-// Category color palette — consistent soft tints
-const CAT_PALETTE = [
-  { bg: '#EFF6FF', border: '#BFDBFE', text: '#1E40AF' }, // blue
-  { bg: '#F5F3FF', border: '#DDD6FE', text: '#5B21B6' }, // purple
-  { bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46' }, // teal
-  { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E' }, // amber
-  { bg: '#FFF1F2', border: '#FECDD3', text: '#9F1239' }, // rose
-  { bg: '#F0FDF4', border: '#BBF7D0', text: '#166534' }, // green
-];
-
-function getCatStyle(catLabel: string, catColor: string | null): { bg: string; border: string; text: string } {
-  if (catColor) {
-    return { bg: `${catColor}18`, border: `${catColor}55`, text: catColor };
-  }
-  // Deterministic hash
-  let h = 0;
-  for (let i = 0; i < catLabel.length; i++) h = (h * 31 + catLabel.charCodeAt(i)) & 0xffff;
-  return CAT_PALETTE[h % CAT_PALETTE.length];
 }
 
 // ── Pill components ────────────────────────────────────────────────────────────
@@ -165,6 +140,14 @@ function KeywordPill({ keyword }: { keyword: string }) {
   );
 }
 
+function IndustryPill() {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200">
+      industry match
+    </span>
+  );
+}
+
 function BuyerDot({ role }: { role: BuyerRole }) {
   const color = !role ? '#9CA3AF'
     : role === 'decision_maker' ? '#7C3AED'
@@ -182,17 +165,16 @@ function AttendeeRow({
   onToggleTarget,
   readOnly,
 }: {
-  attendee: BoardAttendee;
-  company: BoardCompany;
+  attendee: ApiAttendee;
+  company: ApiCompany;
   isTarget: boolean;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   readOnly: boolean;
 }) {
   const openRecord = useRecordDrawer();
-  const { signals } = attendee;
   return (
     <div className="flex gap-2 py-1.5 border-t border-gray-50 first:border-t-0">
-      <BuyerDot role={signals.buyerRole} />
+      <BuyerDot role={attendee.buyerRole as BuyerRole} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
           <button
@@ -213,7 +195,7 @@ function AttendeeRow({
               seniority: attendee.seniority,
               companyName: company.companyName,
               companyId: company.companyId ?? null,
-              companyWse: company.wse,
+              companyWse: company.companyWse,
               assignedUserNames: company.assignedUserNames,
             })}
           />
@@ -222,11 +204,12 @@ function AttendeeRow({
           <p className="text-[11px] text-gray-400 truncate leading-tight">{attendee.title}</p>
         )}
         <div className="flex flex-wrap gap-1 mt-1">
-          <BuyerRolePill role={signals.buyerRole} />
-          {signals.functionMatches.map(fm => (
-            <FunctionPill key={fm.fn} fn={fm.fn} level={fm.level} />
-          ))}
-          {signals.keywordMatches.map(kw => (
+          <BuyerRolePill role={attendee.buyerRole as BuyerRole} />
+          {attendee.functionMatch && (
+            <FunctionPill fn={attendee.functionMatch.fn} level={attendee.functionMatch.level} />
+          )}
+          {attendee.industryMatch && <IndustryPill />}
+          {attendee.keywordMatches.map(kw => (
             <KeywordPill key={kw} keyword={kw} />
           ))}
         </div>
@@ -245,7 +228,7 @@ function CompanyCard({
   onToggleTarget,
   readOnly,
 }: {
-  company: BoardCompany;
+  company: ApiCompany;
   sortMode: string;
   avgCostPerUnit: number;
   targetMap: Map<number, TargetEntry>;
@@ -254,9 +237,12 @@ function CompanyCard({
 }) {
   const openRecord = useRecordDrawer();
   const sorted = sortAttendees(company.attendees, sortMode);
-  const valueLabel = formatValuePill(company.wse, avgCostPerUnit);
+  const valueLabel = formatValuePill(company.companyWse, avgCostPerUnit);
+  const allUnmapped = company.attendees.every(
+    (a) => !a.buyerRole && !a.functionMatch && !a.industryMatch && a.keywordMatches.length === 0,
+  );
   return (
-    <div className={`border rounded-xl p-3 bg-white transition-all ${company.allUnmapped ? 'opacity-60 border-gray-100' : 'border-gray-200 hover:shadow-sm'}`}>
+    <div className={`border rounded-xl p-3 bg-white transition-all ${allUnmapped ? 'opacity-60 border-gray-100' : 'border-gray-200 hover:shadow-sm'}`}>
       <div className="mb-2">
         <div className="flex items-center gap-2 min-w-0">
           {company.companyId != null && company.companyId > 0 ? (
@@ -305,7 +291,7 @@ function ProductColumn({
   onToggleTarget,
   readOnly,
 }: {
-  col: BoardColumn;
+  col: ApiColumn;
   sortMode: string;
   catStyle: { bg: string; border: string; text: string };
   avgCostPerUnit: number;
@@ -352,99 +338,105 @@ function ProductColumn({
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export function ProductIcpTab({
-  productCatalog,
-  icpAttendees,
+  conferenceId,
   targetMap,
   onToggleTarget,
   readOnly = false,
 }: {
-  productCatalog: ProductIcpV2Product[];
-  icpAttendees: ProductIcpV2Attendee[];
-  industryOptions: Array<{ id: number; value: string }>;
+  conferenceId: number;
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   readOnly?: boolean;
 }) {
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<'buyer_role' | 'function' | 'company_name'>('buyer_role');
   const avgCostPerUnit = useAvgCostPerUnit();
 
-  // Only ICP = 'Yes' companies
-  const icpYesAttendees = useMemo(
-    () => icpAttendees.filter(a => a.companyIcp?.toLowerCase() === 'yes'),
-    [icpAttendees],
-  );
+  const fetchSignals = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/product-icp-signals`);
+      if (res.ok) setData(await res.json());
+    } catch { /* non-fatal */ }
+    finally { setLoading(false); }
+  }, [conferenceId]);
 
-  const boardData = useMemo<BoardColumn[]>(() => {
-    const columns: BoardColumn[] = [];
-    for (const product of productCatalog) {
-      const meta = parseMeta(product.meta);
-      if (!meta.active) continue;
+  useEffect(() => { fetchSignals(); }, [fetchSignals]);
 
-      const relevantAttendees: BoardAttendee[] = [];
-      for (const a of icpYesAttendees) {
-        const signals = computeSignals(a, meta);
-        if (isRelevant(signals)) relevantAttendees.push({ ...a, signals });
-      }
-      if (relevantAttendees.length === 0) continue;
-
-      const companyMap = new Map<number | null, BoardAttendee[]>();
-      for (const a of relevantAttendees) {
-        const key = a.companyId;
-        if (!companyMap.has(key)) companyMap.set(key, []);
-        companyMap.get(key)!.push(a);
-      }
-
-      const companies: BoardCompany[] = Array.from(companyMap.entries())
-        .map(([cid, atts]) => ({
-          companyId: cid,
-          companyName: atts[0].companyName,
-          assignedUserNames: atts[0].companyAssignedUserNames,
-          attendees: atts,
-          allUnmapped: atts.every((att: BoardAttendee) => !att.signals.buyerRole && att.signals.functionMatches.length === 0),
-          wse: atts[0].companyWse ?? null,
-        }))
-        .sort((a, b) => a.companyName.localeCompare(b.companyName));
-
-      columns.push({
-        product,
-        meta,
-        companies,
-        totalAttendees: relevantAttendees.length,
-        hasBuyerRole: relevantAttendees.some(a => a.signals.buyerRole !== null),
-      });
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/refresh-icp`, { method: 'POST' });
+      if (!res.ok) throw new Error('Refresh failed');
+      await fetchSignals();
+      toast.success('Product ICP signals refreshed');
+    } catch {
+      toast.error('Failed to refresh signals');
+    } finally {
+      setRefreshing(false);
     }
-    return columns.sort((a, b) => {
-      const catCmp = a.product.categoryLabel.localeCompare(b.product.categoryLabel);
-      return catCmp !== 0 ? catCmp : a.product.name.localeCompare(b.product.name);
-    });
-  }, [productCatalog, icpYesAttendees]);
+  }, [conferenceId, fetchSignals]);
 
-  // Category list for filter chips
+  const columns = data?.columns ?? [];
+  const computedAt = data?.computedAt ?? null;
+
   const categoryLabels = useMemo(() => {
     const seen = new Set<string>();
-    return boardData
+    return columns
       .map(col => col.product.categoryLabel)
       .filter(l => { if (seen.has(l)) return false; seen.add(l); return true; });
-  }, [boardData]);
+  }, [columns]);
 
   const visibleColumns = useMemo(() => (
-    categoryFilter ? boardData.filter(col => col.product.categoryLabel === categoryFilter) : boardData
-  ), [boardData, categoryFilter]);
+    categoryFilter ? columns.filter(col => col.product.categoryLabel === categoryFilter) : columns
+  ), [columns, categoryFilter]);
 
-  // Summary stats
   const totalCompanies = useMemo(() => {
     const ids = new Set<number | null>();
     visibleColumns.forEach(col => col.companies.forEach(co => ids.add(co.companyId)));
     return ids.size;
   }, [visibleColumns]);
+
   const totalAttendees = useMemo(() => {
     const ids = new Set<number>();
     visibleColumns.forEach(col => col.companies.forEach(co => co.attendees.forEach(a => ids.add(a.id))));
     return ids.size;
   }, [visibleColumns]);
 
-  if (boardData.length === 0) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!computedAt) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <svg className="w-10 h-10 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <p className="text-gray-500 font-medium text-sm">No product ICP signals computed yet</p>
+        <p className="text-gray-400 text-xs mt-1 mb-4">
+          Signals are computed after each CSV import, or you can trigger them manually.
+        </p>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="btn-secondary text-sm flex items-center gap-2"
+        >
+          {refreshing && <span className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />}
+          {refreshing ? 'Computing…' : 'Compute signals now'}
+        </button>
+      </div>
+    );
+  }
+
+  if (columns.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <svg className="w-10 h-10 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -452,9 +444,20 @@ export function ProductIcpTab({
         </svg>
         <p className="text-gray-500 font-medium text-sm">No product ICP matches found for this conference</p>
         <p className="text-gray-400 text-xs mt-1 mb-4">Configure products and their function/seniority mappings to see matches here.</p>
-        <Link href="/admin?tab=products" className="text-xs text-brand-secondary hover:underline">
-          Configure products in admin settings →
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/admin?tab=products" className="text-xs text-brand-secondary hover:underline">
+            Configure products in admin settings →
+          </Link>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          >
+            {refreshing && <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full" />}
+            Refresh
+          </button>
+        </div>
       </div>
     );
   }
@@ -495,17 +498,41 @@ export function ProductIcpTab({
           <option value="company_name">Sort: Company A–Z</option>
         </select>
 
-        {/* Summary */}
+        {/* Summary + refresh */}
         <p className="text-xs text-gray-400 flex-shrink-0">
           {visibleColumns.length} product{visibleColumns.length !== 1 ? 's' : ''} · {totalCompanies} {totalCompanies === 1 ? 'company' : 'companies'} · {totalAttendees} attendee{totalAttendees !== 1 ? 's' : ''} matched
         </p>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {computedAt && (
+            <span className="text-[11px] text-gray-400">
+              Synced {formatRelativeTime(computedAt)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Recompute product ICP signals"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-50"
+          >
+            {refreshing ? (
+              <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full" />
+            ) : (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Board */}
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-0 items-start">
         {visibleColumns.map(col => (
           <ProductColumn
-            key={col.product.id}
+            key={col.product.id || col.product.name}
             col={col}
             sortMode={sortMode}
             catStyle={getCatStyle(col.product.categoryLabel, col.product.categoryColor)}
