@@ -3747,7 +3747,7 @@ export default function AdminPage() {
           categories={optionsByCategory['product_category'] ?? []}
           seniorityOptions={optionsByCategory['seniority'] ?? []}
           functionOptions={optionsByCategory['function'] ?? []}
-          industryOptions={(optionsByCategory['product_category'] ?? []).filter(c => !c.is_system)}
+          industryOptions={optionsByCategory['industry'] ?? []}
           onRefresh={fetchAll}
         />
       )}
