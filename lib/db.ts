@@ -104,10 +104,37 @@ export async function initDb(): Promise<void> {
     args: [],
   });
 
-  // Run migrations sequentially — ordering is required because later migrations ALTER tables
-  // created by earlier ones. Parallel Promise.all has a race that silently drops columns.
-  for (const sql of migrations) {
+  // Schema version tracking — only run migrations not yet applied to this DB.
+  // Reduces warm cold-start from 345 sequential round-trips to 3.
+  await db.execute({
+    sql: `CREATE TABLE IF NOT EXISTS _schema_version (version INTEGER NOT NULL DEFAULT 0)`,
+    args: [],
+  }).catch(() => {});
+
+  const versionRow = await db.execute({
+    sql: `SELECT version FROM _schema_version LIMIT 1`,
+    args: [],
+  }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
+
+  const currentVersion = versionRow.rows.length > 0 ? Number(versionRow.rows[0].version) : 0;
+  const pendingMigrations = migrations.slice(currentVersion);
+
+  for (const sql of pendingMigrations) {
     await db.execute({ sql, args: [] }).catch(() => {});
+  }
+
+  if (pendingMigrations.length > 0) {
+    if (currentVersion === 0) {
+      await db.execute({
+        sql: `INSERT INTO _schema_version (version) VALUES (?)`,
+        args: [migrations.length],
+      }).catch(() => {});
+    } else {
+      await db.execute({
+        sql: `UPDATE _schema_version SET version = ?`,
+        args: [migrations.length],
+      }).catch(() => {});
+    }
   }
 
   // Expand role CHECK constraint to include new roles (SQLite requires table recreation)
