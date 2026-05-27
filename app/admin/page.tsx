@@ -546,7 +546,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                               onChange={e => setEditCategoryId(e.target.value ? Number(e.target.value) : null)}
                               className="input-field w-full text-sm"
                             >
-                              <option value="">General</option>
+                              <option value="">{defaultCategoryLabel}</option>
                               {categoryOptions.map(c => (
                                 <option key={c.id} value={c.id}>{c.value}</option>
                               ))}
