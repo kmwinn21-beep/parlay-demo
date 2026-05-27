@@ -303,7 +303,7 @@ function ProductColumn({
     <div className="flex-shrink-0 w-80 flex flex-col gap-3">
       <div className="rounded-xl px-4 py-3 border" style={{ backgroundColor: catStyle.bg, borderColor: catStyle.border }}>
         <h3 className="font-semibold text-sm" style={{ color: catStyle.text }}>{col.product.name}</h3>
-        {col.product.categoryLabel && col.product.categoryLabel !== 'General' && (
+        {col.product.categoryLabel && (
           <p className="text-[11px] mt-0.5 opacity-70" style={{ color: catStyle.text }}>{col.product.categoryLabel}</p>
         )}
         <p className="text-[11px] mt-1 opacity-60" style={{ color: catStyle.text }}>
