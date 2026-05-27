@@ -2076,7 +2076,7 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {CATEGORIES.map(cat => (
                 <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} />
               ))}
