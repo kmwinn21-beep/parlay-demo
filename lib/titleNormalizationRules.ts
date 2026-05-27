@@ -7,6 +7,10 @@ import { buildTitleMetadata, conservativeTitleSimilarity, normalizeTitleKey, typ
 // Director+function entries must precede the generic Director fallback.
 const titleResolutionCache = new Map<string, TitleMatchMetadata>();
 
+// Tracks which DB clients have already had the schema ensured this worker lifetime.
+// Client objects are cached by getDb(), so the same reference recurs across requests.
+const schemaEnsured = new WeakSet<object>();
+
 const SYSTEM_ALIASES: Array<{ aliases: string[]; normalized_title: string; function_value: string; seniority_value: string; buyer_role: BuyerRoleKey }> = [
   // ── C-Suite ──────────────────────────────────────────────────────────────
   { aliases: ['ceo', 'chief executive officer'], normalized_title: 'CEO', function_value: 'Operations', seniority_value: 'C-Suite', buyer_role: 'decision_maker' },
@@ -46,6 +50,13 @@ interface ConfigLookup {
   options: Array<{ id: number; value: string }>;
 }
 
+// Shared context fetched once per resolveAttendeeTitleMetadata batch call
+interface ResolveContext {
+  functions: ConfigLookup;
+  seniorities: ConfigLookup;
+  configuredTitles: Array<{ title: string; buyerRole: BuyerRoleKey }>;
+}
+
 async function getConfigLookup(tenantDb: Client, category: string): Promise<ConfigLookup> {
   const result = await tenantDb.execute({
     sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value',
@@ -83,6 +94,7 @@ function rowToRule(row: Record<string, unknown>): TitleNormalizationRuleLike {
 
 export async function ensureTitleNormalizationSchema(tenantDb?: Client): Promise<void> {
   const client = tenantDb ?? db;
+  if (schemaEnsured.has(client)) return;
   await dbReady;
   await client.execute({
     sql: `CREATE TABLE IF NOT EXISTS title_normalization_rules (
@@ -106,6 +118,7 @@ export async function ensureTitleNormalizationSchema(tenantDb?: Client): Promise
   });
   await client.execute({ sql: 'CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)', args: [] }).catch(() => {});
   await client.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)', args: [] }).catch(() => {});
+  schemaEnsured.add(client);
 }
 
 export async function getRuleForTitle(tenantDb: Client, rawTitle: string, organizationId: number | null = null): Promise<TitleNormalizationRuleLike | null> {
@@ -177,25 +190,9 @@ export async function upsertTitleNormalizationRule(tenantDb: Client, input: {
   return rowToRule(result.rows[0] as Record<string, unknown>);
 }
 
-async function findConfiguredAlias(tenantDb: Client, rawTitle: string): Promise<TitleMatchMetadata | null> {
-  const settings = await tenantDb.execute({
-    sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles', 'icp_influencer_titles')",
-    args: [],
-  }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
-  const byKey = new Map(settings.rows.map(row => [String(row.key), String(row.value ?? '[]')]));
-  const parse = (value: string | undefined): string[] => {
-    try {
-      const parsed = JSON.parse(value || '[]');
-      return Array.isArray(parsed) ? parsed.map(v => String(v)).filter(Boolean) : [];
-    } catch {
-      return [];
-    }
-  };
+function findConfiguredAliasSync(ctx: ResolveContext, rawTitle: string): TitleMatchMetadata | null {
   const rawKey = normalizeTitleKey(rawTitle);
-  const configured = [
-    ...parse(byKey.get('icp_decision_maker_titles')).map(title => ({ title, buyerRole: 'decision_maker' as BuyerRoleKey })),
-    ...parse(byKey.get('icp_influencer_titles')).map(title => ({ title, buyerRole: 'influencer' as BuyerRoleKey })),
-  ].find(candidate => {
+  const configured = ctx.configuredTitles.find(candidate => {
     const candidateKey = normalizeTitleKey(candidate.title);
     return candidateKey && (rawKey === candidateKey || rawKey.includes(candidateKey) || candidateKey.includes(rawKey));
   });
@@ -211,16 +208,15 @@ async function findConfiguredAlias(tenantDb: Client, rawTitle: string): Promise<
   });
 }
 
-async function findSystemAlias(tenantDb: Client, rawTitle: string): Promise<TitleMatchMetadata | null> {
-  const [functions, seniorities] = await Promise.all([getConfigLookup(tenantDb, 'function'), getConfigLookup(tenantDb, 'seniority')]);
+function findSystemAliasSync(ctx: ResolveContext, rawTitle: string): TitleMatchMetadata | null {
   const rawKey = normalizeTitleKey(rawTitle);
   const alias = SYSTEM_ALIASES.find(a => a.aliases.some(candidate => rawKey === normalizeTitleKey(candidate) || rawKey.includes(normalizeTitleKey(candidate))));
   if (!alias) return null;
   return buildTitleMetadata({
     originalTitle: rawTitle,
     normalizedTitle: alias.normalized_title,
-    functionId: functions.byValueKey.get(normalizeTitleKey(alias.function_value)) ?? null,
-    seniorityId: seniorities.byValueKey.get(normalizeTitleKey(alias.seniority_value)) ?? null,
+    functionId: ctx.functions.byValueKey.get(normalizeTitleKey(alias.function_value)) ?? null,
+    seniorityId: ctx.seniorities.byValueKey.get(normalizeTitleKey(alias.seniority_value)) ?? null,
     buyerRole: alias.buyer_role,
     matchType: 'system_alias',
     confidence: 'high',
@@ -229,11 +225,10 @@ async function findSystemAlias(tenantDb: Client, rawTitle: string): Promise<Titl
   });
 }
 
-async function exactOrFuzzyFromConfig(tenantDb: Client, rawTitle: string): Promise<TitleMatchMetadata> {
-  const [functions, seniorities] = await Promise.all([getConfigLookup(tenantDb, 'function'), getConfigLookup(tenantDb, 'seniority')]);
+function exactOrFuzzyFromConfigSync(ctx: ResolveContext, rawTitle: string): TitleMatchMetadata {
   const rawKey = normalizeTitleKey(rawTitle);
-  const seniorityExact = seniorities.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
-  const functionExact = functions.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
+  const seniorityExact = ctx.seniorities.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
+  const functionExact = ctx.functions.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
   if (seniorityExact || functionExact) {
     return buildTitleMetadata({
       originalTitle: rawTitle,
@@ -254,8 +249,8 @@ async function exactOrFuzzyFromConfig(tenantDb: Client, rawTitle: string): Promi
     return buildTitleMetadata({
       originalTitle: rawTitle,
       normalizedTitle: best.alias.normalized_title,
-      functionId: functions.byValueKey.get(normalizeTitleKey(best.alias.function_value)) ?? null,
-      seniorityId: seniorities.byValueKey.get(normalizeTitleKey(best.alias.seniority_value)) ?? null,
+      functionId: ctx.functions.byValueKey.get(normalizeTitleKey(best.alias.function_value)) ?? null,
+      seniorityId: ctx.seniorities.byValueKey.get(normalizeTitleKey(best.alias.seniority_value)) ?? null,
       buyerRole: best.alias.buyer_role,
       matchType: 'fuzzy',
       confidence: 'medium',
@@ -267,8 +262,34 @@ async function exactOrFuzzyFromConfig(tenantDb: Client, rawTitle: string): Promi
   return buildTitleMetadata({ originalTitle: rawTitle, matchType: 'none', confidence: 'low', source: 'none' });
 }
 
-async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
-  await ensureTitleNormalizationSchema(tenantDb);
+async function buildResolveContext(tenantDb: Client): Promise<ResolveContext> {
+  const [functions, seniorities, settingsResult] = await Promise.all([
+    getConfigLookup(tenantDb, 'function'),
+    getConfigLookup(tenantDb, 'seniority'),
+    tenantDb.execute({
+      sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles', 'icp_influencer_titles')",
+      args: [],
+    }).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
+  ]);
+
+  const parse = (value: string | undefined): string[] => {
+    try {
+      const parsed = JSON.parse(value || '[]');
+      return Array.isArray(parsed) ? parsed.map(v => String(v)).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
+  const byKey = new Map(settingsResult.rows.map(row => [String(row.key), String(row.value ?? '[]')]));
+  const configuredTitles: Array<{ title: string; buyerRole: BuyerRoleKey }> = [
+    ...parse(byKey.get('icp_decision_maker_titles')).map(title => ({ title, buyerRole: 'decision_maker' as BuyerRoleKey })),
+    ...parse(byKey.get('icp_influencer_titles')).map(title => ({ title, buyerRole: 'influencer' as BuyerRoleKey })),
+  ];
+
+  return { functions, seniorities, configuredTitles };
+}
+
+async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, ctx: ResolveContext, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
   const title = String(rawTitle ?? '').trim();
   if (!title) return buildTitleMetadata({ originalTitle: null, matchType: 'none', confidence: 'low', source: 'none' });
 
@@ -287,13 +308,13 @@ async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, rawTitle: 
     });
   }
 
-  const configuredAlias = await findConfiguredAlias(tenantDb, title);
+  const configuredAlias = findConfiguredAliasSync(ctx, title);
   if (configuredAlias) return configuredAlias;
 
-  const systemAlias = await findSystemAlias(tenantDb, title);
+  const systemAlias = findSystemAliasSync(ctx, title);
   if (systemAlias) return systemAlias;
 
-  return exactOrFuzzyFromConfig(tenantDb, title);
+  return exactOrFuzzyFromConfigSync(ctx, title);
 }
 
 export async function resolveAttendeeTitleMetadata(tenantDb: Client, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
@@ -301,9 +322,29 @@ export async function resolveAttendeeTitleMetadata(tenantDb: Client, rawTitle: s
   const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
   const cached = titleResolutionCache.get(cacheKey);
   if (cached) return cached;
-  const result = await resolveAttendeeTitleMetadataUncached(tenantDb, rawTitle, organizationId);
+  await ensureTitleNormalizationSchema(tenantDb);
+  const ctx = await buildResolveContext(tenantDb);
+  const result = await resolveAttendeeTitleMetadataUncached(tenantDb, ctx, rawTitle, organizationId);
   titleResolutionCache.set(cacheKey, result);
   return result;
+}
+
+export async function resolveAttendeeTitleMetadataBatch(
+  tenantDb: Client,
+  titles: Array<{ rawTitle: string | null | undefined; organizationId?: number | null }>,
+): Promise<TitleMatchMetadata[]> {
+  if (titles.length === 0) return [];
+  await ensureTitleNormalizationSchema(tenantDb);
+  const ctx = await buildResolveContext(tenantDb);
+  return Promise.all(titles.map(async ({ rawTitle, organizationId = null }) => {
+    const title = String(rawTitle ?? '').trim();
+    const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
+    const cached = titleResolutionCache.get(cacheKey);
+    if (cached) return cached;
+    const result = await resolveAttendeeTitleMetadataUncached(tenantDb, ctx, rawTitle, organizationId ?? null);
+    titleResolutionCache.set(cacheKey, result);
+    return result;
+  }));
 }
 
 export async function applyRuleToExactTitle(tenantDb: Client, rule: TitleNormalizationRuleLike): Promise<{ attendeeCount: number; companyCount: number }> {
