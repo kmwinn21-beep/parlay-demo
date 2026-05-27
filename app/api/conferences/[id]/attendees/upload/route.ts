@@ -92,14 +92,14 @@ export async function POST(
 
     // Fetch live admin config options for classifiers
     const [companyTypeOptions, servicesOptions, icpOptions, icpConfig, userRows, usersWithConfig, functionOptions, productOptions, settingsRows] = await Promise.all([
-      getConfigOptionValues('company_type'),
-      getConfigOptionValues('services'),
-      getConfigOptionValues('icp'),
+      getConfigOptionValues('company_type', db),
+      getConfigOptionValues('services', db),
+      getConfigOptionValues('icp', db),
       getIcpConfig(db),
       db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
       db.execute({ sql: 'SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL', args: [] }),
-      getConfigOptionValues('function'),
-      getConfigOptionValues('products'),
+      getConfigOptionValues('function', db),
+      getConfigOptionValues('products', db),
       db.execute({ sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_seniority_priority', 'icp_function_product_mapping')", args: [] }),
     ]);
 
