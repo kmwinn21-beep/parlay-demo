@@ -63,13 +63,6 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      setDisplayName(user.displayName ?? '');
-      setConfigId(user.configId ?? '');
-    }
-  }, [user]);
-
   // Auto-select and silently save the rep profile when it isn't set but a
   // config_options entry exists whose value matches the user's display name.
   // Covers existing users who activated before the auto-link was added.
@@ -104,7 +97,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Failed to save profile.'); return; }
       toast.success('Profile saved.');
-      onRefresh();
+      onRefresh(); // refresh context so other parts of the app (header, dashboard) pick up the new display name
     } catch {
       toast.error('Network error.');
     } finally {
