@@ -184,6 +184,31 @@ export interface ProductIcpEntry {
   companies: ProductIcpCompany[];
 }
 
+export interface ProductIcpV2Attendee {
+  id: number;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  function: string | null;
+  seniority: string | null;
+  health: number;
+  companyId: number | null;
+  companyName: string;
+  companyAssignedUserNames: string[];
+  companyWse: number | null;
+  companyIcp: string | null;
+}
+
+export interface ProductIcpV2Product {
+  id: number;
+  name: string;
+  meta: string | null;
+  color: string | null;
+  categoryId: number | null;
+  categoryLabel: string;
+  categoryColor: string | null;
+}
+
 export interface PreConferenceData {
   summary: PreConferenceSummary;
   landscape: LandscapeData;
@@ -194,6 +219,9 @@ export interface PreConferenceData {
   relationships: RelationshipRow[];
   productIcp: ProductIcpEntry[];
   strategyAssessment: import('@/lib/strategyAssessment').StrategyAssessment | null;
+  productCatalog: ProductIcpV2Product[];
+  icpAttendees: ProductIcpV2Attendee[];
+  industryOptions: Array<{ id: number; value: string }>;
 }
 
 type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'target_recommendations' | 'parlay_recommendations';
@@ -484,7 +512,14 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                 <RelationshipsTab relationships={data.relationships} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'product_icp' && (
-                <ProductIcpTab productIcp={data.productIcp} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
+                <ProductIcpTab
+                  productCatalog={data.productCatalog ?? []}
+                  icpAttendees={data.icpAttendees ?? []}
+                  industryOptions={data.industryOptions ?? []}
+                  targetMap={targetMap}
+                  onToggleTarget={toggleTarget}
+                  readOnly={targetsReadOnly}
+                />
               )}
               {activeTab === 'conference_targets' && (
                 <ConferenceTargetsTab

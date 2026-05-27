@@ -50,7 +50,7 @@ export async function GET(
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const conference = confRow.rows[0];
 
-  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, productCategoriesRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes, icpPrioritySettingsRes] = await Promise.all([
+  const [attendeesRes, meetingsRes, socialRes, followUpsRes, icpConfig, actionOptsRes, productColorsRes, productCategoriesRes, budgetRes, avgCostRes, strategyTypeLabelRes, avgDealRes, tierSettingsRes, icpPrioritySettingsRes, industryOptsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
                    a.company_id, a.products, a."function",
@@ -94,7 +94,7 @@ export async function GET(
     }),
     getIcpConfig(db),
     db.execute({ sql: `SELECT value, action_key FROM config_options WHERE category = 'action'`, args: [] }),
-    db.execute({ sql: `SELECT id, value, color, category_id FROM config_options WHERE category = 'products'`, args: [] }),
+    db.execute({ sql: `SELECT id, value, color, category_id, metadata FROM config_options WHERE category = 'products'`, args: [] }),
     db.execute({ sql: `SELECT id, value, color FROM config_options WHERE category = 'product_category' ORDER BY sort_order, value`, args: [] }),
     db.execute({ sql: `SELECT line_items, required_pipeline_amount FROM conference_budget WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [] })),
     db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] })),
@@ -107,6 +107,7 @@ export async function GET(
       args: [],
     }).catch(() => ({ rows: [] })),
     db.execute({ sql: `SELECT key, value FROM site_settings WHERE key IN ('icp_function_priority','icp_seniority_priority')`, args: [] }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'industry' ORDER BY sort_order, value`, args: [] }).catch(() => ({ rows: [] })),
   ]);
 
   const attendees = attendeesRes.rows;
@@ -114,11 +115,12 @@ export async function GET(
   const socialEvents = socialRes.rows;
   const followUps = followUpsRes.rows;
 
-  const productInfoMap = new Map<string, { color: string | null; categoryId: number | null }>();
+  const productInfoMap = new Map<string, { color: string | null; categoryId: number | null; metadata: string | null }>();
   for (const r of productColorsRes.rows) {
     productInfoMap.set(String(r.value), {
       color: r.color ? String(r.color) : null,
       categoryId: r.category_id != null ? Number(r.category_id) : null,
+      metadata: r.metadata ? String(r.metadata) : null,
     });
   }
   const productColorMap = new Map<string, string | null>();
@@ -736,6 +738,36 @@ export async function GET(
       };
     });
 
+  // --- Product ICP V2: catalog + all attendees for client-side signal computation ---
+  const productCatalog = productColorsRes.rows.map(r => {
+    const catId = r.category_id != null ? Number(r.category_id) : null;
+    const catEntry = catId != null ? productCategoryMap.get(catId) : null;
+    return {
+      id: Number(r.id),
+      name: String(r.value),
+      meta: r.metadata ? String(r.metadata) : null,
+      color: r.color ? String(r.color) : null,
+      categoryId: catId,
+      categoryLabel: catEntry?.label ?? 'General',
+      categoryColor: catEntry?.color ?? null,
+    };
+  });
+  const icpAttendees = attendees.map(a => ({
+    id: a.id as number,
+    firstName: String(a.first_name ?? ''),
+    lastName: String(a.last_name ?? ''),
+    title: a.title ? String(a.title) : null,
+    function: (a as Record<string, unknown>).function ? String((a as Record<string, unknown>).function) : null,
+    seniority: resolveSeniority(a.seniority as string | null, a.title as string | null),
+    health: attendeeHealthMap.get(a.id as number) ?? 0,
+    companyId: a.company_id != null ? Number(a.company_id) : null,
+    companyName: String(a.company_name ?? ''),
+    companyAssignedUserNames: resolveUserIds(a.company_assigned_user),
+    companyWse: a.wse != null ? Number(a.wse) : null,
+    companyIcp: a.icp ? String(a.icp) : null,
+  }));
+  const industryOptions = (industryOptsRes.rows ?? []).map(r => ({ id: Number(r.id), value: String(r.value) }));
+
   // --- Strategy Assessment ---
   const budgetRow = budgetRes.rows[0];
   const budgetTotal = budgetRow
@@ -829,7 +861,7 @@ export async function GET(
     icpCompanies: icpCompaniesForScoring,
   });
 
-  const responseData = { summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment };
+  const responseData = { summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment, productCatalog, icpAttendees, industryOptions };
   PRE_CONF_CACHE.set(cacheKey, { data: responseData, cachedAt: Date.now() });
   return NextResponse.json(responseData);
 }
