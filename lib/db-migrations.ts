@@ -887,4 +887,23 @@ export const migrations: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_attendee_product_signals_conf ON attendee_product_signals(conference_id)`,
   `CREATE INDEX IF NOT EXISTS idx_attendee_product_signals_attendee ON attendee_product_signals(attendee_id)`,
   `ALTER TABLE companies ADD COLUMN products TEXT`,
+  `CREATE TABLE IF NOT EXISTS title_normalization_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id INTEGER,
+      raw_title TEXT NOT NULL,
+      raw_title_key TEXT NOT NULL,
+      normalized_title TEXT NOT NULL,
+      function_id INTEGER REFERENCES config_options(id),
+      seniority_id INTEGER REFERENCES config_options(id),
+      buyer_role TEXT NOT NULL CHECK (buyer_role IN ('decision_maker', 'influencer', 'target_title', 'ignore')),
+      source TEXT NOT NULL DEFAULT 'user_confirmed' CHECK (source IN ('user_confirmed', 'system_alias', 'fuzzy_match', 'imported')),
+      confidence TEXT NOT NULL DEFAULT 'high' CHECK (confidence IN ('high', 'medium', 'low')),
+      notes TEXT,
+      created_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)`,
+  `CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)`,
 ];

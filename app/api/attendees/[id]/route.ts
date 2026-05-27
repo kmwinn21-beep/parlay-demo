@@ -25,7 +25,7 @@ export async function GET(
     }
 
     const attendee = attendeeResult.rows[0];
-    const title_match_metadata = await resolveAttendeeTitleMetadata(attendee.title ? String(attendee.title) : null);
+    const title_match_metadata = await resolveAttendeeTitleMetadata(db, attendee.title ? String(attendee.title) : null);
 
     const conferencesResult = await db.execute({
       sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location

@@ -826,7 +826,7 @@ export async function GET(
   const uniqueTitles = Array.from(new Set(attendees.map(a => normalizeTitleKey(a.title as string | null)).filter(Boolean)));
   const titleMetaPairs = await Promise.all(uniqueTitles.map(async key => {
     const original = attendees.find(a => normalizeTitleKey(a.title as string | null) === key)?.title as string | null;
-    const meta = await resolveAttendeeTitleMetadata(original ?? key, null);
+    const meta = await resolveAttendeeTitleMetadata(db, original ?? key, null);
     return [key, { buyer_role: meta.buyer_role, match_type: meta.match_type }] as const;
   }));
   const titleMetadataByKey = Object.fromEntries(titleMetaPairs);

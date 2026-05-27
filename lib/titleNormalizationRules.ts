@@ -1,3 +1,4 @@
+import type { Client } from '@libsql/client';
 import { db, dbReady } from '@/lib/db';
 import { buildTitleMetadata, conservativeTitleSimilarity, normalizeTitleKey, type BuyerRoleKey, type TitleMatchConfidence, type TitleMatchMetadata, type TitleNormalizationRuleLike } from '@/lib/titleNormalization';
 
@@ -45,8 +46,8 @@ interface ConfigLookup {
   options: Array<{ id: number; value: string }>;
 }
 
-async function getConfigLookup(category: string): Promise<ConfigLookup> {
-  const result = await db.execute({
+async function getConfigLookup(tenantDb: Client, category: string): Promise<ConfigLookup> {
+  const result = await tenantDb.execute({
     sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value',
     args: [category],
   });
@@ -80,9 +81,10 @@ function rowToRule(row: Record<string, unknown>): TitleNormalizationRuleLike {
   };
 }
 
-export async function ensureTitleNormalizationSchema(): Promise<void> {
+export async function ensureTitleNormalizationSchema(tenantDb?: Client): Promise<void> {
+  const client = tenantDb ?? db;
   await dbReady;
-  await db.execute({
+  await client.execute({
     sql: `CREATE TABLE IF NOT EXISTS title_normalization_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       organization_id INTEGER,
@@ -102,15 +104,15 @@ export async function ensureTitleNormalizationSchema(): Promise<void> {
     )`,
     args: [],
   });
-  await db.execute({ sql: 'CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)', args: [] }).catch(() => {});
-  await db.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)', args: [] }).catch(() => {});
+  await client.execute({ sql: 'CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)', args: [] }).catch(() => {});
+  await client.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)', args: [] }).catch(() => {});
 }
 
-export async function getRuleForTitle(rawTitle: string, organizationId: number | null = null): Promise<TitleNormalizationRuleLike | null> {
-  await ensureTitleNormalizationSchema();
+export async function getRuleForTitle(tenantDb: Client, rawTitle: string, organizationId: number | null = null): Promise<TitleNormalizationRuleLike | null> {
+  await ensureTitleNormalizationSchema(tenantDb);
   const key = normalizeTitleKey(rawTitle);
   if (!key) return null;
-  const result = await db.execute({
+  const result = await tenantDb.execute({
     sql: `SELECT * FROM title_normalization_rules
           WHERE raw_title_key = ? AND COALESCE(organization_id, 0) = COALESCE(?, 0)
           ORDER BY CASE source WHEN 'user_confirmed' THEN 0 ELSE 1 END, updated_at DESC
@@ -120,7 +122,7 @@ export async function getRuleForTitle(rawTitle: string, organizationId: number |
   return result.rows[0] ? rowToRule(result.rows[0] as Record<string, unknown>) : null;
 }
 
-export async function upsertTitleNormalizationRule(input: {
+export async function upsertTitleNormalizationRule(tenantDb: Client, input: {
   organization_id?: number | null;
   raw_title: string;
   normalized_title: string;
@@ -131,12 +133,12 @@ export async function upsertTitleNormalizationRule(input: {
   notes?: string | null;
   user_id?: number | null;
 }): Promise<TitleNormalizationRuleLike> {
-  await ensureTitleNormalizationSchema();
+  await ensureTitleNormalizationSchema(tenantDb);
   const rawTitle = input.raw_title.trim();
   const key = normalizeTitleKey(rawTitle);
   if (!rawTitle || !key) throw new Error('raw_title is required');
 
-  const existing = await db.execute({
+  const existing = await tenantDb.execute({
     sql: `SELECT id FROM title_normalization_rules
           WHERE raw_title_key = ? AND COALESCE(organization_id, 0) = COALESCE(?, 0)
           LIMIT 1`,
@@ -155,7 +157,7 @@ export async function upsertTitleNormalizationRule(input: {
 
   let result;
   if (existing.rows[0]) {
-    result = await db.execute({
+    result = await tenantDb.execute({
       sql: `UPDATE title_normalization_rules SET
               normalized_title = ?, function_id = ?, seniority_id = ?, buyer_role = ?,
               source = 'user_confirmed', confidence = ?, notes = ?, updated_by = ?, updated_at = datetime('now')
@@ -164,7 +166,7 @@ export async function upsertTitleNormalizationRule(input: {
       args: [...args, Number(existing.rows[0].id)],
     });
   } else {
-    result = await db.execute({
+    result = await tenantDb.execute({
       sql: `INSERT INTO title_normalization_rules
               (organization_id, raw_title, raw_title_key, normalized_title, function_id, seniority_id, buyer_role, source, confidence, notes, created_by, updated_by, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'user_confirmed', ?, ?, ?, ?, datetime('now'))
@@ -175,8 +177,8 @@ export async function upsertTitleNormalizationRule(input: {
   return rowToRule(result.rows[0] as Record<string, unknown>);
 }
 
-async function findConfiguredAlias(rawTitle: string): Promise<TitleMatchMetadata | null> {
-  const settings = await db.execute({
+async function findConfiguredAlias(tenantDb: Client, rawTitle: string): Promise<TitleMatchMetadata | null> {
+  const settings = await tenantDb.execute({
     sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles', 'icp_influencer_titles')",
     args: [],
   }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
@@ -209,8 +211,8 @@ async function findConfiguredAlias(rawTitle: string): Promise<TitleMatchMetadata
   });
 }
 
-async function findSystemAlias(rawTitle: string): Promise<TitleMatchMetadata | null> {
-  const [functions, seniorities] = await Promise.all([getConfigLookup('function'), getConfigLookup('seniority')]);
+async function findSystemAlias(tenantDb: Client, rawTitle: string): Promise<TitleMatchMetadata | null> {
+  const [functions, seniorities] = await Promise.all([getConfigLookup(tenantDb, 'function'), getConfigLookup(tenantDb, 'seniority')]);
   const rawKey = normalizeTitleKey(rawTitle);
   const alias = SYSTEM_ALIASES.find(a => a.aliases.some(candidate => rawKey === normalizeTitleKey(candidate) || rawKey.includes(normalizeTitleKey(candidate))));
   if (!alias) return null;
@@ -227,8 +229,8 @@ async function findSystemAlias(rawTitle: string): Promise<TitleMatchMetadata | n
   });
 }
 
-async function exactOrFuzzyFromConfig(rawTitle: string): Promise<TitleMatchMetadata> {
-  const [functions, seniorities] = await Promise.all([getConfigLookup('function'), getConfigLookup('seniority')]);
+async function exactOrFuzzyFromConfig(tenantDb: Client, rawTitle: string): Promise<TitleMatchMetadata> {
+  const [functions, seniorities] = await Promise.all([getConfigLookup(tenantDb, 'function'), getConfigLookup(tenantDb, 'seniority')]);
   const rawKey = normalizeTitleKey(rawTitle);
   const seniorityExact = seniorities.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
   const functionExact = functions.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
@@ -265,12 +267,12 @@ async function exactOrFuzzyFromConfig(rawTitle: string): Promise<TitleMatchMetad
   return buildTitleMetadata({ originalTitle: rawTitle, matchType: 'none', confidence: 'low', source: 'none' });
 }
 
-async function resolveAttendeeTitleMetadataUncached(rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
-  await ensureTitleNormalizationSchema();
+async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
+  await ensureTitleNormalizationSchema(tenantDb);
   const title = String(rawTitle ?? '').trim();
   if (!title) return buildTitleMetadata({ originalTitle: null, matchType: 'none', confidence: 'low', source: 'none' });
 
-  const userRule = await getRuleForTitle(title, organizationId);
+  const userRule = await getRuleForTitle(tenantDb, title, organizationId);
   if (userRule && userRule.source === 'user_confirmed') {
     return buildTitleMetadata({
       originalTitle: title,
@@ -285,41 +287,41 @@ async function resolveAttendeeTitleMetadataUncached(rawTitle: string | null | un
     });
   }
 
-  const configuredAlias = await findConfiguredAlias(title);
+  const configuredAlias = await findConfiguredAlias(tenantDb, title);
   if (configuredAlias) return configuredAlias;
 
-  const systemAlias = await findSystemAlias(title);
+  const systemAlias = await findSystemAlias(tenantDb, title);
   if (systemAlias) return systemAlias;
 
-  return exactOrFuzzyFromConfig(title);
+  return exactOrFuzzyFromConfig(tenantDb, title);
 }
 
-export async function resolveAttendeeTitleMetadata(rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
+export async function resolveAttendeeTitleMetadata(tenantDb: Client, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
   const title = String(rawTitle ?? '').trim();
   const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
   const cached = titleResolutionCache.get(cacheKey);
   if (cached) return cached;
-  const result = await resolveAttendeeTitleMetadataUncached(rawTitle, organizationId);
+  const result = await resolveAttendeeTitleMetadataUncached(tenantDb, rawTitle, organizationId);
   titleResolutionCache.set(cacheKey, result);
   return result;
 }
 
-export async function applyRuleToExactTitle(rule: TitleNormalizationRuleLike): Promise<{ attendeeCount: number; companyCount: number }> {
-  const [functions, seniorities] = await Promise.all([getConfigLookup('function'), getConfigLookup('seniority')]);
+export async function applyRuleToExactTitle(tenantDb: Client, rule: TitleNormalizationRuleLike): Promise<{ attendeeCount: number; companyCount: number }> {
+  const [functions, seniorities] = await Promise.all([getConfigLookup(tenantDb, 'function'), getConfigLookup(tenantDb, 'seniority')]);
   const functionValue = rule.function_id ? functions.byId.get(rule.function_id) ?? null : null;
   const seniorityValue = rule.seniority_id ? seniorities.byId.get(rule.seniority_id) ?? null : null;
   const key = normalizeTitleKey(rule.raw_title);
-  const attendees = await db.execute({ sql: 'SELECT id, company_id, title FROM attendees WHERE title IS NOT NULL', args: [] });
+  const attendees = await tenantDb.execute({ sql: 'SELECT id, company_id, title FROM attendees WHERE title IS NOT NULL', args: [] });
   const matching = attendees.rows.filter(r => normalizeTitleKey(String(r.title ?? '')) === key);
   for (const row of matching) {
-    await db.execute({
+    await tenantDb.execute({
       sql: 'UPDATE attendees SET seniority = COALESCE(?, seniority), "function" = COALESCE(?, "function"), updated_at = datetime(\'now\') WHERE id = ?',
       args: [seniorityValue, functionValue, Number(row.id)],
     });
   }
   const companyIds = new Set(matching.map(r => r.company_id == null ? null : Number(r.company_id)).filter((v): v is number => v != null));
   for (const companyId of Array.from(companyIds)) {
-    await db.execute({ sql: 'UPDATE companies SET updated_at = datetime(\'now\') WHERE id = ?', args: [companyId] }).catch(() => {});
+    await tenantDb.execute({ sql: 'UPDATE companies SET updated_at = datetime(\'now\') WHERE id = ?', args: [companyId] }).catch(() => {});
   }
   return { attendeeCount: matching.length, companyCount: companyIds.size };
 }
