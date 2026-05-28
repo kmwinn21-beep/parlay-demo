@@ -38,6 +38,37 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * PATCH /api/companies/relationships
+ * Body: { company_id_1: number, company_id_2: number, notes: string | null }
+ * Updates notes on an existing relationship.
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
+    const { company_id_1, company_id_2, notes } = await request.json();
+
+    if (!company_id_1 || !company_id_2) {
+      return NextResponse.json({ error: 'Both company IDs are required' }, { status: 400 });
+    }
+
+    const [a, b] = company_id_1 < company_id_2
+      ? [company_id_1, company_id_2]
+      : [company_id_2, company_id_1];
+
+    await db.execute({
+      sql: 'UPDATE company_relationships SET notes = ? WHERE company_id_1 = ? AND company_id_2 = ?',
+      args: [notes ?? null, a, b],
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('PATCH /api/companies/relationships error:', error);
+    return NextResponse.json({ error: 'Failed to update relationship notes' }, { status: 500 });
+  }
+}
+
+/**
  * DELETE /api/companies/relationships
  * Body: { company_id_1: number, company_id_2: number }
  * Removes the relationship between two companies.
