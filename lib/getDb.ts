@@ -2,27 +2,40 @@ import { createClient, type Client } from '@libsql/client';
 import { db, dbReady, migrateTenantDb } from '@/lib/db';
 
 const tenantCache = new Map<string, Client>();
+// Deduplicates concurrent first-access calls — prevents multiple migration runs
+const tenantPending = new Map<string, Promise<Client>>();
 
 export async function getDb(accountId: string | undefined): Promise<Client> {
   if (!accountId) return db; // ops admin — no tenant, uses master DB directly
   const cached = tenantCache.get(accountId);
   if (cached) return cached;
-  await dbReady;
-  const row = await db.execute({
-    sql: `SELECT turso_db_url, turso_auth_token FROM accounts WHERE id = ?`,
-    args: [accountId],
-  });
-  const r = row.rows[0];
-  if (!r?.turso_db_url) {
-    throw new Error(`[getDb] No turso_db_url found for account ${accountId} — tenant database not provisioned correctly`);
-  }
-  const client = createClient({
-    url: String(r.turso_db_url),
-    authToken: String(r.turso_auth_token),
-  });
-  await migrateTenantDb(client);
-  tenantCache.set(accountId, client);
-  return client;
+
+  // If another call is already initializing this tenant, wait for it
+  const pending = tenantPending.get(accountId);
+  if (pending) return pending;
+
+  const init = (async () => {
+    await dbReady;
+    const row = await db.execute({
+      sql: `SELECT turso_db_url, turso_auth_token FROM accounts WHERE id = ?`,
+      args: [accountId],
+    });
+    const r = row.rows[0];
+    if (!r?.turso_db_url) {
+      throw new Error(`[getDb] No turso_db_url found for account ${accountId} — tenant database not provisioned correctly`);
+    }
+    const client = createClient({
+      url: String(r.turso_db_url),
+      authToken: String(r.turso_auth_token),
+    });
+    await migrateTenantDb(client);
+    tenantCache.set(accountId, client);
+    tenantPending.delete(accountId);
+    return client;
+  })();
+
+  tenantPending.set(accountId, init);
+  return init;
 }
 
 /**

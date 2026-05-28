@@ -49,6 +49,7 @@ interface MeetingContext {
   conference_name: string;
   conference_internal_attendees: string | null;
   scheduled_by: string | null;
+  scheduled_by_names: string[];
   additional_attendees: string | null;
   meeting_date: string | null;
   meeting_time: string | null;
@@ -891,16 +892,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     (!savedStateRef.current.hadTranscript && transcript.length > 0)
   );
 
-  // Derive scheduled_by display names and conference internal attendee names
-  const scheduledByNames: string[] = (() => {
-    if (!meeting?.scheduled_by) return [];
-    const ids = meeting.scheduled_by.split(',').map(s => s.trim()).filter(Boolean);
-    return ids.map(idStr => {
-      const id = Number(idStr);
-      const user = allUsers.find(u => u.id === id);
-      return user ? user.value : idStr;
-    });
-  })();
+  // scheduled_by_names is pre-resolved by the API (config_option IDs → display names)
+  const scheduledByNames: string[] = meeting?.scheduled_by_names ?? [];
 
   const conferenceInternalNames: string[] = meeting?.conference_internal_attendees
     ? meeting.conference_internal_attendees.split(',').map(s => s.trim()).filter(Boolean)
