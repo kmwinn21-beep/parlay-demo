@@ -103,7 +103,7 @@ function parseMinutes(time: string | null): number {
 }
 
 function formatMeetingDayLabel(d: string): string {
-  try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }); }
+  try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); }
   catch { return d; }
 }
 

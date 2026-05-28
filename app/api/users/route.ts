@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
 
   const result = await db.execute({
-    sql: `SELECT id, display_name, first_name, last_name FROM users WHERE active = 1 AND email_verified = 1 ORDER BY COALESCE(display_name, first_name, '')`,
+    sql: `SELECT id, display_name, first_name, last_name FROM users ORDER BY COALESCE(display_name, first_name, '')`,
     args: [],
   });
 
