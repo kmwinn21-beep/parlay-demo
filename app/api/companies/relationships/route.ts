@@ -46,22 +46,34 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await getSessionUser(request);
     const db = await getDb(user?.accountId);
-    const { company_id_1, company_id_2, notes } = await request.json();
+    const { company_id_1, company_id_2, note } = await request.json();
 
     if (!company_id_1 || !company_id_2) {
       return NextResponse.json({ error: 'Both company IDs are required' }, { status: 400 });
+    }
+    if (!note || !String(note).trim()) {
+      return NextResponse.json({ error: 'Note text is required' }, { status: 400 });
     }
 
     const [a, b] = company_id_1 < company_id_2
       ? [company_id_1, company_id_2]
       : [company_id_2, company_id_1];
 
+    const existing = await db.execute({
+      sql: 'SELECT notes FROM company_relationships WHERE company_id_1 = ? AND company_id_2 = ?',
+      args: [a, b],
+    });
+    let thread: { text: string; createdAt: string }[] = [];
+    try { thread = JSON.parse(String(existing.rows[0]?.notes ?? '[]')); } catch { thread = []; }
+    if (!Array.isArray(thread)) thread = [];
+    thread.push({ text: String(note).trim(), createdAt: new Date().toISOString() });
+
     await db.execute({
       sql: 'UPDATE company_relationships SET notes = ? WHERE company_id_1 = ? AND company_id_2 = ?',
-      args: [notes ?? null, a, b],
+      args: [JSON.stringify(thread), a, b],
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, thread });
   } catch (error) {
     console.error('PATCH /api/companies/relationships error:', error);
     return NextResponse.json({ error: 'Failed to update relationship notes' }, { status: 500 });

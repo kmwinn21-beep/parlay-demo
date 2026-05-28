@@ -521,24 +521,28 @@ export default function CompanyDetailPage() {
   };
 
   const handleSaveRelNotes = async (relatedCompanyId: number) => {
+    const noteText = (relNotes[relatedCompanyId] ?? '').trim();
+    if (!noteText) return;
     setSavingRelNotes(prev => new Set(prev).add(relatedCompanyId));
     try {
       const res = await fetch('/api/companies/relationships', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id_1: Number(id), company_id_2: relatedCompanyId, notes: relNotes[relatedCompanyId] ?? null }),
+        body: JSON.stringify({ company_id_1: Number(id), company_id_2: relatedCompanyId, note: noteText }),
       });
       if (!res.ok) throw new Error();
-      toast.success('Notes saved.');
-      // Update local company state so notes persist without a full refetch
+      const data = await res.json();
+      toast.success('Note added.');
+      // Clear input and update local notes with new thread
+      setRelNotes(n => ({ ...n, [relatedCompanyId]: '' }));
       setCompany(prev => prev ? {
         ...prev,
         related_companies: prev.related_companies?.map(r =>
-          r.id === relatedCompanyId ? { ...r, notes: relNotes[relatedCompanyId] ?? null } : r
+          r.id === relatedCompanyId ? { ...r, notes: JSON.stringify(data.thread) } : r
         ),
       } : prev);
     } catch {
-      toast.error('Failed to save notes.');
+      toast.error('Failed to save note.');
     } finally {
       setSavingRelNotes(prev => { const s = new Set(prev); s.delete(relatedCompanyId); return s; });
     }
@@ -1452,8 +1456,12 @@ export default function CompanyDetailPage() {
                         <div className="space-y-2 mt-3">
                           {company.related_companies.map(rel => {
                             const isCardExpanded = expandedRelCards.has(rel.id);
-                            const noteVal = relNotes[rel.id] ?? rel.notes ?? '';
+                            const noteInputVal = relNotes[rel.id] ?? '';
                             const isSaving = savingRelNotes.has(rel.id);
+                            let thread: { text: string; createdAt: string }[] = [];
+                            try { thread = JSON.parse(rel.notes ?? '[]'); } catch { thread = []; }
+                            if (!Array.isArray(thread)) thread = [];
+                            const lastNote = thread[thread.length - 1];
                             return (
                               <div key={rel.id} className="rounded-lg border border-gray-100 overflow-hidden">
                                 {/* Card header row */}
@@ -1464,8 +1472,7 @@ export default function CompanyDetailPage() {
                                         const s = new Set(prev);
                                         if (s.has(rel.id)) { s.delete(rel.id); } else {
                                           s.add(rel.id);
-                                          // initialise note editor from existing notes
-                                          setRelNotes(n => rel.id in n ? n : { ...n, [rel.id]: rel.notes ?? '' });
+                                          setRelNotes(n => rel.id in n ? n : { ...n, [rel.id]: '' });
                                         }
                                         return s;
                                       });
@@ -1480,8 +1487,8 @@ export default function CompanyDetailPage() {
                                           {rel.company_type}
                                         </span>
                                       )}
-                                      {!isCardExpanded && rel.notes && (
-                                        <p className="text-xs text-gray-400 mt-0.5 truncate">{rel.notes}</p>
+                                      {!isCardExpanded && lastNote && (
+                                        <p className="text-xs text-gray-400 mt-0.5 truncate">{lastNote.text}</p>
                                       )}
                                     </div>
                                   </button>
@@ -1509,22 +1516,36 @@ export default function CompanyDetailPage() {
                                 {/* Expanded notes area */}
                                 {isCardExpanded && (
                                   <div className="px-3 pb-3 border-t border-gray-100 bg-gray-50">
-                                    <p className="text-xs font-medium text-gray-500 mt-2 mb-1">Notes</p>
-                                    <textarea
-                                      value={noteVal}
-                                      onChange={e => setRelNotes(n => ({ ...n, [rel.id]: e.target.value }))}
-                                      placeholder="Add notes about this relationship…"
-                                      rows={3}
-                                      className="input-field resize-none w-full text-sm"
-                                    />
-                                    <div className="flex justify-end mt-1.5">
-                                      <button
-                                        onClick={() => handleSaveRelNotes(rel.id)}
-                                        disabled={isSaving}
-                                        className="btn-primary text-xs py-1 px-3"
-                                      >
-                                        {isSaving ? 'Saving…' : 'Save'}
-                                      </button>
+                                    {thread.length > 0 && (
+                                      <div className="mt-2 space-y-2">
+                                        {thread.map((entry, i) => (
+                                          <div key={i} className="flex gap-2">
+                                            <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0 mt-1.5" />
+                                            <div className="min-w-0">
+                                              <p className="text-xs text-gray-700 leading-snug">{entry.text}</p>
+                                              <p className="text-[10px] text-gray-400 mt-0.5">{new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className={thread.length > 0 ? 'mt-3 pt-2 border-t border-gray-200' : 'mt-2'}>
+                                      <textarea
+                                        value={noteInputVal}
+                                        onChange={e => setRelNotes(n => ({ ...n, [rel.id]: e.target.value }))}
+                                        placeholder="Add a note…"
+                                        rows={2}
+                                        className="input-field resize-none w-full text-sm"
+                                      />
+                                      <div className="flex justify-end mt-1.5">
+                                        <button
+                                          onClick={() => handleSaveRelNotes(rel.id)}
+                                          disabled={isSaving || !noteInputVal.trim()}
+                                          className="btn-primary text-xs py-1 px-3"
+                                        >
+                                          {isSaving ? 'Saving…' : 'Post'}
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
