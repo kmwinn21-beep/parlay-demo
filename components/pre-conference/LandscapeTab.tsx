@@ -504,6 +504,8 @@ function PipelineChartsPanel({
   const avgCostPerUnit = useAvgCostPerUnit();
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [meetingPipelineOpen, setMeetingPipelineOpen] = useState(false);
 
   // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
   const conversionPct = 60;
@@ -571,15 +573,16 @@ function PipelineChartsPanel({
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4">
       {/* Targeted Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
-        </div>
+          <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${pipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        </button>
 
         {requiredPipeline != null && (
-          <div className="mb-3 pb-3 border-b border-gray-100">
+          <div className={`pb-3 ${pipelineOpen ? 'mb-3 border-b border-gray-100' : ''}`}>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
               <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
@@ -606,42 +609,45 @@ function PipelineChartsPanel({
           </div>
         )}
 
-        {hasValues ? (
-          <div className="space-y-2">
-            {TIER_DATA.map(tier => {
-              const val = tierValueSum[tier.key] ?? 0;
-              return (
-                <div key={tier.key} className="flex items-center gap-2">
-                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
-                        backgroundColor: tier.hex,
-                      }}
-                    />
+        {pipelineOpen && (
+          hasValues ? (
+            <div className="space-y-2">
+              {TIER_DATA.map(tier => {
+                const val = tierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
+                          backgroundColor: tier.hex,
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                    {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+          )
         )}
       </div>
 
       {/* Meetings Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
-        </div>
+          <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${meetingPipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        </button>
 
         {requiredPipeline != null && (
-          <div className="mb-3 pb-3 border-b border-gray-100">
+          <div className={`pb-3 ${meetingPipelineOpen ? 'mb-3 border-b border-gray-100' : ''}`}>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
               <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
@@ -668,37 +674,39 @@ function PipelineChartsPanel({
           </div>
         )}
 
-        {hasMeetingValues ? (
-          <div className="space-y-2">
-            {TIER_DATA.map(tier => {
-              const val = meetingTierValueSum[tier.key] ?? 0;
-              return (
-                <div key={tier.key} className="flex items-center gap-2">
-                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
-                        backgroundColor: tier.hex,
-                      }}
-                    />
+        {meetingPipelineOpen && (
+          hasMeetingValues ? (
+            <div className="space-y-2">
+              {TIER_DATA.map(tier => {
+                const val = meetingTierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
+                          backgroundColor: tier.hex,
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                    {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-gray-400">
-            {avgCostPerUnit > 0
-              ? meetingAttendeeIds.size === 0
-                ? 'No meetings scheduled yet.'
-                : 'No target companies with meetings.'
-              : 'Set avg. cost per unit in Admin Settings to see values.'}
-          </p>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">
+              {avgCostPerUnit > 0
+                ? meetingAttendeeIds.size === 0
+                  ? 'No meetings scheduled yet.'
+                  : 'No target companies with meetings.'
+                : 'Set avg. cost per unit in Admin Settings to see values.'}
+            </p>
+          )
         )}
       </div>
     </div>
@@ -933,7 +941,7 @@ function RelationshipHeatmapPanel({
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full">
       {/* Toggle header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <button
@@ -1199,7 +1207,7 @@ export function LandscapeTab({
         </div>
 
         {/* Cols 3-4: Relationship Heatmap */}
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 h-full">
           <RelationshipHeatmapPanel
             byRep={byRep}
             icpCompanies={icpCompanies}
