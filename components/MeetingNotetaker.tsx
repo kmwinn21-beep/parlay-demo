@@ -402,7 +402,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         const [meetingDetailRes, notesRes, usersRes, tasksRes, ppTemplatesRes, bsTemplatesRes] = await Promise.all([
           fetch(`/api/meetings/${meetingId}`),
           fetch(`/api/meetings/${meetingId}/notes`),
-          fetch('/api/config?category=user'),
+          fetch('/api/users'),
           fetch(`/api/meetings/${meetingId}/tasks`),
           fetch('/api/config?category=pain_point_template'),
           fetch('/api/config?category=buying_signal_template'),
