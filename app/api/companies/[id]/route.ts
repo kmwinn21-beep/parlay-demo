@@ -150,7 +150,7 @@ export async function GET(
           })
         : Promise.resolve({ rows: [] }),
       db.execute({
-        sql: `SELECT c.id, c.name, c.company_type
+        sql: `SELECT c.id, c.name, c.company_type, cr.notes
               FROM companies c
               INNER JOIN company_relationships cr
                 ON (cr.company_id_1 = c.id AND cr.company_id_2 = ?)
@@ -208,6 +208,7 @@ export async function GET(
       id: Number(r.id),
       name: String(r.name),
       company_type: r.company_type ? String(r.company_type) : null,
+      notes: r.notes ? String(r.notes) : null,
     }));
 
     // Strip all user-scoped status values from the global status string

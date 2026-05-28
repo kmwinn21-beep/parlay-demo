@@ -906,4 +906,5 @@ export const migrations: string[] = [
     )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)`,
   `CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)`,
+  `ALTER TABLE company_relationships ADD COLUMN notes TEXT`,
 ];
