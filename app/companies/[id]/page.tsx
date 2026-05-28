@@ -166,8 +166,6 @@ export default function CompanyDetailPage() {
   const [showTpMatrix, setShowTpMatrix] = useState(false);
 
   // Operator / Capital relationship state
-  const [operatorTypeValues, setOperatorTypeValues] = useState<Set<string>>(new Set());
-  const [capitalTypeValues, setCapitalTypeValues] = useState<Set<string>>(new Set());
   const [showRelateModal, setShowRelateModal] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
@@ -238,20 +236,6 @@ export default function CompanyDetailPage() {
       if (compTypeRes.ok) {
         const compTypeData = await compTypeRes.json();
         setCompanyTypeOptions(compTypeData.map((o: { value: string }) => o.value));
-        // Identify Operator and Capital type values by their config option IDs
-        // so the relationship section works even if option names change in Admin
-        const opVals = new Set<string>();
-        const capVals = new Set<string>();
-        for (const opt of compTypeData) {
-          const v = (opt.value as string).toLowerCase();
-          if (v.includes('operator') || v === 'opco' || v === 'own/op') {
-            opVals.add(opt.value as string);
-          } else if (v.includes('capital') || v === 'propco') {
-            capVals.add(opt.value as string);
-          }
-        }
-        setOperatorTypeValues(opVals);
-        setCapitalTypeValues(capVals);
       }
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
@@ -1408,7 +1392,7 @@ export default function CompanyDetailPage() {
                   onRefresh={fetchInternalRelationships}
                 />
               ),
-              operator_capital: (company.company_type && (operatorTypeValues.has(company.company_type) || capitalTypeValues.has(company.company_type))) ? (
+              operator_capital: (
                 <div key="operator_capital" className="card">
                   <button
                     onClick={() => setOpCapRelExpanded(prev => !prev)}
@@ -1519,7 +1503,7 @@ export default function CompanyDetailPage() {
                     </div>
                   )}
                 </div>
-              ) : null,
+              ),
               products: (() => {
                 // Only show Products for ICP-matching companies
                 const isIcp = icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0];
