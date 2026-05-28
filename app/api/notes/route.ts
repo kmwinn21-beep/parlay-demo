@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     let resolvedRep = rep || null;
     if (!resolvedRep) {
       try {
-        const configId = await getConfigIdByEmail(user.email);
+        const configId = await getConfigIdByEmail(user.email, db);
         if (configId) {
           const nameRow = await db.execute({
             sql: 'SELECT value FROM config_options WHERE id = ?',
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     // Fire standard notifications (best-effort) — skipped on cross-posts to avoid duplicates
     if (!skip_notification) {
-      const changedByConfigId = await getConfigIdByEmail(user.email);
+      const changedByConfigId = await getConfigIdByEmail(user.email, db);
       const snippet = content.trim().slice(0, 80);
       if (entity_type === 'attendee') {
         const attRow = await db.execute({
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
         .filter(n => !isNaN(n) && n > 0);
 
       if (taggedConfigIds.length > 0) {
-        const changedByConfigId = await getConfigIdByEmail(user.email);
+        const changedByConfigId = await getConfigIdByEmail(user.email, db);
         // Resolve entity name for the notification message
         let entityName = '';
         try {

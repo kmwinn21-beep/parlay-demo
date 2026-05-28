@@ -3,6 +3,7 @@
  * Errors are swallowed so a notification failure never breaks a primary mutation.
  */
 import { db } from './db';
+import type { Client } from '@libsql/client';
 import { sendNotificationEmail } from './email';
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
@@ -58,9 +59,10 @@ export async function resolveUserIds(
  * Get the config_id for a user identified by email.
  * Returns null if the user is not found or has no config_id set.
  */
-export async function getConfigIdByEmail(email: string): Promise<number | null> {
+export async function getConfigIdByEmail(email: string, tenantDb?: Client): Promise<number | null> {
   try {
-    const r = await db.execute({
+    const client = tenantDb ?? db;
+    const r = await client.execute({
       sql: 'SELECT config_id FROM users WHERE email = ?',
       args: [email],
     });

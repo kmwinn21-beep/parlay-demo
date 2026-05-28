@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }));
 
     // Meetings for this conference scheduled by the current user
-    const configId = await getConfigIdByEmail(user.email);
+    const configId = await getConfigIdByEmail(user.email, db);
     let meetings: unknown[] = [];
     if (configId != null) {
       const meetingsRes = await db.execute({
