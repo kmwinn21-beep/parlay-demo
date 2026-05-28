@@ -575,142 +575,138 @@ function PipelineChartsPanel({
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* Targeted Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
         <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
           <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${pipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
 
-        {pipelineOpen && (
-          <>
-            {requiredPipeline != null && (
-              <div className="mb-3 pb-3 border-b border-gray-100">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
-                  <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
-                </div>
-                <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="h-2.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
-                      backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
-                    }}
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-xs text-gray-400">
-                    Projected: <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
-                  </span>
-                  {coverageRatio != null && (
-                    <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
-                      ({Math.round((coverageRatio ?? 0) * 100)}%)
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+        {requiredPipeline != null && (
+          <div className={`pb-3 ${pipelineOpen ? 'mb-3 border-b border-gray-100' : ''}`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+              <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+            </div>
+            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-2.5 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
+                  backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-xs text-gray-400">
+                Projected: <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+              </span>
+              {coverageRatio != null && (
+                <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                  ({Math.round((coverageRatio ?? 0) * 100)}%)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
-            {hasValues ? (
-              <div className="space-y-2">
-                {TIER_DATA.map(tier => {
-                  const val = tierValueSum[tier.key] ?? 0;
-                  return (
-                    <div key={tier.key} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
-                            backgroundColor: tier.hex,
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                        {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                      </span>
+        {pipelineOpen && (
+          hasValues ? (
+            <div className="space-y-2">
+              {TIER_DATA.map(tier => {
+                const val = tierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
+                          backgroundColor: tier.hex,
+                        }}
+                      />
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
-            )}
-          </>
+                    <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+          )
         )}
       </div>
 
       {/* Meetings Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 min-h-0">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
         <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
           <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${meetingPipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
 
-        {meetingPipelineOpen && (
-          <>
-            {requiredPipeline != null && (
-              <div className="mb-3 pb-3 border-b border-gray-100">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
-                  <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
-                </div>
-                <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="h-2.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
-                      backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
-                    }}
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-xs text-gray-400">
-                    Projected: <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
-                  </span>
-                  {meetingsCoverageRatio != null && (
-                    <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
-                      ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {hasMeetingValues ? (
-              <div className="space-y-2">
-                {TIER_DATA.map(tier => {
-                  const val = meetingTierValueSum[tier.key] ?? 0;
-                  return (
-                    <div key={tier.key} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
-                            backgroundColor: tier.hex,
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                        {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                      </span>
-                </div>
-              );
-            })}
+        {requiredPipeline != null && (
+          <div className={`pb-3 ${meetingPipelineOpen ? 'mb-3 border-b border-gray-100' : ''}`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+              <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+            </div>
+            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-2.5 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
+                  backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-xs text-gray-400">
+                Projected: <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
+              </span>
+              {meetingsCoverageRatio != null && (
+                <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                  ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
+                </span>
+              )}
+            </div>
           </div>
-        ) : (
-              <p className="text-xs text-gray-400">
-                {avgCostPerUnit > 0
-                  ? meetingAttendeeIds.size === 0
-                    ? 'No meetings scheduled yet.'
-                    : 'No target companies with meetings.'
-                  : 'Set avg. cost per unit in Admin Settings to see values.'}
-              </p>
-            )}
-          </>
+        )}
+
+        {meetingPipelineOpen && (
+          hasMeetingValues ? (
+            <div className="space-y-2">
+              {TIER_DATA.map(tier => {
+                const val = meetingTierValueSum[tier.key] ?? 0;
+                return (
+                  <div key={tier.key} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
+                          backgroundColor: tier.hex,
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">
+              {avgCostPerUnit > 0
+                ? meetingAttendeeIds.size === 0
+                  ? 'No meetings scheduled yet.'
+                  : 'No target companies with meetings.'
+                : 'Set avg. cost per unit in Admin Settings to see values.'}
+            </p>
+          )
         )}
       </div>
     </div>
