@@ -26,6 +26,7 @@ import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
+import { CompanyDrawer } from '@/components/CompanyDrawer';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -166,6 +167,7 @@ export default function CompanyDetailPage() {
   const [showTpMatrix, setShowTpMatrix] = useState(false);
 
   // Operator / Capital relationship state
+  const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
   const [showRelateModal, setShowRelateModal] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
@@ -1422,14 +1424,17 @@ export default function CompanyDetailPage() {
                         <div className="space-y-2 mt-3">
                           {company.related_companies.map(rel => (
                             <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all group">
-                              <Link href={`/companies/${rel.id}`} className="min-w-0 flex-1">
+                              <button
+                                onClick={() => setRelatedDrawerCompanyId(rel.id)}
+                                className="min-w-0 flex-1 text-left"
+                              >
                                 <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
                                 {rel.company_type && (
                                   <span className={`mt-1 ${getBadgeClass(rel.company_type, colorMaps.company_type || {})}`}>
                                     {rel.company_type}
                                   </span>
                                 )}
-                              </Link>
+                              </button>
                               <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                                 <button
                                   onClick={() => handleRemoveRelationship(rel.id)}
@@ -1440,11 +1445,11 @@ export default function CompanyDetailPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                   </svg>
                                 </button>
-                                <Link href={`/companies/${rel.id}`}>
+                                <button onClick={() => setRelatedDrawerCompanyId(rel.id)}>
                                   <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                   </svg>
-                                </Link>
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -1592,6 +1597,11 @@ export default function CompanyDetailPage() {
         companyId={id}
         open={showTpMatrix}
         onClose={() => setShowTpMatrix(false)}
+      />
+
+      <CompanyDrawer
+        companyId={relatedDrawerCompanyId}
+        onClose={() => setRelatedDrawerCompanyId(null)}
       />
     </div>
   );
