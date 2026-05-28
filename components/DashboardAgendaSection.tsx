@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 
 interface AgendaItem {
   id: number;
@@ -164,6 +165,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
   const [noteContents, setNoteContents] = useState<Map<string, string>>(new Map());
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
+  const [notetakerMeetingId, setNotetakerMeetingId] = useState<number | null>(null);
   const [keyToMyItemId, setKeyToMyItemId] = useState<Map<string, number>>(new Map());
 
   const fetchAll = useCallback(async () => {
@@ -292,6 +294,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
   }
 
   return (
+    <>
     <div className="space-y-3">
       {/* My Agenda */}
       {view === 'my' && (
@@ -320,11 +323,11 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                   {expanded && (
                     <div className="divide-y divide-gray-200 border-t border-brand-secondary/30">
                       {group.items.map(item => {
-                        const noteOpen = expandedNotes.has(item.key);
+                        const isMeeting = item.sourceType === 'meeting';
+                        const noteOpen = !isMeeting && expandedNotes.has(item.key);
                         const saving = savingNotes.has(item.key);
                         const noteVal = noteContents.get(item.key) ?? item.note_content ?? '';
-                        const meetingId = item.sourceType === 'meeting' ? item.sourceId : undefined;
-                        const subtitle = item.sourceType === 'meeting' ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ') : null;
+                        const subtitle = isMeeting ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ') : null;
                         return (
                           <div key={item.key}>
                             <div className="flex gap-3 px-4 py-2.5">
@@ -346,15 +349,24 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                                     </p>
                                   )}
                                 </ExpandableItemText>
-                                {!noteOpen && noteVal && <p className="mt-1 text-xs text-gray-400 italic line-clamp-1">{noteVal}</p>}
+                                {!noteOpen && noteVal && !isMeeting && <p className="mt-1 text-xs text-gray-400 italic line-clamp-1">{noteVal}</p>}
                               </div>
                               <div className="shrink-0 pl-1 pt-0.5">
-                                <button onClick={() => setExpandedNotes(prev => { const s = new Set(prev); s.has(item.key) ? s.delete(item.key) : s.add(item.key); return s; })} className="text-xs text-gray-400 hover:text-brand-secondary transition-colors">{noteOpen ? 'Close' : 'Notes'}</button>
+                                {isMeeting ? (
+                                  <button
+                                    onClick={() => setNotetakerMeetingId(item.sourceId)}
+                                    className="text-xs text-gray-400 hover:text-brand-secondary transition-colors"
+                                  >
+                                    Notes
+                                  </button>
+                                ) : (
+                                  <button onClick={() => setExpandedNotes(prev => { const s = new Set(prev); s.has(item.key) ? s.delete(item.key) : s.add(item.key); return s; })} className="text-xs text-gray-400 hover:text-brand-secondary transition-colors">{noteOpen ? 'Close' : 'Notes'}</button>
+                                )}
                               </div>
                             </div>
                             {noteOpen && (
                               <div className="px-4 pb-3 space-y-1.5">
-                                <textarea value={noteVal} onChange={e => setNoteContents(prev => new Map(Array.from(prev).concat([[item.key, e.target.value]])))} onBlur={() => { const content = noteContents.get(item.key) ?? ''; void saveNote(item.key, content, meetingId); }} placeholder="Add notes…" rows={3} className="input-field resize-none w-full text-xs" />
+                                <textarea value={noteVal} onChange={e => setNoteContents(prev => new Map(Array.from(prev).concat([[item.key, e.target.value]])))} onBlur={() => { const content = noteContents.get(item.key) ?? ''; void saveNote(item.key, content, undefined); }} placeholder="Add notes…" rows={3} className="input-field resize-none w-full text-xs" />
                                 <p className="text-xs text-gray-400">{saving ? 'Saving…' : noteVal ? 'Saved' : 'Notes save when you click away'}</p>
                               </div>
                             )}
@@ -442,5 +454,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
         )
       )}
     </div>
+    <MeetingNotesDrawer meetingId={notetakerMeetingId} onClose={() => setNotetakerMeetingId(null)} />
+    </>
   );
 }
