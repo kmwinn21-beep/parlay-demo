@@ -1595,10 +1595,11 @@ export default function ConferenceDetailPage() {
                   </button>
                   {!titleMetaLoading && (() => {
                     const warnCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title && shouldWarnForTitleMetadata(titleMetaMap[a.id])).length;
-                    return warnCount > 0 ? (
-                      <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                        Classify Titles ({warnCount})
+                    const titleCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title).length;
+                    return titleCount > 0 ? (
+                      <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                        Classify Titles ({titleCount}{warnCount > 0 ? `, ${warnCount} flagged` : ''})
                       </button>
                     ) : null;
                   })()}
@@ -1877,11 +1878,13 @@ export default function ConferenceDetailPage() {
                       </div>
                       {attendee.title && (
                         <div className="flex items-center gap-1 mt-1 ml-6">
-                          <p className="text-xs text-gray-500">{attendee.title}</p>
+                          <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} className="text-xs text-gray-500 hover:text-brand-secondary text-left">
+                            {attendee.title}
+                          </button>
                           {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
-                            <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review" className="text-amber-500 hover:text-amber-600 flex-shrink-0">
+                            <span className="text-amber-500 flex-shrink-0 pointer-events-none">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                            </button>
+                            </span>
                           )}
                         </div>
                       )}
@@ -1977,20 +1980,20 @@ export default function ConferenceDetailPage() {
                           );
                           case 'title': return (
                             <td key="title" className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
-                              {editingCell?.attendeeId === attendee.id && editingCell.field === 'title' ? (
-                                <input className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'title')} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(attendee, 'title'); if (e.key === 'Escape') setEditingCell(null); }} autoFocus />
-                              ) : (
-                                <div className="flex items-start gap-1 min-w-0">
-                                  <button type="button" className="text-left flex-1 min-w-0" onClick={() => startInlineEdit(attendee, 'title')}>
-                                    <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
+                              <div className="flex items-start gap-1 min-w-0">
+                                {attendee.title ? (
+                                  <button type="button" className="text-left flex-1 min-w-0 hover:text-brand-secondary" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })}>
+                                    <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title}</span>
                                   </button>
-                                  {!titleMetaLoading && attendee.title && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
-                                    <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review — click to classify" className="flex-shrink-0 text-amber-500 hover:text-amber-600 mt-0.5">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                                {!titleMetaLoading && attendee.title && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                                  <span className="flex-shrink-0 text-amber-500 mt-0.5 pointer-events-none">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           );
                           case 'company': return (
