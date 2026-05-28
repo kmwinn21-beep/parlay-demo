@@ -573,7 +573,7 @@ function PipelineChartsPanel({
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4">
       {/* Targeted Pipeline Value */}
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
@@ -941,7 +941,7 @@ function RelationshipHeatmapPanel({
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full">
       {/* Toggle header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <button
@@ -1207,7 +1207,7 @@ export function LandscapeTab({
         </div>
 
         {/* Cols 3-4: Relationship Heatmap */}
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 h-full">
           <RelationshipHeatmapPanel
             byRep={byRep}
             icpCompanies={icpCompanies}
