@@ -262,15 +262,6 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             </div>
           ) : (
             <>
-              {bannerData.state === 'upcoming' && items.length > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-3" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
-                  <span>🕐</span>
-                  <p className="text-xs font-medium">
-                    Clear these before {bannerData.conference.name} in {bannerData.daysUntil} days
-                  </p>
-                </div>
-              )}
-
               <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
                 {groups.map(([confId, group]) => (
                   <ConferenceGroup
