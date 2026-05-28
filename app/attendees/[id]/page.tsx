@@ -814,10 +814,13 @@ export default function AttendeeDetailPage() {
                       </div>
                       {attendee.title && (
                         <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span
-                            tabIndex={hasTitleNormalizationTooltip ? 0 : undefined}
+                          <button
+                            type="button"
+                            onClick={openTitleClassifier}
+                            tabIndex={0}
                             aria-describedby={hasTitleNormalizationTooltip ? titleTooltipId : undefined}
-                            className={`relative inline-flex text-gray-600 ${hasTitleNormalizationTooltip ? 'cursor-help outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary/30 focus-visible:ring-offset-2 rounded-sm group/title-tooltip' : ''}`}
+                            className="relative inline-flex text-gray-600 hover:text-brand-secondary transition-colors text-left group/title-tooltip outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary/30 focus-visible:ring-offset-2 rounded-sm"
+                            title="Click to edit title classification"
                           >
                             {attendee.title}
                             {hasTitleNormalizationTooltip && (
@@ -837,8 +840,8 @@ export default function AttendeeDetailPage() {
                                 </span>
                               </span>
                             )}
-                          </span>
-                          {showTitleWarning ? (
+                          </button>
+                          {showTitleWarning && (
                             <button
                               type="button"
                               onClick={openTitleClassifier}
@@ -848,7 +851,8 @@ export default function AttendeeDetailPage() {
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m0 3.75h.008v.008H12V16.5zM10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
                             </button>
-                          ) : titleMeta?.source === 'user_confirmed' ? (
+                          )}
+                          {!showTitleWarning && titleMeta?.source === 'user_confirmed' && (
                             <button
                               type="button"
                               onClick={openTitleClassifier}
@@ -858,7 +862,7 @@ export default function AttendeeDetailPage() {
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             </button>
-                          ) : null}
+                          )}
                         </div>
                       )}
                       <div className="flex flex-wrap items-center gap-2 mt-2">

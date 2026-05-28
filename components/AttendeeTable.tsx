@@ -765,7 +765,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 </div>
                 {attendee.title && (
                   <div className="flex items-center gap-1 mt-1 ml-6">
-                    <p className="text-xs text-gray-500">{attendee.title}</p>
+                    <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Click to edit title classification" className="text-xs text-gray-500 hover:text-brand-secondary transition-colors text-left">
+                      {attendee.title}
+                    </button>
                     {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
                       <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review" className="text-amber-500 hover:text-amber-600 flex-shrink-0">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
@@ -887,9 +889,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                               />
                             ) : (
                               <div className="flex items-start gap-1 min-w-0">
-                                <button type="button" className="block text-left flex-1 min-w-0" onClick={() => startInlineEdit(attendee, 'title')} title="Click to edit title">
-                                  <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title || <span className="text-gray-300">—</span>}</span>
-                                </button>
+                                {attendee.title ? (
+                                  <button type="button" className="block text-left flex-1 min-w-0 hover:text-brand-secondary transition-colors" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Click to edit title classification">
+                                    <span className="block text-sm leading-snug break-words whitespace-normal">{attendee.title}</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-300 text-sm">—</span>
+                                )}
                                 {!titleMetaLoading && attendee.title && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
                                   <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} title="Title needs review — click to classify" className="flex-shrink-0 text-amber-500 hover:text-amber-600 mt-0.5">
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
