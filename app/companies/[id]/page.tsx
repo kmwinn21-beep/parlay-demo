@@ -168,6 +168,7 @@ export default function CompanyDetailPage() {
 
   // Operator / Capital relationship state
   const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
+  const [relatedDrawerCompanyName, setRelatedDrawerCompanyName] = useState<string | undefined>();
   const [showRelateModal, setShowRelateModal] = useState(false);
   const [conferencesExpanded, setConferencesExpanded] = useState(false);
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
@@ -1425,7 +1426,7 @@ export default function CompanyDetailPage() {
                           {company.related_companies.map(rel => (
                             <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all group">
                               <button
-                                onClick={() => setRelatedDrawerCompanyId(rel.id)}
+                                onClick={() => { setRelatedDrawerCompanyId(rel.id); setRelatedDrawerCompanyName(rel.name); }}
                                 className="min-w-0 flex-1 text-left"
                               >
                                 <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
@@ -1445,7 +1446,7 @@ export default function CompanyDetailPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                   </svg>
                                 </button>
-                                <button onClick={() => setRelatedDrawerCompanyId(rel.id)}>
+                                <button onClick={() => { setRelatedDrawerCompanyId(rel.id); setRelatedDrawerCompanyName(rel.name); }}>
                                   <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                   </svg>
@@ -1601,7 +1602,8 @@ export default function CompanyDetailPage() {
 
       <CompanyDrawer
         companyId={relatedDrawerCompanyId}
-        onClose={() => setRelatedDrawerCompanyId(null)}
+        companyName={relatedDrawerCompanyName}
+        onClose={() => { setRelatedDrawerCompanyId(null); setRelatedDrawerCompanyName(undefined); }}
       />
     </div>
   );

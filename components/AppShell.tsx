@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { FloatingNav } from './FloatingNav';
@@ -81,6 +81,15 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   );
 }
 
+function EmbedChecker({ children }: { children: React.ReactNode }) {
+  const searchParams = useSearchParams();
+  if (searchParams.get('embed') === 'true') {
+    // Render only the page content with no chrome (sidebar, header, nav, footer)
+    return <main className="h-screen overflow-y-auto p-4 lg:p-6 bg-gray-50">{children}</main>;
+  }
+  return <AppShellInner>{children}</AppShellInner>;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
@@ -96,7 +105,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <UpgradeModalProvider>
       <ActiveConferenceProvider>
       <MeetingNotesDrawerProvider>
-        <AppShellInner>{children}</AppShellInner>
+        <Suspense fallback={<AppShellInner>{children}</AppShellInner>}>
+          <EmbedChecker>{children}</EmbedChecker>
+        </Suspense>
       </MeetingNotesDrawerProvider>
       </ActiveConferenceProvider>
       </UpgradeModalProvider>
