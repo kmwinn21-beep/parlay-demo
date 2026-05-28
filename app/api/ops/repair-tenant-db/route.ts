@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOpsAdmin } from '@/lib/opsAuth';
-import { db, dbReady } from '@/lib/db';
-import { migrations } from '@/lib/db-migrations';
+import { db, dbReady, migrateTenantDb } from '@/lib/db';
 import { createClient } from '@libsql/client';
 
 export async function POST(request: NextRequest) {
   const auth = await requireOpsAdmin(request);
   if (auth instanceof NextResponse) return auth;
 
-  const { accountId } = await request.json();
+  const { accountId, force } = await request.json();
   if (!accountId) {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
   }
@@ -35,33 +34,18 @@ export async function POST(request: NextRequest) {
     authToken: String(turso_auth_token),
   });
 
-  let applied = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-
-  for (const sql of migrations) {
-    try {
-      await client.execute({ sql, args: [] });
-      applied++;
-    } catch (err: unknown) {
-      // Expected: "already exists", "duplicate column" — these are idempotent skips
-      const msg = err instanceof Error ? err.message : String(err);
-      if (
-        msg.includes('already exists') ||
-        msg.includes('duplicate column') ||
-        msg.includes('no such column') // some ALTER TABLE checks fail gracefully
-      ) {
-        skipped++;
-      } else {
-        errors.push(`${msg.slice(0, 120)} [sql: ${sql.slice(0, 60)}...]`);
-      }
-    }
+  if (force) {
+    // Reset version so all migrations re-run from scratch
+    await client.execute({
+      sql: `UPDATE _schema_version SET version = 0`,
+      args: [],
+    }).catch(() => {});
   }
+
+  await migrateTenantDb(client);
 
   return NextResponse.json({
     ok: true,
     account: { id: accountId, companyName: String(company_name) },
-    migrations: { total: migrations.length, applied, skipped, errors: errors.length },
-    errors: errors.slice(0, 20),
   });
 }
