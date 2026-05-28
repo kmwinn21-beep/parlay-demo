@@ -631,12 +631,6 @@ export async function GET(
       repCompaniesMap.get(name)!.add(rel.company_id as number);
     }
   }
-  for (const a of attendees) {
-    for (const name of resolveUserIds(a.company_assigned_user)) {
-      if (!repCompaniesMap.has(name)) repCompaniesMap.set(name, new Set());
-      repCompaniesMap.get(name)!.add(a.company_id as number);
-    }
-  }
 
   const byRep: Array<{ rep: string; companies: Array<{ company_id: number; company_name: string; company_type: string | null; relationship_status: string | null; description: string | null; profit_type: string | null; entity_structure: string | null; wse: number | null; services: string | null; icp: string | null; company_status: string | null; assigned_user_names: string[]; website: string | null; internal_relationships: Array<{ rep_names: string[]; relationship_status: string; description: string }>; attendees: Array<{ id: unknown; first_name: unknown; last_name: unknown; title: unknown; status: unknown; health: number }>; notes: Array<{ id: unknown; content: unknown; created_at: unknown; rep: unknown; attendee_name: unknown; conference_name: unknown }> }> }> = [];
   repCompaniesMap.forEach((cids, rep) => {
