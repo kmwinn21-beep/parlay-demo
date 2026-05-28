@@ -156,7 +156,7 @@ export async function POST(
       }
     } catch { /* non-fatal */ }
 
-    const commenterConfigId = await getConfigIdByEmail(user.email);
+    const commenterConfigId = await getConfigIdByEmail(user.email, db);
     notifyNoteComment({
       noteId,
       noteAuthorUserId: note.author_user_id != null ? Number(note.author_user_id) : null,

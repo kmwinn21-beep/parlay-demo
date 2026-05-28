@@ -20,7 +20,7 @@ async function syncUserScopedStatuses(db: Client, opts: {
   actorEmail: string;
   statusPayload: unknown;
 }): Promise<void> {
-  const markerConfigId = await getConfigIdByEmail(opts.actorEmail);
+  const markerConfigId = await getConfigIdByEmail(opts.actorEmail, db);
   if (markerConfigId == null) return;
 
   const userScopedResult = await db.execute({
@@ -286,7 +286,7 @@ export async function PUT(
       const newIds = parseNotifIds(assigned_user);
       const addedIds = newIds.filter(id => !prevIds.has(id));
       if (addedIds.length > 0) {
-        const changedByConfigId = await getConfigIdByEmail(user.email);
+        const changedByConfigId = await getConfigIdByEmail(user.email, db);
         const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
         createNotifications({
           userIds,

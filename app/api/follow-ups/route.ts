@@ -185,7 +185,7 @@ export async function PATCH(request: NextRequest) {
         if (fuRow.rows.length > 0) {
           const a = fuRow.rows[0];
           const attendeeName = `${a.first_name} ${a.last_name}`.trim();
-          const changedByConfigId = await getConfigIdByEmail(user.email);
+          const changedByConfigId = await getConfigIdByEmail(user.email, db);
           const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
           createNotifications({
             userIds,

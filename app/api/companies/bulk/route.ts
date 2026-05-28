@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if ('status' in fields) {
-      const markerConfigId = await getConfigIdByEmail(user.email);
+      const markerConfigId = await getConfigIdByEmail(user.email, db);
       if (markerConfigId != null && userScopedOptions.length > 0) {
         const statuses = parseStatusValues(fields.status);
         const statusValues = new Set(statuses);

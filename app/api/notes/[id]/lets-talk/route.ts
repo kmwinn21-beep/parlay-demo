@@ -63,7 +63,7 @@ export async function POST(
 
     const nameRow = await db.execute({ sql: 'SELECT COALESCE(display_name, email) AS name FROM users WHERE id = ?', args: [user.id] });
     const triggerName = nameRow.rows.length ? String(nameRow.rows[0].name) : user.email;
-    const triggerConfigId = await getConfigIdByEmail(user.email);
+    const triggerConfigId = await getConfigIdByEmail(user.email, db);
 
     notifyNoteLetsTalk({
       noteId,
