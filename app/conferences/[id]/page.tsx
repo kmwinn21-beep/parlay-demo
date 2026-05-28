@@ -1595,10 +1595,11 @@ export default function ConferenceDetailPage() {
                   </button>
                   {!titleMetaLoading && (() => {
                     const warnCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title && shouldWarnForTitleMetadata(titleMetaMap[a.id])).length;
-                    return warnCount > 0 ? (
-                      <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                        Classify Titles ({warnCount})
+                    const titleCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title).length;
+                    return titleCount > 0 ? (
+                      <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                        Classify Titles ({titleCount}{warnCount > 0 ? `, ${warnCount} flagged` : ''})
                       </button>
                     ) : null;
                   })()}
