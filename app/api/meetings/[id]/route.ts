@@ -31,11 +31,30 @@ export async function GET(
     }
 
     const r = result.rows[0];
+
+    // Resolve scheduled_by config_option IDs to display names
+    let scheduledByNames: string[] = [];
+    if (r.scheduled_by) {
+      const ids = String(r.scheduled_by).split(',').map(s => s.trim()).filter(Boolean);
+      const numericIds = ids.filter(id => !isNaN(Number(id)) && id !== '');
+      if (numericIds.length > 0) {
+        const placeholders = numericIds.map(() => '?').join(',');
+        const namesRes = await db.execute({
+          sql: `SELECT id, value FROM config_options WHERE id IN (${placeholders})`,
+          args: numericIds.map(Number),
+        });
+        const nameMap = new Map(namesRes.rows.map(row => [Number(row.id), String(row.value)]));
+        scheduledByNames = ids.map(id => nameMap.get(Number(id)) ?? id);
+      } else {
+        scheduledByNames = ids; // already names (legacy data)
+      }
+    }
     return NextResponse.json({
       id: Number(r.id),
       attendee_id: Number(r.attendee_id),
       conference_id: Number(r.conference_id),
       scheduled_by: r.scheduled_by ? String(r.scheduled_by) : null,
+      scheduled_by_names: scheduledByNames,
       additional_attendees: r.additional_attendees ? String(r.additional_attendees) : null,
       meeting_date: r.meeting_date ? String(r.meeting_date) : null,
       meeting_time: r.meeting_time ? String(r.meeting_time) : null,
