@@ -210,7 +210,14 @@ function findConfiguredAliasSync(ctx: ResolveContext, rawTitle: string): TitleMa
 
 function findSystemAliasSync(ctx: ResolveContext, rawTitle: string): TitleMatchMetadata | null {
   const rawKey = normalizeTitleKey(rawTitle);
-  const alias = SYSTEM_ALIASES.find(a => a.aliases.some(candidate => rawKey === normalizeTitleKey(candidate) || rawKey.includes(normalizeTitleKey(candidate))));
+  const alias = SYSTEM_ALIASES.find(a => a.aliases.some(candidate => {
+    const ck = normalizeTitleKey(candidate);
+    if (!ck) return false;
+    if (rawKey === ck) return true;
+    // Use word-boundary-aware match so "cto" inside "director" (dire*cto*r) doesn't match
+    const escaped = ck.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`).test(rawKey);
+  }));
   if (!alias) return null;
   return buildTitleMetadata({
     originalTitle: rawTitle,
