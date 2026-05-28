@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireOpsAdmin(request);
   if (auth instanceof NextResponse) return auth;
 
-  const { accountId } = await request.json();
+  const { accountId, force } = await request.json();
   if (!accountId) {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
   }
@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
     url: String(turso_db_url),
     authToken: String(turso_auth_token),
   });
+
+  if (force) {
+    // Reset version so all migrations re-run from scratch
+    await client.execute({
+      sql: `UPDATE _schema_version SET version = 0`,
+      args: [],
+    }).catch(() => {});
+  }
 
   await migrateTenantDb(client);
 
