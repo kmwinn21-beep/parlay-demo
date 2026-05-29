@@ -18,6 +18,11 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+// 2-minute cache per account+conference — targeting scores are stable until
+// recommendations are re-run, so per-poll re-computation is wasteful.
+const TARGETING_CACHE = new Map<string, { data: unknown; cachedAt: number }>();
+const TARGETING_CACHE_TTL = 2 * 60 * 1000;
+
 type Row = Record<string, unknown>;
 
 function parseJson<T>(raw: unknown, fallback: T): T {
@@ -66,6 +71,12 @@ export async function GET(
   const { id } = await params;
   const conferenceId = Number(id);
   if (!Number.isFinite(conferenceId)) return NextResponse.json({ error: 'Invalid conference ID' }, { status: 400 });
+
+  const cacheKey = `${authResult?.accountId ?? 'anon'}:${conferenceId}`;
+  const cached = TARGETING_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < TARGETING_CACHE_TTL) {
+    return NextResponse.json(cached.data);
+  }
 
   try {
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
@@ -290,7 +301,7 @@ export async function GET(
       return scoreCompanyTarget({ company, attendees, signals, config, functionLabels, seniorityLabels });
     }).sort((a, b) => b.target_priority_score - a.target_priority_score);
 
-    return NextResponse.json({
+    const responseData = {
       conference_id: conferenceId,
       generated_at: new Date().toISOString(),
       scoring_config: {
@@ -309,7 +320,10 @@ export async function GET(
         next_offset: batchMode && requestedOffset + batchLimit < totalCompanies ? requestedOffset + batchLimit : null,
       },
       unavailable_reason: totalCompanies === 0 ? 'No conference attendees with companies were found.' : undefined,
-    });
+    };
+    // Only cache non-batched (full) responses — batched pagination requests vary by offset
+    if (!batchMode) TARGETING_CACHE.set(cacheKey, { data: responseData, cachedAt: Date.now() });
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('GET /api/conferences/[id]/targeting error:', error);
     return NextResponse.json({ error: 'Failed to calculate targeting scores' }, { status: 500 });

@@ -108,12 +108,6 @@ function CompanyIntelCard({
   const hasRealIntel = intel && intel.summary !== null && intel.summary !== 'Generating…';
   const isGenerating = generating || intel?.summary === 'Generating…';
 
-  // Poll every 4s while server-side generation is in progress
-  useEffect(() => {
-    if (intel?.summary !== 'Generating…') return;
-    const interval = setInterval(onRefreshed, 4000);
-    return () => clearInterval(interval);
-  }, [intel?.summary, onRefreshed]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -358,17 +352,21 @@ export function TargetIntelTab({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetches both scored companies and intel — used on initial load only.
+  // Targeting is expensive (per-attendee DB calls); never fetch it during polling.
   const loadData = useCallback(async () => {
     const [targetingRes, intelRes] = await Promise.all([
       fetch(`/api/conferences/${conferenceId}/targeting`).catch(() => null),
       fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null),
     ]);
 
-    if (targetingRes?.ok) {
-      const data = await targetingRes.json() as {
-        companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string }>;
-      };
-      const companies = (data.companies ?? [])
+    const [targetingData, intelData] = await Promise.all([
+      targetingRes?.ok ? (targetingRes.json() as Promise<{ companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string }> }>) : Promise.resolve(null),
+      intelRes?.ok ? (intelRes.json() as Promise<{ intel?: CompanyIntelRow[] }>) : Promise.resolve(null),
+    ]);
+
+    if (targetingData) {
+      const companies = (targetingData.companies ?? [])
         .filter(c => VALID_TIER_KEYS.has(c.target_priority_tier_key))
         .map(c => ({
           company_id: c.company_id,
@@ -377,13 +375,22 @@ export function TargetIntelTab({
         }));
       setScoredCompanies(companies);
     }
-
-    if (intelRes?.ok) {
-      const data = await intelRes.json() as { intel?: CompanyIntelRow[] };
+    if (intelData) {
       const map = new Map<number, CompanyIntelRow>();
-      for (const row of data.intel ?? []) map.set(row.company_id, row);
+      for (const row of intelData.intel ?? []) map.set(row.company_id, row);
       setIntelMap(map);
     }
+  }, [conferenceId]);
+
+  // Fetches only intel — used during the poll loop. Scored companies are stable
+  // while generation is running so there is no need to hit /targeting every tick.
+  const pollIntel = useCallback(async () => {
+    const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json() as { intel?: CompanyIntelRow[] };
+    const map = new Map<number, CompanyIntelRow>();
+    for (const row of data.intel ?? []) map.set(row.company_id, row);
+    setIntelMap(map);
   }, [conferenceId]);
 
   useEffect(() => {
@@ -391,6 +398,15 @@ export function TargetIntelTab({
       .catch(() => setError('Failed to load intel data.'))
       .finally(() => setLoading(false));
   }, [loadData]);
+
+  // Single parent-level poll — fires only when at least one card is generating.
+  // Only fetches /intel (not /targeting) to avoid expensive per-attendee DB queries.
+  const anyGenerating = Array.from(intelMap.values()).some(r => r.summary === 'Generating…');
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const interval = setInterval(pollIntel, 4000);
+    return () => clearInterval(interval);
+  }, [anyGenerating, pollIntel]);
 
   if (loading) {
     return (
