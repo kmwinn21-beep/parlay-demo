@@ -385,7 +385,13 @@ export function TargetIntelTab({
         return;
       }
       if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: string };
+        const json = await res.json().catch(() => ({})) as { error?: string; state?: { status: string; completed: number; total: number } };
+        // 409 = already running — treat it as success and start polling
+        if (res.status === 409 && json.state) {
+          setProgressState({ status: json.state.status, completed: json.state.completed, total: json.state.total });
+          startPolling();
+          return;
+        }
         setError(json.error ?? 'Failed to start generation.');
         setGenerating(false);
         return;
@@ -413,6 +419,21 @@ export function TargetIntelTab({
   const canRefresh = refreshCount < MAX_REFRESHES;
 
   if (intel.length === 0) {
+    if (generating || progressState) {
+      const completed = progressState?.completed ?? 0;
+      const total = progressState?.total ?? null;
+      const progressLabel = total
+        ? `${Math.min(completed, total)} of ${total} companies compiled`
+        : 'Preparing company batches…';
+      return (
+        <div className="text-center py-16">
+          <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm font-medium">Generating target intel…</p>
+          <p className="text-gray-400 text-xs mt-1">{progressLabel}</p>
+          <p className="text-gray-400 text-xs mt-2">You can leave this tab while intel compiles. We'll notify you when it's ready.</p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
         <div>
@@ -422,22 +443,13 @@ export function TargetIntelTab({
           </p>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {generating && progressState ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">
-              {progressState.completed} of {progressState.total} companies compiled
-            </p>
-          </div>
-        ) : (
-          <button
-            onClick={generateAll}
-            disabled={generating}
-            className="btn-primary text-sm flex items-center gap-2"
-          >
-            Generate Target Intel
-          </button>
-        )}
+        <button
+          onClick={generateAll}
+          disabled={generating}
+          className="btn-primary text-sm flex items-center gap-2"
+        >
+          Generate Target Intel
+        </button>
       </div>
     );
   }
