@@ -907,4 +907,22 @@ export const migrations: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_title_norm_scope_raw ON title_normalization_rules(COALESCE(organization_id, 0), raw_title_key)`,
   `CREATE INDEX IF NOT EXISTS idx_title_norm_raw_key ON title_normalization_rules(raw_title_key)`,
   `ALTER TABLE company_relationships ADD COLUMN notes TEXT`,
+  `ALTER TABLE conferences ADD COLUMN intel_refresh_count INTEGER DEFAULT 0`,
+  `ALTER TABLE conferences ADD COLUMN intel_last_refresh_at TEXT`,
+  `CREATE TABLE IF NOT EXISTS conference_company_intel (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    company_name TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    summary TEXT,
+    pain_point_signals TEXT,
+    trigger_events TEXT,
+    buying_signals TEXT,
+    opening_angles TEXT,
+    used_icp_fallback INTEGER DEFAULT 0,
+    generated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(conference_id, company_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_conf_company_intel_conf ON conference_company_intel(conference_id)`,
 ];
