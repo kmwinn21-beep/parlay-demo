@@ -943,6 +943,8 @@ export default function AdminPage() {
     company_info_youtube: '',
     company_info_tiktok: '',
   });
+  const [companyInfoIndustries, setCompanyInfoIndustries] = useState<string[]>([]);
+  const [savedCompanyInfoIndustries, setSavedCompanyInfoIndustries] = useState<string[]>([]);
   const [savingCompanyInfo, setSavingCompanyInfo] = useState(false);
 
   // Permissions tab
@@ -1785,6 +1787,9 @@ export default function AdminPage() {
       };
       setCompanyInfoDraft(ci);
       setSavedCompanyInfo(ci);
+      const industries = (data['company_info_industries'] ?? '').split(',').map((s: string) => s.trim()).filter(Boolean);
+      setCompanyInfoIndustries(industries);
+      setSavedCompanyInfoIndustries(industries);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
   };
@@ -1823,16 +1828,22 @@ export default function AdminPage() {
   const handleSaveCompanyInfo = async () => {
     setSavingCompanyInfo(true);
     try {
-      await Promise.all(
-        (Object.entries(companyInfoDraft) as [string, string][]).map(([key, value]) =>
+      await Promise.all([
+        ...(Object.entries(companyInfoDraft) as [string, string][]).map(([key, value]) =>
           fetch('/api/admin/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key, value: value.trim() }),
           })
-        )
-      );
+        ),
+        fetch('/api/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'company_info_industries', value: companyInfoIndustries.join(',') }),
+        }),
+      ]);
       setSavedCompanyInfo({ ...companyInfoDraft });
+      setSavedCompanyInfoIndustries([...companyInfoIndustries]);
       toast.success('Company information saved.');
     } catch { toast.error('Failed to save company information.'); }
     finally { setSavingCompanyInfo(false); }
@@ -2465,6 +2476,15 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Industries Served</label>
+                  <MultiSelectDropdown
+                    options={(optionsByCategory['industry'] ?? []).map(o => o.value)}
+                    selected={companyInfoIndustries}
+                    onChange={setCompanyInfoIndustries}
+                    placeholder="Select industries…"
+                  />
+                </div>
+                <div className="border-t border-gray-100 pt-4">
                   <p className="text-xs font-medium text-gray-500 mb-3">Social Media</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {([
@@ -2493,7 +2513,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={handleSaveCompanyInfo}
-                  disabled={savingCompanyInfo || JSON.stringify(companyInfoDraft) === JSON.stringify(savedCompanyInfo)}
+                  disabled={savingCompanyInfo || (JSON.stringify(companyInfoDraft) === JSON.stringify(savedCompanyInfo) && JSON.stringify([...companyInfoIndustries].sort()) === JSON.stringify([...savedCompanyInfoIndustries].sort()))}
                   className="btn-primary text-sm"
                 >
                   {savingCompanyInfo ? 'Saving…' : 'Save Company Information'}
