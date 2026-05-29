@@ -352,19 +352,19 @@ export function TargetIntelTab({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetches both scored companies and intel — used on initial load only.
+  // Targeting is expensive (per-attendee DB calls); never fetch it during polling.
   const loadData = useCallback(async () => {
     const [targetingRes, intelRes] = await Promise.all([
       fetch(`/api/conferences/${conferenceId}/targeting`).catch(() => null),
       fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null),
     ]);
 
-    // Parse both responses in parallel before any setState to keep updates in one batch
     const [targetingData, intelData] = await Promise.all([
       targetingRes?.ok ? (targetingRes.json() as Promise<{ companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string }> }>) : Promise.resolve(null),
       intelRes?.ok ? (intelRes.json() as Promise<{ intel?: CompanyIntelRow[] }>) : Promise.resolve(null),
     ]);
 
-    // Both setStates called synchronously — React 18 batches them into one render
     if (targetingData) {
       const companies = (targetingData.companies ?? [])
         .filter(c => VALID_TIER_KEYS.has(c.target_priority_tier_key))
@@ -382,6 +382,17 @@ export function TargetIntelTab({
     }
   }, [conferenceId]);
 
+  // Fetches only intel — used during the poll loop. Scored companies are stable
+  // while generation is running so there is no need to hit /targeting every tick.
+  const pollIntel = useCallback(async () => {
+    const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json() as { intel?: CompanyIntelRow[] };
+    const map = new Map<number, CompanyIntelRow>();
+    for (const row of data.intel ?? []) map.set(row.company_id, row);
+    setIntelMap(map);
+  }, [conferenceId]);
+
   useEffect(() => {
     loadData()
       .catch(() => setError('Failed to load intel data.'))
@@ -389,13 +400,13 @@ export function TargetIntelTab({
   }, [loadData]);
 
   // Single parent-level poll — fires only when at least one card is generating.
-  // Keeps request count to 2/poll regardless of how many cards are in-flight.
+  // Only fetches /intel (not /targeting) to avoid expensive per-attendee DB queries.
   const anyGenerating = Array.from(intelMap.values()).some(r => r.summary === 'Generating…');
   useEffect(() => {
     if (!anyGenerating) return;
-    const interval = setInterval(loadData, 4000);
+    const interval = setInterval(pollIntel, 4000);
     return () => clearInterval(interval);
-  }, [anyGenerating, loadData]);
+  }, [anyGenerating, pollIntel]);
 
   if (loading) {
     return (
