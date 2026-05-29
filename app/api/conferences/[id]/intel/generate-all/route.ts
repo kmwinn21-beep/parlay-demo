@@ -7,7 +7,7 @@ import { intelProcessingState, stateKey, type ProcessingState } from '@/lib/inte
 
 export const maxDuration = 300;
 
-const MAX_REFRESHES = 5;
+const MAX_REFRESHES = 25;
 const BATCH_SIZE = 5;
 const VALID_TIERS = new Set(['must_target', 'high_priority', 'worth_engaging', 'monitor']);
 

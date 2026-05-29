@@ -7,7 +7,7 @@ import { useRecordDrawer } from './RecordDrawerContext';
 import type { TargetEntry } from '../PreConferenceReview';
 import type { CompanyIntelRow, IntelData } from '@/app/api/conferences/[id]/intel/route';
 
-const MAX_REFRESHES = 5;
+const MAX_REFRESHES = 25;
 
 const TIER_CONFIG: Record<string, { label: string; color: string; border: string; bg: string; defaultExpanded: boolean }> = {
   'Must Target': {
