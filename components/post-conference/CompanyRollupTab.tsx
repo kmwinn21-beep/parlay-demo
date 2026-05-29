@@ -84,17 +84,9 @@ function deriveBuyerRole(seniority: string | null): string | null {
   return null;
 }
 
-function formatPipeline(units: number | null, avgCostPerUnit: number, unitType: string): { value: string; subtitle: string; hasValue: boolean } {
-  if (units == null) return { value: 'Units not set', subtitle: '', hasValue: false };
-  if (avgCostPerUnit <= 0) return { value: 'Set cost per unit in admin settings', subtitle: '', hasValue: false };
-  const total = Math.round(units * avgCostPerUnit);
-  const rate = '$' + avgCostPerUnit.toLocaleString('en-US');
-  const label = unitType || 'Units';
-  return {
-    value: '$' + total.toLocaleString('en-US'),
-    subtitle: `${units.toLocaleString('en-US')} ${label.toLowerCase()} · ${rate} / ${label.toLowerCase()} / yr`,
-    hasValue: true,
-  };
+function computePipeline(units: number | null, avgCostPerUnit: number): number | null {
+  if (units == null || avgCostPerUnit <= 0) return null;
+  return Math.round(units * avgCostPerUnit);
 }
 
 function fuRatePct(created: number, completed: number): number | null {
@@ -159,13 +151,11 @@ function EngagementBadge({ type }: { type: string }) {
 function CompanyCard({
   row,
   avgCostPerUnit,
-  unitType,
   conferenceId,
   conferenceName,
 }: {
   row: CompanyRollupRow;
   avgCostPerUnit: number;
-  unitType: string;
   conferenceId: number;
   conferenceName: string;
 }) {
@@ -174,7 +164,7 @@ function CompanyCard({
   const router = useRouter();
 
   const noActivity = row.meetings_held === 0 && row.touchpoints === 0 && row.notes_logged === 0 && row.follow_ups_created === 0;
-  const pipeline = formatPipeline(row.units, avgCostPerUnit, unitType);
+  const pipelineTotal = computePipeline(row.units, avgCostPerUnit);
 
   return (
     <>
@@ -191,9 +181,9 @@ function CompanyCard({
           {/* Name + subtitle */}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">{row.company_name}</p>
-            <p className="text-xs text-gray-400 truncate">
-              {[row.industry, row.units != null ? `${row.units.toLocaleString('en-US')} ${(unitType || 'Units').toLowerCase()}` : `${(unitType || 'units').toLowerCase()} not set`].filter(Boolean).join(' · ')}
-            </p>
+            {row.industry && (
+              <p className="text-xs text-gray-400 truncate">{row.industry}</p>
+            )}
           </div>
 
           {/* Right-side badges */}
@@ -242,14 +232,11 @@ function CompanyCard({
 
             {/* 2. Pipeline influence */}
             <div className="px-4 py-3 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-medium text-gray-600">Pipeline influence</p>
-                {pipeline.subtitle && (
-                  <p className="text-xs text-gray-400 mt-0.5">{pipeline.subtitle}</p>
-                )}
-              </div>
-              <span className={`text-sm font-semibold flex-shrink-0 ${pipeline.hasValue ? 'text-blue-600' : 'text-gray-400 text-xs font-normal'}`}>
-                {pipeline.value}
+              <p className="text-xs font-medium text-gray-600">Pipeline influence</p>
+              <span className={`text-sm font-semibold flex-shrink-0 ${pipelineTotal != null ? 'text-blue-600' : 'text-gray-400 text-xs font-normal'}`}>
+                {pipelineTotal != null
+                  ? '$' + pipelineTotal.toLocaleString('en-US')
+                  : row.units == null ? 'Units not set on company' : 'Set cost per unit in admin settings'}
               </span>
             </div>
 
@@ -360,12 +347,11 @@ type SortKey = 'pipeline' | 'health_delta' | 'tier' | 'fu_rate' | 'name';
 interface Props {
   companyRollup: CompanyRollupRow[];
   avgCostPerUnit: number;
-  unitType: string;
   conferenceId: number;
   conferenceName: string;
 }
 
-export function CompanyRollupTab({ companyRollup, avgCostPerUnit, unitType, conferenceId, conferenceName }: Props) {
+export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, conferenceName }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('pipeline');
 
@@ -505,7 +491,6 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, unitType, conf
               key={row.company_id}
               row={row}
               avgCostPerUnit={avgCostPerUnit}
-              unitType={unitType}
               conferenceId={conferenceId}
               conferenceName={conferenceName}
             />
