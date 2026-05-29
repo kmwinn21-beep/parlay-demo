@@ -108,12 +108,6 @@ function CompanyIntelCard({
   const hasRealIntel = intel && intel.summary !== null && intel.summary !== 'Generating…';
   const isGenerating = generating || intel?.summary === 'Generating…';
 
-  // Poll every 4s while server-side generation is in progress
-  useEffect(() => {
-    if (intel?.summary !== 'Generating…') return;
-    const interval = setInterval(onRefreshed, 4000);
-    return () => clearInterval(interval);
-  }, [intel?.summary, onRefreshed]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -364,11 +358,15 @@ export function TargetIntelTab({
       fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null),
     ]);
 
-    if (targetingRes?.ok) {
-      const data = await targetingRes.json() as {
-        companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string }>;
-      };
-      const companies = (data.companies ?? [])
+    // Parse both responses in parallel before any setState to keep updates in one batch
+    const [targetingData, intelData] = await Promise.all([
+      targetingRes?.ok ? (targetingRes.json() as Promise<{ companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string }> }>) : Promise.resolve(null),
+      intelRes?.ok ? (intelRes.json() as Promise<{ intel?: CompanyIntelRow[] }>) : Promise.resolve(null),
+    ]);
+
+    // Both setStates called synchronously — React 18 batches them into one render
+    if (targetingData) {
+      const companies = (targetingData.companies ?? [])
         .filter(c => VALID_TIER_KEYS.has(c.target_priority_tier_key))
         .map(c => ({
           company_id: c.company_id,
@@ -377,11 +375,9 @@ export function TargetIntelTab({
         }));
       setScoredCompanies(companies);
     }
-
-    if (intelRes?.ok) {
-      const data = await intelRes.json() as { intel?: CompanyIntelRow[] };
+    if (intelData) {
       const map = new Map<number, CompanyIntelRow>();
-      for (const row of data.intel ?? []) map.set(row.company_id, row);
+      for (const row of intelData.intel ?? []) map.set(row.company_id, row);
       setIntelMap(map);
     }
   }, [conferenceId]);
@@ -391,6 +387,15 @@ export function TargetIntelTab({
       .catch(() => setError('Failed to load intel data.'))
       .finally(() => setLoading(false));
   }, [loadData]);
+
+  // Single parent-level poll — fires only when at least one card is generating.
+  // Keeps request count to 2/poll regardless of how many cards are in-flight.
+  const anyGenerating = Array.from(intelMap.values()).some(r => r.summary === 'Generating…');
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const interval = setInterval(loadData, 4000);
+    return () => clearInterval(interval);
+  }, [anyGenerating, loadData]);
 
   if (loading) {
     return (
