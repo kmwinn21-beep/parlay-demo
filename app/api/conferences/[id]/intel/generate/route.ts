@@ -38,14 +38,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (companyRow.rows.length === 0) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     const company = companyRow.rows[0];
 
-    // Get tier for this company at this conference (from conference_targets)
+    // Get tier for this company at this conference (from scoring intel table, falling back to Monitor)
     const tierRow = await db.execute({
-      sql: `SELECT ct.tier FROM conference_targets ct
-            JOIN attendees a ON a.id = ct.attendee_id
-            WHERE ct.conference_id = ? AND a.company_id = ?
-            ORDER BY ct.tier LIMIT 1`,
+      sql: `SELECT tier FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
       args: [conferenceId, companyId],
-    });
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
     const tier = tierRow.rows.length > 0 ? String(tierRow.rows[0].tier) : 'Monitor';
 
     // Get attendees

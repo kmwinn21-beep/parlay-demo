@@ -103,7 +103,7 @@ If you cannot find specific information for a field, still include it with at le
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 4096,
       tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
@@ -115,7 +115,10 @@ If you cannot find specific information for a field, still include it with at le
     }
 
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
+    if (!jsonMatch) {
+      console.error('[generateCompanyIntel] No JSON in response for', input.companyName, '| stop_reason:', response.stop_reason, '| rawText length:', rawText.length);
+      return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
+    }
 
     const parsed = JSON.parse(jsonMatch[0]) as {
       summary?: string;
@@ -133,7 +136,8 @@ If you cannot find specific information for a field, still include it with at le
       opening_angles: parsed.opening_angles ?? [],
       used_icp_fallback: usedIcpFallback,
     };
-  } catch {
+  } catch (err) {
+    console.error('[generateCompanyIntel] API error for', input.companyName, ':', err);
     return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
   }
 }
