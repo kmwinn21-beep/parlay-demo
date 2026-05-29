@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { TargetBtn } from './TargetBtn';
-import { useRecordDrawer } from './RecordDrawerContext';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import type { TargetEntry } from '../PreConferenceReview';
 import type { CompanyIntelRow } from '@/app/api/conferences/[id]/intel/route';
@@ -140,6 +139,7 @@ function CompanyIntelCard({
   conferenceId,
   onRefreshed,
   avgCostPerUnit,
+  onOpenRecord,
 }: {
   company: ScoredCompany;
   intel: CompanyIntelRow | null;
@@ -148,8 +148,8 @@ function CompanyIntelCard({
   conferenceId: number;
   onRefreshed: () => void;
   avgCostPerUnit: number;
+  onOpenRecord: (type: 'attendee' | 'company', id: number) => void;
 }) {
-  const openRecord = useRecordDrawer();
   const [expanded, setExpanded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const tierConf = TIER_CONFIG[company.tier] ?? TIER_CONFIG['Monitor'];
@@ -191,7 +191,7 @@ function CompanyIntelCard({
               {company.company_id ? (
                 <button
                   type="button"
-                  onClick={() => openRecord('company', company.company_id)}
+                  onClick={() => onOpenRecord('company', company.company_id)}
                   className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm text-left truncate"
                 >
                   {company.company_name}
@@ -285,7 +285,7 @@ function CompanyIntelCard({
                     <div key={a.id} className="flex items-center gap-2 text-xs">
                       <button
                         type="button"
-                        onClick={() => openRecord('attendee', a.id)}
+                        onClick={() => onOpenRecord('attendee', a.id)}
                         className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors text-left"
                       >
                         {a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}
@@ -331,6 +331,7 @@ function TierSection({
   conferenceId,
   onRefreshed,
   avgCostPerUnit,
+  onOpenRecord,
 }: {
   tier: string;
   companies: ScoredCompany[];
@@ -340,6 +341,7 @@ function TierSection({
   conferenceId: number;
   onRefreshed: () => void;
   avgCostPerUnit: number;
+  onOpenRecord: (type: 'attendee' | 'company', id: number) => void;
 }) {
   const config = TIER_CONFIG[tier] ?? TIER_CONFIG['Monitor'];
   const [sectionExpanded, setSectionExpanded] = useState(config.defaultExpanded);
@@ -372,7 +374,7 @@ function TierSection({
       </button>
 
       {sectionExpanded && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 items-start">
           {companies.map(company => (
             <CompanyIntelCard
               key={company.company_id}
@@ -383,6 +385,7 @@ function TierSection({
               conferenceId={conferenceId}
               onRefreshed={onRefreshed}
               avgCostPerUnit={avgCostPerUnit}
+              onOpenRecord={onOpenRecord}
             />
           ))}
         </div>
@@ -401,6 +404,9 @@ export function TargetIntelTab({
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
+  const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const openRecord = useCallback((type: 'attendee' | 'company', id: number) => setRecordDrawer({ type, id }), []);
+  const closeRecord = useCallback(() => setRecordDrawer(null), []);
   const [scoredCompanies, setScoredCompanies] = useState<ScoredCompany[]>([]);
   const [intelMap, setIntelMap] = useState<Map<number, CompanyIntelRow>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -503,23 +509,59 @@ export function TargetIntelTab({
   }
 
   return (
-    <div className="space-y-8">
-      {TIER_ORDER.map(tier => {
-        const companies = byTier.get(tier) ?? [];
-        return (
-          <TierSection
-            key={tier}
-            tier={tier}
-            companies={companies}
-            intelMap={intelMap}
-            targetMap={targetMap}
-            onToggleTarget={onToggleTarget}
-            conferenceId={conferenceId}
-            onRefreshed={loadData}
-            avgCostPerUnit={avgCostPerUnit}
-          />
-        );
-      })}
-    </div>
+    <>
+      <div className="space-y-8">
+        {TIER_ORDER.map(tier => {
+          const companies = byTier.get(tier) ?? [];
+          return (
+            <TierSection
+              key={tier}
+              tier={tier}
+              companies={companies}
+              intelMap={intelMap}
+              targetMap={targetMap}
+              onToggleTarget={onToggleTarget}
+              conferenceId={conferenceId}
+              onRefreshed={loadData}
+              avgCostPerUnit={avgCostPerUnit}
+              onOpenRecord={openRecord}
+            />
+          );
+        })}
+      </div>
+
+      {/* Record drawer — slides in from right, same pattern as MyDebriefDrawer */}
+      {recordDrawer != null && (
+        <div className="sm:hidden fixed inset-0 z-[69] bg-black/30" onClick={closeRecord} />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[70] flex flex-col overflow-hidden transition-all ease-out ${
+          recordDrawer != null ? 'w-full sm:w-[420px]' : 'w-0'
+        }`}
+        style={{ transitionDuration: '200ms' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {recordDrawer != null && (
+          <>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0 bg-white">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                {recordDrawer.type === 'company' ? 'Company' : 'Attendee'}
+              </span>
+              <button type="button" onClick={closeRecord} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              key={`${recordDrawer.type}-${recordDrawer.id}`}
+              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}?embed=true`}
+              className="flex-1 border-0 w-full"
+              title={`${recordDrawer.type} record`}
+            />
+          </>
+        )}
+      </div>
+    </>
   );
 }
