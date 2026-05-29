@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { generateCompanyIntel } from '@/lib/intel/generateCompanyIntel';
@@ -185,8 +186,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       args: [conferenceId],
     }).catch(() => {});
 
-    // Fire-and-forget background processing
-    (async () => {
+    // Keep the Vercel function alive until background processing completes
+    waitUntil((async () => {
       try {
         for (let i = 0; i < companies.length; i += BATCH_SIZE) {
           const batch = companies.slice(i, i + BATCH_SIZE);
@@ -245,7 +246,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         state.status = 'error';
         state.error = err instanceof Error ? err.message : 'Unknown error';
       }
-    })();
+    })());
 
     return NextResponse.json({ ok: true, total: companies.length, state });
   } catch (err) {

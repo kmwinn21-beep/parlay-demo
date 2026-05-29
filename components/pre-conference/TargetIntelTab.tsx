@@ -314,24 +314,73 @@ export function TargetIntelTab({
   const [progressState, setProgressState] = useState<{ status: string; completed: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasFetched = useRef(false);
+  const pollCountRef = useRef(0);
 
   const fetchIntel = useCallback(async () => {
-    const res = await fetch(`/api/conferences/${conferenceId}/intel`);
-    if (res.ok) {
+    const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
+    if (res?.ok) {
       const json = await res.json() as IntelData;
       setData(json);
     }
   }, [conferenceId]);
 
+  const stopPolling = useCallback((wasSuccessful: boolean) => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setGenerating(false);
+    setProgressState(null);
+    if (wasSuccessful) toast.success('Target intel generated!');
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (pollRef.current) return;
+    pollCountRef.current = 0;
+    pollRef.current = setInterval(async () => {
+      const res = await fetch(`/api/conferences/${conferenceId}/intel/progress`).catch(() => null);
+      if (!res?.ok) return;
+      const state = await res.json() as { status?: string; completed?: number; total?: number };
+
+      const completed = state.completed ?? 0;
+      const total = state.total ?? 0;
+      const status = state.status ?? 'idle';
+
+      if (status === 'running') {
+        setGenerating(true);
+        setProgressState({ status, completed, total });
+      }
+
+      // Fetch partial results every 5 polls (~10s) so completed batches appear
+      pollCountRef.current++;
+      if (pollCountRef.current % 5 === 0) {
+        fetchIntel();
+      }
+
+      if (status === 'done') {
+        await fetchIntel();
+        stopPolling(true);
+      } else if (status === 'error') {
+        setError('Intel generation encountered an error.');
+        stopPolling(false);
+      } else if (status === 'idle') {
+        // Job finished or worker recycled — fetch latest and stop
+        await fetchIntel();
+        stopPolling(false);
+      }
+    }, 2000);
+  }, [conferenceId, fetchIntel, stopPolling]);
+
+  // On mount: load whatever intel has been saved so far
   useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
+    let cancelled = false;
     fetch(`/api/conferences/${conferenceId}/intel`)
       .then(r => r.json())
-      .then((json: IntelData) => setData(json))
-      .catch(() => setError('Failed to load intel.'))
-      .finally(() => setLoading(false));
+      .then((json: IntelData) => { if (!cancelled) setData(json); })
+      .catch(() => { if (!cancelled) setError('Failed to load intel.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => {
+      cancelled = true;
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conferenceId]);
 
   // Listen for single-company refreshes
@@ -341,63 +390,36 @@ export function TargetIntelTab({
     return () => window.removeEventListener('intel-single-updated', handler);
   }, [fetchIntel]);
 
-  const startPolling = useCallback(() => {
-    if (pollRef.current) return;
-    pollRef.current = setInterval(async () => {
-      const res = await fetch(`/api/conferences/${conferenceId}/intel/progress`).catch(() => null);
-      if (!res?.ok) return;
-      const state = await res.json() as { status: string; completed: number; total: number };
-      setProgressState(state);
-      if (state.status === 'done' || state.status === 'error') {
-        clearInterval(pollRef.current!);
-        pollRef.current = null;
-        setGenerating(false);
-        if (state.status === 'done') {
-          toast.success('Target intel generated!');
-          await fetchIntel();
-        } else {
-          setError('Intel generation encountered an error.');
-        }
-        setProgressState(null);
-      }
-    }, 2000);
-  }, [conferenceId, fetchIntel]);
-
-  useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
   const generateAll = async () => {
     setGenerating(true);
     setError(null);
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/intel/generate-all`, { method: 'POST' });
+      const json = await res.json().catch(() => ({})) as { total?: number; error?: string; state?: { status: string; completed: number; total: number } };
+
       if (res.status === 429) {
-        const json = await res.json().catch(() => ({})) as { error?: string };
         setError(json.error ?? `Maximum of ${MAX_REFRESHES} bulk refreshes reached.`);
         setGenerating(false);
         return;
       }
       if (res.status === 400) {
-        const json = await res.json().catch(() => ({})) as { error?: string };
         setError(json.error ?? 'No target companies found.');
         setGenerating(false);
         return;
       }
+      if (res.status === 409) {
+        // Already running — attach to the existing job
+        const s = json.state;
+        setProgressState({ status: 'running', completed: s?.completed ?? 0, total: s?.total ?? 0 });
+        startPolling();
+        return;
+      }
       if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: string; state?: { status: string; completed: number; total: number } };
-        // 409 = already running — treat it as success and start polling
-        if (res.status === 409 && json.state) {
-          setProgressState({ status: json.state.status, completed: json.state.completed, total: json.state.total });
-          startPolling();
-          return;
-        }
         setError(json.error ?? 'Failed to start generation.');
         setGenerating(false);
         return;
       }
-      const json = await res.json() as { total: number };
-      setProgressState({ status: 'running', completed: 0, total: json.total });
+      setProgressState({ status: 'running', completed: 0, total: json.total ?? 0 });
       startPolling();
     } catch {
       setError('Failed to start generation.');
@@ -487,7 +509,11 @@ export function TargetIntelTab({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
-              {generating ? (progressState ? `${progressState.completed} of ${progressState.total} compiled…` : 'Starting…') : 'Refresh All Intel'}
+              {generating
+                ? progressState?.total
+                  ? `${progressState.completed} of ${progressState.total} compiled…`
+                  : 'Starting…'
+                : 'Refresh All Intel'}
             </button>
           ) : null}
           <span className="text-xs text-gray-400">
