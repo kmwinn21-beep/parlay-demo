@@ -430,7 +430,7 @@ export function TargetIntelTab({
           <div className="w-10 h-10 rounded-full border-2 border-brand-secondary/20 border-t-brand-secondary animate-spin mx-auto mb-3" />
           <p className="text-gray-500 text-sm font-medium">Generating target intel…</p>
           <p className="text-gray-400 text-xs mt-1">{progressLabel}</p>
-          <p className="text-gray-400 text-xs mt-2">You can leave this tab while intel compiles. We'll notify you when it's ready.</p>
+          <p className="text-gray-400 text-xs mt-2">You can leave this tab while intel compiles. We&apos;ll notify you when it&apos;s ready.</p>
         </div>
       );
     }
