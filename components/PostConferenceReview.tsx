@@ -9,6 +9,7 @@ import { FollowUpsTab } from './post-conference/FollowUpsTab';
 import { RelationshipShiftsTab } from './post-conference/RelationshipShiftsTab';
 import { EventsTouchpointsTab } from './post-conference/EventsTouchpointsTab';
 import { ActionItemsTab } from './post-conference/ActionItemsTab';
+import { CompanyRollupTab } from './post-conference/CompanyRollupTab';
 import type { SocialEventRow, SocialEventGuest } from './PreConferenceReview';
 export type { SocialEventRow, SocialEventGuest };
 
@@ -71,6 +72,42 @@ export interface ActionItem {
   title: string; description: string;
   repName: string | null; attendeeName: string | null; companyName: string | null;
 }
+export interface CompanyRollupContact {
+  attendee_id: number;
+  first_name: string;
+  last_name: string;
+  title: string | null;
+  seniority: string | null;
+  buyer_role: string | null;
+  engagement_types: string[];
+}
+export interface CompanyRollupRep {
+  rep_name: string;
+  meetings: number;
+  touchpoints: number;
+  follow_ups_created: number;
+  follow_ups_completed: number;
+}
+export interface CompanyRollupRow {
+  company_id: number;
+  company_name: string;
+  industry: string | null;
+  units: number | null;
+  icp: 'Yes' | 'No' | null;
+  company_type: string | null;
+  target_tier: string | null;
+  health_score: number;
+  health_before: number;
+  health_delta: number;
+  meetings_held: number;
+  touchpoints: number;
+  notes_logged: number;
+  new_contacts: number;
+  follow_ups_created: number;
+  follow_ups_completed: number;
+  contacts: CompanyRollupContact[];
+  reps: CompanyRollupRep[];
+}
 export interface PostConferenceData {
   summary: {
     conference: { id: number; name: string; start_date: string; end_date: string; location: string };
@@ -103,13 +140,16 @@ export interface PostConferenceData {
   socialEvents: SocialEventRow[];
   touchpoints: TouchpointAttendeeRow[];
   actionItems: ActionItem[];
+  companyRollup: CompanyRollupRow[];
+  avgCostPerUnit: number;
+  unitType: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GREEN = '#34D399';
 const GREEN_DARK = '#064e3b';
 const GREEN_ACTIVE = '#059669';
-const TAB_ORDER = ['summary', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'events_touchpoints', 'action_items'];
+const TAB_ORDER = ['summary', 'company_rollup', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'events_touchpoints', 'action_items'];
 
 // ── Stat pill in header ────────────────────────────────────────────────────────
 function StatPill({ label, value }: { label: string; value: number | string }) {
@@ -249,6 +289,7 @@ export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             {effectiveTab === 'summary' && <SummaryTab summary={data.summary} repPerformance={data.repPerformance} />}
+            {effectiveTab === 'company_rollup' && <CompanyRollupTab companyRollup={data.companyRollup} avgCostPerUnit={data.avgCostPerUnit} conferenceId={conferenceId} conferenceName={conferenceName} />}
             {effectiveTab === 'contacts' && <ContactsCapturedTab contacts={data.contacts} />}
             {effectiveTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
             {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}

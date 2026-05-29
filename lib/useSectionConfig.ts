@@ -54,6 +54,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
   ],
   post_conference_review: [
     { key: 'summary', label: 'Summary' },
+    { key: 'company_rollup', label: 'Company Rollup' },
     { key: 'contacts', label: 'Contacts Captured' },
     { key: 'meetings', label: 'Meetings' },
     { key: 'follow_ups', label: 'Follow-ups' },

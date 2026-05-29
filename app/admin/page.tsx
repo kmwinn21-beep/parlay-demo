@@ -922,6 +922,31 @@ export default function AdminPage() {
   const [savedTagline, setSavedTagline] = useState('');
   const [savingTagline, setSavingTagline] = useState(false);
 
+  // Company information
+  const [companyInfoDraft, setCompanyInfoDraft] = useState({
+    company_info_name: '',
+    company_info_website: '',
+    company_info_linkedin: '',
+    company_info_twitter: '',
+    company_info_facebook: '',
+    company_info_instagram: '',
+    company_info_youtube: '',
+    company_info_tiktok: '',
+  });
+  const [savedCompanyInfo, setSavedCompanyInfo] = useState({
+    company_info_name: '',
+    company_info_website: '',
+    company_info_linkedin: '',
+    company_info_twitter: '',
+    company_info_facebook: '',
+    company_info_instagram: '',
+    company_info_youtube: '',
+    company_info_tiktok: '',
+  });
+  const [companyInfoIndustries, setCompanyInfoIndustries] = useState<string[]>([]);
+  const [savedCompanyInfoIndustries, setSavedCompanyInfoIndustries] = useState<string[]>([]);
+  const [savingCompanyInfo, setSavingCompanyInfo] = useState(false);
+
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
   const [loadingPerms, setLoadingPerms] = useState(false);
@@ -1750,6 +1775,21 @@ export default function AdminPage() {
       setFontKey(fk); setSavedFontKey(fk);
       const tl = data['tagline'] ?? '';
       setTaglineInput(tl); setSavedTagline(tl);
+      const ci = {
+        company_info_name: data['company_info_name'] ?? '',
+        company_info_website: data['company_info_website'] ?? '',
+        company_info_linkedin: data['company_info_linkedin'] ?? '',
+        company_info_twitter: data['company_info_twitter'] ?? '',
+        company_info_facebook: data['company_info_facebook'] ?? '',
+        company_info_instagram: data['company_info_instagram'] ?? '',
+        company_info_youtube: data['company_info_youtube'] ?? '',
+        company_info_tiktok: data['company_info_tiktok'] ?? '',
+      };
+      setCompanyInfoDraft(ci);
+      setSavedCompanyInfo(ci);
+      const industries = (data['company_info_industries'] ?? '').split(',').map((s: string) => s.trim()).filter(Boolean);
+      setCompanyInfoIndustries(industries);
+      setSavedCompanyInfoIndustries(industries);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
   };
@@ -1783,6 +1823,30 @@ export default function AdminPage() {
       toast.success(taglineInput.trim() ? 'Tagline saved.' : 'Tagline reset to default.');
     } catch { toast.error('Failed to save tagline.'); }
     finally { setSavingTagline(false); }
+  };
+
+  const handleSaveCompanyInfo = async () => {
+    setSavingCompanyInfo(true);
+    try {
+      await Promise.all([
+        ...(Object.entries(companyInfoDraft) as [string, string][]).map(([key, value]) =>
+          fetch('/api/admin/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value: value.trim() }),
+          })
+        ),
+        fetch('/api/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'company_info_industries', value: companyInfoIndustries.join(',') }),
+        }),
+      ]);
+      setSavedCompanyInfo({ ...companyInfoDraft });
+      setSavedCompanyInfoIndustries([...companyInfoIndustries]);
+      toast.success('Company information saved.');
+    } catch { toast.error('Failed to save company information.'); }
+    finally { setSavingCompanyInfo(false); }
   };
 
   useEffect(() => {
@@ -2383,6 +2447,79 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             <p className="text-sm text-gray-500">Customize the application&apos;s primary brand colors. Changes apply as a live preview instantly — click Save to persist for all users.</p>
+
+            {/* Company Information */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Company Information</h2>
+              <p className="text-sm text-gray-500 mb-4">Your organization&apos;s name, website, and social media profiles.</p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Company Name</label>
+                    <input
+                      type="text"
+                      value={companyInfoDraft.company_info_name}
+                      onChange={e => setCompanyInfoDraft(p => ({ ...p, company_info_name: e.target.value }))}
+                      placeholder="Acme Corp"
+                      className="input-field text-sm w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Website</label>
+                    <input
+                      type="url"
+                      value={companyInfoDraft.company_info_website}
+                      onChange={e => setCompanyInfoDraft(p => ({ ...p, company_info_website: e.target.value }))}
+                      placeholder="https://www.example.com"
+                      className="input-field text-sm w-full"
+                    />
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Industries Served</label>
+                  <MultiSelectDropdown
+                    options={(optionsByCategory['industry'] ?? []).map(o => o.value)}
+                    selected={companyInfoIndustries}
+                    onChange={setCompanyInfoIndustries}
+                    placeholder="Select industries…"
+                  />
+                </div>
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-medium text-gray-500 mb-3">Social Media</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {([
+                      { key: 'company_info_linkedin', label: 'LinkedIn', placeholder: 'https://linkedin.com/company/...' },
+                      { key: 'company_info_twitter', label: 'X / Twitter', placeholder: 'https://x.com/...' },
+                      { key: 'company_info_facebook', label: 'Facebook', placeholder: 'https://facebook.com/...' },
+                      { key: 'company_info_instagram', label: 'Instagram', placeholder: 'https://instagram.com/...' },
+                      { key: 'company_info_youtube', label: 'YouTube', placeholder: 'https://youtube.com/...' },
+                      { key: 'company_info_tiktok', label: 'TikTok', placeholder: 'https://tiktok.com/@...' },
+                    ] as const).map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                        <input
+                          type="url"
+                          value={companyInfoDraft[key]}
+                          onChange={e => setCompanyInfoDraft(p => ({ ...p, [key]: e.target.value }))}
+                          placeholder={placeholder}
+                          className="input-field text-sm w-full"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleSaveCompanyInfo}
+                  disabled={savingCompanyInfo || (JSON.stringify(companyInfoDraft) === JSON.stringify(savedCompanyInfo) && JSON.stringify([...companyInfoIndustries].sort()) === JSON.stringify([...savedCompanyInfoIndustries].sort()))}
+                  className="btn-primary text-sm"
+                >
+                  {savingCompanyInfo ? 'Saving…' : 'Save Company Information'}
+                </button>
+              </div>
+            </div>
 
             {/* Live preview */}
             <div className="card overflow-hidden p-0">
@@ -3210,90 +3347,32 @@ export default function AdminPage() {
             <div className="border-t border-gray-100 my-4" />
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Priority and Product Mapping</label>
-              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and map products to contact functions. Contacts with High or Medium priority whose function has a mapped product will be auto-assigned that product on upload.</p>
-              <div className="grid grid-cols-2 gap-6">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-gray-500 border-b border-gray-100">
-                      <th className="text-left pb-1 font-medium">Seniority Level</th>
-                      <th className="text-left pb-1 font-medium">Priority</th>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Prioritization</label>
+              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
+              <table className="w-full text-sm max-w-xs">
+                <thead>
+                  <tr className="text-xs text-gray-500 border-b border-gray-100">
+                    <th className="text-left pb-1 font-medium">Seniority Level</th>
+                    <th className="text-left pb-1 font-medium">Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(optionsByCategory['seniority'] ?? []).map(s => (
+                    <tr key={s.value} className="border-b border-gray-50">
+                      <td className="py-1.5 pr-4">{s.value}</td>
+                      <td className="py-1.5">
+                        <select
+                          value={icpSeniorityPriority[s.value] ?? 'Medium'}
+                          onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                          className="input-field text-sm py-0.5"
+                        >
+                          {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {(optionsByCategory['seniority'] ?? []).map(s => (
-                      <tr key={s.value} className="border-b border-gray-50">
-                        <td className="py-1.5 pr-4">{s.value}</td>
-                        <td className="py-1.5">
-                          <select
-                            value={icpSeniorityPriority[s.value] ?? 'Medium'}
-                            onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                            className="input-field text-sm py-0.5"
-                          >
-                            {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-gray-500 border-b border-gray-100">
-                      <th className="text-left pb-1 font-medium">Function</th>
-                      <th className="text-left pb-1 font-medium">Priority</th>
-                      <th className="text-left pb-1 font-medium">Product</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(optionsByCategory['function'] ?? []).map(f => {
-                      const productOpts = optionsByCategory['products'] ?? [];
-                      const validProductValues = new Set(productOpts.map(p => p.value));
-                      // Filter out any saved selections whose product type was since deleted
-                      const selected = (icpFunctionProductMapping[f.value] ?? []).filter(v => validProductValues.has(v));
-                      return (
-                        <tr key={f.value} className="border-b border-gray-50">
-                          <td className="py-1.5 pr-4">{f.value}</td>
-                          <td className="py-1.5 pr-4">
-                            <select
-                              value={icpFunctionPriority[f.value] ?? 'Medium'}
-                              onChange={e => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                              className="input-field text-sm py-0.5"
-                            >
-                              {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                          </td>
-                          <td className="py-1.5">
-                            <div className="flex items-center gap-1">
-                              <MultiSelectDropdown
-                                options={productOpts.map(p => p.value)}
-                                selected={selected}
-                                onChange={vals => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }))}
-                                placeholder="None"
-                              />
-                              {selected.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: [] }))}
-                                  className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors p-0.5 rounded"
-                                  title="Clear product selections"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {(optionsByCategory['function'] ?? []).length === 0 && (
-                      <tr><td colSpan={3} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             <div className="border-t border-gray-100 my-4" />

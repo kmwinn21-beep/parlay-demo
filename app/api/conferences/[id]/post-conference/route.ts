@@ -187,11 +187,12 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
-                   c.assigned_user as company_assigned_user
+                   c.assigned_user as company_assigned_user,
+                   c.industry, c.wse
             FROM attendees a
             JOIN conference_attendees ca ON a.id = ca.attendee_id AND ca.conference_id = ?
             LEFT JOIN companies c ON a.company_id = c.id
@@ -244,7 +245,16 @@ export async function GET(
             WHERE conference_id = ? AND notes IS NOT NULL AND TRIM(notes) != ''`,
       args: [confId],
     }),
+    db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] as { value: unknown }[] })),
+    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'unit_type' ORDER BY id LIMIT 1`, args: [] }).catch(() => ({ rows: [] as { value: unknown }[] })),
   ]);
+
+  const avgCostPerUnit = (() => {
+    const val = parseFloat(String((avgCostRes as { rows: { value: unknown }[] }).rows[0]?.value ?? '0'));
+    return isNaN(val) ? 0 : val;
+  })();
+
+  const unitType = String((unitTypeRes as { rows: { value: unknown }[] }).rows[0]?.value ?? 'Units');
 
   const prospectsTypeId = prospectsTypeRes.rows[0]?.id ? Number(prospectsTypeRes.rows[0].id) : null;
   const prospectsTypeValue = prospectsTypeRes.rows[0]?.value ? String(prospectsTypeRes.rows[0].value).trim() : null;
@@ -274,7 +284,7 @@ export async function GET(
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
     allSocialRes, allConfsRes, confTouchpointsRes, confSocialEventsRes, confTouchpointRowsRes,
-    confTargetsRes, confEngDetailsRes, confEngEntityNotesRes] = await Promise.all([
+    confTargetsRes, confEngDetailsRes, confEngEntityNotesRes, confProductSignalsRes] = await Promise.all([
     db.execute({
       sql: `SELECT ca.attendee_id, ca.conference_id
             FROM conference_attendees ca
@@ -337,7 +347,7 @@ export async function GET(
       args: [confId],
     }),
     db.execute({
-      sql: `SELECT attendee_id FROM conference_targets WHERE conference_id = ?`,
+      sql: `SELECT attendee_id, tier FROM conference_targets WHERE conference_id = ?`,
       args: [confId],
     }),
     db.execute({
@@ -353,6 +363,10 @@ export async function GET(
             WHERE conference_name = ? AND entity_type = 'attendee'`,
       args: [confName],
     }),
+    db.execute({
+      sql: `SELECT attendee_id, buyer_role FROM attendee_product_signals WHERE conference_id = ?`,
+      args: [confId],
+    }).catch(() => ({ rows: [] as { attendee_id: unknown; buyer_role: unknown }[] })),
   ]);
 
   // ── Social events for this conference ────────────────────────────────────
@@ -680,6 +694,7 @@ export async function GET(
   // ── Compute per-attendee data ─────────────────────────────────────────────
   const contactRows: ContactRow[] = [];
   const healthDeltaByAttendee = new Map<number, number>();
+  const healthBeforeByAttendee = new Map<number, number>();
 
   for (const a of attendees) {
     const aid = Number(a.id);
@@ -708,6 +723,7 @@ export async function GET(
     });
     const healthDelta = healthAfter - healthBefore;
     healthDeltaByAttendee.set(aid, healthDelta);
+    healthBeforeByAttendee.set(aid, healthBefore);
 
     const currentDet = detailsByAttConf.get(`${aid}_${confId}`);
     const currentActionStr = currentDet?.action ? String(currentDet.action) : '';
@@ -1035,6 +1051,244 @@ export async function GET(
   }
   repPerfRows.sort((a, b) => b.contactsCaptured - a.contactsCaptured);
 
+  // ── Company Rollup ────────────────────────────────────────────────────────
+  const productSignalsByAttendee = new Map<number, string | null>();
+  for (const r of confProductSignalsRes.rows) {
+    const aid = Number(r.attendee_id);
+    if (!productSignalsByAttendee.has(aid)) {
+      productSignalsByAttendee.set(aid, r.buyer_role ? String(r.buyer_role) : null);
+    }
+  }
+
+  const targetTierByAttendee = new Map<number, string>();
+  for (const r of confTargetsRes.rows) {
+    targetTierByAttendee.set(Number(r.attendee_id), String(r.tier ?? 'unassigned'));
+  }
+
+  const notesEngagedSet = new Set([
+    ...confEngDetailsRes.rows.map(r => Number(r.attendee_id)),
+    ...confEngEntityNotesRes.rows.map(r => Number(r.attendee_id)),
+  ]);
+
+  const touchpointAttendeeSet = new Set(confTouchpointRowsRes.rows.map(r => Number(r.attendee_id)));
+  const touchpointCountByAttendee = new Map<number, number>();
+  for (const r of confTouchpointRowsRes.rows) {
+    const aid = Number(r.attendee_id);
+    touchpointCountByAttendee.set(aid, (touchpointCountByAttendee.get(aid) ?? 0) + Number(r.cnt));
+  }
+
+  const heldMeetingAttIds = new Set<number>();
+  for (const m of confMeetingsRes.rows) {
+    const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+    if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+      heldMeetingAttIds.add(Number(m.attendee_id));
+    }
+  }
+
+  const newlyEngagedIds = new Set(newlyEngaged.map(c => c.attendee_id));
+
+  // Group contactRows by company_id
+  const companyContactsMap = new Map<number, typeof contactRows[0][]>();
+  for (const c of contactRows) {
+    if (!c.company_id) continue;
+    if (!companyContactsMap.has(c.company_id)) companyContactsMap.set(c.company_id, []);
+    companyContactsMap.get(c.company_id)!.push(c);
+  }
+
+  // Fetch canonical wse + industry directly from companies table (same source as company profile page)
+  const rollupCompanyIds = Array.from(companyContactsMap.keys());
+  const companyWseMap = new Map<number, number | null>();
+  const companyIndustryMap = new Map<number, string | null>();
+  if (rollupCompanyIds.length > 0) {
+    const ph = rollupCompanyIds.map(() => '?').join(',');
+    const companyMetaRes = await db.execute({
+      sql: `SELECT id, wse, industry FROM companies WHERE id IN (${ph})`,
+      args: rollupCompanyIds,
+    }).catch(() => ({ rows: [] as { id: unknown; wse: unknown; industry: unknown }[] }));
+    for (const row of companyMetaRes.rows) {
+      const cid = Number(row.id);
+      companyWseMap.set(cid, row.wse != null ? Number(row.wse) : null);
+      companyIndustryMap.set(cid, row.industry ? String(row.industry) : null);
+    }
+  }
+
+  interface CompanyRollupContact {
+    attendee_id: number;
+    first_name: string;
+    last_name: string;
+    title: string | null;
+    seniority: string | null;
+    buyer_role: string | null;
+    engagement_types: string[];
+  }
+  interface CompanyRollupRep {
+    rep_name: string;
+    meetings: number;
+    touchpoints: number;
+    follow_ups_created: number;
+    follow_ups_completed: number;
+  }
+  interface CompanyRollupRow {
+    company_id: number;
+    company_name: string;
+    industry: string | null;
+    units: number | null;
+    icp: 'Yes' | 'No' | null;
+    company_type: string | null;
+    target_tier: string | null;
+    health_score: number;
+    health_before: number;
+    health_delta: number;
+    meetings_held: number;
+    touchpoints: number;
+    notes_logged: number;
+    new_contacts: number;
+    follow_ups_created: number;
+    follow_ups_completed: number;
+    contacts: CompanyRollupContact[];
+    reps: CompanyRollupRep[];
+  }
+
+  const companyRollup: CompanyRollupRow[] = [];
+
+  for (const [companyId, contacts] of Array.from(companyContactsMap.entries())) {
+    const attendeeIds = new Set(contacts.map(c => c.attendee_id));
+
+    // Meetings held for this company
+    const meetings_held = confMeetingsRes.rows.filter(m =>
+      attendeeIds.has(Number(m.attendee_id)) && heldMeetingAttIds.has(Number(m.attendee_id))
+    ).length;
+
+    // Unique attendees with touchpoints
+    let touchpoints = 0;
+    for (const aid of Array.from(attendeeIds)) {
+      touchpoints += touchpointCountByAttendee.get(aid) ?? 0;
+    }
+
+    // Notes logged (distinct attendees who have notes)
+    const notes_logged = Array.from(attendeeIds).filter(aid => notesEngagedSet.has(aid)).length;
+
+    // Follow-ups
+    const companyFUs = confFollowUpsRes.rows.filter(r => attendeeIds.has(Number(r.attendee_id)));
+    const follow_ups_created = companyFUs.length;
+    const follow_ups_completed = companyFUs.filter(r => Number(r.completed) === 1).length;
+
+    // New contacts
+    const new_contacts = Array.from(attendeeIds).filter(aid => newlyEngagedIds.has(aid)).length;
+
+    // Health scores
+    const healthScores = contacts.map(c => c.healthScore);
+    const healthBefores = contacts.map(c => healthBeforeByAttendee.get(c.attendee_id) ?? 0);
+    const health_score = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
+    const health_before = Math.round(healthBefores.reduce((a, b) => a + b, 0) / healthBefores.length);
+    const health_delta = health_score - health_before;
+
+    // Target tier — best tier across company's attendees
+    const TIER_PRIORITY: Record<string, number> = { '1': 0, 'must_target': 0, '2': 1, 'high_priority': 1, '3': 2, 'worth_engaging': 2, 'unassigned': 3 };
+    let bestTier: string | null = null;
+    for (const aid of Array.from(attendeeIds)) {
+      const t = targetTierByAttendee.get(aid);
+      if (!t) continue;
+      if (!bestTier || (TIER_PRIORITY[t.toLowerCase()] ?? 99) < (TIER_PRIORITY[bestTier.toLowerCase()] ?? 99)) {
+        bestTier = t;
+      }
+    }
+
+    // Company metadata — fetched directly from companies table (canonical, same as company profile page)
+    const industry = companyIndustryMap.get(companyId) ?? null;
+    const units = companyWseMap.get(companyId) ?? null;
+
+    // Contacts list
+    const contactsList: CompanyRollupContact[] = contacts.map(c => {
+      const aid = c.attendee_id;
+      const engTypes: string[] = [];
+      if (heldMeetingAttIds.has(aid)) engTypes.push('Meeting');
+      if (confFollowUpsRes.rows.some(r => Number(r.attendee_id) === aid)) engTypes.push('Follow-up');
+      if (touchpointAttendeeSet.has(aid)) engTypes.push('Touchpoint');
+      if (notesEngagedSet.has(aid)) engTypes.push('Note');
+
+      // Buyer role: from product signals first, then null
+      const buyer_role = productSignalsByAttendee.get(aid) ?? null;
+
+      return {
+        attendee_id: aid,
+        first_name: c.first_name,
+        last_name: c.last_name,
+        title: c.title,
+        seniority: c.seniority,
+        buyer_role,
+        engagement_types: engTypes,
+      };
+    });
+
+    // Reps for this company
+    const repMap = new Map<string, CompanyRollupRep>();
+    for (const rep of repPerfRows) {
+      let repMeetings = 0, repTouchpoints = 0, repFUCreated = 0, repFUCompleted = 0;
+      let hasAnyActivity = false;
+
+      for (const m of confMeetingsRes.rows) {
+        if (!attendeeIds.has(Number(m.attendee_id))) continue;
+        if (!rawFieldMatchesName(m.scheduled_by, rep.repName)) continue;
+        const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
+        if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+          repMeetings++;
+          hasAnyActivity = true;
+        }
+      }
+      for (const f of confFollowUpsRes.rows) {
+        if (!attendeeIds.has(Number(f.attendee_id))) continue;
+        if (!rawFieldMatchesName(f.assigned_rep, rep.repName)) continue;
+        repFUCreated++;
+        if (Number(f.completed) === 1) repFUCompleted++;
+        hasAnyActivity = true;
+      }
+      // Touchpoints — confTouchpointRowsRes doesn't track rep; skip for now
+      if (hasAnyActivity) {
+        repMap.set(rep.repName, {
+          rep_name: rep.repName,
+          meetings: repMeetings,
+          touchpoints: repTouchpoints,
+          follow_ups_created: repFUCreated,
+          follow_ups_completed: repFUCompleted,
+        });
+      }
+    }
+
+    const icp = contacts[0].icp === 'Yes' ? 'Yes' : contacts[0].icp === 'No' ? 'No' : null;
+
+    companyRollup.push({
+      company_id: companyId,
+      company_name: contacts[0].company_name ?? String(companyId),
+      industry,
+      units,
+      icp: icp as 'Yes' | 'No' | null,
+      company_type: contacts[0].company_type,
+      target_tier: bestTier,
+      health_score,
+      health_before,
+      health_delta,
+      meetings_held,
+      touchpoints,
+      notes_logged,
+      new_contacts,
+      follow_ups_created,
+      follow_ups_completed,
+      contacts: contactsList,
+      reps: Array.from(repMap.values()),
+    });
+  }
+
+  // Sort by pipeline influence desc (nulls last), then name
+  companyRollup.sort((a, b) => {
+    const aVal = a.units != null && avgCostPerUnit > 0 ? a.units * avgCostPerUnit : null;
+    const bVal = b.units != null && avgCostPerUnit > 0 ? b.units * avgCostPerUnit : null;
+    if (aVal == null && bVal == null) return a.company_name.localeCompare(b.company_name);
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+    return bVal - aVal;
+  });
+
   // ── Relationship shifts ───────────────────────────────────────────────────
   const improved: RelationshipShiftRow[] = [];
   const declined: RelationshipShiftRow[] = [];
@@ -1300,5 +1554,8 @@ export async function GET(
     socialEvents: socialEventRows,
     touchpoints: touchpointRows,
     actionItems,
+    companyRollup,
+    avgCostPerUnit,
+    unitType,
   });
 }
