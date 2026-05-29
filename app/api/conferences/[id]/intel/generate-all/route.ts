@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { generateCompanyIntel } from '@/lib/intel/generateCompanyIntel';
+import { generateCompanyIntelBatch, type CompanyIntelBatchInput } from '@/lib/intel/generateCompanyIntel';
 import { intelProcessingState, stateKey, type ProcessingState } from '@/lib/intel/intelState';
 
 export const maxDuration = 300;
 
 const MAX_REFRESHES = 25;
-const BATCH_SIZE = 5;
+const COMPANIES_PER_CLAUDE_CALL = 15; // companies batched into a single Claude call
+const PARALLEL_CALLS = 4;             // simultaneous Claude calls per round
 const VALID_TIERS = new Set(['must_target', 'high_priority', 'worth_engaging', 'monitor']);
 
 function tryParseJson<T>(val: string | null | undefined, fallback: T): T {
@@ -219,10 +220,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           args: [],
         }).catch(() => {});
 
-        for (let i = 0; i < companies.length; i += BATCH_SIZE) {
-          const batch = companies.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map(async company => {
-            // Insert a stub record first — always reset summary so in-progress is visible
+        const sharedContext = {
+          icpPainPoints,
+          icpTriggerEvents,
+          companyInfoName: brandSettings['company_info_name'] || null,
+          companyInfoIndustries: brandSettings['company_info_industries'] || null,
+        };
+
+        // Process in rounds: PARALLEL_CALLS batches of COMPANIES_PER_CLAUDE_CALL each
+        const roundSize = COMPANIES_PER_CLAUDE_CALL * PARALLEL_CALLS;
+        for (let i = 0; i < companies.length; i += roundSize) {
+          const roundCompanies = companies.slice(i, i + roundSize);
+
+          // Write stubs for all companies in this round first so the UI shows them immediately
+          for (const company of roundCompanies) {
             await db.execute({
               sql: `INSERT INTO conference_company_intel
                       (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
@@ -241,66 +252,74 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 'Generating…', '[]', '[]', '[]', '[]', 0,
               ],
             }).catch(() => {});
+          }
 
+          // Split round into sub-batches and run them in parallel
+          const subBatches: CompanyIntelBatchInput[][] = [];
+          for (let j = 0; j < roundCompanies.length; j += COMPANIES_PER_CLAUDE_CALL) {
+            subBatches.push(
+              roundCompanies.slice(j, j + COMPANIES_PER_CLAUDE_CALL).map(c => ({
+                company_id: c.company_id,
+                company_name: c.company_name,
+                company_type: c.company_type,
+                industry: c.industry,
+                wse: c.wse,
+                tier: c.tier,
+                attendees: attendeesByCompany.get(c.company_id) ?? [],
+                repNames: c.repNames,
+              }))
+            );
+          }
+
+          await Promise.all(subBatches.map(async (subBatch) => {
             try {
-              const result = await generateCompanyIntel({
-                companyName: company.company_name,
-                companyType: company.company_type,
-                industry: company.industry,
-                wse: company.wse,
-                tier: company.tier,
-                attendees: attendeesByCompany.get(company.company_id) ?? [],
-                repNames: company.repNames,
-                icpPainPoints,
-                icpTriggerEvents,
-                companyInfoName: brandSettings['company_info_name'] || null,
-                companyInfoIndustries: brandSettings['company_info_industries'] || null,
-              });
-
-              await db.execute({
-                sql: `INSERT INTO conference_company_intel
-                        (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                      ON CONFLICT(conference_id, company_id) DO UPDATE SET
-                        company_name = excluded.company_name,
-                        tier = excluded.tier,
-                        summary = excluded.summary,
-                        pain_point_signals = excluded.pain_point_signals,
-                        trigger_events = excluded.trigger_events,
-                        buying_signals = excluded.buying_signals,
-                        opening_angles = excluded.opening_angles,
-                        used_icp_fallback = excluded.used_icp_fallback,
-                        generated_at = excluded.generated_at`,
-                args: [
-                  conferenceId, company.company_id, company.company_name, company.tier,
-                  result.summary,
-                  JSON.stringify(result.pain_point_signals),
-                  JSON.stringify(result.trigger_events),
-                  JSON.stringify(result.buying_signals),
-                  JSON.stringify(result.opening_angles),
-                  result.used_icp_fallback ? 1 : 0,
-                ],
-              }).catch(() => {});
+              const resultMap = await generateCompanyIntelBatch(subBatch, sharedContext);
+              for (const company of subBatch) {
+                const result = resultMap.get(company.company_id);
+                if (result) {
+                  await db.execute({
+                    sql: `INSERT INTO conference_company_intel
+                            (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                          ON CONFLICT(conference_id, company_id) DO UPDATE SET
+                            company_name = excluded.company_name,
+                            tier = excluded.tier,
+                            summary = excluded.summary,
+                            pain_point_signals = excluded.pain_point_signals,
+                            trigger_events = excluded.trigger_events,
+                            buying_signals = excluded.buying_signals,
+                            opening_angles = excluded.opening_angles,
+                            used_icp_fallback = excluded.used_icp_fallback,
+                            generated_at = excluded.generated_at`,
+                    args: [
+                      conferenceId, company.company_id, company.company_name, company.tier,
+                      result.summary,
+                      JSON.stringify(result.pain_point_signals),
+                      JSON.stringify(result.trigger_events),
+                      JSON.stringify(result.buying_signals),
+                      JSON.stringify(result.opening_angles),
+                      result.used_icp_fallback ? 1 : 0,
+                    ],
+                  }).catch(() => {});
+                }
+              }
             } catch (err) {
-              // Update stub with error message so it's visible in the UI
               const errMsg = err instanceof Error ? err.message : 'Generation failed';
-              await db.execute({
-                sql: `UPDATE conference_company_intel SET summary = ? WHERE conference_id = ? AND company_id = ?`,
-                args: [`Error: ${errMsg}`, conferenceId, company.company_id],
-              }).catch(() => {});
+              for (const company of subBatch) {
+                await db.execute({
+                  sql: `UPDATE conference_company_intel SET summary = ? WHERE conference_id = ? AND company_id = ?`,
+                  args: [`Error: ${errMsg}`, conferenceId, company.company_id],
+                }).catch(() => {});
+              }
             }
-            state.completed++;
+            state.completed += subBatch.length;
           }));
 
-          // Write progress to DB after each batch so all worker instances can see it
+          // Write progress to DB after each round so all worker instances see it
           await db.execute({
             sql: `UPDATE conferences SET intel_job_completed = ? WHERE id = ?`,
             args: [state.completed, conferenceId],
           }).catch(() => {});
-
-          if (i + BATCH_SIZE < companies.length) {
-            await new Promise(r => setTimeout(r, 500));
-          }
         }
         state.status = 'done';
         await db.execute({
