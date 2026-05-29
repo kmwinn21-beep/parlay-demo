@@ -108,6 +108,13 @@ function CompanyIntelCard({
   const hasRealIntel = intel && intel.summary !== null && intel.summary !== 'Generating…';
   const isGenerating = generating || intel?.summary === 'Generating…';
 
+  // Poll every 4s while server-side generation is in progress
+  useEffect(() => {
+    if (intel?.summary !== 'Generating…') return;
+    const interval = setInterval(onRefreshed, 4000);
+    return () => clearInterval(interval);
+  }, [intel?.summary, onRefreshed]);
+
   const handleGenerate = async () => {
     setGenerating(true);
     try {
@@ -121,8 +128,8 @@ function CompanyIntelCard({
         toast.error(err.error ?? 'Failed to generate intel');
         return;
       }
+      // Endpoint returns immediately after writing stub — refresh to show spinner
       onRefreshed();
-      if (hasRealIntel) toast.success(`Intel refreshed for ${company.company_name}`);
     } catch {
       toast.error('Failed to generate intel');
     } finally {

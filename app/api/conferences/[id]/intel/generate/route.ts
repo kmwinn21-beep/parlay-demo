@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { generateCompanyIntel } from '@/lib/intel/generateCompanyIntel';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 function tryParseJson<T>(val: string | null | undefined, fallback: T): T {
   if (!val) return fallback;
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (companyRow.rows.length === 0) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     const company = companyRow.rows[0];
 
-    // Get tier for this company at this conference (from scoring intel table, falling back to Monitor)
+    // Get tier from intel table, falling back to Monitor
     const tierRow = await db.execute({
       sql: `SELECT tier FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
       args: [conferenceId, companyId],
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       seniority: r.seniority as string | null,
     }));
 
-    // Resolve rep names from company.assigned_user IDs
+    // Resolve rep names
     const userIds = parseIdList(company.assigned_user);
     const repNames: string[] = [];
     if (userIds.length > 0) {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_trigger_events'], []).map(t => t.title),
     ];
 
-    // Get company info from brand settings (fallback)
+    // Get brand settings
     const brandRows = await db.execute({
       sql: `SELECT key, value FROM site_settings WHERE key LIKE 'company_info_%'`,
       args: [],
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const brandSettings: Record<string, string> = {};
     for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
 
-    // Ensure table exists on this tenant DB connection
+    // Ensure table exists
     await db.execute({
       sql: `CREATE TABLE IF NOT EXISTS conference_company_intel (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +119,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       args: [],
     }).catch(() => {});
 
-    const result = await generateCompanyIntel({
+    // Write 'Generating…' stub immediately so UI shows spinner
+    await db.execute({
+      sql: `INSERT INTO conference_company_intel
+              (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
+            VALUES (?, ?, ?, ?, 'Generating…', '[]', '[]', '[]', '[]', 0, datetime('now'))
+            ON CONFLICT(conference_id, company_id) DO UPDATE SET
+              summary = 'Generating…',
+              pain_point_signals = '[]',
+              trigger_events = '[]',
+              buying_signals = '[]',
+              opening_angles = '[]',
+              generated_at = datetime('now')`,
+      args: [conferenceId, companyId, String(company.name), tier],
+    });
+
+    const input = {
       companyName: String(company.name),
       companyType: company.company_type as string | null,
       industry: company.industry as string | null,
@@ -130,35 +146,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       icpTriggerEvents,
       companyInfoName: brandSettings['company_info_name'] || null,
       companyInfoIndustries: brandSettings['company_info_industries'] || null,
-    });
+    };
 
-    // Upsert into conference_company_intel
-    await db.execute({
-      sql: `INSERT INTO conference_company_intel
-              (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            ON CONFLICT(conference_id, company_id) DO UPDATE SET
-              company_name = excluded.company_name,
-              tier = excluded.tier,
-              summary = excluded.summary,
-              pain_point_signals = excluded.pain_point_signals,
-              trigger_events = excluded.trigger_events,
-              buying_signals = excluded.buying_signals,
-              opening_angles = excluded.opening_angles,
-              used_icp_fallback = excluded.used_icp_fallback,
-              generated_at = excluded.generated_at`,
-      args: [
-        conferenceId, companyId, String(company.name), tier,
-        result.summary,
-        JSON.stringify(result.pain_point_signals),
-        JSON.stringify(result.trigger_events),
-        JSON.stringify(result.buying_signals),
-        JSON.stringify(result.opening_angles),
-        result.used_icp_fallback ? 1 : 0,
-      ],
-    });
+    // Run generation in background — returns immediately, keeps function alive via waitUntil
+    waitUntil((async () => {
+      try {
+        const result = await generateCompanyIntel(input);
+        await db.execute({
+          sql: `INSERT INTO conference_company_intel
+                  (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(conference_id, company_id) DO UPDATE SET
+                  summary = excluded.summary,
+                  pain_point_signals = excluded.pain_point_signals,
+                  trigger_events = excluded.trigger_events,
+                  buying_signals = excluded.buying_signals,
+                  opening_angles = excluded.opening_angles,
+                  used_icp_fallback = excluded.used_icp_fallback,
+                  generated_at = excluded.generated_at`,
+          args: [
+            conferenceId, companyId, String(company.name), tier,
+            result.summary,
+            JSON.stringify(result.pain_point_signals),
+            JSON.stringify(result.trigger_events),
+            JSON.stringify(result.buying_signals),
+            JSON.stringify(result.opening_angles),
+            result.used_icp_fallback ? 1 : 0,
+          ],
+        });
+      } catch (err) {
+        console.error('[intel/generate] background error for company', companyId, ':', err);
+        await db.execute({
+          sql: `UPDATE conference_company_intel SET summary = ? WHERE conference_id = ? AND company_id = ?`,
+          args: [`Error: ${err instanceof Error ? err.message : 'Generation failed'}`, conferenceId, companyId],
+        }).catch(() => {});
+      }
+    })());
 
-    return NextResponse.json({ ok: true, company_id: companyId });
+    return NextResponse.json({ ok: true, company_id: companyId, status: 'generating' });
   } catch (err) {
     console.error('[intel/generate]', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal server error' }, { status: 500 });
