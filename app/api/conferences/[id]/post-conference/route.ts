@@ -1095,6 +1095,23 @@ export async function GET(
     companyContactsMap.get(c.company_id)!.push(c);
   }
 
+  // Fetch canonical wse + industry directly from companies table (same source as company profile page)
+  const rollupCompanyIds = Array.from(companyContactsMap.keys());
+  const companyWseMap = new Map<number, number | null>();
+  const companyIndustryMap = new Map<number, string | null>();
+  if (rollupCompanyIds.length > 0) {
+    const ph = rollupCompanyIds.map(() => '?').join(',');
+    const companyMetaRes = await db.execute({
+      sql: `SELECT id, wse, industry FROM companies WHERE id IN (${ph})`,
+      args: rollupCompanyIds,
+    }).catch(() => ({ rows: [] as { id: unknown; wse: unknown; industry: unknown }[] }));
+    for (const row of companyMetaRes.rows) {
+      const cid = Number(row.id);
+      companyWseMap.set(cid, row.wse != null ? Number(row.wse) : null);
+      companyIndustryMap.set(cid, row.industry ? String(row.industry) : null);
+    }
+  }
+
   interface CompanyRollupContact {
     attendee_id: number;
     first_name: string;
@@ -1177,10 +1194,9 @@ export async function GET(
       }
     }
 
-    // Company metadata from attendee rows
-    const firstAttendee = allAttendeesById.get(contacts[0].attendee_id);
-    const industry = firstAttendee && 'industry' in firstAttendee ? (firstAttendee.industry ? String(firstAttendee.industry) : null) : null;
-    const units = firstAttendee && 'wse' in firstAttendee && firstAttendee.wse != null ? Number(firstAttendee.wse) : null;
+    // Company metadata — fetched directly from companies table (canonical, same as company profile page)
+    const industry = companyIndustryMap.get(companyId) ?? null;
+    const units = companyWseMap.get(companyId) ?? null;
 
     // Contacts list
     const contactsList: CompanyRollupContact[] = contacts.map(c => {
