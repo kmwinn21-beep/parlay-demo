@@ -77,7 +77,7 @@ export async function generateCompanyIntel(input: CompanyIntelInput): Promise<Co
 
   const userPrompt = `${sharedCtx}
 
-Research ${input.companyName} using your knowledge and return a JSON object with sales intelligence for a conference team:
+Using web search, research ${input.companyName} and return a JSON object with sales intelligence for a conference team:
 
 Company: ${input.companyName}
 Type: ${input.companyType ?? 'Unknown'}
@@ -89,9 +89,7 @@ Reps Assigned: ${input.repNames.length > 0 ? input.repNames.join(', ') : 'None a
 Attendees at this conference:
 ${attendeeLines || '- No attendees listed'}
 
-Draw on your knowledge of this company and the senior housing and care industry to surface trigger events, buying signals, and relevant pain points. Be specific and actionable — reps will use this to prepare for meetings at this conference.
-
-Return ONLY valid JSON with exactly these fields:
+Search the web for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Then return ONLY valid JSON with exactly these fields:
 {
   "summary": "2-3 sentence company overview focused on their current business situation and fit",
   "pain_point_signals": ["3-5 bullets: specific evidence this company has the pain points we solve"],
@@ -100,12 +98,13 @@ Return ONLY valid JSON with exactly these fields:
   "opening_angles": ["2-3 bullets: specific conversation starters for reps meeting these attendees"]
 }
 
-If you cannot find specific information for a field, still include it with at least one bullet noting what is unknown or suggesting what to look for. Return ONLY valid JSON, no markdown.`;
+Return ONLY valid JSON, no markdown.`;
 
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
+      tools: [{ type: 'web_search_20260209' as const, name: 'web_search' }],
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
