@@ -8,6 +8,7 @@ export const maxDuration = 300;
 
 const MAX_REFRESHES = 5;
 const BATCH_SIZE = 5;
+const VALID_TIERS = new Set(['must_target', 'high_priority', 'worth_engaging', 'monitor']);
 
 function tryParseJson<T>(val: string | null | undefined, fallback: T): T {
   if (!val) return fallback;
@@ -17,6 +18,17 @@ function tryParseJson<T>(val: string | null | undefined, fallback: T): T {
 function parseIdList(raw: unknown): number[] {
   if (!raw) return [];
   return String(raw).split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+}
+
+// Map targeting tier keys to display labels used in intel cards
+function tierKeyToLabel(key: string): string {
+  switch (key) {
+    case 'must_target':   return 'Must Target';
+    case 'high_priority': return 'High Priority';
+    case 'worth_engaging': return 'Worth Engaging';
+    case 'monitor':       return 'Monitor';
+    default:              return key;
+  }
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const db = await getDb(authResult.accountId);
 
-    // Check refresh count — catch in case column doesn't exist yet on this tenant DB
+    // Check refresh count
     const confRow = await db.execute({
       sql: 'SELECT intel_refresh_count FROM conferences WHERE id = ?',
       args: [conferenceId],
@@ -46,26 +58,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Already running', state: existing }, { status: 409 });
     }
 
-    // Get all target companies for this conference (from conference_targets)
-    const targetCompanyRows = await db.execute({
-      sql: `SELECT DISTINCT a.company_id, c.name as company_name, c.company_type, c.industry, c.wse,
-                  c.assigned_user, ct.tier
-            FROM conference_targets ct
-            JOIN attendees a ON a.id = ct.attendee_id
-            JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ct.conference_id
-            JOIN companies c ON c.id = a.company_id
-            WHERE ct.conference_id = ? AND a.company_id IS NOT NULL
-            ORDER BY ct.tier, c.name`,
-      args: [conferenceId],
-    });
+    // Fetch all scored companies from the targeting API (same data as Target Recommendations tab)
+    const origin = request.nextUrl.origin;
+    const targetingRes = await fetch(
+      `${origin}/api/conferences/${conferenceId}/targeting`,
+      { headers: { cookie: request.headers.get('cookie') ?? '' } }
+    );
 
-    if (targetCompanyRows.rows.length === 0) {
-      return NextResponse.json({ error: 'No target companies found. Add targets in the Target Recommendations tab first.' }, { status: 400 });
+    if (!targetingRes.ok) {
+      return NextResponse.json({ error: 'Failed to load targeting data. Make sure the conference has attendees.' }, { status: 400 });
     }
 
-    // Collect all user IDs from company assigned_user fields to resolve names
+    const targetingData = await targetingRes.json() as {
+      companies?: Array<{
+        company_id: number;
+        company_name: string;
+        wse: number | null;
+        target_priority_tier_key: string;
+      }>;
+    };
+
+    const allCompanies = (targetingData.companies ?? []).filter(c =>
+      VALID_TIERS.has(c.target_priority_tier_key)
+    );
+
+    if (allCompanies.length === 0) {
+      return NextResponse.json({ error: 'No scored companies found. Run Target Recommendations first to score companies.' }, { status: 400 });
+    }
+
+    // Fetch full company details (type, industry, assigned_user) from DB
+    const scoredIds = allCompanies.map(c => c.company_id);
+    const companyDetailRows = await db.execute({
+      sql: `SELECT id, company_type, industry, assigned_user FROM companies WHERE id IN (${scoredIds.map(() => '?').join(',')})`,
+      args: [...scoredIds],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+    const companyDetails = new Map(
+      companyDetailRows.rows.map(r => [Number(r.id), r as Record<string, unknown>])
+    );
+
+    // Collect user IDs for rep name resolution
     const allUserIds = new Set<number>();
-    for (const r of targetCompanyRows.rows) {
+    for (const r of companyDetailRows.rows) {
       for (const uid of parseIdList(r.assigned_user)) allUserIds.add(uid);
     }
     const userNameMap = new Map<number, string>();
@@ -103,15 +136,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const brandSettings: Record<string, string> = {};
     for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
 
-    // Get attendees for all these companies
-    const companyIds = Array.from(new Set(targetCompanyRows.rows.map(r => Number(r.company_id))));
+    // Get attendees for all companies at this conference (targeting API may include them, but fetch fresh)
+    const companyIds = allCompanies.map(c => c.company_id);
     const attendeeRows = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id
             FROM attendees a
             JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
             WHERE a.company_id IN (${companyIds.map(() => '?').join(',')})`,
       args: [conferenceId, ...companyIds],
-    });
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
 
     const attendeesByCompany = new Map<number, { first_name: string; last_name: string; title: string | null; seniority: string | null }[]>();
     for (const r of attendeeRows.rows) {
@@ -125,28 +158,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
     }
 
-    // Deduplicate by company_id (take first tier seen = highest priority due to ORDER BY)
-    const seen = new Set<number>();
-    const companies: Array<{
-      company_id: number; company_name: string; company_type: string | null;
-      industry: string | null; wse: number | null; tier: string; repNames: string[];
-    }> = [];
-    for (const r of targetCompanyRows.rows) {
-      const cid = Number(r.company_id);
-      if (!seen.has(cid)) {
-        seen.add(cid);
-        const repNames = parseIdList(r.assigned_user).map(uid => userNameMap.get(uid) ?? String(uid));
-        companies.push({
-          company_id: cid,
-          company_name: String(r.company_name),
-          company_type: r.company_type as string | null,
-          industry: r.industry as string | null,
-          wse: r.wse ? Number(r.wse) : null,
-          tier: String(r.tier),
-          repNames,
-        });
-      }
-    }
+    const companies = allCompanies.map(c => {
+      const detail = companyDetails.get(c.company_id);
+      return {
+        company_id: c.company_id,
+        company_name: c.company_name,
+        company_type: detail ? (detail.company_type as string | null) : null,
+        industry: detail ? (detail.industry as string | null) : null,
+        wse: c.wse,
+        tier: tierKeyToLabel(c.target_priority_tier_key),
+        repNames: detail ? parseIdList(detail.assigned_user).map(uid => userNameMap.get(uid) ?? String(uid)) : [],
+      };
+    });
 
     const state: ProcessingState = {
       status: 'running',
@@ -156,7 +179,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     };
     intelProcessingState.set(key, state);
 
-    // Increment refresh count and update timestamp
+    // Increment refresh count
     await db.execute({
       sql: `UPDATE conferences SET intel_refresh_count = COALESCE(intel_refresh_count, 0) + 1, intel_last_refresh_at = datetime('now') WHERE id = ?`,
       args: [conferenceId],
