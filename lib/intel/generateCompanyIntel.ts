@@ -66,23 +66,40 @@ function fallbackResult(companyName: string, companyType: string | null, industr
   };
 }
 
-// Extracts the last valid JSON object from Claude's response text,
-// handling markdown code fences and multi-block text responses.
-function extractJson(text: string): Record<string, unknown> | null {
-  // Strip markdown code fences
-  const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '');
-  // Try each { from rightmost to leftmost, return first valid parse
-  let pos = stripped.lastIndexOf('{');
-  while (pos >= 0) {
-    try {
-      const parsed = JSON.parse(stripped.slice(pos)) as Record<string, unknown>;
-      return parsed;
-    } catch {
-      pos = stripped.lastIndexOf('{', pos - 1);
-    }
-  }
-  return null;
-}
+const SAVE_INTEL_TOOL = {
+  name: 'save_intel',
+  description: 'Save the researched sales intelligence for this company.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      summary: {
+        type: 'string',
+        description: '2-3 sentence company overview focused on current business situation and ICP fit',
+      },
+      pain_point_signals: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '3-5 specific bullets of evidence this company has the pain points we solve',
+      },
+      trigger_events: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '2-4 bullets: recent news, leadership changes, expansions, or regulatory events',
+      },
+      buying_signals: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '2-4 bullets: signals indicating they may be in a buying position',
+      },
+      opening_angles: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '2-3 bullets: conversation starters for reps meeting these attendees',
+      },
+    },
+    required: ['summary', 'pain_point_signals', 'trigger_events', 'buying_signals', 'opening_angles'],
+  },
+};
 
 // Single-company function — used by /intel/generate for per-card refresh
 export async function generateCompanyIntel(input: CompanyIntelInput): Promise<CompanyIntelResult> {
@@ -95,7 +112,7 @@ export async function generateCompanyIntel(input: CompanyIntelInput): Promise<Co
 
   const userPrompt = `${sharedCtx}
 
-Using web search, research ${input.companyName} and return a JSON object with sales intelligence for a conference team:
+Research ${input.companyName} using web search, then call save_intel with the findings.
 
 Company: ${input.companyName}
 Type: ${input.companyType ?? 'Unknown'}
@@ -107,37 +124,30 @@ Reps Assigned: ${input.repNames.length > 0 ? input.repNames.join(', ') : 'None a
 Attendees at this conference:
 ${attendeeLines || '- No attendees listed'}
 
-Search the web for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Then return ONLY valid JSON with exactly these fields:
-{
-  "summary": "2-3 sentence company overview focused on their current business situation and fit",
-  "pain_point_signals": ["3-5 bullets: specific evidence this company has the pain points we solve"],
-  "trigger_events": ["2-4 bullets: recent news, leadership changes, expansions, or regulatory changes relevant to us"],
-  "buying_signals": ["2-4 bullets: specific signals indicating they may be in a buying position"],
-  "opening_angles": ["2-3 bullets: specific conversation starters for reps meeting these attendees"]
-}
-
-Return ONLY valid JSON, no markdown.`;
+Search for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Use your findings to populate all fields in save_intel with specific, actionable intelligence for the sales rep meeting this company at the conference.`;
 
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      tools: [{ type: 'web_search_20260209' as const, name: 'web_search', max_uses: 2 }],
+      max_tokens: 4096,
+      tools: [
+        { type: 'web_search_20260209' as const, name: 'web_search', max_uses: 2 },
+        SAVE_INTEL_TOOL,
+      ],
+      tool_choice: { type: 'any' },
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
 
-    let rawText = '';
-    for (const block of response.content) {
-      if (block.type === 'text') rawText += block.text;
-    }
-
-    const parsed = extractJson(rawText);
-    if (!parsed) {
-      console.error('[generateCompanyIntel] No JSON in response for', input.companyName, '| stop_reason:', response.stop_reason, '| rawText:', rawText.slice(0, 300));
+    const toolUseBlock = response.content.find(
+      b => b.type === 'tool_use' && (b as { name: string }).name === 'save_intel'
+    );
+    if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {
+      console.error('[generateCompanyIntel] save_intel not called for', input.companyName, '| stop_reason:', response.stop_reason);
       return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
     }
 
+    const parsed = (toolUseBlock as { input: Record<string, unknown> }).input;
     return {
       summary: (parsed.summary as string) ?? '',
       pain_point_signals: (parsed.pain_point_signals as string[]) ?? [],
