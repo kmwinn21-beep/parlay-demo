@@ -374,20 +374,39 @@ function TierSection({
       </button>
 
       {sectionExpanded && (
-        <div className="grid grid-cols-2 gap-3 items-start">
-          {companies.map(company => (
-            <CompanyIntelCard
-              key={company.company_id}
-              company={company}
-              intel={intelMap.get(company.company_id) ?? null}
-              targetMap={targetMap}
-              onToggleTarget={onToggleTarget}
-              conferenceId={conferenceId}
-              onRefreshed={onRefreshed}
-              avgCostPerUnit={avgCostPerUnit}
-              onOpenRecord={onOpenRecord}
-            />
-          ))}
+        <div className="flex gap-3">
+          {/* Left column — odd-indexed companies */}
+          <div className="flex-1 flex flex-col gap-3">
+            {companies.filter((_, i) => i % 2 === 0).map(company => (
+              <CompanyIntelCard
+                key={company.company_id}
+                company={company}
+                intel={intelMap.get(company.company_id) ?? null}
+                targetMap={targetMap}
+                onToggleTarget={onToggleTarget}
+                conferenceId={conferenceId}
+                onRefreshed={onRefreshed}
+                avgCostPerUnit={avgCostPerUnit}
+                onOpenRecord={onOpenRecord}
+              />
+            ))}
+          </div>
+          {/* Right column — even-indexed companies */}
+          <div className="flex-1 flex flex-col gap-3">
+            {companies.filter((_, i) => i % 2 === 1).map(company => (
+              <CompanyIntelCard
+                key={company.company_id}
+                company={company}
+                intel={intelMap.get(company.company_id) ?? null}
+                targetMap={targetMap}
+                onToggleTarget={onToggleTarget}
+                conferenceId={conferenceId}
+                onRefreshed={onRefreshed}
+                avgCostPerUnit={avgCostPerUnit}
+                onOpenRecord={onOpenRecord}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
