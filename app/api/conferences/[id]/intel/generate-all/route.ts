@@ -48,13 +48,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Get all target companies for this conference (from conference_targets)
     const targetCompanyRows = await db.execute({
-      sql: `SELECT DISTINCT ca.company_id, c.name as company_name, c.company_type, c.industry, c.wse,
+      sql: `SELECT DISTINCT a.company_id, c.name as company_name, c.company_type, c.industry, c.wse,
                   c.assigned_user, ct.tier
             FROM conference_targets ct
             JOIN attendees a ON a.id = ct.attendee_id
             JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ct.conference_id
-            JOIN companies c ON c.id = ca.company_id
-            WHERE ct.conference_id = ? AND ca.company_id IS NOT NULL
+            JOIN companies c ON c.id = a.company_id
+            WHERE ct.conference_id = ? AND a.company_id IS NOT NULL
             ORDER BY ct.tier, c.name`,
       args: [conferenceId],
     });
@@ -106,10 +106,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Get attendees for all these companies
     const companyIds = Array.from(new Set(targetCompanyRows.rows.map(r => Number(r.company_id))));
     const attendeeRows = await db.execute({
-      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, ca.company_id
+      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id
             FROM attendees a
             JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-            WHERE ca.company_id IN (${companyIds.map(() => '?').join(',')})`,
+            WHERE a.company_id IN (${companyIds.map(() => '?').join(',')})`,
       args: [conferenceId, ...companyIds],
     });
 

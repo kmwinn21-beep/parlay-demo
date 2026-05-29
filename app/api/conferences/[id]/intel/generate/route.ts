@@ -41,8 +41,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Get tier for this company at this conference (from conference_targets)
     const tierRow = await db.execute({
       sql: `SELECT ct.tier FROM conference_targets ct
-            JOIN conference_attendees ca ON ca.attendee_id = ct.attendee_id AND ca.conference_id = ct.conference_id
-            WHERE ct.conference_id = ? AND ca.company_id = ?
+            JOIN attendees a ON a.id = ct.attendee_id
+            WHERE ct.conference_id = ? AND a.company_id = ?
             ORDER BY ct.tier LIMIT 1`,
       args: [conferenceId, companyId],
     });
@@ -52,8 +52,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const attendeeRows = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority
             FROM attendees a
-            JOIN conference_attendees ca ON ca.attendee_id = a.id
-            WHERE ca.conference_id = ? AND ca.company_id = ?
+            JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
+            WHERE a.company_id = ?
             ORDER BY a.seniority, a.last_name`,
       args: [conferenceId, companyId],
     });

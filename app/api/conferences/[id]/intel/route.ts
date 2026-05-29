@@ -96,10 +96,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // Get attendees for these companies at this conference
     const attendeeRows = await db.execute({
-      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, ca.company_id
+      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id
             FROM attendees a
             JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-            WHERE ca.company_id IN (${companyIds.map(() => '?').join(',')})
+            WHERE a.company_id IN (${companyIds.map(() => '?').join(',')})
             ORDER BY a.last_name`,
       args: [conferenceId, ...companyIds],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
