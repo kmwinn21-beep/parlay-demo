@@ -189,9 +189,48 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Keep the Vercel function alive until background processing completes
     waitUntil((async () => {
       try {
+        // Ensure table exists — handles tenant DBs where migration hasn't applied yet
+        await db.execute({
+          sql: `CREATE TABLE IF NOT EXISTS conference_company_intel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+            company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+            company_name TEXT NOT NULL,
+            tier TEXT NOT NULL,
+            summary TEXT,
+            pain_point_signals TEXT,
+            trigger_events TEXT,
+            buying_signals TEXT,
+            opening_angles TEXT,
+            used_icp_fallback INTEGER DEFAULT 0,
+            generated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(conference_id, company_id)
+          )`,
+          args: [],
+        }).catch(() => {});
+        await db.execute({
+          sql: `CREATE INDEX IF NOT EXISTS idx_conf_company_intel_conf ON conference_company_intel(conference_id)`,
+          args: [],
+        }).catch(() => {});
+
         for (let i = 0; i < companies.length; i += BATCH_SIZE) {
           const batch = companies.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map(async company => {
+            // Insert a stub record first — so partial results always appear in the UI
+            await db.execute({
+              sql: `INSERT INTO conference_company_intel
+                      (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                    ON CONFLICT(conference_id, company_id) DO UPDATE SET
+                      company_name = excluded.company_name,
+                      tier = excluded.tier,
+                      generated_at = excluded.generated_at`,
+              args: [
+                conferenceId, company.company_id, company.company_name, company.tier,
+                'Generating…', JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), 0,
+              ],
+            }).catch(() => {});
+
             try {
               const result = await generateCompanyIntel({
                 companyName: company.company_name,
@@ -230,9 +269,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                   JSON.stringify(result.opening_angles),
                   result.used_icp_fallback ? 1 : 0,
                 ],
-              });
-            } catch {
-              // Don't fail the whole batch for one company
+              }).catch(() => {});
+            } catch (err) {
+              // Update stub with error message so it's visible in the UI
+              const errMsg = err instanceof Error ? err.message : 'Generation failed';
+              await db.execute({
+                sql: `UPDATE conference_company_intel SET summary = ? WHERE conference_id = ? AND company_id = ?`,
+                args: [`Error: ${errMsg}`, conferenceId, company.company_id],
+              }).catch(() => {});
             }
             state.completed++;
           }));

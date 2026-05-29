@@ -101,6 +101,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const brandSettings: Record<string, string> = {};
     for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
 
+    // Ensure table exists on this tenant DB connection
+    await db.execute({
+      sql: `CREATE TABLE IF NOT EXISTS conference_company_intel (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        company_name TEXT NOT NULL,
+        tier TEXT NOT NULL,
+        summary TEXT,
+        pain_point_signals TEXT,
+        trigger_events TEXT,
+        buying_signals TEXT,
+        opening_angles TEXT,
+        used_icp_fallback INTEGER DEFAULT 0,
+        generated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(conference_id, company_id)
+      )`,
+      args: [],
+    }).catch(() => {});
+
     const result = await generateCompanyIntel({
       companyName: String(company.name),
       companyType: company.company_type as string | null,
