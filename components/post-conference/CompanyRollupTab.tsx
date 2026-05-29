@@ -84,14 +84,15 @@ function deriveBuyerRole(seniority: string | null): string | null {
   return null;
 }
 
-function formatPipeline(units: number | null, avgCostPerUnit: number): { value: string; subtitle: string; hasValue: boolean } {
+function formatPipeline(units: number | null, avgCostPerUnit: number, unitType: string): { value: string; subtitle: string; hasValue: boolean } {
   if (units == null) return { value: 'Units not set', subtitle: '', hasValue: false };
   if (avgCostPerUnit <= 0) return { value: 'Set cost per unit in admin settings', subtitle: '', hasValue: false };
   const total = Math.round(units * avgCostPerUnit);
   const rate = '$' + avgCostPerUnit.toLocaleString('en-US');
+  const label = unitType || 'Units';
   return {
     value: '$' + total.toLocaleString('en-US'),
-    subtitle: `${units.toLocaleString('en-US')} users · ${rate} / user / yr`,
+    subtitle: `${units.toLocaleString('en-US')} ${label.toLowerCase()} · ${rate} / ${label.toLowerCase()} / yr`,
     hasValue: true,
   };
 }
@@ -158,11 +159,13 @@ function EngagementBadge({ type }: { type: string }) {
 function CompanyCard({
   row,
   avgCostPerUnit,
+  unitType,
   conferenceId,
   conferenceName,
 }: {
   row: CompanyRollupRow;
   avgCostPerUnit: number;
+  unitType: string;
   conferenceId: number;
   conferenceName: string;
 }) {
@@ -171,7 +174,7 @@ function CompanyCard({
   const router = useRouter();
 
   const noActivity = row.meetings_held === 0 && row.touchpoints === 0 && row.notes_logged === 0 && row.follow_ups_created === 0;
-  const pipeline = formatPipeline(row.units, avgCostPerUnit);
+  const pipeline = formatPipeline(row.units, avgCostPerUnit, unitType);
 
   return (
     <>
@@ -189,7 +192,7 @@ function CompanyCard({
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">{row.company_name}</p>
             <p className="text-xs text-gray-400 truncate">
-              {[row.industry, row.units != null ? `${row.units.toLocaleString('en-US')} users` : 'units not set'].filter(Boolean).join(' · ')}
+              {[row.industry, row.units != null ? `${row.units.toLocaleString('en-US')} ${(unitType || 'Units').toLowerCase()}` : `${(unitType || 'units').toLowerCase()} not set`].filter(Boolean).join(' · ')}
             </p>
           </div>
 
@@ -357,11 +360,12 @@ type SortKey = 'pipeline' | 'health_delta' | 'tier' | 'fu_rate' | 'name';
 interface Props {
   companyRollup: CompanyRollupRow[];
   avgCostPerUnit: number;
+  unitType: string;
   conferenceId: number;
   conferenceName: string;
 }
 
-export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, conferenceName }: Props) {
+export function CompanyRollupTab({ companyRollup, avgCostPerUnit, unitType, conferenceId, conferenceName }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('pipeline');
 
@@ -501,6 +505,7 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, 
               key={row.company_id}
               row={row}
               avgCostPerUnit={avgCostPerUnit}
+              unitType={unitType}
               conferenceId={conferenceId}
               conferenceName={conferenceName}
             />

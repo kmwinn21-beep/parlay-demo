@@ -187,7 +187,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -246,12 +246,15 @@ export async function GET(
       args: [confId],
     }),
     db.execute({ sql: `SELECT value FROM effectiveness_defaults WHERE key = 'avg_cost_per_unit'`, args: [] }).catch(() => ({ rows: [] as { value: unknown }[] })),
+    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'unit_type' ORDER BY id LIMIT 1`, args: [] }).catch(() => ({ rows: [] as { value: unknown }[] })),
   ]);
 
   const avgCostPerUnit = (() => {
     const val = parseFloat(String((avgCostRes as { rows: { value: unknown }[] }).rows[0]?.value ?? '0'));
     return isNaN(val) ? 0 : val;
   })();
+
+  const unitType = String((unitTypeRes as { rows: { value: unknown }[] }).rows[0]?.value ?? 'Units');
 
   const prospectsTypeId = prospectsTypeRes.rows[0]?.id ? Number(prospectsTypeRes.rows[0].id) : null;
   const prospectsTypeValue = prospectsTypeRes.rows[0]?.value ? String(prospectsTypeRes.rows[0].value).trim() : null;
@@ -1537,5 +1540,6 @@ export async function GET(
     actionItems,
     companyRollup,
     avgCostPerUnit,
+    unitType,
   });
 }

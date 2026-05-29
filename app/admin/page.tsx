@@ -3210,90 +3210,32 @@ export default function AdminPage() {
             <div className="border-t border-gray-100 my-4" />
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Priority and Product Mapping</label>
-              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and map products to contact functions. Contacts with High or Medium priority whose function has a mapped product will be auto-assigned that product on upload.</p>
-              <div className="grid grid-cols-2 gap-6">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-gray-500 border-b border-gray-100">
-                      <th className="text-left pb-1 font-medium">Seniority Level</th>
-                      <th className="text-left pb-1 font-medium">Priority</th>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Prioritization</label>
+              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
+              <table className="w-full text-sm max-w-xs">
+                <thead>
+                  <tr className="text-xs text-gray-500 border-b border-gray-100">
+                    <th className="text-left pb-1 font-medium">Seniority Level</th>
+                    <th className="text-left pb-1 font-medium">Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(optionsByCategory['seniority'] ?? []).map(s => (
+                    <tr key={s.value} className="border-b border-gray-50">
+                      <td className="py-1.5 pr-4">{s.value}</td>
+                      <td className="py-1.5">
+                        <select
+                          value={icpSeniorityPriority[s.value] ?? 'Medium'}
+                          onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                          className="input-field text-sm py-0.5"
+                        >
+                          {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {(optionsByCategory['seniority'] ?? []).map(s => (
-                      <tr key={s.value} className="border-b border-gray-50">
-                        <td className="py-1.5 pr-4">{s.value}</td>
-                        <td className="py-1.5">
-                          <select
-                            value={icpSeniorityPriority[s.value] ?? 'Medium'}
-                            onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                            className="input-field text-sm py-0.5"
-                          >
-                            {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-gray-500 border-b border-gray-100">
-                      <th className="text-left pb-1 font-medium">Function</th>
-                      <th className="text-left pb-1 font-medium">Priority</th>
-                      <th className="text-left pb-1 font-medium">Product</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(optionsByCategory['function'] ?? []).map(f => {
-                      const productOpts = optionsByCategory['products'] ?? [];
-                      const validProductValues = new Set(productOpts.map(p => p.value));
-                      // Filter out any saved selections whose product type was since deleted
-                      const selected = (icpFunctionProductMapping[f.value] ?? []).filter(v => validProductValues.has(v));
-                      return (
-                        <tr key={f.value} className="border-b border-gray-50">
-                          <td className="py-1.5 pr-4">{f.value}</td>
-                          <td className="py-1.5 pr-4">
-                            <select
-                              value={icpFunctionPriority[f.value] ?? 'Medium'}
-                              onChange={e => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                              className="input-field text-sm py-0.5"
-                            >
-                              {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                          </td>
-                          <td className="py-1.5">
-                            <div className="flex items-center gap-1">
-                              <MultiSelectDropdown
-                                options={productOpts.map(p => p.value)}
-                                selected={selected}
-                                onChange={vals => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: vals }))}
-                                placeholder="None"
-                              />
-                              {selected.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setIcpFunctionProductMapping(prev => ({ ...prev, [f.value]: [] }))}
-                                  className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors p-0.5 rounded"
-                                  title="Clear product selections"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {(optionsByCategory['function'] ?? []).length === 0 && (
-                      <tr><td colSpan={3} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             <div className="border-t border-gray-100 my-4" />

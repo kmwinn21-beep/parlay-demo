@@ -142,6 +142,7 @@ export interface PostConferenceData {
   actionItems: ActionItem[];
   companyRollup: CompanyRollupRow[];
   avgCostPerUnit: number;
+  unitType: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -288,7 +289,7 @@ export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             {effectiveTab === 'summary' && <SummaryTab summary={data.summary} repPerformance={data.repPerformance} />}
-            {effectiveTab === 'company_rollup' && <CompanyRollupTab companyRollup={data.companyRollup} avgCostPerUnit={data.avgCostPerUnit} conferenceId={conferenceId} conferenceName={conferenceName} />}
+            {effectiveTab === 'company_rollup' && <CompanyRollupTab companyRollup={data.companyRollup} avgCostPerUnit={data.avgCostPerUnit} unitType={data.unitType} conferenceId={conferenceId} conferenceName={conferenceName} />}
             {effectiveTab === 'contacts' && <ContactsCapturedTab contacts={data.contacts} />}
             {effectiveTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
             {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}
