@@ -131,7 +131,14 @@ function CompanyIntelCard({
               </span>
             )}
           </div>
-          {intel.summary && (
+          {intel.summary === null ? (
+            <p className="text-xs text-gray-400 italic mt-1">No intel yet — click ↻ to generate</p>
+          ) : intel.summary === 'Generating…' ? (
+            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5">
+              <span className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin inline-block flex-shrink-0" />
+              Generating…
+            </p>
+          ) : (
             <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{intel.summary}</p>
           )}
         </div>
@@ -167,7 +174,7 @@ function CompanyIntelCard({
       {/* Expanded content */}
       {expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3">
-          {intel.summary && (
+          {intel.summary && intel.summary !== 'Generating…' && (
             <p className="text-xs text-gray-600 leading-relaxed">{intel.summary}</p>
           )}
           <IntelSection title="Pain Point Signals" items={intel.pain_point_signals} color={dotColor} icon="⚡" />
