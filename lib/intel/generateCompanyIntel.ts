@@ -77,7 +77,7 @@ export async function generateCompanyIntel(input: CompanyIntelInput): Promise<Co
 
   const userPrompt = `${sharedCtx}
 
-Using web search, research ${input.companyName} and return a JSON object with sales intelligence for a conference team:
+Research ${input.companyName} using your knowledge and return a JSON object with sales intelligence for a conference team:
 
 Company: ${input.companyName}
 Type: ${input.companyType ?? 'Unknown'}
@@ -88,6 +88,8 @@ Reps Assigned: ${input.repNames.length > 0 ? input.repNames.join(', ') : 'None a
 
 Attendees at this conference:
 ${attendeeLines || '- No attendees listed'}
+
+Draw on your knowledge of this company and the senior housing and care industry to surface trigger events, buying signals, and relevant pain points. Be specific and actionable — reps will use this to prepare for meetings at this conference.
 
 Return ONLY valid JSON with exactly these fields:
 {
@@ -104,7 +106,6 @@ If you cannot find specific information for a field, still include it with at le
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
-      tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
