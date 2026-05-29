@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { TargetBtn } from './TargetBtn';
-import { useRecordDrawer } from './RecordDrawerContext';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import type { TargetEntry } from '../PreConferenceReview';
 import type { CompanyIntelRow } from '@/app/api/conferences/[id]/intel/route';
 
@@ -56,7 +56,54 @@ type ScoredCompany = {
   company_id: number;
   company_name: string;
   tier: string;
+  icp_fit_score: number;
+  buyer_access_score: number;
+  relationship_leverage_score: number;
+  conference_opportunity_score: number;
+  confidence_level: string;
+  wse: number | null;
 };
+
+function CompanyAvatar({ name }: { name: string }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+  const colors = [
+    { bg: '#dbeafe', text: '#1e40af' },
+    { bg: '#dcfce7', text: '#166534' },
+    { bg: '#fce7f3', text: '#9d174d' },
+    { bg: '#fef9c3', text: '#854d0e' },
+    { bg: '#ede9fe', text: '#5b21b6' },
+    { bg: '#ffedd5', text: '#9a3412' },
+  ];
+  const idx = name.split('').reduce((s, c) => s + c.charCodeAt(0), 0) % colors.length;
+  const { bg, text } = colors[idx];
+  return (
+    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ backgroundColor: bg, color: text }}>
+      {initials || '?'}
+    </div>
+  );
+}
+
+function ScorePill({ label, value }: { label: string; value: number }) {
+  const color = value >= 75 ? '#059669' : value >= 50 ? '#f59e0b' : value >= 25 ? '#f97316' : '#ef4444';
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</span>
+      <span className="text-sm font-bold tabular-nums" style={{ color }}>{Math.round(value)}</span>
+    </div>
+  );
+}
+
+function ConfidencePill({ level }: { level: string }) {
+  const cls =
+    level === 'High' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+    level === 'Medium' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+    'bg-gray-100 text-gray-500 border-gray-200';
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>
+      {level}
+    </span>
+  );
+}
 
 function IntelBullets({ items, color }: { items: string[]; color: string }) {
   if (items.length === 0) return null;
@@ -91,6 +138,8 @@ function CompanyIntelCard({
   onToggleTarget,
   conferenceId,
   onRefreshed,
+  avgCostPerUnit,
+  onOpenRecord,
 }: {
   company: ScoredCompany;
   intel: CompanyIntelRow | null;
@@ -98,8 +147,9 @@ function CompanyIntelCard({
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   conferenceId: number;
   onRefreshed: () => void;
+  avgCostPerUnit: number;
+  onOpenRecord: (type: 'attendee' | 'company', id: number) => void;
 }) {
-  const openRecord = useRecordDrawer();
   const [expanded, setExpanded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const tierConf = TIER_CONFIG[company.tier] ?? TIER_CONFIG['Monitor'];
@@ -107,7 +157,7 @@ function CompanyIntelCard({
 
   const hasRealIntel = intel && intel.summary !== null && intel.summary !== 'Generating…';
   const isGenerating = generating || intel?.summary === 'Generating…';
-
+  const pipelineValue = formatValuePill(company.wse, avgCostPerUnit);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -122,7 +172,6 @@ function CompanyIntelCard({
         toast.error(err.error ?? 'Failed to generate intel');
         return;
       }
-      // Endpoint returns immediately after writing stub — refresh to show spinner
       onRefreshed();
     } catch {
       toast.error('Failed to generate intel');
@@ -133,78 +182,81 @@ function CompanyIntelCard({
 
   return (
     <div className={`border ${tierConf.border} rounded-xl overflow-hidden bg-white flex flex-col`}>
-      {/* Card header */}
-      <div className="p-4 flex-1">
-        <div className="flex items-start gap-2">
+      {/* ── Header ── */}
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <CompanyAvatar name={company.company_name} />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center justify-between gap-2">
               {company.company_id ? (
                 <button
                   type="button"
-                  onClick={() => openRecord('company', company.company_id)}
-                  className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm text-left"
+                  onClick={() => onOpenRecord('company', company.company_id)}
+                  className="font-semibold text-gray-900 hover:text-brand-secondary transition-colors text-sm text-left truncate"
                 >
                   {company.company_name}
                 </button>
               ) : (
-                <span className="font-semibold text-gray-900 text-sm">{company.company_name}</span>
+                <span className="font-semibold text-gray-900 text-sm truncate">{company.company_name}</span>
               )}
-              {intel?.used_icp_fallback && (
-                <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5">
-                  ICP fallback
-                </span>
+              {/* Refresh / expand controls */}
+              {hasRealIntel && (
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={handleGenerate} disabled={generating} className="text-gray-300 hover:text-gray-500 transition-colors disabled:opacity-40" title="Refresh intel">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                  <button onClick={() => setExpanded(e => !e)} className="text-gray-300 hover:text-gray-500 transition-colors">
+                    <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
               )}
             </div>
-
-            {/* Summary preview */}
-            {isGenerating ? (
-              <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5">
-                <span className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin inline-block flex-shrink-0" />
-                Researching…
-              </p>
-            ) : hasRealIntel ? (
-              <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{intel!.summary}</p>
-            ) : null}
           </div>
-
-          {/* Expand / refresh buttons — only when intel exists */}
-          {hasRealIntel && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                onClick={handleGenerate}
-                disabled={generating}
-                className="text-gray-300 hover:text-gray-500 transition-colors disabled:opacity-40"
-                title="Refresh intel"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setExpanded(e => !e)}
-                className="text-gray-300 hover:text-gray-500 transition-colors"
-              >
-                <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* Generate Intel button — shown when no intel yet and not currently generating */}
-        {!hasRealIntel && !isGenerating && (
+        {/* ── Score row ── */}
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <div className="flex items-end gap-4">
+            <ScorePill label="ICP" value={company.icp_fit_score} />
+            <ScorePill label="Buyer" value={company.buyer_access_score} />
+            <ScorePill label="Relation" value={company.relationship_leverage_score} />
+            <ScorePill label="Opp" value={company.conference_opportunity_score} />
+          </div>
+          <ConfidencePill level={company.confidence_level} />
+        </div>
+
+        {/* ── Pipeline value ── */}
+        {pipelineValue && (
+          <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+            <span className="text-xs text-gray-400 font-medium">Pipeline influence</span>
+            <span className="text-sm font-bold text-brand-secondary">{pipelineValue}</span>
+          </div>
+        )}
+
+        {/* ── Intel state ── */}
+        {isGenerating ? (
+          <p className="text-xs text-gray-400 mt-3 flex items-center gap-1.5">
+            <span className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin inline-block flex-shrink-0" />
+            Researching…
+          </p>
+        ) : hasRealIntel ? (
+          <p className="text-xs text-gray-500 mt-3 leading-relaxed line-clamp-2">{intel!.summary}</p>
+        ) : (
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className={`mt-3 w-full text-xs font-medium py-1.5 px-3 rounded-lg border ${tierConf.border} ${tierConf.color} hover:${tierConf.bg} transition-colors disabled:opacity-40`}
+            className={`mt-3 w-full text-xs font-medium py-1.5 px-3 rounded-lg border ${tierConf.border} ${tierConf.color} transition-colors disabled:opacity-40`}
           >
             Generate Intel
           </button>
         )}
       </div>
 
-      {/* Expanded intel content */}
+      {/* ── Expanded intel content ── */}
       {expanded && hasRealIntel && (
         <div className="border-t border-gray-100 p-4 space-y-3">
           <p className="text-xs text-gray-600 leading-relaxed">{intel!.summary}</p>
@@ -213,7 +265,6 @@ function CompanyIntelCard({
           <IntelSection title="Buying Signals" items={intel!.buying_signals} color={dotColor} icon="💡" />
           <IntelSection title="Opening Angles" items={intel!.opening_angles} color={dotColor} icon="🎯" />
 
-          {/* Rep assignments */}
           {intel!.rep_names.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {intel!.rep_names.map(name => (
@@ -224,7 +275,6 @@ function CompanyIntelCard({
             </div>
           )}
 
-          {/* Attendees */}
           {intel!.attendees.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">At This Conference</p>
@@ -235,7 +285,7 @@ function CompanyIntelCard({
                     <div key={a.id} className="flex items-center gap-2 text-xs">
                       <button
                         type="button"
-                        onClick={() => openRecord('attendee', a.id)}
+                        onClick={() => onOpenRecord('attendee', a.id)}
                         className="text-gray-700 truncate flex-1 hover:text-brand-secondary transition-colors text-left"
                       >
                         {a.first_name} {a.last_name}{a.title ? ` · ${a.title}` : ''}
@@ -280,6 +330,8 @@ function TierSection({
   onToggleTarget,
   conferenceId,
   onRefreshed,
+  avgCostPerUnit,
+  onOpenRecord,
 }: {
   tier: string;
   companies: ScoredCompany[];
@@ -288,6 +340,8 @@ function TierSection({
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   conferenceId: number;
   onRefreshed: () => void;
+  avgCostPerUnit: number;
+  onOpenRecord: (type: 'attendee' | 'company', id: number) => void;
 }) {
   const config = TIER_CONFIG[tier] ?? TIER_CONFIG['Monitor'];
   const [sectionExpanded, setSectionExpanded] = useState(config.defaultExpanded);
@@ -320,18 +374,39 @@ function TierSection({
       </button>
 
       {sectionExpanded && (
-        <div className="grid grid-cols-2 gap-3">
-          {companies.map(company => (
-            <CompanyIntelCard
-              key={company.company_id}
-              company={company}
-              intel={intelMap.get(company.company_id) ?? null}
-              targetMap={targetMap}
-              onToggleTarget={onToggleTarget}
-              conferenceId={conferenceId}
-              onRefreshed={onRefreshed}
-            />
-          ))}
+        <div className="flex gap-3">
+          {/* Left column — odd-indexed companies */}
+          <div className="flex-1 flex flex-col gap-3">
+            {companies.filter((_, i) => i % 2 === 0).map(company => (
+              <CompanyIntelCard
+                key={company.company_id}
+                company={company}
+                intel={intelMap.get(company.company_id) ?? null}
+                targetMap={targetMap}
+                onToggleTarget={onToggleTarget}
+                conferenceId={conferenceId}
+                onRefreshed={onRefreshed}
+                avgCostPerUnit={avgCostPerUnit}
+                onOpenRecord={onOpenRecord}
+              />
+            ))}
+          </div>
+          {/* Right column — even-indexed companies */}
+          <div className="flex-1 flex flex-col gap-3">
+            {companies.filter((_, i) => i % 2 === 1).map(company => (
+              <CompanyIntelCard
+                key={company.company_id}
+                company={company}
+                intel={intelMap.get(company.company_id) ?? null}
+                targetMap={targetMap}
+                onToggleTarget={onToggleTarget}
+                conferenceId={conferenceId}
+                onRefreshed={onRefreshed}
+                avgCostPerUnit={avgCostPerUnit}
+                onOpenRecord={onOpenRecord}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -347,6 +422,10 @@ export function TargetIntelTab({
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
 }) {
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const openRecord = useCallback((type: 'attendee' | 'company', id: number) => setRecordDrawer({ type, id }), []);
+  const closeRecord = useCallback(() => setRecordDrawer(null), []);
   const [scoredCompanies, setScoredCompanies] = useState<ScoredCompany[]>([]);
   const [intelMap, setIntelMap] = useState<Map<number, CompanyIntelRow>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -361,7 +440,7 @@ export function TargetIntelTab({
     ]);
 
     const [targetingData, intelData] = await Promise.all([
-      targetingRes?.ok ? (targetingRes.json() as Promise<{ companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string }> }>) : Promise.resolve(null),
+      targetingRes?.ok ? (targetingRes.json() as Promise<{ companies?: Array<{ company_id: number; company_name: string; target_priority_tier_key: string; icp_fit_score: number; buyer_access_score: number; relationship_leverage_score: number; conference_opportunity_score: number; confidence_level: string; wse: number | null }> }>) : Promise.resolve(null),
       intelRes?.ok ? (intelRes.json() as Promise<{ intel?: CompanyIntelRow[] }>) : Promise.resolve(null),
     ]);
 
@@ -372,6 +451,12 @@ export function TargetIntelTab({
           company_id: c.company_id,
           company_name: c.company_name,
           tier: tierKeyToLabel(c.target_priority_tier_key),
+          icp_fit_score: c.icp_fit_score ?? 0,
+          buyer_access_score: c.buyer_access_score ?? 0,
+          relationship_leverage_score: c.relationship_leverage_score ?? 0,
+          conference_opportunity_score: c.conference_opportunity_score ?? 0,
+          confidence_level: c.confidence_level ?? 'Low',
+          wse: c.wse ?? null,
         }));
       setScoredCompanies(companies);
     }
@@ -443,22 +528,59 @@ export function TargetIntelTab({
   }
 
   return (
-    <div className="space-y-8">
-      {TIER_ORDER.map(tier => {
-        const companies = byTier.get(tier) ?? [];
-        return (
-          <TierSection
-            key={tier}
-            tier={tier}
-            companies={companies}
-            intelMap={intelMap}
-            targetMap={targetMap}
-            onToggleTarget={onToggleTarget}
-            conferenceId={conferenceId}
-            onRefreshed={loadData}
-          />
-        );
-      })}
-    </div>
+    <>
+      <div className="space-y-8">
+        {TIER_ORDER.map(tier => {
+          const companies = byTier.get(tier) ?? [];
+          return (
+            <TierSection
+              key={tier}
+              tier={tier}
+              companies={companies}
+              intelMap={intelMap}
+              targetMap={targetMap}
+              onToggleTarget={onToggleTarget}
+              conferenceId={conferenceId}
+              onRefreshed={loadData}
+              avgCostPerUnit={avgCostPerUnit}
+              onOpenRecord={openRecord}
+            />
+          );
+        })}
+      </div>
+
+      {/* Record drawer — slides in from right, same pattern as MyDebriefDrawer */}
+      {recordDrawer != null && (
+        <div className="sm:hidden fixed inset-0 z-[69] bg-black/30" onClick={closeRecord} />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[70] flex flex-col overflow-hidden transition-all ease-out ${
+          recordDrawer != null ? 'w-full sm:w-[420px]' : 'w-0'
+        }`}
+        style={{ transitionDuration: '200ms' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {recordDrawer != null && (
+          <>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0 bg-white">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                {recordDrawer.type === 'company' ? 'Company' : 'Attendee'}
+              </span>
+              <button type="button" onClick={closeRecord} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              key={`${recordDrawer.type}-${recordDrawer.id}`}
+              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}?embed=true`}
+              className="flex-1 border-0 w-full"
+              title={`${recordDrawer.type} record`}
+            />
+          </>
+        )}
+      </div>
+    </>
   );
 }

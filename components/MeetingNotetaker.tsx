@@ -392,21 +392,20 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [showMobileTools, setShowMobileTools] = useState(false);
 
   // Templates for manual capture
-  const [painPointTemplates, setPainPointTemplates] = useState<ConfigOption[]>([]);
-  const [buyingSignalTemplates, setBuyingSignalTemplates] = useState<ConfigOption[]>([]);
+  const [painPointTemplates, setPainPointTemplates] = useState<string[]>([]);
+  const [buyingSignalTemplates, setBuyingSignalTemplates] = useState<string[]>([]);
   const [manualInsightText, setManualInsightText] = useState<{ pain_point: string; buying_signal: string }>({ pain_point: '', buying_signal: '' });
 
   // Load initial data
   useEffect(() => {
     async function load() {
       try {
-        const [meetingDetailRes, notesRes, usersRes, tasksRes, ppTemplatesRes, bsTemplatesRes] = await Promise.all([
+        const [meetingDetailRes, notesRes, usersRes, tasksRes, icpConfigRes] = await Promise.all([
           fetch(`/api/meetings/${meetingId}`),
           fetch(`/api/meetings/${meetingId}/notes`),
           fetch('/api/users'),
           fetch(`/api/meetings/${meetingId}/tasks`),
-          fetch('/api/config?category=pain_point_template'),
-          fetch('/api/config?category=buying_signal_template'),
+          fetch('/api/icp-config'),
         ]);
 
         if (meetingDetailRes.ok) {
@@ -446,13 +445,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           setAllUsers(users);
         }
 
-        if (ppTemplatesRes.ok) {
-          const pp: ConfigOption[] = await ppTemplatesRes.json();
-          setPainPointTemplates(pp.filter(t => t.is_active !== 0));
-        }
-        if (bsTemplatesRes.ok) {
-          const bs: ConfigOption[] = await bsTemplatesRes.json();
-          setBuyingSignalTemplates(bs.filter(t => t.is_active !== 0));
+        if (icpConfigRes.ok) {
+          const icpConfig: { painPoints: string[]; triggerEvents: string[] } = await icpConfigRes.json();
+          setPainPointTemplates(icpConfig.painPoints);
+          setBuyingSignalTemplates(icpConfig.triggerEvents);
         }
 
         if (tasksRes.ok) {
@@ -1552,20 +1548,36 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <span className="text-[11px] font-medium text-gray-600">Pain points</span>
                 </div>
 
+                {/* Free-text input */}
+                <input
+                  type="text"
+                  value={manualInsightText.pain_point}
+                  onChange={e => setManualInsightText(prev => ({ ...prev, pain_point: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualInsight('pain_point', manualInsightText.pain_point);
+                      setManualInsightText(prev => ({ ...prev, pain_point: '' }));
+                    }
+                  }}
+                  placeholder="Type a pain point and press Enter…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 placeholder-gray-300 mb-2"
+                />
+
                 {/* Quick-tap templates */}
                 {painPointTemplates.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-2">
                     {painPointTemplates.map(t => {
-                      const alreadyAdded = insights.some(i => i.source === 'manual' && i.insight_type === 'pain_point' && i.content === t.value);
+                      const alreadyAdded = insights.some(i => i.source === 'manual' && i.insight_type === 'pain_point' && i.content === t);
                       return (
                         <button
-                          key={t.id}
+                          key={t}
                           disabled={alreadyAdded}
-                          onClick={() => handleAddManualInsight('pain_point', t.value)}
+                          onClick={() => handleAddManualInsight('pain_point', t)}
                           style={{ background: '#FAECE7', border: '0.5px solid #F5C4B3', color: '#993C1D', opacity: alreadyAdded ? 0.4 : 1 }}
                           className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-opacity"
                         >
-                          {t.value}
+                          {t}
                         </button>
                       );
                     })}
@@ -1590,47 +1602,47 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     ))}
                   </div>
                 )}
-
-                {/* Free-text input */}
-                <input
-                  type="text"
-                  value={manualInsightText.pain_point}
-                  onChange={e => setManualInsightText(prev => ({ ...prev, pain_point: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddManualInsight('pain_point', manualInsightText.pain_point);
-                      setManualInsightText(prev => ({ ...prev, pain_point: '' }));
-                    }
-                  }}
-                  placeholder="Type a pain point and press Enter…"
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 placeholder-gray-300"
-                />
               </div>
 
-              {/* ── Buying Signals ── */}
+              {/* ── Trigger Events & Buying Signals ── */}
               <div className="border-t border-gray-100 pt-4">
                 <div className="flex items-center gap-1.5 mb-2">
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="#1D9E75" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
-                  <span className="text-[11px] font-medium text-gray-600">Buying signals</span>
+                  <span className="text-[11px] font-medium text-gray-600">Trigger Events & Buying Signals</span>
                 </div>
+
+                {/* Free-text input */}
+                <input
+                  type="text"
+                  value={manualInsightText.buying_signal}
+                  onChange={e => setManualInsightText(prev => ({ ...prev, buying_signal: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualInsight('buying_signal', manualInsightText.buying_signal);
+                      setManualInsightText(prev => ({ ...prev, buying_signal: '' }));
+                    }
+                  }}
+                  placeholder="Type a buying signal and press Enter…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-300 placeholder-gray-300 mb-2"
+                />
 
                 {/* Quick-tap templates */}
                 {buyingSignalTemplates.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-2">
                     {buyingSignalTemplates.map(t => {
-                      const alreadyAdded = insights.some(i => i.source === 'manual' && i.insight_type === 'buying_signal' && i.content === t.value);
+                      const alreadyAdded = insights.some(i => i.source === 'manual' && i.insight_type === 'buying_signal' && i.content === t);
                       return (
                         <button
-                          key={t.id}
+                          key={t}
                           disabled={alreadyAdded}
-                          onClick={() => handleAddManualInsight('buying_signal', t.value)}
+                          onClick={() => handleAddManualInsight('buying_signal', t)}
                           style={{ background: '#E1F5EE', border: '0.5px solid #9FE1CB', color: '#0F6E56', opacity: alreadyAdded ? 0.4 : 1 }}
                           className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-opacity"
                         >
-                          {t.value}
+                          {t}
                         </button>
                       );
                     })}
@@ -1655,22 +1667,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     ))}
                   </div>
                 )}
-
-                {/* Free-text input */}
-                <input
-                  type="text"
-                  value={manualInsightText.buying_signal}
-                  onChange={e => setManualInsightText(prev => ({ ...prev, buying_signal: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddManualInsight('buying_signal', manualInsightText.buying_signal);
-                      setManualInsightText(prev => ({ ...prev, buying_signal: '' }));
-                    }
-                  }}
-                  placeholder="Type a buying signal and press Enter…"
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-300 placeholder-gray-300"
-                />
               </div>
 
             </div>

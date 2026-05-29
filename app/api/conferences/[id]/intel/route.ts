@@ -88,10 +88,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (allUserIds.size > 0) {
       const uidArr = Array.from(allUserIds);
       const userRows = await db.execute({
-        sql: `SELECT id, display_name FROM users WHERE id IN (${uidArr.map(() => '?').join(',')})`,
+        sql: `SELECT config_id, display_name FROM users WHERE config_id IN (${uidArr.map(() => '?').join(',')})`,
         args: uidArr,
       }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
-      for (const r of userRows.rows) userNameMap.set(Number(r.id), String(r.display_name));
+      for (const r of userRows.rows) userNameMap.set(Number(r.config_id), String(r.display_name));
     }
 
     // Get attendees for these companies at this conference
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         used_icp_fallback: Boolean(r.used_icp_fallback),
         generated_at: r.generated_at as string | null,
         attendees: attendeesByCompany.get(cid) ?? [],
-        rep_names: uids.map(uid => userNameMap.get(uid) ?? String(uid)),
+        rep_names: uids.map(uid => userNameMap.get(uid)).filter(Boolean) as string[],
       };
     });
 
