@@ -925,4 +925,7 @@ export const migrations: string[] = [
     UNIQUE(conference_id, company_id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_conf_company_intel_conf ON conference_company_intel(conference_id)`,
+  `ALTER TABLE conferences ADD COLUMN intel_job_status TEXT`,
+  `ALTER TABLE conferences ADD COLUMN intel_job_completed INTEGER DEFAULT 0`,
+  `ALTER TABLE conferences ADD COLUMN intel_job_total INTEGER DEFAULT 0`,
 ];

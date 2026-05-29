@@ -180,10 +180,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     };
     intelProcessingState.set(key, state);
 
-    // Increment refresh count
+    // Increment refresh count and mark job as running (DB-persisted so all worker instances can read it)
     await db.execute({
-      sql: `UPDATE conferences SET intel_refresh_count = COALESCE(intel_refresh_count, 0) + 1, intel_last_refresh_at = datetime('now') WHERE id = ?`,
-      args: [conferenceId],
+      sql: `UPDATE conferences SET
+        intel_refresh_count = COALESCE(intel_refresh_count, 0) + 1,
+        intel_last_refresh_at = datetime('now'),
+        intel_job_status = 'running',
+        intel_job_completed = 0,
+        intel_job_total = ?
+      WHERE id = ?`,
+      args: [companies.length, conferenceId],
     }).catch(() => {});
 
     // Keep the Vercel function alive until background processing completes
@@ -216,7 +222,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         for (let i = 0; i < companies.length; i += BATCH_SIZE) {
           const batch = companies.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map(async company => {
-            // Insert a stub record first — so partial results always appear in the UI
+            // Insert a stub record first — always reset summary so in-progress is visible
             await db.execute({
               sql: `INSERT INTO conference_company_intel
                       (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
@@ -224,10 +230,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                     ON CONFLICT(conference_id, company_id) DO UPDATE SET
                       company_name = excluded.company_name,
                       tier = excluded.tier,
+                      summary = 'Generating…',
+                      pain_point_signals = '[]',
+                      trigger_events = '[]',
+                      buying_signals = '[]',
+                      opening_angles = '[]',
                       generated_at = excluded.generated_at`,
               args: [
                 conferenceId, company.company_id, company.company_name, company.tier,
-                'Generating…', JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), 0,
+                'Generating…', '[]', '[]', '[]', '[]', 0,
               ],
             }).catch(() => {});
 
@@ -281,14 +292,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             state.completed++;
           }));
 
+          // Write progress to DB after each batch so all worker instances can see it
+          await db.execute({
+            sql: `UPDATE conferences SET intel_job_completed = ? WHERE id = ?`,
+            args: [state.completed, conferenceId],
+          }).catch(() => {});
+
           if (i + BATCH_SIZE < companies.length) {
             await new Promise(r => setTimeout(r, 500));
           }
         }
         state.status = 'done';
+        await db.execute({
+          sql: `UPDATE conferences SET intel_job_status = 'done', intel_job_completed = ? WHERE id = ?`,
+          args: [state.completed, conferenceId],
+        }).catch(() => {});
       } catch (err) {
         state.status = 'error';
         state.error = err instanceof Error ? err.message : 'Unknown error';
+        await db.execute({
+          sql: `UPDATE conferences SET intel_job_status = 'error' WHERE id = ?`,
+          args: [conferenceId],
+        }).catch(() => {});
       }
     })());
 
