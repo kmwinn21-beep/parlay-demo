@@ -67,11 +67,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const repNames: string[] = [];
     if (userIds.length > 0) {
       const userRows = await db.execute({
-        sql: `SELECT id, display_name FROM users WHERE id IN (${userIds.map(() => '?').join(',')})`,
+        sql: `SELECT config_id, display_name FROM users WHERE config_id IN (${userIds.map(() => '?').join(',')})`,
         args: [...userIds],
       }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
-      const nameMap = new Map(userRows.rows.map(r => [Number(r.id), String(r.display_name)]));
-      repNames.push(...userIds.map(uid => nameMap.get(uid) ?? String(uid)));
+      const nameMap = new Map(userRows.rows.map(r => [Number(r.config_id), String(r.display_name)]));
+      repNames.push(...userIds.map(uid => nameMap.get(uid)).filter(Boolean) as string[]);
     }
 
     // Get ICP settings
