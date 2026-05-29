@@ -922,6 +922,29 @@ export default function AdminPage() {
   const [savedTagline, setSavedTagline] = useState('');
   const [savingTagline, setSavingTagline] = useState(false);
 
+  // Company information
+  const [companyInfoDraft, setCompanyInfoDraft] = useState({
+    company_info_name: '',
+    company_info_website: '',
+    company_info_linkedin: '',
+    company_info_twitter: '',
+    company_info_facebook: '',
+    company_info_instagram: '',
+    company_info_youtube: '',
+    company_info_tiktok: '',
+  });
+  const [savedCompanyInfo, setSavedCompanyInfo] = useState({
+    company_info_name: '',
+    company_info_website: '',
+    company_info_linkedin: '',
+    company_info_twitter: '',
+    company_info_facebook: '',
+    company_info_instagram: '',
+    company_info_youtube: '',
+    company_info_tiktok: '',
+  });
+  const [savingCompanyInfo, setSavingCompanyInfo] = useState(false);
+
   // Permissions tab
   const [allowUpload, setAllowUpload] = useState(true);
   const [loadingPerms, setLoadingPerms] = useState(false);
@@ -1750,6 +1773,18 @@ export default function AdminPage() {
       setFontKey(fk); setSavedFontKey(fk);
       const tl = data['tagline'] ?? '';
       setTaglineInput(tl); setSavedTagline(tl);
+      const ci = {
+        company_info_name: data['company_info_name'] ?? '',
+        company_info_website: data['company_info_website'] ?? '',
+        company_info_linkedin: data['company_info_linkedin'] ?? '',
+        company_info_twitter: data['company_info_twitter'] ?? '',
+        company_info_facebook: data['company_info_facebook'] ?? '',
+        company_info_instagram: data['company_info_instagram'] ?? '',
+        company_info_youtube: data['company_info_youtube'] ?? '',
+        company_info_tiktok: data['company_info_tiktok'] ?? '',
+      };
+      setCompanyInfoDraft(ci);
+      setSavedCompanyInfo(ci);
     } catch { toast.error('Failed to load brand colors.'); }
     finally { setLoadingBrand(false); }
   };
@@ -1783,6 +1818,24 @@ export default function AdminPage() {
       toast.success(taglineInput.trim() ? 'Tagline saved.' : 'Tagline reset to default.');
     } catch { toast.error('Failed to save tagline.'); }
     finally { setSavingTagline(false); }
+  };
+
+  const handleSaveCompanyInfo = async () => {
+    setSavingCompanyInfo(true);
+    try {
+      await Promise.all(
+        (Object.entries(companyInfoDraft) as [string, string][]).map(([key, value]) =>
+          fetch('/api/admin/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value: value.trim() }),
+          })
+        )
+      );
+      setSavedCompanyInfo({ ...companyInfoDraft });
+      toast.success('Company information saved.');
+    } catch { toast.error('Failed to save company information.'); }
+    finally { setSavingCompanyInfo(false); }
   };
 
   useEffect(() => {
@@ -2383,6 +2436,70 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             <p className="text-sm text-gray-500">Customize the application&apos;s primary brand colors. Changes apply as a live preview instantly — click Save to persist for all users.</p>
+
+            {/* Company Information */}
+            <div className="card">
+              <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Company Information</h2>
+              <p className="text-sm text-gray-500 mb-4">Your organization&apos;s name, website, and social media profiles.</p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Company Name</label>
+                    <input
+                      type="text"
+                      value={companyInfoDraft.company_info_name}
+                      onChange={e => setCompanyInfoDraft(p => ({ ...p, company_info_name: e.target.value }))}
+                      placeholder="Acme Corp"
+                      className="input-field text-sm w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Website</label>
+                    <input
+                      type="url"
+                      value={companyInfoDraft.company_info_website}
+                      onChange={e => setCompanyInfoDraft(p => ({ ...p, company_info_website: e.target.value }))}
+                      placeholder="https://www.example.com"
+                      className="input-field text-sm w-full"
+                    />
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-medium text-gray-500 mb-3">Social Media</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {([
+                      { key: 'company_info_linkedin', label: 'LinkedIn', placeholder: 'https://linkedin.com/company/...' },
+                      { key: 'company_info_twitter', label: 'X / Twitter', placeholder: 'https://x.com/...' },
+                      { key: 'company_info_facebook', label: 'Facebook', placeholder: 'https://facebook.com/...' },
+                      { key: 'company_info_instagram', label: 'Instagram', placeholder: 'https://instagram.com/...' },
+                      { key: 'company_info_youtube', label: 'YouTube', placeholder: 'https://youtube.com/...' },
+                      { key: 'company_info_tiktok', label: 'TikTok', placeholder: 'https://tiktok.com/@...' },
+                    ] as const).map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                        <input
+                          type="url"
+                          value={companyInfoDraft[key]}
+                          onChange={e => setCompanyInfoDraft(p => ({ ...p, [key]: e.target.value }))}
+                          placeholder={placeholder}
+                          className="input-field text-sm w-full"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleSaveCompanyInfo}
+                  disabled={savingCompanyInfo || JSON.stringify(companyInfoDraft) === JSON.stringify(savedCompanyInfo)}
+                  className="btn-primary text-sm"
+                >
+                  {savingCompanyInfo ? 'Saving…' : 'Save Company Information'}
+                </button>
+              </div>
+            </div>
 
             {/* Live preview */}
             <div className="card overflow-hidden p-0">
