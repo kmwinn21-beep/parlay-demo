@@ -66,6 +66,24 @@ function fallbackResult(companyName: string, companyType: string | null, industr
   };
 }
 
+// Extracts the last valid JSON object from Claude's response text,
+// handling markdown code fences and multi-block text responses.
+function extractJson(text: string): Record<string, unknown> | null {
+  // Strip markdown code fences
+  const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '');
+  // Try each { from rightmost to leftmost, return first valid parse
+  let pos = stripped.lastIndexOf('{');
+  while (pos >= 0) {
+    try {
+      const parsed = JSON.parse(stripped.slice(pos)) as Record<string, unknown>;
+      return parsed;
+    } catch {
+      pos = stripped.lastIndexOf('{', pos - 1);
+    }
+  }
+  return null;
+}
+
 // Single-company function — used by /intel/generate for per-card refresh
 export async function generateCompanyIntel(input: CompanyIntelInput): Promise<CompanyIntelResult> {
   const usedIcpFallback = input.icpPainPoints.length === 0 || input.icpTriggerEvents.length === 0;
@@ -102,8 +120,8 @@ Return ONLY valid JSON, no markdown.`;
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
       tools: [{ type: 'web_search_20260209' as const, name: 'web_search' }],
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
@@ -114,26 +132,18 @@ Return ONLY valid JSON, no markdown.`;
       if (block.type === 'text') rawText += block.text;
     }
 
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error('[generateCompanyIntel] No JSON in response for', input.companyName, '| stop_reason:', response.stop_reason, '| rawText length:', rawText.length);
+    const parsed = extractJson(rawText);
+    if (!parsed) {
+      console.error('[generateCompanyIntel] No JSON in response for', input.companyName, '| stop_reason:', response.stop_reason, '| rawText:', rawText.slice(0, 300));
       return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      summary?: string;
-      pain_point_signals?: string[];
-      trigger_events?: string[];
-      buying_signals?: string[];
-      opening_angles?: string[];
-    };
-
     return {
-      summary: parsed.summary ?? '',
-      pain_point_signals: parsed.pain_point_signals ?? [],
-      trigger_events: parsed.trigger_events ?? [],
-      buying_signals: parsed.buying_signals ?? [],
-      opening_angles: parsed.opening_angles ?? [],
+      summary: (parsed.summary as string) ?? '',
+      pain_point_signals: (parsed.pain_point_signals as string[]) ?? [],
+      trigger_events: (parsed.trigger_events as string[]) ?? [],
+      buying_signals: (parsed.buying_signals as string[]) ?? [],
+      opening_angles: (parsed.opening_angles as string[]) ?? [],
       used_icp_fallback: usedIcpFallback,
     };
   } catch (err) {
