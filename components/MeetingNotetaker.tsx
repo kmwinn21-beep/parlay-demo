@@ -1548,6 +1548,22 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <span className="text-[11px] font-medium text-gray-600">Pain points</span>
                 </div>
 
+                {/* Free-text input */}
+                <input
+                  type="text"
+                  value={manualInsightText.pain_point}
+                  onChange={e => setManualInsightText(prev => ({ ...prev, pain_point: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualInsight('pain_point', manualInsightText.pain_point);
+                      setManualInsightText(prev => ({ ...prev, pain_point: '' }));
+                    }
+                  }}
+                  placeholder="Type a pain point and press Enter…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 placeholder-gray-300 mb-2"
+                />
+
                 {/* Quick-tap templates */}
                 {painPointTemplates.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-2">
@@ -1586,22 +1602,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     ))}
                   </div>
                 )}
-
-                {/* Free-text input */}
-                <input
-                  type="text"
-                  value={manualInsightText.pain_point}
-                  onChange={e => setManualInsightText(prev => ({ ...prev, pain_point: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddManualInsight('pain_point', manualInsightText.pain_point);
-                      setManualInsightText(prev => ({ ...prev, pain_point: '' }));
-                    }
-                  }}
-                  placeholder="Type a pain point and press Enter…"
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 placeholder-gray-300"
-                />
               </div>
 
               {/* ── Trigger Events & Buying Signals ── */}
@@ -1612,6 +1612,22 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   </svg>
                   <span className="text-[11px] font-medium text-gray-600">Trigger Events & Buying Signals</span>
                 </div>
+
+                {/* Free-text input */}
+                <input
+                  type="text"
+                  value={manualInsightText.buying_signal}
+                  onChange={e => setManualInsightText(prev => ({ ...prev, buying_signal: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualInsight('buying_signal', manualInsightText.buying_signal);
+                      setManualInsightText(prev => ({ ...prev, buying_signal: '' }));
+                    }
+                  }}
+                  placeholder="Type a buying signal and press Enter…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-300 placeholder-gray-300 mb-2"
+                />
 
                 {/* Quick-tap templates */}
                 {buyingSignalTemplates.length > 0 && (
@@ -1651,22 +1667,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     ))}
                   </div>
                 )}
-
-                {/* Free-text input */}
-                <input
-                  type="text"
-                  value={manualInsightText.buying_signal}
-                  onChange={e => setManualInsightText(prev => ({ ...prev, buying_signal: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddManualInsight('buying_signal', manualInsightText.buying_signal);
-                      setManualInsightText(prev => ({ ...prev, buying_signal: '' }));
-                    }
-                  }}
-                  placeholder="Type a buying signal and press Enter…"
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-300 placeholder-gray-300"
-                />
               </div>
 
             </div>
