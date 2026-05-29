@@ -11,9 +11,8 @@ import { ByRepTab } from './pre-conference/ByRepTab';
 import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
 import { TargetRecommendationsTab } from './pre-conference/TargetRecommendationsTab';
-import { ParlayRecommendationsTab } from './pre-conference/ParlayRecommendationsTab';
+import { TargetIntelTab } from './pre-conference/TargetIntelTab';
 import { ProductIcpTab } from './pre-conference/ProductIcpTab';
-export type { ParlayRec, ParlayWatchItem, ParlayRecsData } from '@/app/api/conferences/[id]/parlay-recommendations/route';
 export type { StrategyAssessment } from '@/lib/strategyAssessment';
 
 export interface PreConferenceSummary {
@@ -224,7 +223,7 @@ export interface PreConferenceData {
   industryOptions: Array<{ id: number; value: string }>;
 }
 
-type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'target_recommendations' | 'parlay_recommendations';
+type TabKey = 'landscape' | 'icp' | 'meetings' | 'social' | 'by-rep' | 'relationships' | 'product_icp' | 'conference_targets' | 'target_recommendations' | 'target_intel';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'landscape', label: 'Landscape' },
   { key: 'icp', label: 'ICP Companies' },
@@ -235,7 +234,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'product_icp', label: 'Product ICP' },
   { key: 'conference_targets', label: 'Conference Targets' },
   { key: 'target_recommendations', label: 'Target Recommendations' },
-  { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
+  { key: 'target_intel', label: 'Target Intel' },
 ];
 
 function StatPill({ label, value }: { label: string; value: number | string }) {
@@ -537,8 +536,8 @@ export function PreConferenceReview({ conferenceId, conferenceName, targetsReadO
                   onAddTargetWithTier={targetsReadOnly ? undefined : addTargetWithTier}
                 />
               )}
-              {activeTab === 'parlay_recommendations' && (
-                <ParlayRecommendationsTab
+              {activeTab === 'target_intel' && (
+                <TargetIntelTab
                   conferenceId={conferenceId}
                   targetMap={targetMap}
                   onToggleTarget={toggleTarget}

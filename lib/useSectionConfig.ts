@@ -50,7 +50,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'product_icp', label: 'Product ICP' },
     { key: 'conference_targets', label: 'Conference Targets' },
     { key: 'target_recommendations', label: 'Target Recommendations' },
-    { key: 'parlay_recommendations', label: 'Parlay Recommendations' },
+    { key: 'target_intel', label: 'Target Intel' },
   ],
   post_conference_review: [
     { key: 'summary', label: 'Summary' },

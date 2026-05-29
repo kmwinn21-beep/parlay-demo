@@ -887,6 +887,30 @@ export async function seedFreshDb(client: Client): Promise<void> {
     }).catch(() => {})
   ));
 
+  // conference_company_intel table
+  await client.execute({
+    sql: `CREATE TABLE IF NOT EXISTS conference_company_intel (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      company_name TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      summary TEXT,
+      pain_point_signals TEXT,
+      trigger_events TEXT,
+      buying_signals TEXT,
+      opening_angles TEXT,
+      used_icp_fallback INTEGER DEFAULT 0,
+      generated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(conference_id, company_id)
+    )`,
+    args: [],
+  }).catch(() => {});
+  await client.execute({
+    sql: `CREATE INDEX IF NOT EXISTS idx_conf_company_intel_conf ON conference_company_intel(conference_id)`,
+    args: [],
+  }).catch(() => {});
+
   // Stamp _schema_version so first getDb() call knows this DB is fully migrated
   await client.execute({
     sql: `CREATE TABLE IF NOT EXISTS _schema_version (version INTEGER NOT NULL DEFAULT 0)`,
