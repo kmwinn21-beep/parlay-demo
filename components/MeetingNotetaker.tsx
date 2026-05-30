@@ -2101,138 +2101,162 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             </div>
           </div>
 
-          {/* ── Meeting Intel Panel ── */}
-          {showIntelPanel && (
-            <div className="border-l border-gray-200 lg:w-[300px] flex-shrink-0 flex flex-col overflow-hidden hidden lg:flex">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Company Intel</span>
+        </div>
+      </div>
+
+      {/* ── Meeting Intel Drawer — slides in from right ── */}
+      {showIntelPanel && (
+        <div className="fixed inset-0 z-[65] flex justify-end bg-black/30" onClick={() => setShowIntelPanel(false)}>
+          <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          <div
+            className="h-full w-full max-w-[400px] bg-white flex flex-col overflow-hidden shadow-2xl"
+            style={{ animation: 'slideInFromRight 200ms ease-out' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Company Intel</h3>
+                  {meeting?.company_name && (
+                    <p className="text-xs text-gray-500">{meeting.company_name}</p>
+                  )}
                 </div>
-                <button onClick={() => setShowIntelPanel(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              </div>
+              <div className="flex items-center gap-2">
+                {companyIntel && companyIntel.summary && companyIntel.summary !== 'Generating…' && (
+                  <button
+                    onClick={() => {
+                      setCompanyIntel(null);
+                      setIntelLoading(true);
+                      setIntelGenerating(false);
+                      handleGetMeetingIntel();
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-amber-600 transition-colors"
+                    title="Refresh intel"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowIntelPanel(false)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-
-              <div className="overflow-y-auto flex-1 p-4">
-                {(intelLoading && !companyIntel) && (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-xs text-gray-500">Loading intel…</p>
-                  </div>
-                )}
-
-                {intelGenerating && (!companyIntel || companyIntel.summary === 'Generating…') && (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-                    <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-xs text-gray-500">Researching {meeting?.company_name}…</p>
-                    <p className="text-[10px] text-gray-400">This takes 15–30 seconds</p>
-                  </div>
-                )}
-
-                {companyIntel && companyIntel.summary && companyIntel.summary !== 'Generating…' && (
-                  <div className="space-y-4">
-                    {/* Company header */}
-                    <div>
-                      <p className="text-xs font-semibold text-gray-800">{companyIntel.company_name}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{companyIntel.tier} · {companyIntel.generated_at ? new Date(companyIntel.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</p>
-                      {companyIntel.used_icp_fallback && (
-                        <span className="inline-block mt-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">ICP fallback used</span>
-                      )}
-                    </div>
-
-                    {/* Summary */}
-                    {companyIntel.summary && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Overview</p>
-                        <p className="text-xs text-gray-700 leading-relaxed">{companyIntel.summary}</p>
-                      </div>
-                    )}
-
-                    {/* Pain point signals */}
-                    {companyIntel.pain_point_signals.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Pain Point Signals</p>
-                        <ul className="space-y-1">
-                          {companyIntel.pain_point_signals.map((s, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
-                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                              {s}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Trigger events */}
-                    {companyIntel.trigger_events.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Trigger Events</p>
-                        <ul className="space-y-1">
-                          {companyIntel.trigger_events.map((s, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
-                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                              {s}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Buying signals */}
-                    {companyIntel.buying_signals.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Buying Signals</p>
-                        <ul className="space-y-1">
-                          {companyIntel.buying_signals.map((s, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
-                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-                              {s}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Opening angles */}
-                    {companyIntel.opening_angles.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Opening Angles</p>
-                        <ul className="space-y-1">
-                          {companyIntel.opening_angles.map((s, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
-                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-                              {s}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Refresh button */}
-                    <button
-                      onClick={() => {
-                        setCompanyIntel(null);
-                        setIntelLoading(true);
-                        setIntelGenerating(false);
-                        handleGetMeetingIntel();
-                      }}
-                      className="w-full text-[10px] text-gray-400 hover:text-amber-600 transition-colors text-center py-1"
-                    >
-                      ↻ Refresh intel
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
-          )}
 
+            {/* Drawer body */}
+            <div className="overflow-y-auto flex-1 px-5 py-5">
+              {(intelLoading && !companyIntel) && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-gray-500">Loading intel…</p>
+                </div>
+              )}
+
+              {intelGenerating && (!companyIntel || companyIntel.summary === 'Generating…') && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                  <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-gray-500">Researching {meeting?.company_name}…</p>
+                  <p className="text-xs text-gray-400 mt-1">This takes 15–30 seconds</p>
+                </div>
+              )}
+
+              {companyIntel && companyIntel.summary && companyIntel.summary !== 'Generating…' && (
+                <div className="space-y-5">
+                  {/* Tier + date */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-0.5">{companyIntel.tier}</span>
+                    {companyIntel.generated_at && (
+                      <span className="text-xs text-gray-400">
+                        Updated {new Date(companyIntel.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                    {companyIntel.used_icp_fallback && (
+                      <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">ICP fallback</span>
+                    )}
+                  </div>
+
+                  {/* Overview */}
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Overview</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">{companyIntel.summary}</p>
+                  </div>
+
+                  {/* Pain point signals */}
+                  {companyIntel.pain_point_signals.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Pain Point Signals</p>
+                      <ul className="space-y-2">
+                        {companyIntel.pain_point_signals.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Trigger events */}
+                  {companyIntel.trigger_events.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Trigger Events</p>
+                      <ul className="space-y-2">
+                        {companyIntel.trigger_events.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Buying signals */}
+                  {companyIntel.buying_signals.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Buying Signals</p>
+                      <ul className="space-y-2">
+                        {companyIntel.buying_signals.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Opening angles */}
+                  {companyIntel.opening_angles.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Opening Angles</p>
+                      <ul className="space-y-2">
+                        {companyIntel.opening_angles.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Record drawer — fixed, full viewport height, slides in from right */}
       {recordDrawer != null && (
