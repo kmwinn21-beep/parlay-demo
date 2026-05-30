@@ -1167,7 +1167,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
               recordingState === 'recording' ? 'border-red-400 bg-red-50 text-red-600' :
               recordingState === 'paused' ? 'border-yellow-400 bg-yellow-50 text-yellow-700' :
-              'border-gray-200 text-gray-600 hover:bg-gray-50'
+              'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
             }`}
             title={recordingState === 'recording' ? `Recording — ${formatTime(recordingElapsed)}` : 'Record audio'}
           >
