@@ -430,6 +430,7 @@ export function TargetIntelTab({
   const [intelMap, setIntelMap] = useState<Map<number, CompanyIntelRow>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   // Fetches both scored companies and intel — used on initial load only.
   // Targeting is expensive (per-attendee DB calls); never fetch it during polling.
@@ -520,15 +521,46 @@ export function TargetIntelTab({
     );
   }
 
-  // Group by tier
+  // Filter by search, then group by tier
+  const q = search.trim().toLowerCase();
+  const filteredCompanies = q
+    ? scoredCompanies.filter(c => c.company_name.toLowerCase().includes(q))
+    : scoredCompanies;
+
   const byTier = new Map<string, ScoredCompany[]>();
-  for (const c of scoredCompanies) {
+  for (const c of filteredCompanies) {
     if (!byTier.has(c.tier)) byTier.set(c.tier, []);
     byTier.get(c.tier)!.push(c);
   }
 
   return (
     <>
+      {/* Search bar — left-column width */}
+      <div className="w-full sm:w-[calc(50%-6px)] mb-4">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search companies…"
+            className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary/30 focus:border-brand-secondary placeholder-gray-400 bg-white"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="space-y-8">
         {TIER_ORDER.map(tier => {
           const companies = byTier.get(tier) ?? [];
@@ -547,6 +579,12 @@ export function TargetIntelTab({
             />
           );
         })}
+        {q && filteredCompanies.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+            <p className="text-sm font-medium text-gray-500">No companies match &ldquo;{search}&rdquo;</p>
+            <button onClick={() => setSearch('')} className="text-xs text-brand-secondary hover:underline">Clear search</button>
+          </div>
+        )}
       </div>
 
       {/* Record drawer — slides in from right, same pattern as MyDebriefDrawer */}
