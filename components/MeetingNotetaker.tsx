@@ -2239,7 +2239,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {!intelLoading && !intelGenerating && companyIntel !== null && (
+                {companyIntel !== null && companyIntel.summary !== null && companyIntel.summary !== undefined && companyIntel.summary !== 'Generating…' && !intelLoading && !intelGenerating && (
                   <button
                     onClick={() => {
                       setCompanyIntel(null);
@@ -2268,22 +2268,17 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
             {/* Drawer body */}
             <div className="overflow-y-auto flex-1 px-5 py-5">
-              {(intelLoading && !companyIntel) && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-gray-500">Loading intel…</p>
-                </div>
-              )}
-
-              {intelGenerating && (!companyIntel || companyIntel.summary === 'Generating…') && (
+              {(intelLoading || intelGenerating) && (companyIntel === null || companyIntel.summary === 'Generating…' || companyIntel.summary === null) && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
                   <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-gray-500">Researching {meeting?.company_name}…</p>
-                  <p className="text-xs text-gray-400 mt-1">This takes 15–30 seconds</p>
+                  {intelGenerating
+                    ? <><p className="text-sm text-gray-500">Researching {meeting?.company_name}…</p><p className="text-xs text-gray-400 mt-1">This takes 15–30 seconds</p></>
+                    : <p className="text-sm text-gray-500">Loading intel…</p>
+                  }
                 </div>
               )}
 
-              {!intelLoading && !intelGenerating && companyIntel !== null && (
+              {companyIntel !== null && companyIntel.summary !== null && companyIntel.summary !== undefined && companyIntel.summary !== 'Generating…' && (
                 <div className="space-y-5">
                   {/* Tier + date */}
                   <div className="flex items-center gap-2 flex-wrap">
