@@ -820,8 +820,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      // Fix 3: 15 attempts × 3s = 45s timeout; show explicit error instead of silent null
-      if (attempts > 15) {
+      // Fix 3: 25 attempts × 3s = 75s timeout; show explicit error instead of silent null
+      if (attempts > 25) {
         clearInterval(interval);
         setCompanyIntel(null);
         setIntelError('Intel generation timed out — the server may still be processing. Try clicking Generate again in a moment.');
