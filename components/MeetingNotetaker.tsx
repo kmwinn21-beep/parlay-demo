@@ -2106,12 +2106,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
       {/* ── Meeting Intel Drawer — slides in from right ── */}
       {showIntelPanel && (
-        <div className="fixed inset-0 z-[65] flex justify-end bg-black/30" onClick={() => setShowIntelPanel(false)}>
+        <div className="fixed inset-0 z-[65] flex justify-end pointer-events-none">
           <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div
-            className="h-full w-full max-w-[400px] bg-white flex flex-col overflow-hidden shadow-2xl"
+            className="h-full w-full max-w-[400px] bg-white flex flex-col overflow-hidden shadow-2xl pointer-events-auto"
             style={{ animation: 'slideInFromRight 200ms ease-out' }}
-            onClick={e => e.stopPropagation()}
           >
             {/* Drawer header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
