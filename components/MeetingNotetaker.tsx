@@ -55,6 +55,19 @@ interface MeetingContext {
   meeting_time: string | null;
 }
 
+interface CompanyIntelRow {
+  company_id: number;
+  company_name: string;
+  tier: string;
+  summary: string | null;
+  pain_point_signals: string[];
+  trigger_events: string[];
+  buying_signals: string[];
+  opening_angles: string[];
+  used_icp_fallback: boolean;
+  generated_at: string | null;
+}
+
 interface AttendeeResult {
   id: number;
   first_name: string;
@@ -395,6 +408,12 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [painPointTemplates, setPainPointTemplates] = useState<string[]>([]);
   const [buyingSignalTemplates, setBuyingSignalTemplates] = useState<string[]>([]);
   const [manualInsightText, setManualInsightText] = useState<{ pain_point: string; buying_signal: string }>({ pain_point: '', buying_signal: '' });
+
+  // Meeting intel panel
+  const [showIntelPanel, setShowIntelPanel] = useState(false);
+  const [companyIntel, setCompanyIntel] = useState<CompanyIntelRow | null>(null);
+  const [intelLoading, setIntelLoading] = useState(false);
+  const [intelGenerating, setIntelGenerating] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -786,6 +805,60 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights, selectedTaskIds, confirmSelectedTasksToApi]);
 
+  const handleGetMeetingIntel = useCallback(async () => {
+    if (!meeting?.company_id || !meeting?.conference_id) {
+      toast.error('No company associated with this meeting.');
+      return;
+    }
+    setShowIntelPanel(true);
+    setIntelLoading(true);
+    try {
+      // Check if intel already exists for this company
+      const intelRes = await fetch(`/api/conferences/${meeting.conference_id}/intel`);
+      if (intelRes.ok) {
+        const data = await intelRes.json() as { intel: CompanyIntelRow[] };
+        const existing = data.intel.find(r => r.company_id === meeting.company_id);
+        if (existing && existing.summary && existing.summary !== 'Generating…') {
+          setCompanyIntel(existing);
+          setIntelLoading(false);
+          return;
+        }
+        // Intel exists but is generating — show it and wait
+        if (existing && existing.summary === 'Generating…') {
+          setCompanyIntel(existing);
+        }
+      }
+      // No intel yet — trigger generation
+      setIntelGenerating(true);
+      const genRes = await fetch(`/api/conferences/${meeting.conference_id}/intel/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: meeting.company_id }),
+      });
+      if (!genRes.ok) throw new Error('Failed to start intel generation');
+      // Poll until done
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
+        const res = await fetch(`/api/conferences/${meeting.conference_id}/intel`).catch(() => null);
+        if (!res?.ok) return;
+        const data = await res.json() as { intel: CompanyIntelRow[] };
+        const row = data.intel.find(r => r.company_id === meeting.company_id);
+        if (row) setCompanyIntel(row);
+        if (row && row.summary && row.summary !== 'Generating…') {
+          clearInterval(poll);
+          setIntelGenerating(false);
+          setIntelLoading(false);
+        }
+      }, 3000);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to get meeting intel');
+      setIntelLoading(false);
+      setIntelGenerating(false);
+    }
+  }, [meeting]);
+
   const handleConfirmInsight = useCallback(async (insightId: number) => {
     try {
       const res = await fetch(`/api/meetings/${meetingId}/insights/${insightId}/confirm`, { method: 'PATCH' });
@@ -1114,6 +1187,32 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             </svg>
             {analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}
           </button>
+
+          {/* Get Meeting Intel */}
+          {meeting?.company_id && (
+            <button
+              onClick={handleGetMeetingIntel}
+              disabled={intelLoading || intelGenerating}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
+                showIntelPanel
+                  ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+              } disabled:opacity-50`}
+              title="Get company intel for this meeting"
+            >
+              {intelGenerating ? (
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              )}
+              {intelGenerating ? 'Generating…' : 'Get Meeting Intel'}
+            </button>
+          )}
 
           <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
 
@@ -2001,6 +2100,136 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               )}
             </div>
           </div>
+
+          {/* ── Meeting Intel Panel ── */}
+          {showIntelPanel && (
+            <div className="border-l border-gray-200 lg:w-[300px] flex-shrink-0 flex flex-col overflow-hidden hidden lg:flex">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Company Intel</span>
+                </div>
+                <button onClick={() => setShowIntelPanel(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-4">
+                {(intelLoading && !companyIntel) && (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-gray-500">Loading intel…</p>
+                  </div>
+                )}
+
+                {intelGenerating && (!companyIntel || companyIntel.summary === 'Generating…') && (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                    <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-gray-500">Researching {meeting?.company_name}…</p>
+                    <p className="text-[10px] text-gray-400">This takes 15–30 seconds</p>
+                  </div>
+                )}
+
+                {companyIntel && companyIntel.summary && companyIntel.summary !== 'Generating…' && (
+                  <div className="space-y-4">
+                    {/* Company header */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-800">{companyIntel.company_name}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{companyIntel.tier} · {companyIntel.generated_at ? new Date(companyIntel.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</p>
+                      {companyIntel.used_icp_fallback && (
+                        <span className="inline-block mt-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">ICP fallback used</span>
+                      )}
+                    </div>
+
+                    {/* Summary */}
+                    {companyIntel.summary && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Overview</p>
+                        <p className="text-xs text-gray-700 leading-relaxed">{companyIntel.summary}</p>
+                      </div>
+                    )}
+
+                    {/* Pain point signals */}
+                    {companyIntel.pain_point_signals.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Pain Point Signals</p>
+                        <ul className="space-y-1">
+                          {companyIntel.pain_point_signals.map((s, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Trigger events */}
+                    {companyIntel.trigger_events.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Trigger Events</p>
+                        <ul className="space-y-1">
+                          {companyIntel.trigger_events.map((s, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Buying signals */}
+                    {companyIntel.buying_signals.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Buying Signals</p>
+                        <ul className="space-y-1">
+                          {companyIntel.buying_signals.map((s, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Opening angles */}
+                    {companyIntel.opening_angles.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Opening Angles</p>
+                        <ul className="space-y-1">
+                          {companyIntel.opening_angles.map((s, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                              <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Refresh button */}
+                    <button
+                      onClick={() => {
+                        setCompanyIntel(null);
+                        setIntelLoading(true);
+                        setIntelGenerating(false);
+                        handleGetMeetingIntel();
+                      }}
+                      className="w-full text-[10px] text-gray-400 hover:text-amber-600 transition-colors text-center py-1"
+                    >
+                      ↻ Refresh intel
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
