@@ -45,6 +45,7 @@ import { getConferencePermissions } from '@/lib/conference-permissions';
 import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ClassifyTitleModal } from '@/components/ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
+import { MergeModal } from '@/components/MergeModal';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 
@@ -341,6 +342,7 @@ export default function ConferenceDetailPage() {
   const [titleMetaRefetch, setTitleMetaRefetch] = useState(0);
   const [classifyingAttendee, setClassifyingAttendee] = useState<{ id: number; title: string } | null>(null);
   const [showBulkClassify, setShowBulkClassify] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
   const [classifyFunctionOptions, setClassifyFunctionOptions] = useState<Array<{ id: number; value: string }>>([]);
   const [classifySeniorityOptions, setClassifySeniorityOptions] = useState<Array<{ id: number; value: string }>>([]);
   const [editInternalAttendees, setEditInternalAttendees] = useState<string[]>([]);
@@ -830,6 +832,26 @@ export default function ConferenceDetailPage() {
     } catch {
       toast.error('Failed to decouple attendees.');
       setConference(prevConference);
+    }
+  };
+
+  const handleMergeAttendees = async (masterId: number, duplicateIds: number[]) => {
+    const dupSet = new Set(duplicateIds);
+    const prevConference = conference;
+    setConference(prev => prev ? { ...prev, attendees: prev.attendees.filter(a => !dupSet.has(a.id)) } : prev);
+    setSelectedAttendeeIds(new Set());
+    try {
+      const res = await fetch('/api/attendees/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Merge failed'); }
+      toast.success('Attendees merged!');
+      fetchConference();
+    } catch (e) {
+      setConference(prevConference);
+      throw e;
     }
   };
 
@@ -1583,6 +1605,17 @@ export default function ConferenceDetailPage() {
                     </svg>
                     Decouple ({selectedAttendeeIds.size})
                   </button>
+                  {selectedAttendeeIds.size >= 2 && (
+                    <button
+                      onClick={() => setShowMergeModal(true)}
+                      className="btn-gold flex items-center gap-2 text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      Merge ({selectedAttendeeIds.size})
+                    </button>
+                  )}
                   <button
                     onClick={handleRemoveSelected}
                     disabled={isRemoving}
@@ -2538,6 +2571,22 @@ export default function ConferenceDetailPage() {
             setTitleMetaMap(prev => ({ ...prev, [classifyingAttendee.id]: savedMeta }));
             setClassifyingAttendee(null);
           }}
+        />
+      )}
+
+      {showMergeModal && (
+        <MergeModal
+          isOpen={showMergeModal}
+          onClose={() => setShowMergeModal(false)}
+          onMerge={handleMergeAttendees}
+          items={(conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id)).map(a => ({
+            id: a.id,
+            label: `${a.first_name} ${a.last_name}`,
+            sublabel: [a.title, a.company_name].filter(Boolean).join(' · '),
+          }))}
+          title="Merge Attendees"
+          description="Select the master record. All conference associations will be merged into master. Duplicates will be deleted."
+          searchType="attendee"
         />
       )}
 
