@@ -415,6 +415,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelGenerating, setIntelGenerating] = useState(false);
 
+  // Expanded notes overlay
+  const [showExpandedNotes, setShowExpandedNotes] = useState(false);
+  const [expandedNotesText, setExpandedNotesText] = useState('');
+
   // Load initial data
   useEffect(() => {
     async function load() {
@@ -1472,7 +1476,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
-        <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0">
+        <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0 relative">
 
           {/* ── Context Panel ── */}
           <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0 ${mobileTab !== 'context' ? 'hidden lg:flex lg:flex-col' : ''}`}>
@@ -1666,7 +1670,19 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Notes</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Notes</label>
+                  <button
+                    type="button"
+                    onClick={() => { setExpandedNotesText(notesText); setShowExpandedNotes(true); }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Expand notes"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                  </button>
+                </div>
                 <textarea
                   value={notesText}
                   onChange={e => setNotesText(e.target.value)}
@@ -2144,6 +2160,54 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               )}
             </div>
           </div>
+
+          {/* ── Expanded Notes Overlay — covers the summary (3rd) column ── */}
+          {showExpandedNotes && (
+            <div className="absolute inset-y-0 right-0 z-[20] flex flex-col bg-white border-l border-gray-200 shadow-xl lg:w-[calc(100%-320px-256px)] w-full">
+              <style>{`@keyframes fadeInExpand { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+              <div className="flex flex-col h-full" style={{ animation: 'fadeInExpand 150ms ease-out' }}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
+                  <span className="text-sm font-semibold text-gray-800">Notes</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setNotesText(expandedNotesText);
+                        setShowExpandedNotes(false);
+                        toast.success('Notes saved.');
+                      }}
+                      className="px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNotesText(expandedNotesText);
+                        setShowExpandedNotes(false);
+                        toast.success('Notes saved.');
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                      title="Close"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                {/* Large textarea */}
+                <div className="flex-1 p-5 overflow-hidden">
+                  <textarea
+                    autoFocus
+                    value={expandedNotesText}
+                    onChange={e => setExpandedNotesText(e.target.value)}
+                    placeholder="Free-form meeting notes…"
+                    className="w-full h-full border border-gray-200 rounded-xl p-4 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
