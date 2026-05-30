@@ -822,9 +822,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       'No specific buying signals identified.',
       'Ask about their current challenges in their industry.',
     ];
-    const isFallbackIntel = (row: CompanyIntelRow) =>
-      [...row.pain_point_signals, ...row.trigger_events, ...row.buying_signals, ...row.opening_angles]
-        .some(s => FALLBACK_EXACT.includes(s));
+    const isFallbackIntel = (row: CompanyIntelRow) => {
+      const allText = [...row.pain_point_signals, ...row.trigger_events, ...row.buying_signals, ...row.opening_angles];
+      return FALLBACK_EXACT.every(f => allText.includes(f));
+    };
 
     const isGeneratingDone = (row: CompanyIntelRow) =>
       row.summary !== 'Generating…' && row.summary !== null && row.summary !== undefined;
@@ -2238,7 +2239,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {companyIntel && companyIntel.summary !== 'Generating…' && companyIntel.summary !== null && companyIntel.summary !== undefined && (
+                {!intelLoading && !intelGenerating && companyIntel !== null && (
                   <button
                     onClick={() => {
                       setCompanyIntel(null);
@@ -2282,7 +2283,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
-              {companyIntel && companyIntel.summary !== 'Generating…' && companyIntel.summary !== null && companyIntel.summary !== undefined && (
+              {!intelLoading && !intelGenerating && companyIntel !== null && (
                 <div className="space-y-5">
                   {/* Tier + date */}
                   <div className="flex items-center gap-2 flex-wrap">
