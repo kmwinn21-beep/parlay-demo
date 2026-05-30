@@ -1103,6 +1103,27 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   </svg>
                   <span className="font-medium">{analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}</span>
                 </button>
+
+                {/* Get Meeting Intel */}
+                {meeting?.company_id && (
+                  <button
+                    onClick={() => { setShowMobileTools(false); handleGetMeetingIntel(); }}
+                    disabled={intelLoading || intelGenerating}
+                    className="w-full text-left px-4 py-2.5 text-sm text-amber-700 hover:bg-amber-50 transition-colors flex items-center gap-3 border-t border-gray-100 disabled:opacity-40"
+                  >
+                    {intelGenerating ? (
+                      <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    )}
+                    <span className="font-medium">{intelGenerating ? 'Generating…' : 'Get Meeting Intel'}</span>
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -2109,7 +2130,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         <div className="fixed inset-0 z-[65] flex justify-end pointer-events-none">
           <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div
-            className="h-full w-full max-w-[400px] bg-white flex flex-col overflow-hidden shadow-2xl pointer-events-auto"
+            className="h-full w-full sm:max-w-[400px] bg-white flex flex-col overflow-hidden shadow-2xl pointer-events-auto"
             style={{ animation: 'slideInFromRight 200ms ease-out' }}
           >
             {/* Drawer header */}
