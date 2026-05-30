@@ -413,7 +413,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [showIntelPanel, setShowIntelPanel] = useState(false);
   const [companyIntel, setCompanyIntel] = useState<CompanyIntelRow | null>(null);
   const [intelLoading, setIntelLoading] = useState(false);
-  const [intelGenerating, setIntelGenerating] = useState(false);
+  // "generating" is encoded in companyIntel.summary === 'Generating…' — no separate state needed
 
   // Expanded notes overlay
   const [showExpandedNotes, setShowExpandedNotes] = useState(false);
@@ -809,85 +809,98 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     }
   }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights, selectedTaskIds, confirmSelectedTasksToApi]);
 
+  // Exact strings written by fallbackResult() in generateCompanyIntel.ts
+  const INTEL_FALLBACK_STRINGS = [
+    'Insufficient data to identify specific signals.',
+    'No specific trigger events identified.',
+    'No specific buying signals identified.',
+    'Ask about their current challenges in their industry.',
+  ];
+
+  // Mirror TargetIntelTab: poll via useEffect when summary === 'Generating…', stop when real data arrives.
+  const isCompanyIntelGenerating = companyIntel?.summary === 'Generating…';
+  useEffect(() => {
+    if (!isCompanyIntelGenerating || !meeting?.conference_id || !meeting?.company_id) return;
+    const conferenceId = meeting.conference_id;
+    const companyId = meeting.company_id;
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      if (attempts > 40) { clearInterval(interval); setCompanyIntel(null); return; }
+      const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
+      if (!res?.ok) return;
+      const data = await res.json() as { intel: CompanyIntelRow[] };
+      const row = data.intel.find(r => Number(r.company_id) === Number(companyId));
+      if (row && row.summary !== 'Generating…' && row.summary !== null) {
+        setCompanyIntel(row);
+        window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: conferenceId } }));
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isCompanyIntelGenerating, meeting?.conference_id, meeting?.company_id]);
+
   const handleGetMeetingIntel = useCallback(async () => {
     if (!meeting?.company_id || !meeting?.conference_id) {
       toast.error('No company associated with this meeting.');
       return;
     }
 
-    // Exact strings written by fallbackResult() in generateCompanyIntel.ts
-    const FALLBACK_EXACT = [
-      'Insufficient data to identify specific signals.',
-      'No specific trigger events identified.',
-      'No specific buying signals identified.',
-      'Ask about their current challenges in their industry.',
-    ];
-    const isFallbackIntel = (row: CompanyIntelRow) => {
-      const allText = [...row.pain_point_signals, ...row.trigger_events, ...row.buying_signals, ...row.opening_angles];
-      return FALLBACK_EXACT.every(f => allText.includes(f));
-    };
-
-    const isGeneratingDone = (row: CompanyIntelRow) =>
-      row.summary !== 'Generating…' && row.summary !== null && row.summary !== undefined;
-
-    const triggerGeneration = async (conferenceId: number, companyId: number) => {
-      setIntelGenerating(true);
-      const genRes = await fetch(`/api/conferences/${conferenceId}/intel/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: companyId }),
-      });
-      if (!genRes.ok) throw new Error('Failed to start intel generation');
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        if (attempts > 40) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
-        const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
-        if (!res?.ok) return;
-        const data = await res.json() as { intel: CompanyIntelRow[] };
-        const row = data.intel.find(r => Number(r.company_id) === Number(companyId));
-        if (row) setCompanyIntel(row);
-        if (row && isGeneratingDone(row)) {
-          clearInterval(poll);
-          setIntelGenerating(false);
-          setIntelLoading(false);
-          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: conferenceId } }));
-        }
-      }, 3000);
-    };
-
     setShowIntelPanel(true);
     setIntelLoading(true);
     try {
-      // Check if intel already exists for this company
       const intelRes = await fetch(`/api/conferences/${meeting.conference_id}/intel`);
       if (intelRes.ok) {
         const data = await intelRes.json() as { intel: CompanyIntelRow[] };
         const existing = data.intel.find(r => Number(r.company_id) === Number(meeting.company_id));
-        if (existing && existing.summary !== 'Generating…') {
-          // If the existing intel is just fallback placeholders, regenerate automatically
-          if (isFallbackIntel(existing)) {
+        if (existing && existing.summary !== 'Generating…' && existing.summary !== null) {
+          const allText = [...existing.pain_point_signals, ...existing.trigger_events, ...existing.buying_signals, ...existing.opening_angles];
+          const isFallback = INTEL_FALLBACK_STRINGS.every(f => allText.includes(f));
+          if (!isFallback) {
+            // Real intel — show it
             setCompanyIntel(existing);
             setIntelLoading(false);
-            await triggerGeneration(meeting.conference_id, meeting.company_id);
             return;
           }
-          setCompanyIntel(existing);
+          // Fallback placeholders — show stub and trigger fresh generation
+        }
+        if (existing) {
+          // Already generating or fallback — set what we have and let the useEffect poll
+          setCompanyIntel({ ...existing, summary: 'Generating…' });
           setIntelLoading(false);
+          if (existing.summary !== 'Generating…') {
+            // Fallback case: need to trigger a new generation
+            await fetch(`/api/conferences/${meeting.conference_id}/intel/generate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ company_id: meeting.company_id }),
+            });
+          }
           return;
         }
-        // Intel exists but is generating — show stub and wait
-        if (existing && existing.summary === 'Generating…') {
-          setCompanyIntel(existing);
-        }
       }
-      // No intel yet — trigger generation
+      // No intel yet — set stub and trigger generation; useEffect will poll
+      setCompanyIntel({
+        company_id: meeting.company_id,
+        company_name: meeting.company_name ?? '',
+        tier: 'Unknown',
+        summary: 'Generating…',
+        pain_point_signals: [],
+        trigger_events: [],
+        buying_signals: [],
+        opening_angles: [],
+        used_icp_fallback: false,
+        generated_at: null,
+      });
       setIntelLoading(false);
-      await triggerGeneration(meeting.conference_id, meeting.company_id);
+      await fetch(`/api/conferences/${meeting.conference_id}/intel/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: meeting.company_id }),
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to get meeting intel');
       setIntelLoading(false);
-      setIntelGenerating(false);
+      setCompanyIntel(null);
     }
   }, [meeting]);
 
@@ -1128,10 +1141,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 {meeting?.company_id && (
                   <button
                     onClick={() => { setShowMobileTools(false); handleGetMeetingIntel(); }}
-                    disabled={intelLoading || intelGenerating}
+                    disabled={intelLoading || isCompanyIntelGenerating}
                     className="w-full text-left px-4 py-2.5 text-sm text-amber-700 hover:bg-amber-50 transition-colors flex items-center gap-3 border-t border-gray-100 disabled:opacity-40"
                   >
-                    {intelGenerating ? (
+                    {isCompanyIntelGenerating ? (
                       <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -1141,7 +1154,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                     )}
-                    <span className="font-medium">{intelGenerating ? 'Generating…' : 'Get Meeting Intel'}</span>
+                    <span className="font-medium">{isCompanyIntelGenerating ? 'Generating…' : 'Get Meeting Intel'}</span>
                   </button>
                 )}
 
@@ -1232,7 +1245,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           {meeting?.company_id && (
             <button
               onClick={handleGetMeetingIntel}
-              disabled={intelLoading || intelGenerating}
+              disabled={intelLoading || isCompanyIntelGenerating}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
                 showIntelPanel
                   ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
@@ -1240,7 +1253,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               } disabled:opacity-50`}
               title="Get company intel for this meeting"
             >
-              {intelGenerating ? (
+              {isCompanyIntelGenerating ? (
                 <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -1250,7 +1263,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               )}
-              {intelGenerating ? 'Generating…' : 'Get Meeting Intel'}
+              {isCompanyIntelGenerating ? 'Generating…' : 'Get Meeting Intel'}
             </button>
           )}
 
@@ -2239,12 +2252,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {companyIntel !== null && companyIntel.summary !== null && companyIntel.summary !== undefined && companyIntel.summary !== 'Generating…' && !intelLoading && !intelGenerating && (
+                {!intelLoading && !isCompanyIntelGenerating && companyIntel !== null && companyIntel.summary !== null && companyIntel.summary !== 'Generating…' && (
                   <button
                     onClick={() => {
                       setCompanyIntel(null);
-                      setIntelLoading(true);
-                      setIntelGenerating(false);
                       handleGetMeetingIntel();
                     }}
                     className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-amber-600 transition-colors"
@@ -2268,10 +2279,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
             {/* Drawer body */}
             <div className="overflow-y-auto flex-1 px-5 py-5">
-              {(intelLoading || intelGenerating) && (companyIntel === null || companyIntel.summary === 'Generating…' || companyIntel.summary === null) && (
+              {(intelLoading || isCompanyIntelGenerating) && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
                   <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                  {intelGenerating
+                  {isCompanyIntelGenerating
                     ? <><p className="text-sm text-gray-500">Researching {meeting?.company_name}…</p><p className="text-xs text-gray-400 mt-1">This takes 15–30 seconds</p></>
                     : <p className="text-sm text-gray-500">Loading intel…</p>
                   }
