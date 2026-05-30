@@ -810,6 +810,43 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       toast.error('No company associated with this meeting.');
       return;
     }
+
+    const FALLBACK_STRINGS = [
+      'Insufficient data to identify specific signals.',
+      'No specific trigger events identified.',
+      'No specific buying signals identified.',
+      'Ask about their current challenges in',
+    ];
+    const isFallbackIntel = (row: CompanyIntelRow) =>
+      [...row.pain_point_signals, ...row.trigger_events, ...row.buying_signals, ...row.opening_angles]
+        .some(s => FALLBACK_STRINGS.some(f => s.includes(f)));
+
+    const triggerGeneration = async (conferenceId: number, companyId: number) => {
+      setIntelGenerating(true);
+      const genRes = await fetch(`/api/conferences/${conferenceId}/intel/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: companyId }),
+      });
+      if (!genRes.ok) throw new Error('Failed to start intel generation');
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
+        const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
+        if (!res?.ok) return;
+        const data = await res.json() as { intel: CompanyIntelRow[] };
+        const row = data.intel.find(r => r.company_id === companyId);
+        if (row) setCompanyIntel(row);
+        if (row && row.summary && row.summary !== 'Generating…') {
+          clearInterval(poll);
+          setIntelGenerating(false);
+          setIntelLoading(false);
+          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: conferenceId } }));
+        }
+      }, 3000);
+    };
+
     setShowIntelPanel(true);
     setIntelLoading(true);
     try {
@@ -819,6 +856,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         const data = await intelRes.json() as { intel: CompanyIntelRow[] };
         const existing = data.intel.find(r => r.company_id === meeting.company_id);
         if (existing && existing.summary && existing.summary !== 'Generating…') {
+          // If the existing intel is just fallback placeholders, regenerate automatically
+          if (isFallbackIntel(existing)) {
+            setCompanyIntel(existing);
+            setIntelLoading(false);
+            await triggerGeneration(meeting.conference_id, meeting.company_id);
+            return;
+          }
           setCompanyIntel(existing);
           setIntelLoading(false);
           return;
@@ -829,31 +873,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         }
       }
       // No intel yet — trigger generation
-      setIntelGenerating(true);
-      const genRes = await fetch(`/api/conferences/${meeting.conference_id}/intel/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: meeting.company_id }),
-      });
-      if (!genRes.ok) throw new Error('Failed to start intel generation');
-      // Poll until done
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        if (attempts > 30) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
-        const res = await fetch(`/api/conferences/${meeting.conference_id}/intel`).catch(() => null);
-        if (!res?.ok) return;
-        const data = await res.json() as { intel: CompanyIntelRow[] };
-        const row = data.intel.find(r => r.company_id === meeting.company_id);
-        if (row) setCompanyIntel(row);
-        if (row && row.summary && row.summary !== 'Generating…') {
-          clearInterval(poll);
-          setIntelGenerating(false);
-          setIntelLoading(false);
-          // Notify TargetIntelTab to refresh its intel map
-          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: meeting?.conference_id } }));
-        }
-      }, 3000);
+      setIntelLoading(false);
+      await triggerGeneration(meeting.conference_id, meeting.company_id);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to get meeting intel');
       setIntelLoading(false);
