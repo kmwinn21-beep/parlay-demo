@@ -14,6 +14,7 @@ export interface CompanyIntelRow {
   buying_signals: string[];
   opening_angles: string[];
   used_icp_fallback: boolean;
+  is_fallback: boolean;
   generated_at: string | null;
   attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null }[];
   rep_names: string[];
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Get all stored intel for this conference
     const intelRows = await db.execute({
       sql: `SELECT company_id, company_name, tier, summary, pain_point_signals, trigger_events,
-                   buying_signals, opening_angles, used_icp_fallback, generated_at
+                   buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at
             FROM conference_company_intel WHERE conference_id = ? ORDER BY tier, company_name`,
       args: [conferenceId],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
@@ -130,6 +131,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         buying_signals: tryParseJson<string[]>(r.buying_signals as string | null, []),
         opening_angles: tryParseJson<string[]>(r.opening_angles as string | null, []),
         used_icp_fallback: Boolean(r.used_icp_fallback),
+        is_fallback: Boolean(r.is_fallback),
         generated_at: r.generated_at as string | null,
         attendees: attendeesByCompany.get(cid) ?? [],
         rep_names: uids.map(uid => userNameMap.get(uid)).filter(Boolean) as string[],

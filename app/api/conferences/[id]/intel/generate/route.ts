@@ -122,14 +122,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Write 'Generating…' stub immediately so UI shows spinner
     await db.execute({
       sql: `INSERT INTO conference_company_intel
-              (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
-            VALUES (?, ?, ?, ?, 'Generating…', '[]', '[]', '[]', '[]', 0, datetime('now'))
+              (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at)
+            VALUES (?, ?, ?, ?, 'Generating…', '[]', '[]', '[]', '[]', 0, 0, datetime('now'))
             ON CONFLICT(conference_id, company_id) DO UPDATE SET
               summary = 'Generating…',
               pain_point_signals = '[]',
               trigger_events = '[]',
               buying_signals = '[]',
               opening_angles = '[]',
+              is_fallback = 0,
               generated_at = datetime('now')`,
       args: [conferenceId, companyId, String(company.name), tier],
     });
@@ -154,8 +155,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const result = await generateCompanyIntel(input);
         await db.execute({
           sql: `INSERT INTO conference_company_intel
-                  (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                  (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
                 ON CONFLICT(conference_id, company_id) DO UPDATE SET
                   summary = excluded.summary,
                   pain_point_signals = excluded.pain_point_signals,
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                   buying_signals = excluded.buying_signals,
                   opening_angles = excluded.opening_angles,
                   used_icp_fallback = excluded.used_icp_fallback,
+                  is_fallback = excluded.is_fallback,
                   generated_at = excluded.generated_at`,
           args: [
             conferenceId, companyId, String(company.name), tier,
@@ -172,13 +174,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             JSON.stringify(result.buying_signals),
             JSON.stringify(result.opening_angles),
             result.used_icp_fallback ? 1 : 0,
+            result.is_fallback ? 1 : 0,
           ],
         });
       } catch (err) {
         console.error('[intel/generate] background error for company', companyId, ':', err);
         await db.execute({
-          sql: `UPDATE conference_company_intel SET summary = ? WHERE conference_id = ? AND company_id = ?`,
-          args: [`Error: ${err instanceof Error ? err.message : 'Generation failed'}`, conferenceId, companyId],
+          sql: `UPDATE conference_company_intel SET summary = 'Error: generation failed', is_fallback = 1 WHERE conference_id = ? AND company_id = ?`,
+          args: [conferenceId, companyId],
         }).catch(() => {});
       }
     })());

@@ -32,6 +32,7 @@ export interface CompanyIntelResult {
   buying_signals: string[];
   opening_angles: string[];
   used_icp_fallback: boolean;
+  is_fallback: boolean;
 }
 
 const client = new Anthropic();
@@ -63,6 +64,7 @@ function fallbackResult(companyName: string, companyType: string | null, industr
     buying_signals: ['No specific buying signals identified.'],
     opening_angles: [`Ask about their current challenges in ${industry ?? 'their industry'}.`],
     used_icp_fallback: usedIcpFallback,
+    is_fallback: true,
   };
 }
 
@@ -155,6 +157,7 @@ Search for recent news, leadership changes, expansions, acquisitions, or regulat
       buying_signals: (parsed.buying_signals as string[]) ?? [],
       opening_angles: (parsed.opening_angles as string[]) ?? [],
       used_icp_fallback: usedIcpFallback,
+      is_fallback: false,
     };
   } catch (err) {
     console.error('[generateCompanyIntel] API error for', input.companyName, ':', err);
@@ -246,6 +249,7 @@ Return ONLY a valid JSON array — one entry per company, using the company_id t
         buying_signals: item.buying_signals ?? [],
         opening_angles: item.opening_angles ?? [],
         used_icp_fallback: usedIcpFallback,
+        is_fallback: false,
       });
     }
   } catch {
