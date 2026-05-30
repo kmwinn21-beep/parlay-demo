@@ -880,7 +880,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           setCompanyIntel(existing);
         }
       }
-      }
       // No intel yet — trigger generation
       setIntelLoading(false);
       await triggerGeneration(meeting.conference_id, meeting.company_id);
