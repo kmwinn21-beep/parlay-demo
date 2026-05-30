@@ -415,6 +415,10 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelGenerating, setIntelGenerating] = useState(false);
 
+  // Expanded notes overlay
+  const [showExpandedNotes, setShowExpandedNotes] = useState(false);
+  const [expandedNotesText, setExpandedNotesText] = useState('');
+
   // Load initial data
   useEffect(() => {
     async function load() {
@@ -810,6 +814,43 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       toast.error('No company associated with this meeting.');
       return;
     }
+
+    const FALLBACK_STRINGS = [
+      'Insufficient data to identify specific signals.',
+      'No specific trigger events identified.',
+      'No specific buying signals identified.',
+      'Ask about their current challenges in',
+    ];
+    const isFallbackIntel = (row: CompanyIntelRow) =>
+      [...row.pain_point_signals, ...row.trigger_events, ...row.buying_signals, ...row.opening_angles]
+        .some(s => FALLBACK_STRINGS.some(f => s.includes(f)));
+
+    const triggerGeneration = async (conferenceId: number, companyId: number) => {
+      setIntelGenerating(true);
+      const genRes = await fetch(`/api/conferences/${conferenceId}/intel/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: companyId }),
+      });
+      if (!genRes.ok) throw new Error('Failed to start intel generation');
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
+        const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
+        if (!res?.ok) return;
+        const data = await res.json() as { intel: CompanyIntelRow[] };
+        const row = data.intel.find(r => r.company_id === companyId);
+        if (row) setCompanyIntel(row);
+        if (row && row.summary && row.summary !== 'Generating…') {
+          clearInterval(poll);
+          setIntelGenerating(false);
+          setIntelLoading(false);
+          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: conferenceId } }));
+        }
+      }, 3000);
+    };
+
     setShowIntelPanel(true);
     setIntelLoading(true);
     try {
@@ -819,6 +860,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         const data = await intelRes.json() as { intel: CompanyIntelRow[] };
         const existing = data.intel.find(r => r.company_id === meeting.company_id);
         if (existing && existing.summary && existing.summary !== 'Generating…') {
+          // If the existing intel is just fallback placeholders, regenerate automatically
+          if (isFallbackIntel(existing)) {
+            setCompanyIntel(existing);
+            setIntelLoading(false);
+            await triggerGeneration(meeting.conference_id, meeting.company_id);
+            return;
+          }
           setCompanyIntel(existing);
           setIntelLoading(false);
           return;
@@ -829,31 +877,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         }
       }
       // No intel yet — trigger generation
-      setIntelGenerating(true);
-      const genRes = await fetch(`/api/conferences/${meeting.conference_id}/intel/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: meeting.company_id }),
-      });
-      if (!genRes.ok) throw new Error('Failed to start intel generation');
-      // Poll until done
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        if (attempts > 30) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
-        const res = await fetch(`/api/conferences/${meeting.conference_id}/intel`).catch(() => null);
-        if (!res?.ok) return;
-        const data = await res.json() as { intel: CompanyIntelRow[] };
-        const row = data.intel.find(r => r.company_id === meeting.company_id);
-        if (row) setCompanyIntel(row);
-        if (row && row.summary && row.summary !== 'Generating…') {
-          clearInterval(poll);
-          setIntelGenerating(false);
-          setIntelLoading(false);
-          // Notify TargetIntelTab to refresh its intel map
-          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: meeting?.conference_id } }));
-        }
-      }, 3000);
+      setIntelLoading(false);
+      await triggerGeneration(meeting.conference_id, meeting.company_id);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to get meeting intel');
       setIntelLoading(false);
@@ -1094,18 +1119,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   </div>
                 </button>
 
-                {/* Generate AI Summary */}
-                <button
-                  onClick={() => { handleAnalyze(); setShowMobileTools(false); }}
-                  disabled={analysisLoading || !hasAudioOrTranscript}
-                  className="w-full text-left px-4 py-2.5 text-sm text-teal-700 hover:bg-teal-50 transition-colors flex items-center gap-3 border-t border-gray-100 disabled:opacity-40"
-                >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span className="font-medium">{analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}</span>
-                </button>
-
                 {/* Get Meeting Intel */}
                 {meeting?.company_id && (
                   <button
@@ -1126,6 +1139,18 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     <span className="font-medium">{intelGenerating ? 'Generating…' : 'Get Meeting Intel'}</span>
                   </button>
                 )}
+
+                {/* Generate AI Summary */}
+                <button
+                  onClick={() => { handleAnalyze(); setShowMobileTools(false); }}
+                  disabled={analysisLoading || !hasAudioOrTranscript}
+                  className="w-full text-left px-4 py-2.5 text-sm text-teal-700 hover:bg-teal-50 transition-colors flex items-center gap-3 border-t border-gray-100 disabled:opacity-40"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span className="font-medium">{analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}</span>
+                </button>
               </div>
             </>
           )}
@@ -1142,7 +1167,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
               recordingState === 'recording' ? 'border-red-400 bg-red-50 text-red-600' :
               recordingState === 'paused' ? 'border-yellow-400 bg-yellow-50 text-yellow-700' :
-              'border-gray-200 text-gray-600 hover:bg-gray-50'
+              'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
             }`}
             title={recordingState === 'recording' ? `Recording — ${formatTime(recordingElapsed)}` : 'Record audio'}
           >
@@ -1198,19 +1223,6 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             )}
           </div>
 
-          {/* Generate AI Summary */}
-          <button
-            onClick={handleAnalyze}
-            disabled={analysisLoading || (!hasAudioOrTranscript)}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-colors flex items-center gap-1.5 disabled:opacity-40"
-            title="Generate AI summary from audio or transcript"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-            {analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}
-          </button>
-
           {/* Get Meeting Intel */}
           {meeting?.company_id && (
             <button
@@ -1236,6 +1248,19 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               {intelGenerating ? 'Generating…' : 'Get Meeting Intel'}
             </button>
           )}
+
+          {/* Generate AI Summary */}
+          <button
+            onClick={handleAnalyze}
+            disabled={analysisLoading || (!hasAudioOrTranscript)}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+            title="Generate AI summary from audio or transcript"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            {analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}
+          </button>
 
           <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
 
@@ -1451,7 +1476,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
-        <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0">
+        <div className="flex flex-col lg:flex lg:flex-row h-full min-h-0 relative">
 
           {/* ── Context Panel ── */}
           <div className={`border-b lg:border-b-0 lg:border-r border-gray-200 transition-all duration-200 ${contextCollapsed ? 'lg:w-8' : 'lg:w-64'} flex-shrink-0 ${mobileTab !== 'context' ? 'hidden lg:flex lg:flex-col' : ''}`}>
@@ -1645,7 +1670,19 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Notes</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Notes</label>
+                  <button
+                    type="button"
+                    onClick={() => { setExpandedNotesText(notesText); setShowExpandedNotes(true); }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Expand notes"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                  </button>
+                </div>
                 <textarea
                   value={notesText}
                   onChange={e => setNotesText(e.target.value)}
@@ -2123,6 +2160,54 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               )}
             </div>
           </div>
+
+          {/* ── Expanded Notes Overlay — covers the summary (3rd) column ── */}
+          {showExpandedNotes && (
+            <div className="absolute inset-y-0 right-0 z-[20] flex flex-col bg-white border-l border-gray-200 shadow-xl lg:w-[calc(100%-320px-256px)] w-full">
+              <style>{`@keyframes fadeInExpand { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+              <div className="flex flex-col h-full" style={{ animation: 'fadeInExpand 150ms ease-out' }}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
+                  <span className="text-sm font-semibold text-gray-800">Notes</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setNotesText(expandedNotesText);
+                        setShowExpandedNotes(false);
+                        toast.success('Notes saved.');
+                      }}
+                      className="px-3 py-1.5 bg-brand-secondary text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNotesText(expandedNotesText);
+                        setShowExpandedNotes(false);
+                        toast.success('Notes saved.');
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                      title="Close"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                {/* Large textarea */}
+                <div className="flex-1 p-5 overflow-hidden">
+                  <textarea
+                    autoFocus
+                    value={expandedNotesText}
+                    onChange={e => setExpandedNotesText(e.target.value)}
+                    placeholder="Free-form meeting notes…"
+                    className="w-full h-full border border-gray-200 rounded-xl p-4 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
