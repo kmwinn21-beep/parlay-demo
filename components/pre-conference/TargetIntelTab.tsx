@@ -374,7 +374,7 @@ function TierSection({
       </button>
 
       {sectionExpanded && (
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           {/* Left column — odd-indexed companies */}
           <div className="flex-1 flex flex-col gap-3">
             {companies.filter((_, i) => i % 2 === 0).map(company => (
