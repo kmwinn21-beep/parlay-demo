@@ -850,6 +850,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           clearInterval(poll);
           setIntelGenerating(false);
           setIntelLoading(false);
+          // Notify TargetIntelTab to refresh its intel map
+          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: meeting?.conference_id } }));
         }
       }, 3000);
     } catch (e) {

@@ -485,14 +485,31 @@ export function TargetIntelTab({
       .finally(() => setLoading(false));
   }, [loadData]);
 
-  // Single parent-level poll — fires only when at least one card is generating.
-  // Only fetches /intel (not /targeting) to avoid expensive per-attendee DB queries.
+  // Fast poll — fires when at least one card is actively generating.
   const anyGenerating = Array.from(intelMap.values()).some(r => r.summary === 'Generating…');
   useEffect(() => {
     if (!anyGenerating) return;
     const interval = setInterval(pollIntel, 4000);
     return () => clearInterval(interval);
   }, [anyGenerating, pollIntel]);
+
+  // Idle poll — always runs to pick up intel written from other surfaces (e.g. notetaker modal).
+  useEffect(() => {
+    const interval = setInterval(pollIntel, 30000);
+    return () => clearInterval(interval);
+  }, [pollIntel]);
+
+  // Immediate refresh when notetaker finishes generating intel for any company in this conference.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { conference_id?: number } | undefined;
+      if (!detail?.conference_id || detail.conference_id === conferenceId) {
+        pollIntel();
+      }
+    };
+    window.addEventListener('parlay:intel-updated', handler);
+    return () => window.removeEventListener('parlay:intel-updated', handler);
+  }, [conferenceId, pollIntel]);
 
   if (loading) {
     return (
