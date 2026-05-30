@@ -815,15 +815,19 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       return;
     }
 
-    const FALLBACK_STRINGS = [
+    // Exact strings written by fallbackResult() in generateCompanyIntel.ts
+    const FALLBACK_EXACT = [
       'Insufficient data to identify specific signals.',
       'No specific trigger events identified.',
       'No specific buying signals identified.',
-      'Ask about their current challenges in',
+      'Ask about their current challenges in their industry.',
     ];
     const isFallbackIntel = (row: CompanyIntelRow) =>
       [...row.pain_point_signals, ...row.trigger_events, ...row.buying_signals, ...row.opening_angles]
-        .some(s => FALLBACK_STRINGS.some(f => s.includes(f)));
+        .some(s => FALLBACK_EXACT.includes(s));
+
+    const isGeneratingDone = (row: CompanyIntelRow) =>
+      row.summary !== 'Generating…' && row.summary !== null && row.summary !== undefined;
 
     const triggerGeneration = async (conferenceId: number, companyId: number) => {
       setIntelGenerating(true);
@@ -836,13 +840,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
-        if (attempts > 30) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
+        if (attempts > 40) { clearInterval(poll); setIntelGenerating(false); setIntelLoading(false); return; }
         const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
         if (!res?.ok) return;
         const data = await res.json() as { intel: CompanyIntelRow[] };
-        const row = data.intel.find(r => r.company_id === companyId);
+        const row = data.intel.find(r => Number(r.company_id) === Number(companyId));
         if (row) setCompanyIntel(row);
-        if (row && row.summary && row.summary !== 'Generating…') {
+        if (row && isGeneratingDone(row)) {
           clearInterval(poll);
           setIntelGenerating(false);
           setIntelLoading(false);
@@ -858,8 +862,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       const intelRes = await fetch(`/api/conferences/${meeting.conference_id}/intel`);
       if (intelRes.ok) {
         const data = await intelRes.json() as { intel: CompanyIntelRow[] };
-        const existing = data.intel.find(r => r.company_id === meeting.company_id);
-        if (existing && existing.summary && existing.summary !== 'Generating…') {
+        const existing = data.intel.find(r => Number(r.company_id) === Number(meeting.company_id));
+        if (existing && existing.summary !== 'Generating…') {
           // If the existing intel is just fallback placeholders, regenerate automatically
           if (isFallbackIntel(existing)) {
             setCompanyIntel(existing);
@@ -871,10 +875,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           setIntelLoading(false);
           return;
         }
-        // Intel exists but is generating — show it and wait
+        // Intel exists but is generating — show stub and wait
         if (existing && existing.summary === 'Generating…') {
           setCompanyIntel(existing);
         }
+      }
       }
       // No intel yet — trigger generation
       setIntelLoading(false);
@@ -2234,7 +2239,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {companyIntel && companyIntel.summary && companyIntel.summary !== 'Generating…' && (
+                {companyIntel && companyIntel.summary !== 'Generating…' && companyIntel.summary !== null && companyIntel.summary !== undefined && (
                   <button
                     onClick={() => {
                       setCompanyIntel(null);
@@ -2278,7 +2283,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
-              {companyIntel && companyIntel.summary && companyIntel.summary !== 'Generating…' && (
+              {companyIntel && companyIntel.summary !== 'Generating…' && companyIntel.summary !== null && companyIntel.summary !== undefined && (
                 <div className="space-y-5">
                   {/* Tier + date */}
                   <div className="flex items-center gap-2 flex-wrap">
