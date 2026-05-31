@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { getConfig } from '@/lib/configCache';
 import { parseRepIds } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
@@ -93,10 +94,6 @@ function formatTime(t: string | null) {
   const [h, m] = t.split(':');
   const hour = parseInt(h, 10);
   return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
-}
-function isOperator(ct: string | null | undefined) {
-  const l = (ct || '').toLowerCase();
-  return l.includes('operator') || l.includes('own/op') || l.includes('opco');
 }
 function parseStatuses(stored: string | null | undefined): RsvpStatus[] {
   if (!stored) return [];
@@ -220,19 +217,20 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
   );
 }
 
-/* ─── RSVP summary totals + Operators toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggleOperators, activeFilters, onToggleFilter, stackOperators }: {
+/* ─── RSVP summary totals + Primary Company Type toggle ─── */
+function RSVPSummaryBar({ invitedIds, rsvpMap, primaryTypeOnly, primaryCompanyType, attendees, onTogglePrimaryType, activeFilters, onToggleFilter, stackOperators }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus[]>;
-  operatorsOnly: boolean;
+  primaryTypeOnly: boolean;
+  primaryCompanyType: string | null;
   attendees: Attendee[];
-  onToggleOperators: () => void;
+  onTogglePrimaryType: () => void;
   activeFilters: RsvpStatus[];
   onToggleFilter: (f: RsvpStatus | null) => void;
   stackOperators?: boolean;
 }) {
-  const filtered = operatorsOnly
-    ? invitedIds.filter(id => isOperator(attendees.find(a => a.id === id)?.company_type))
+  const filtered = primaryTypeOnly && primaryCompanyType
+    ? invitedIds.filter(id => attendees.find(a => a.id === id)?.company_type === primaryCompanyType)
     : invitedIds;
   const yes = filtered.filter(id => (rsvpMap[id] || []).includes('yes')).length;
   const attended = filtered.filter(id => (rsvpMap[id] || []).includes('attended')).length;
@@ -264,20 +262,20 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
       })}
     </div>
   );
-  const operatorsBtn = (
+  const primaryTypeBtn = primaryCompanyType ? (
     <button
       type="button"
-      onClick={onToggleOperators}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+      onClick={onTogglePrimaryType}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${primaryTypeOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
     >
-      Operators
+      {primaryCompanyType}
     </button>
-  );
+  ) : null;
   if (stackOperators) {
     return (
       <div className="space-y-2">
         {countRow}
-        <div>{operatorsBtn}</div>
+        {primaryTypeBtn && <div>{primaryTypeBtn}</div>}
       </div>
     );
   }
@@ -299,13 +297,7 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, operatorsOnly, attendees, onToggl
           );
         })}
       </div>
-      <button
-        type="button"
-        onClick={onToggleOperators}
-        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-      >
-        Operators
-      </button>
+      {primaryTypeBtn}
     </div>
   );
 }
@@ -387,7 +379,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
 }
 
 /* ─── Mobile: full-screen guest list bottom sheet ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, primaryCompanyType }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -397,15 +389,16 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
+  primaryCompanyType: string | null;
 }) {
-  const [operatorsOnly, setOperatorsOnly] = useState(false);
+  const [primaryTypeOnly, setPrimaryTypeOnly] = useState(false);
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
-  const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
+  const byPrimaryType = primaryTypeOnly && primaryCompanyType ? invitedAttendees.filter(a => a.company_type === primaryCompanyType) : invitedAttendees;
+  const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
   });
@@ -422,7 +415,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} primaryTypeOnly={primaryTypeOnly} primaryCompanyType={primaryCompanyType} attendees={invitedAttendees} onTogglePrimaryType={() => setPrimaryTypeOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -437,7 +430,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
 }
 
 /* ─── Desktop: inline RSVP expansion below table row ─── */
-function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull }: {
+function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull, primaryCompanyType }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -446,22 +439,23 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
+  primaryCompanyType: string | null;
 }) {
-  const [operatorsOnly, setOperatorsOnly] = useState(false);
+  const [primaryTypeOnly, setPrimaryTypeOnly] = useState(false);
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byOperator = operatorsOnly ? invitedAttendees.filter(a => isOperator(a.company_type)) : invitedAttendees;
-  const visible = activeFilters.length === 0 ? byOperator : byOperator.filter(a => {
+  const byPrimaryType = primaryTypeOnly && primaryCompanyType ? invitedAttendees.filter(a => a.company_type === primaryCompanyType) : invitedAttendees;
+  const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
   });
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
       <div className="mb-4">
-        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} operatorsOnly={operatorsOnly} attendees={invitedAttendees} onToggleOperators={() => setOperatorsOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
+        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} primaryTypeOnly={primaryTypeOnly} primaryCompanyType={primaryCompanyType} attendees={invitedAttendees} onTogglePrimaryType={() => setPrimaryTypeOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
       </div>
       {visible.length === 0
         ? <p className="text-sm text-gray-400 text-center py-4">No attendees to show.</p>
@@ -532,18 +526,19 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
 }
 
 /* ─── Build Guest List modal ─── */
-function GuestListModal({ attendees, selected, onConfirm, onClose }: {
+function GuestListModal({ attendees, selected, onConfirm, onClose, primaryCompanyType }: {
   attendees: Attendee[];
   selected: string[];
   onConfirm: (ids: string[]) => void;
   onClose: () => void;
+  primaryCompanyType: string | null;
 }) {
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
 
   const sorted = [...attendees].sort((a, b) => {
-    const aOp = isOperator(a.company_type) ? 0 : 1;
-    const bOp = isOperator(b.company_type) ? 0 : 1;
+    const aOp = primaryCompanyType && a.company_type === primaryCompanyType ? 0 : 1;
+    const bOp = primaryCompanyType && b.company_type === primaryCompanyType ? 0 : 1;
     if (aOp !== bOp) return aOp - bOp;
     return (a.company_name || '').localeCompare(b.company_name || '');
   });
@@ -614,7 +609,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose }: {
               ) : visible.map(att => {
                 const id = String(att.id);
                 const checked = draft.includes(id);
-                const op = isOperator(att.company_type);
+                const op = primaryCompanyType && att.company_type === primaryCompanyType;
                 return (
                   <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
                     <td className="pl-4 pr-2 py-2.5 align-middle">
@@ -664,6 +659,14 @@ export function SocialEventsTable({
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
   const { user } = useUser();
+  const [primaryCompanyType, setPrimaryCompanyType] = useState<string | null>(null);
+  useEffect(() => {
+    getConfig().then((data: unknown) => {
+      const rows = data as { category: string; value: string; is_primary: number }[];
+      const primary = rows.find(r => r.category === 'company_type' && r.is_primary === 1);
+      setPrimaryCompanyType(primary?.value ?? null);
+    }).catch(() => {});
+  }, []);
   const { isVisible, orderedColumns } = useTableColumnConfig('social_events');
 
   /* form state */
@@ -1013,6 +1016,7 @@ export function SocialEventsTable({
           selected={formData.prospect_attendees}
           onConfirm={ids => setFormData(p => ({ ...p, prospect_attendees: ids }))}
           onClose={() => setShowGuestListModal(false)}
+          primaryCompanyType={primaryCompanyType}
         />
       )}
 
@@ -1131,7 +1135,7 @@ export function SocialEventsTable({
                       {isExpanded && (
                         <tr>
                           <td colSpan={99} className="p-0 border-b border-gray-200">
-                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} primaryCompanyType={primaryCompanyType} />
                           </td>
                         </tr>
                       )}
@@ -1150,7 +1154,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} primaryCompanyType={primaryCompanyType} />
         );
       })()}
     </div>
