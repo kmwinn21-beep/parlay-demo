@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-const POLL_INTERVAL_MS = 60_000;
+import { startPolling, stopPolling } from '@/lib/pollingManager';
 
 export function useUnreadNotificationCount(): number {
   const [count, setCount] = useState(0);
@@ -22,8 +21,8 @@ export function useUnreadNotificationCount(): number {
     }
 
     fetchCount();
-    const id = setInterval(fetchCount, POLL_INTERVAL_MS);
-    return () => { cancelled = true; clearInterval(id); };
+    startPolling('notification-count', fetchCount, 30_000, 30_000);
+    return () => { cancelled = true; stopPolling('notification-count'); };
   }, []);
 
   return count;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { startPolling, stopPolling } from '@/lib/pollingManager';
 import Link from 'next/link';
 
 interface Notification {
@@ -99,16 +100,10 @@ export function NotificationBell() {
     }
   }, []);
 
-  // Poll unread count every 8s + re-fetch immediately when tab becomes visible
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 8_000);
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchUnreadCount(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
+    startPolling('notification-bell', fetchUnreadCount, 30_000, 30_000);
+    return () => stopPolling('notification-bell');
   }, [fetchUnreadCount]);
 
   // Fetch notifications when dropdown opens

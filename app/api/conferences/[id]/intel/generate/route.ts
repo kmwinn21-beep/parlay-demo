@@ -17,6 +17,9 @@ function parseIdList(raw: unknown): number[] {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const t0 = Date.now();
+  console.log('[intel-timing] step: handler_start, elapsed: 0ms');
+
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
 
@@ -31,30 +34,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const db = await getDb(authResult.accountId);
 
-    // Get company info
-    const companyRow = await db.execute({
-      sql: 'SELECT id, name, company_type, industry, wse, assigned_user FROM companies WHERE id = ?',
-      args: [companyId],
-    });
+    // Run all independent queries in parallel — cuts sequential Turso round-trip overhead
+    const [companyRow, tierRow, attendeeRows, icpRows, brandRows] = await Promise.all([
+      db.execute({
+        sql: 'SELECT id, name, company_type, industry, wse, assigned_user FROM companies WHERE id = ?',
+        args: [companyId],
+      }),
+      db.execute({
+        sql: `SELECT tier FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
+        args: [conferenceId, companyId],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+      db.execute({
+        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority
+              FROM attendees a
+              JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
+              WHERE a.company_id = ?
+              ORDER BY a.seniority, a.last_name`,
+        args: [conferenceId, companyId],
+      }),
+      db.execute({
+        sql: `SELECT key, value FROM site_settings WHERE key LIKE 'icp_%'`,
+        args: [],
+      }),
+      db.execute({
+        sql: `SELECT key, value FROM site_settings WHERE key LIKE 'company_info_%'`,
+        args: [],
+      }),
+    ]);
+
     if (companyRow.rows.length === 0) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     const company = companyRow.rows[0];
-
-    // Get tier from intel table, falling back to Monitor
-    const tierRow = await db.execute({
-      sql: `SELECT tier FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
-      args: [conferenceId, companyId],
-    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
     const tier = tierRow.rows.length > 0 ? String(tierRow.rows[0].tier) : 'Monitor';
 
-    // Get attendees
-    const attendeeRows = await db.execute({
-      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority
-            FROM attendees a
-            JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-            WHERE a.company_id = ?
-            ORDER BY a.seniority, a.last_name`,
-      args: [conferenceId, companyId],
-    });
     const attendees = attendeeRows.rows.map(r => ({
       first_name: String(r.first_name),
       last_name: String(r.last_name),
@@ -62,7 +73,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       seniority: r.seniority as string | null,
     }));
 
-    // Resolve rep names
+    const icpSettings: Record<string, string> = {};
+    for (const r of icpRows.rows) icpSettings[String(r.key)] = String(r.value);
+    const icpPainPoints = [
+      ...tryParseJson<string[]>(icpSettings['icp_pain_points'], []),
+      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_pain_points'], []).map(p => p.title),
+    ];
+    const icpTriggerEvents = [
+      ...tryParseJson<string[]>(icpSettings['icp_trigger_events'], []),
+      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_trigger_events'], []).map(t => t.title),
+    ];
+
+    const brandSettings: Record<string, string> = {};
+    for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
+
+    // Rep names depend on company.assigned_user — resolved after the parallel batch
     const userIds = parseIdList(company.assigned_user);
     const repNames: string[] = [];
     if (userIds.length > 0) {
@@ -74,30 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       repNames.push(...userIds.map(uid => nameMap.get(uid)).filter(Boolean) as string[]);
     }
 
-    // Get ICP settings
-    const icpRows = await db.execute({
-      sql: `SELECT key, value FROM site_settings WHERE key LIKE 'icp_%'`,
-      args: [],
-    });
-    const icpSettings: Record<string, string> = {};
-    for (const r of icpRows.rows) icpSettings[String(r.key)] = String(r.value);
-
-    const icpPainPoints = [
-      ...tryParseJson<string[]>(icpSettings['icp_pain_points'], []),
-      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_pain_points'], []).map(p => p.title),
-    ];
-    const icpTriggerEvents = [
-      ...tryParseJson<string[]>(icpSettings['icp_trigger_events'], []),
-      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_trigger_events'], []).map(t => t.title),
-    ];
-
-    // Get brand settings
-    const brandRows = await db.execute({
-      sql: `SELECT key, value FROM site_settings WHERE key LIKE 'company_info_%'`,
-      args: [],
-    });
-    const brandSettings: Record<string, string> = {};
-    for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
+    console.log(`[intel-timing] step: db_queries_complete, elapsed: ${Date.now() - t0}ms`);
 
     // Ensure table exists
     await db.execute({
@@ -122,17 +124,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Write 'Generating…' stub immediately so UI shows spinner
     await db.execute({
       sql: `INSERT INTO conference_company_intel
-              (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
-            VALUES (?, ?, ?, ?, 'Generating…', '[]', '[]', '[]', '[]', 0, datetime('now'))
+              (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at)
+            VALUES (?, ?, ?, ?, 'Generating…', '[]', '[]', '[]', '[]', 0, 0, datetime('now'))
             ON CONFLICT(conference_id, company_id) DO UPDATE SET
               summary = 'Generating…',
               pain_point_signals = '[]',
               trigger_events = '[]',
               buying_signals = '[]',
               opening_angles = '[]',
+              is_fallback = 0,
               generated_at = datetime('now')`,
       args: [conferenceId, companyId, String(company.name), tier],
     });
+
+    console.log(`[intel-timing] step: stub_written, elapsed: ${Date.now() - t0}ms`);
 
     const input = {
       companyName: String(company.name),
@@ -150,12 +155,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Run generation in background — returns immediately, keeps function alive via waitUntil
     waitUntil((async () => {
+      console.log(`[intel-timing] step: anthropic_call_start, elapsed: ${Date.now() - t0}ms`);
       try {
         const result = await generateCompanyIntel(input);
+        console.log(`[intel-timing] step: anthropic_call_complete, elapsed: ${Date.now() - t0}ms`);
         await db.execute({
           sql: `INSERT INTO conference_company_intel
-                  (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                  (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
                 ON CONFLICT(conference_id, company_id) DO UPDATE SET
                   summary = excluded.summary,
                   pain_point_signals = excluded.pain_point_signals,
@@ -163,6 +170,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                   buying_signals = excluded.buying_signals,
                   opening_angles = excluded.opening_angles,
                   used_icp_fallback = excluded.used_icp_fallback,
+                  is_fallback = excluded.is_fallback,
                   generated_at = excluded.generated_at`,
           args: [
             conferenceId, companyId, String(company.name), tier,
@@ -172,17 +180,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             JSON.stringify(result.buying_signals),
             JSON.stringify(result.opening_angles),
             result.used_icp_fallback ? 1 : 0,
+            result.is_fallback ? 1 : 0,
           ],
         });
+        console.log(`[intel-timing] step: result_db_write_complete, elapsed: ${Date.now() - t0}ms`);
       } catch (err) {
-        console.error('[intel/generate] background error for company', companyId, ':', err);
+        console.error(`[intel-timing] step: anthropic_call_error, elapsed: ${Date.now() - t0}ms`, err);
         await db.execute({
-          sql: `UPDATE conference_company_intel SET summary = ? WHERE conference_id = ? AND company_id = ?`,
-          args: [`Error: ${err instanceof Error ? err.message : 'Generation failed'}`, conferenceId, companyId],
+          sql: `UPDATE conference_company_intel SET summary = 'Error: generation failed', is_fallback = 1 WHERE conference_id = ? AND company_id = ?`,
+          args: [conferenceId, companyId],
         }).catch(() => {});
       }
     })());
 
+    console.log(`[intel-timing] step: http_response_sent, elapsed: ${Date.now() - t0}ms`);
     return NextResponse.json({ ok: true, company_id: companyId, status: 'generating' });
   } catch (err) {
     console.error('[intel/generate]', err);

@@ -32,11 +32,30 @@ export interface CompanyIntelResult {
   buying_signals: string[];
   opening_angles: string[];
   used_icp_fallback: boolean;
+  is_fallback: boolean;
 }
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are a senior sales intelligence analyst embedded in a conference relationship management platform. Your job is to analyze companies attending an upcoming conference and surface actionable intelligence for sales reps. Focus on how each company fits the ICP and what specific angles the reps should use. Be concise — reps have 60 seconds to read your output per company.`;
+const SYSTEM_PROMPT = `You are a senior sales intelligence analyst embedded in a conference relationship management platform. Your job is to analyze companies attending an upcoming conference and surface actionable intelligence for sales reps. Focus on how each company fits the ICP and what specific angles the reps should use. Be concise — reps have 60 seconds to read your output per company.
+
+You must call the save_intel tool with your findings. Do not write any text response. Your only output must be a save_intel tool call.`;
+
+const SAVE_INTEL_TOOL = {
+  name: 'save_intel',
+  description: 'Save the researched sales intelligence for this company.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      summary: { type: 'string', description: '2-3 sentence company overview focused on current business situation and ICP fit' },
+      pain_point_signals: { type: 'array', items: { type: 'string' }, description: '3-5 specific bullets of evidence this company has the pain points we solve' },
+      trigger_events: { type: 'array', items: { type: 'string' }, description: '2-4 bullets: recent news, leadership changes, expansions, or regulatory events' },
+      buying_signals: { type: 'array', items: { type: 'string' }, description: '2-4 bullets: signals indicating they may be in a buying position' },
+      opening_angles: { type: 'array', items: { type: 'string' }, description: '2-3 bullets: conversation starters for reps meeting these attendees' },
+    },
+    required: ['summary', 'pain_point_signals', 'trigger_events', 'buying_signals', 'opening_angles'],
+  },
+};
 
 function buildSharedContext(
   icpPainPoints: string[],
@@ -63,43 +82,9 @@ function fallbackResult(companyName: string, companyType: string | null, industr
     buying_signals: ['No specific buying signals identified.'],
     opening_angles: [`Ask about their current challenges in ${industry ?? 'their industry'}.`],
     used_icp_fallback: usedIcpFallback,
+    is_fallback: true,
   };
 }
-
-const SAVE_INTEL_TOOL = {
-  name: 'save_intel',
-  description: 'Save the researched sales intelligence for this company.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      summary: {
-        type: 'string',
-        description: '2-3 sentence company overview focused on current business situation and ICP fit',
-      },
-      pain_point_signals: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '3-5 specific bullets of evidence this company has the pain points we solve',
-      },
-      trigger_events: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2-4 bullets: recent news, leadership changes, expansions, or regulatory events',
-      },
-      buying_signals: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2-4 bullets: signals indicating they may be in a buying position',
-      },
-      opening_angles: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2-3 bullets: conversation starters for reps meeting these attendees',
-      },
-    },
-    required: ['summary', 'pain_point_signals', 'trigger_events', 'buying_signals', 'opening_angles'],
-  },
-};
 
 // Single-company function — used by /intel/generate for per-card refresh
 export async function generateCompanyIntel(input: CompanyIntelInput): Promise<CompanyIntelResult> {
@@ -112,7 +97,7 @@ export async function generateCompanyIntel(input: CompanyIntelInput): Promise<Co
 
   const userPrompt = `${sharedCtx}
 
-Research ${input.companyName} using web search, then call save_intel with the findings.
+Research ${input.companyName} using web search, then call save_intel with your findings.
 
 Company: ${input.companyName}
 Type: ${input.companyType ?? 'Unknown'}
@@ -124,14 +109,14 @@ Reps Assigned: ${input.repNames.length > 0 ? input.repNames.join(', ') : 'None a
 Attendees at this conference:
 ${attendeeLines || '- No attendees listed'}
 
-Search for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Use your findings to populate all fields in save_intel with specific, actionable intelligence for the sales rep meeting this company at the conference.`;
+Search for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Then call save_intel with specific, actionable intelligence for the sales rep meeting this company at the conference.`;
 
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       tools: [
-        { type: 'web_search_20260209' as const, name: 'web_search', max_uses: 2 },
+        { type: 'web_search_20260209' as const, name: 'web_search', max_uses: 1 },
         SAVE_INTEL_TOOL,
       ],
       tool_choice: { type: 'any' },
@@ -143,7 +128,9 @@ Search for recent news, leadership changes, expansions, acquisitions, or regulat
       b => b.type === 'tool_use' && (b as { name: string }).name === 'save_intel'
     );
     if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {
-      console.error('[generateCompanyIntel] save_intel not called for', input.companyName, '| stop_reason:', response.stop_reason);
+      console.error('[generateCompanyIntel] save_intel not called for', input.companyName,
+        '| stop_reason:', response.stop_reason,
+        '| content:', JSON.stringify(response.content));
       return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
     }
 
@@ -155,9 +142,10 @@ Search for recent news, leadership changes, expansions, acquisitions, or regulat
       buying_signals: (parsed.buying_signals as string[]) ?? [],
       opening_angles: (parsed.opening_angles as string[]) ?? [],
       used_icp_fallback: usedIcpFallback,
+      is_fallback: false,
     };
   } catch (err) {
-    console.error('[generateCompanyIntel] API error for', input.companyName, ':', err);
+    console.error('[generateCompanyIntel] error for', input.companyName, ':', err);
     return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
   }
 }
@@ -246,6 +234,7 @@ Return ONLY a valid JSON array — one entry per company, using the company_id t
         buying_signals: item.buying_signals ?? [],
         opening_angles: item.opening_angles ?? [],
         used_icp_fallback: usedIcpFallback,
+        is_fallback: false,
       });
     }
   } catch {

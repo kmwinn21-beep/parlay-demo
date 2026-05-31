@@ -37,6 +37,7 @@ import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
 import { ConferenceEffectivenessModal } from '@/components/ConferenceEffectivenessModal';
+import { getCached } from '@/lib/configCache';
 import { AgendaTab } from '@/components/AgendaTab';
 import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTargetsTab';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
@@ -1083,12 +1084,15 @@ export default function ConferenceDetailPage() {
     setTitleMetaLoading(true);
     const chunks: number[][] = [];
     for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
-    Promise.all(chunks.map(chunk =>
-      fetch(`/api/attendees/title-metadata?ids=${chunk.join(',')}`).then(r => r.json())
-    )).then(results => {
+    Promise.all(chunks.map(chunk => {
+      const key = `title-metadata:${chunk.join(',')}`;
+      return getCached(key, () =>
+        fetch(`/api/attendees/title-metadata?ids=${chunk.join(',')}`).then(r => r.json())
+      );
+    })).then(results => {
       const combined: Record<number, TitleMatchMetadata> = {};
       for (const res of results) {
-        for (const [id, meta] of Object.entries(res)) {
+        for (const [id, meta] of Object.entries(res as Record<string, unknown>)) {
           combined[Number(id)] = meta as TitleMatchMetadata;
         }
       }

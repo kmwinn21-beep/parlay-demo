@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { buildColorMap, type ColorMap } from '@/lib/colors';
+import { getConfig } from '@/lib/configCache';
 
 interface ConfigOption {
   id: number;
@@ -27,9 +28,9 @@ export function useConfigColors(): Record<string, ColorMap> {
       return;
     }
 
-    fetch('/api/config')
-      .then(r => r.json())
-      .then((rows: ConfigOption[]) => {
+    getConfig()
+      .then((data: unknown) => {
+        const rows = data as ConfigOption[];
         const byCategory: Record<string, ConfigOption[]> = {};
         for (const row of rows) {
           (byCategory[row.category] ??= []).push(row);

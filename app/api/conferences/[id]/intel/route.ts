@@ -14,6 +14,7 @@ export interface CompanyIntelRow {
   buying_signals: string[];
   opening_angles: string[];
   used_icp_fallback: boolean;
+  is_fallback: boolean;
   generated_at: string | null;
   attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null }[];
   rep_names: string[];
@@ -46,6 +47,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const db = await getDb(authResult.accountId);
 
+    // Lightweight poll path — single query when polling for one company's status
+    const pollCompanyId = request.nextUrl.searchParams.get('company_id');
+    if (pollCompanyId) {
+      const cid = parseInt(pollCompanyId, 10);
+      if (isNaN(cid)) return NextResponse.json({ error: 'Invalid company_id' }, { status: 400 });
+      const row = await db.execute({
+        sql: `SELECT summary, is_fallback, generated_at FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
+        args: [conferenceId, cid],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      if (row.rows.length === 0) return NextResponse.json({ summary: null, is_fallback: 0, generated_at: null });
+      const r = row.rows[0];
+      return NextResponse.json({ summary: r.summary ?? null, is_fallback: r.is_fallback ?? 0, generated_at: r.generated_at ?? null });
+    }
+
     // Get conference refresh counts — catch in case column doesn't exist yet
     const confRow = await db.execute({
       sql: 'SELECT intel_refresh_count, intel_last_refresh_at FROM conferences WHERE id = ?',
@@ -58,7 +73,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Get all stored intel for this conference
     const intelRows = await db.execute({
       sql: `SELECT company_id, company_name, tier, summary, pain_point_signals, trigger_events,
-                   buying_signals, opening_angles, used_icp_fallback, generated_at
+                   buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at
             FROM conference_company_intel WHERE conference_id = ? ORDER BY tier, company_name`,
       args: [conferenceId],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
@@ -130,6 +145,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         buying_signals: tryParseJson<string[]>(r.buying_signals as string | null, []),
         opening_angles: tryParseJson<string[]>(r.opening_angles as string | null, []),
         used_icp_fallback: Boolean(r.used_icp_fallback),
+        is_fallback: Boolean(r.is_fallback),
         generated_at: r.generated_at as string | null,
         attendees: attendeesByCompany.get(cid) ?? [],
         rep_names: uids.map(uid => userNameMap.get(uid)).filter(Boolean) as string[],

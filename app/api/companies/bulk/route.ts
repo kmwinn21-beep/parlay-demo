@@ -3,6 +3,47 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail } from '@/lib/notifications';
 
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
+
+  const raw = new URL(request.url).searchParams.get('ids') ?? '';
+  const ids = raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+  const unique = Array.from(new Set(ids));
+
+  if (unique.length === 0) return NextResponse.json({ error: 'ids parameter required' }, { status: 400 });
+  if (unique.length > 500) return NextResponse.json({ error: 'Too many IDs — maximum 500' }, { status: 400 });
+
+  try {
+    const ph = unique.map(() => '?').join(',');
+    const [companyRows, attendeeRows] = await Promise.all([
+      db.execute({ sql: `SELECT id, name, company_type, industry FROM companies WHERE id IN (${ph})`, args: unique }),
+      db.execute({ sql: `SELECT id, first_name, last_name, title, company_id FROM attendees WHERE company_id IN (${ph})`, args: unique }),
+    ]);
+
+    const attendeesByCompany = new Map<number, { id: number; first_name: string; last_name: string; title: string | null }[]>();
+    for (const r of attendeeRows.rows) {
+      const cid = Number(r.company_id);
+      if (!attendeesByCompany.has(cid)) attendeesByCompany.set(cid, []);
+      attendeesByCompany.get(cid)!.push({ id: Number(r.id), first_name: String(r.first_name), last_name: String(r.last_name), title: r.title as string | null });
+    }
+
+    const companies = companyRows.rows.map(r => ({
+      id: Number(r.id),
+      name: r.name,
+      company_type: r.company_type,
+      industry: r.industry,
+      attendees: attendeesByCompany.get(Number(r.id)) ?? [],
+    }));
+
+    return NextResponse.json({ companies });
+  } catch (err) {
+    console.error('GET /api/companies/bulk error:', err);
+    return NextResponse.json({ error: 'Failed to fetch companies' }, { status: 500 });
+  }
+}
+
 function parseStatusValues(status: unknown): string[] {
   if (status == null) return [];
   return String(status)

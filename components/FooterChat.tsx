@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { startPolling, stopPolling } from '@/lib/pollingManager';
 import { useUser } from '@/components/UserContext';
 import { useChatPanel } from '@/components/ChatPanelContext';
 
@@ -433,7 +434,6 @@ export function FooterChat() {
   const [openChats, setOpenChats] = useState<ChatUser[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [convLoading, setConvLoading] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Group chat state
   const [panelTab, setPanelTab] = useState<'direct' | 'groups'>('direct');
   const [groups, setGroups] = useState<GroupConversation[]>([]);
@@ -469,8 +469,8 @@ export function FooterChat() {
     if (!user) return;
     fetchConversations();
     fetchGroups();
-    pollRef.current = setInterval(() => { fetchConversations(); fetchGroups(); }, 10000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    startPolling('chat-footer', () => { fetchConversations(); fetchGroups(); }, 15_000, 30_000);
+    return () => stopPolling('chat-footer');
   }, [user, fetchConversations, fetchGroups]);
 
   const openChat = useCallback((other: ChatUser) => {
