@@ -7,6 +7,7 @@ import type { UserOption } from '@/lib/useUserOptions';
 import { getRepInitials } from '@/lib/useUserOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { RelationshipMapDrawer } from './RelationshipMapDrawer';
 
 interface InternalRelationship {
   id: number;
@@ -349,6 +350,7 @@ export function InternalRelationshipsSection({
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showMapDrawer, setShowMapDrawer] = useState(false);
 
   // Form state - full form (company context)
   const [formRepIds, setFormRepIds] = useState<number[]>([]);
@@ -465,14 +467,28 @@ export function InternalRelationshipsSection({
             Internal Relationships ({relationships.length})
           </h2>
         </button>
-        {sectionExpanded && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="text-xs text-brand-secondary hover:underline font-medium"
-          >
-            + Add
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {relationships.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowMapDrawer(true)}
+              className="text-xs text-brand-secondary hover:underline font-medium flex items-center gap-1"
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Relationship map
+            </button>
+          )}
+          {sectionExpanded && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="text-xs text-brand-secondary hover:underline font-medium"
+            >
+              + Add
+            </button>
+          )}
+        </div>
       </div>
 
       {sectionExpanded && (
@@ -541,6 +557,18 @@ export function InternalRelationshipsSection({
             </div>
           )}
         </div>
+      )}
+
+      {/* Relationship map drawer */}
+      {showMapDrawer && (
+        <RelationshipMapDrawer
+          relationships={relationships}
+          contacts={attendeeDetailMap}
+          userOptions={userOptions}
+          relTypeOptions={relTypeOptions}
+          companyName={companyName}
+          onClose={() => setShowMapDrawer(false)}
+        />
       )}
     </div>
   );
