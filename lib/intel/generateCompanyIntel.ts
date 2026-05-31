@@ -114,12 +114,12 @@ Search for recent news, leadership changes, expansions, acquisitions, or regulat
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 4096,
       tools: [
         { type: 'web_search_20260209' as const, name: 'web_search', max_uses: 1 },
         SAVE_INTEL_TOOL,
       ],
-      tool_choice: { type: 'tool', name: 'save_intel' },
+      tool_choice: { type: 'any' },
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
