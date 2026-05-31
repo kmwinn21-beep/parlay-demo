@@ -144,27 +144,36 @@ export async function initDb(): Promise<void> {
       args: [],
     });
     const currentSql = masterRow.rows.length > 0 ? String(masterRow.rows[0].sql ?? '') : '';
-    if (!currentSql.includes('sales_rep') || !currentSql.includes('stakeholder')) {
-      await db.execute({ sql: `DROP TABLE IF EXISTS users_new`, args: [] });
-      await db.execute({ sql: `CREATE TABLE users_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator','stakeholder')),
-        email_verified INTEGER NOT NULL DEFAULT 0,
-        verification_token TEXT, reset_token TEXT, reset_token_expires INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        config_id INTEGER REFERENCES config_options(id),
-        display_name TEXT, email_pending TEXT, email_change_token TEXT, email_change_expires INTEGER,
-        active INTEGER NOT NULL DEFAULT 1,
-        invite_token TEXT, invite_expires INTEGER, first_name TEXT, last_name TEXT,
-        signature_html TEXT, last_seen_at TEXT
-      )`, args: [] });
-      await db.execute({ sql: `INSERT INTO users_new SELECT id,email,password_hash,role,email_verified,verification_token,reset_token,reset_token_expires,created_at,config_id,display_name,email_pending,email_change_token,email_change_expires,active,invite_token,invite_expires,first_name,last_name,signature_html,last_seen_at FROM users`, args: [] });
-      await db.execute({ sql: `DROP TABLE users`, args: [] });
-      await db.execute({ sql: `ALTER TABLE users_new RENAME TO users`, args: [] });
+    if (currentSql.includes('sales_rep') && currentSql.includes('stakeholder')) {
+      // Already migrated — skip entirely
+    } else {
+      await db.execute({ sql: `PRAGMA foreign_keys = OFF`, args: [] });
+      try {
+        await db.execute({ sql: `CREATE TABLE IF NOT EXISTS users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','administrator','sales_rep','manager','analyst','conference_coordinator','stakeholder')),
+          email_verified INTEGER NOT NULL DEFAULT 0,
+          verification_token TEXT, reset_token TEXT, reset_token_expires INTEGER,
+          created_at TEXT DEFAULT (datetime('now')),
+          config_id INTEGER REFERENCES config_options(id),
+          display_name TEXT, email_pending TEXT, email_change_token TEXT, email_change_expires INTEGER,
+          active INTEGER NOT NULL DEFAULT 1,
+          invite_token TEXT, invite_expires INTEGER, first_name TEXT, last_name TEXT,
+          signature_html TEXT, last_seen_at TEXT
+        )`, args: [] });
+        await db.execute({ sql: `DELETE FROM users_new`, args: [] });
+        await db.execute({ sql: `INSERT INTO users_new SELECT id,email,password_hash,role,email_verified,verification_token,reset_token,reset_token_expires,created_at,config_id,display_name,email_pending,email_change_token,email_change_expires,active,invite_token,invite_expires,first_name,last_name,signature_html,last_seen_at FROM users`, args: [] });
+        await db.execute({ sql: `DROP TABLE users`, args: [] });
+        await db.execute({ sql: `ALTER TABLE users_new RENAME TO users`, args: [] });
+      } catch (e) {
+        console.error('[migration] role constraint migration failed:', e);
+      } finally {
+        await db.execute({ sql: `PRAGMA foreign_keys = ON`, args: [] }).catch(() => {});
+      }
     }
-  } catch (e) { console.error('Role constraint migration failed:', e); }
+  } catch (e) { console.error('[migration] role constraint check failed:', e); }
 
   // Belt-and-suspenders: explicitly verify critical columns exist and add them if missing.
   // This catches cases where ALTER TABLE silently failed or code was deployed without migrations.
