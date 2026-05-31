@@ -37,7 +37,10 @@ export interface CompanyIntelResult {
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are a senior sales intelligence analyst embedded in a conference relationship management platform. Your job is to analyze companies attending an upcoming conference and surface actionable intelligence for sales reps. Focus on how each company fits the ICP and what specific angles the reps should use. Be concise — reps have 60 seconds to read your output per company.`;
+const SYSTEM_PROMPT = `You are a senior sales intelligence analyst embedded in a conference relationship management platform. Your job is to analyze companies attending an upcoming conference and surface actionable intelligence for sales reps. Focus on how each company fits the ICP and what specific angles the reps should use. Be concise — reps have 60 seconds to read your output per company.
+
+Respond with only valid JSON matching this exact schema. No preamble, no explanation, no markdown fences. Your entire response must be parseable by JSON.parse():
+{"summary":"string","pain_point_signals":["string"],"trigger_events":["string"],"buying_signals":["string"],"opening_angles":["string"]}`;
 
 function buildSharedContext(
   icpPainPoints: string[],
@@ -68,41 +71,6 @@ function fallbackResult(companyName: string, companyType: string | null, industr
   };
 }
 
-const SAVE_INTEL_TOOL = {
-  name: 'save_intel',
-  description: 'Save the researched sales intelligence for this company.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      summary: {
-        type: 'string',
-        description: '2-3 sentence company overview focused on current business situation and ICP fit',
-      },
-      pain_point_signals: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '3-5 specific bullets of evidence this company has the pain points we solve',
-      },
-      trigger_events: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2-4 bullets: recent news, leadership changes, expansions, or regulatory events',
-      },
-      buying_signals: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2-4 bullets: signals indicating they may be in a buying position',
-      },
-      opening_angles: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2-3 bullets: conversation starters for reps meeting these attendees',
-      },
-    },
-    required: ['summary', 'pain_point_signals', 'trigger_events', 'buying_signals', 'opening_angles'],
-  },
-};
-
 // Single-company function — used by /intel/generate for per-card refresh
 export async function generateCompanyIntel(input: CompanyIntelInput): Promise<CompanyIntelResult> {
   const usedIcpFallback = input.icpPainPoints.length === 0 || input.icpTriggerEvents.length === 0;
@@ -114,7 +82,7 @@ export async function generateCompanyIntel(input: CompanyIntelInput): Promise<Co
 
   const userPrompt = `${sharedCtx}
 
-Research ${input.companyName} using web search, then call save_intel with the findings.
+Research ${input.companyName} using web search, then return the JSON intel.
 
 Company: ${input.companyName}
 Type: ${input.companyType ?? 'Unknown'}
@@ -126,41 +94,43 @@ Reps Assigned: ${input.repNames.length > 0 ? input.repNames.join(', ') : 'None a
 Attendees at this conference:
 ${attendeeLines || '- No attendees listed'}
 
-Search for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Use your findings to populate all fields in save_intel with specific, actionable intelligence for the sales rep meeting this company at the conference.`;
+Search for recent news, leadership changes, expansions, acquisitions, or regulatory events for this company. Return a JSON object with specific, actionable intelligence for the sales rep meeting this company at the conference.`;
 
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 1024,
       tools: [
-        { type: 'web_search_20260209' as const, name: 'web_search', max_uses: 2 },
-        SAVE_INTEL_TOOL,
+        { type: 'web_search_20260209' as const, name: 'web_search', max_uses: 1 },
       ],
-      tool_choice: { type: 'any' },
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
 
-    const toolUseBlock = response.content.find(
-      b => b.type === 'tool_use' && (b as { name: string }).name === 'save_intel'
-    );
-    if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {
-      console.error('[generateCompanyIntel] save_intel not called for', input.companyName, '| stop_reason:', response.stop_reason);
-      return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
-    }
+    const text = response.content
+      .filter(b => b.type === 'text')
+      .map(b => (b as { text: string }).text)
+      .join('');
 
-    const parsed = (toolUseBlock as { input: Record<string, unknown> }).input;
+    const parsed = JSON.parse(text.trim()) as {
+      summary?: string;
+      pain_point_signals?: string[];
+      trigger_events?: string[];
+      buying_signals?: string[];
+      opening_angles?: string[];
+    };
+
     return {
-      summary: (parsed.summary as string) ?? '',
-      pain_point_signals: (parsed.pain_point_signals as string[]) ?? [],
-      trigger_events: (parsed.trigger_events as string[]) ?? [],
-      buying_signals: (parsed.buying_signals as string[]) ?? [],
-      opening_angles: (parsed.opening_angles as string[]) ?? [],
+      summary: parsed.summary ?? '',
+      pain_point_signals: parsed.pain_point_signals ?? [],
+      trigger_events: parsed.trigger_events ?? [],
+      buying_signals: parsed.buying_signals ?? [],
+      opening_angles: parsed.opening_angles ?? [],
       used_icp_fallback: usedIcpFallback,
       is_fallback: false,
     };
   } catch (err) {
-    console.error('[generateCompanyIntel] API error for', input.companyName, ':', err);
+    console.error('[generateCompanyIntel] error for', input.companyName, ':', err);
     return fallbackResult(input.companyName, input.companyType, input.industry, usedIcpFallback);
   }
 }

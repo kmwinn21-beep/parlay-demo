@@ -34,30 +34,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const db = await getDb(authResult.accountId);
 
-    // Get company info
-    const companyRow = await db.execute({
-      sql: 'SELECT id, name, company_type, industry, wse, assigned_user FROM companies WHERE id = ?',
-      args: [companyId],
-    });
+    // Run all independent queries in parallel — cuts sequential Turso round-trip overhead
+    const [companyRow, tierRow, attendeeRows, icpRows, brandRows] = await Promise.all([
+      db.execute({
+        sql: 'SELECT id, name, company_type, industry, wse, assigned_user FROM companies WHERE id = ?',
+        args: [companyId],
+      }),
+      db.execute({
+        sql: `SELECT tier FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
+        args: [conferenceId, companyId],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+      db.execute({
+        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority
+              FROM attendees a
+              JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
+              WHERE a.company_id = ?
+              ORDER BY a.seniority, a.last_name`,
+        args: [conferenceId, companyId],
+      }),
+      db.execute({
+        sql: `SELECT key, value FROM site_settings WHERE key LIKE 'icp_%'`,
+        args: [],
+      }),
+      db.execute({
+        sql: `SELECT key, value FROM site_settings WHERE key LIKE 'company_info_%'`,
+        args: [],
+      }),
+    ]);
+
     if (companyRow.rows.length === 0) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     const company = companyRow.rows[0];
-
-    // Get tier from intel table, falling back to Monitor
-    const tierRow = await db.execute({
-      sql: `SELECT tier FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
-      args: [conferenceId, companyId],
-    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
     const tier = tierRow.rows.length > 0 ? String(tierRow.rows[0].tier) : 'Monitor';
 
-    // Get attendees
-    const attendeeRows = await db.execute({
-      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority
-            FROM attendees a
-            JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-            WHERE a.company_id = ?
-            ORDER BY a.seniority, a.last_name`,
-      args: [conferenceId, companyId],
-    });
     const attendees = attendeeRows.rows.map(r => ({
       first_name: String(r.first_name),
       last_name: String(r.last_name),
@@ -65,7 +73,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       seniority: r.seniority as string | null,
     }));
 
-    // Resolve rep names
+    const icpSettings: Record<string, string> = {};
+    for (const r of icpRows.rows) icpSettings[String(r.key)] = String(r.value);
+    const icpPainPoints = [
+      ...tryParseJson<string[]>(icpSettings['icp_pain_points'], []),
+      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_pain_points'], []).map(p => p.title),
+    ];
+    const icpTriggerEvents = [
+      ...tryParseJson<string[]>(icpSettings['icp_trigger_events'], []),
+      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_trigger_events'], []).map(t => t.title),
+    ];
+
+    const brandSettings: Record<string, string> = {};
+    for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
+
+    // Rep names depend on company.assigned_user — resolved after the parallel batch
     const userIds = parseIdList(company.assigned_user);
     const repNames: string[] = [];
     if (userIds.length > 0) {
@@ -76,31 +98,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const nameMap = new Map(userRows.rows.map(r => [Number(r.config_id), String(r.display_name)]));
       repNames.push(...userIds.map(uid => nameMap.get(uid)).filter(Boolean) as string[]);
     }
-
-    // Get ICP settings
-    const icpRows = await db.execute({
-      sql: `SELECT key, value FROM site_settings WHERE key LIKE 'icp_%'`,
-      args: [],
-    });
-    const icpSettings: Record<string, string> = {};
-    for (const r of icpRows.rows) icpSettings[String(r.key)] = String(r.value);
-
-    const icpPainPoints = [
-      ...tryParseJson<string[]>(icpSettings['icp_pain_points'], []),
-      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_pain_points'], []).map(p => p.title),
-    ];
-    const icpTriggerEvents = [
-      ...tryParseJson<string[]>(icpSettings['icp_trigger_events'], []),
-      ...tryParseJson<{ title: string; description: string }[]>(icpSettings['icp_ai_trigger_events'], []).map(t => t.title),
-    ];
-
-    // Get brand settings
-    const brandRows = await db.execute({
-      sql: `SELECT key, value FROM site_settings WHERE key LIKE 'company_info_%'`,
-      args: [],
-    });
-    const brandSettings: Record<string, string> = {};
-    for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
 
     console.log(`[intel-timing] step: db_queries_complete, elapsed: ${Date.now() - t0}ms`);
 
