@@ -3,6 +3,33 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { classifySeniority } from '@/lib/parsers';
 
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
+
+  const raw = new URL(request.url).searchParams.get('ids') ?? '';
+  const ids = raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+  const unique = Array.from(new Set(ids));
+
+  if (unique.length === 0) return NextResponse.json({ error: 'ids parameter required' }, { status: 400 });
+  if (unique.length > 500) return NextResponse.json({ error: 'Too many IDs — maximum 500' }, { status: 400 });
+
+  try {
+    const result = await db.execute({
+      sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, co.name as company_name
+            FROM attendees a
+            LEFT JOIN companies co ON a.company_id = co.id
+            WHERE a.id IN (${unique.map(() => '?').join(',')})`,
+      args: unique,
+    });
+    return NextResponse.json({ attendees: result.rows.map(r => ({ ...r })) });
+  } catch (err) {
+    console.error('GET /api/attendees/bulk error:', err);
+    return NextResponse.json({ error: 'Failed to fetch attendees' }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;

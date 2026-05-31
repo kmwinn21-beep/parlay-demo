@@ -383,20 +383,17 @@ export function InternalRelationshipsSection({
       return;
     }
 
-    // Fetch missing attendee details
+    // Bulk-fetch missing attendee details in a single request
     const uniqueIds = Array.from(new Set(missingIds));
-    Promise.all(
-      uniqueIds.map(aid =>
-        fetch(`/api/attendees/${aid}`).then(r => r.ok ? r.json() : null).catch(() => null)
-      )
-    ).then(results => {
-      for (const data of results) {
-        if (data?.id) {
-          map.set(data.id, { id: data.id, first_name: data.first_name, last_name: data.last_name, title: data.title || undefined });
+    fetch(`/api/attendees/bulk?ids=${uniqueIds.join(',')}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(({ attendees }: { attendees: { id: number; first_name: string; last_name: string; title?: string | null }[] }) => {
+        for (const a of attendees) {
+          map.set(a.id, { id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title ?? undefined });
         }
-      }
-      setAttendeeDetailMap(new Map(map));
-    });
+        setAttendeeDetailMap(new Map(map));
+      })
+      .catch(() => setAttendeeDetailMap(new Map(map)));
   }, [attendees, relationships]);
 
   const resetForm = () => {
@@ -581,35 +578,38 @@ export function InternalRelationshipModal({
   useEffect(() => {
     if (!isOpen) return;
     setIsLoading(true);
+    const entityUrl = entityType === 'company'
+      ? `/api/companies/bulk?ids=${entityIds.join(',')}`
+      : `/api/attendees/bulk?ids=${entityIds.join(',')}`;
+
     Promise.all([
       fetch('/api/config?category=user&form=relationships_page').then(r => r.json()),
       fetch('/api/config?category=rep_relationship_type&form=relationships_page').then(r => r.json()),
-      ...(entityType === 'company'
-        ? entityIds.map(id => fetch(`/api/companies/${id}`).then(r => r.json()))
-        : entityIds.map(id => fetch(`/api/attendees/${id}`).then(r => r.json()))
-      ),
-    ]).then(([userData, relData, ...entityData]) => {
-      setUserOptions(userData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-      setRelTypeOptions(relData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      fetch(entityUrl).then(r => r.json()),
+    ]).then(([userData, relData, entityBulk]: [
+      { id: number; value: string }[],
+      { id: number; value: string }[],
+      { companies?: { id: number; name: string; attendees: { id: number; first_name: string; last_name: string; title: string | null }[] }[] } &
+      { attendees?: { id: number; first_name: string; last_name: string; title: string | null; company_id: number | null; company_name: string | null }[] },
+    ]) => {
+      setUserOptions(userData.map((o) => ({ id: Number(o.id), value: String(o.value) })));
+      setRelTypeOptions(relData.map((o) => ({ id: Number(o.id), value: String(o.value) })));
 
       if (entityType === 'company') {
         const byCompany = new Map<number, AttendeeOption[]>();
-        for (const data of entityData) {
-          if (data?.id && data?.attendees) {
-            byCompany.set(data.id, data.attendees.map((a: { id: number; first_name: string; last_name: string; title?: string }) => ({
-              id: a.id, first_name: a.first_name, last_name: a.last_name,
-              title: a.title ?? undefined,
-              company_id: data.id,
-              company_name: data.name ?? undefined,
-            })));
-          }
+        for (const data of entityBulk.companies ?? []) {
+          byCompany.set(data.id, (data.attendees ?? []).map(a => ({
+            id: a.id, first_name: a.first_name, last_name: a.last_name,
+            title: a.title ?? undefined,
+            company_id: data.id,
+            company_name: data.name ?? undefined,
+          })));
         }
         setAttendeesByCompany(byCompany);
       } else {
-        // Attendee context - map attendee to company
         const compMap = new Map<number, number>();
         const cNames = new Map<number, string>();
-        for (const data of entityData) {
+        for (const data of entityBulk.attendees ?? []) {
           if (data?.company_id) {
             compMap.set(data.id, data.company_id);
             if (data.company_name) cNames.set(data.company_id, data.company_name);
