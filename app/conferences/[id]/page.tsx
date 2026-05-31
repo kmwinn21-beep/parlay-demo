@@ -67,6 +67,7 @@ interface Attendee {
   conference_names?: string;
   entity_notes_count?: number;
   created_at?: string;
+  updated_at?: string;
 }
 
 function fmtDate(dateStr?: string): string {
@@ -325,6 +326,10 @@ export default function ConferenceDetailPage() {
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterCompanyType, setFilterCompanyType] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
+  const [showConfFilter, setShowConfFilter] = useState(false);
+  const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   const [attendeeFiltersOpen, setAttendeeFiltersOpen] = useState(false);
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
@@ -1063,7 +1068,18 @@ export default function ConferenceDetailPage() {
     await doUpload(pendingMapping, resolutions);
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterNeedsReview]);
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview]);
+
+  const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
+  const toggleConfFilter = (val: string) => {
+    setFilterConfCounts(prev => { const n = new Set(prev); n.has(val) ? n.delete(val) : n.add(val); return n; });
+  };
+  const confCountMatches = (count: number): boolean => {
+    if (filterConfCounts.size === 0) return true;
+    if (filterConfCounts.has('4+') && count >= 4) return true;
+    if (filterConfCounts.has(String(count)) && count < 4) return true;
+    return false;
+  };
 
   // Fetch function and seniority option records once for the classify modal
   useEffect(() => {
@@ -1116,6 +1132,13 @@ export default function ConferenceDetailPage() {
       }
       if (filterSeniority && effectiveSeniority(a.seniority, a.title) !== filterSeniority) return false;
       if (filterCompanyType && (a.company_type || '') !== filterCompanyType) return false;
+      if (filterStatus && !(a.status || '').split(',').map(s => s.trim()).some(s => s === filterStatus)) return false;
+      if (!confCountMatches(Number(a.conference_count ?? 0))) return false;
+      if (filterUpdatedWithin) {
+        const days = filterUpdatedWithin === '1day' ? 1 : filterUpdatedWithin === '1week' ? 7 : filterUpdatedWithin === '2weeks' ? 14 : 30;
+        const updAt = a.updated_at ? String(a.updated_at) : null;
+        if (!updAt || new Date(updAt.endsWith('Z') || updAt.includes('+') ? updAt : updAt + 'Z').getTime() < Date.now() - days * 24 * 60 * 60 * 1000) return false;
+      }
       if (filterNeedsReview && !(a.title ? shouldWarnForTitleMetadata(titleMetaMap[a.id]) : false)) return false;
       return true;
     })
@@ -1710,9 +1733,9 @@ export default function ConferenceDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
                 </svg>
                 Filters
-                {(filterSeniority || filterCompanyType) && (
+                {(filterSeniority || filterCompanyType || filterStatus || filterConfCounts.size > 0 || filterUpdatedWithin || filterNeedsReview) && (
                   <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-brand-secondary text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-brand-secondary">
-                    {[filterSeniority, filterCompanyType].filter(Boolean).length}
+                    {(filterSeniority ? 1 : 0) + (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterNeedsReview ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -1780,7 +1803,21 @@ export default function ConferenceDetailPage() {
           {/* Collapsible attendee filters pane */}
           {attendeeFiltersOpen && (
             <div className="mb-4 px-6 py-4 bg-gray-50 border border-gray-200 rounded-xl">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Type</p>
+                  <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Company Types</option>
+                    {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status</p>
+                  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">All Statuses</option>
+                    {(allConfigOptions.status ?? []).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Seniority</p>
                   <select value={filterSeniority} onChange={e => setFilterSeniority(e.target.value)} className="input-field w-full text-sm">
@@ -1789,26 +1826,53 @@ export default function ConferenceDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Type</p>
-                  <select value={filterCompanyType} onChange={e => setFilterCompanyType(e.target.value)} className="input-field w-full text-sm">
-                    <option value="">All Types</option>
-                    {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5"># Conferences</p>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfFilter(v => !v)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:border-brand-secondary transition-colors bg-white"
+                    >
+                      <span>{filterConfCounts.size > 0 ? `${filterConfCounts.size} selected` : 'All counts...'}</span>
+                      <svg className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${showConfFilter ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    {showConfFilter && (
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 p-2 min-w-[140px]">
+                        {CONF_COUNT_OPTIONS.map(opt => (
+                          <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm">
+                            <input type="checkbox" checked={filterConfCounts.has(opt)} onChange={() => toggleConfFilter(opt)} className="accent-brand-secondary" />
+                            {opt} conference{opt === '1' ? '' : 's'}
+                          </label>
+                        ))}
+                        {filterConfCounts.size > 0 && <button onClick={() => setFilterConfCounts(new Set())} className="text-xs text-red-500 hover:underline px-2 mt-1">Clear</button>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Updated On</p>
+                  <select value={filterUpdatedWithin} onChange={e => setFilterUpdatedWithin(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">Updated within the...</option>
+                    <option value="1day">Last Day</option>
+                    <option value="1week">Last Week</option>
+                    <option value="2weeks">Last 2 Weeks</option>
+                    <option value="30days">Last 30 Days</option>
                   </select>
                 </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title Status</p>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                    <input type="checkbox" checked={filterNeedsReview} onChange={e => setFilterNeedsReview(e.target.checked)} className="accent-brand-secondary" />
+                    Needs Title Review
+                    {titleMetaLoading && <span className="text-xs text-gray-400">…</span>}
+                  </label>
+                </div>
               </div>
-              <div className="sm:col-span-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title Status</p>
-                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer border border-gray-200 rounded-lg px-3 py-2 bg-white">
-                  <input type="checkbox" checked={filterNeedsReview} onChange={e => setFilterNeedsReview(e.target.checked)} className="accent-brand-secondary" />
-                  Needs Title Review
-                  {titleMetaLoading && <span className="text-xs text-gray-400">…</span>}
-                </label>
-              </div>
-              {(filterSeniority || filterCompanyType || filterNeedsReview) && (
-                <div className="mt-3 flex justify-end sm:col-span-2">
+              {(filterSeniority || filterCompanyType || filterStatus || filterConfCounts.size > 0 || filterUpdatedWithin || filterNeedsReview) && (
+                <div className="mt-3 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); setFilterNeedsReview(false); }}
+                    onClick={() => { setFilterSeniority(''); setFilterCompanyType(''); setFilterStatus(''); setFilterConfCounts(new Set()); setFilterUpdatedWithin(''); setFilterNeedsReview(false); }}
                     className="text-xs text-gray-500 hover:text-red-500 transition-colors"
                   >
                     Clear all filters

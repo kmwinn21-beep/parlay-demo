@@ -192,11 +192,36 @@ export default function CompanyDetailPage() {
   const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
   const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
 
+  // Intel drawer state
+  interface IntelItem {
+    conference_id: number;
+    conference_name: string;
+    tier: string;
+    summary: string;
+    pain_point_signals: string[];
+    trigger_events: string[];
+    buying_signals: string[];
+    opening_angles: string[];
+    used_icp_fallback: boolean;
+    is_fallback: boolean;
+    generated_at: string | null;
+  }
+  const [intelItems, setIntelItems] = useState<IntelItem[]>([]);
+  const [showIntelDrawer, setShowIntelDrawer] = useState(false);
+  const [selectedIntelIdx, setSelectedIntelIdx] = useState(0);
+
   const fetchInternalRelationships = useCallback(async () => {
     try {
       const res = await fetch(`/api/internal-relationships?company_id=${id}`);
       if (res.ok) setInternalRelationships(await res.json());
     } catch { /* non-fatal */ }
+  }, [id]);
+
+  useEffect(() => {
+    fetch(`/api/companies/${id}/intel`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.items) setIntelItems(data.items); })
+      .catch(() => {});
   }, [id]);
 
   const fetchCompany = useCallback(async () => {
@@ -860,6 +885,17 @@ export default function CompanyDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                         </span>
+                      )}
+                      {intelItems.length > 0 && (
+                        <button
+                          onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }}
+                          title="View company intel"
+                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0"
+                        >
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        </button>
                       )}
                     </h1>
                     {company.parent_company && (
@@ -1703,6 +1739,123 @@ export default function CompanyDetailPage() {
         companyName={relatedDrawerCompanyName}
         onClose={() => { setRelatedDrawerCompanyId(null); setRelatedDrawerCompanyName(undefined); }}
       />
+
+      {/* Intel drawer */}
+      {showIntelDrawer && intelItems.length > 0 && (() => {
+        const intel = intelItems[selectedIntelIdx];
+        return (
+          <div className="fixed inset-0 z-50 flex">
+            <style>{`
+              @keyframes intelFadeIn { from { opacity: 0; } to { opacity: 1; } }
+              @keyframes intelSlideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            `}</style>
+            <div className="flex-1" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
+            <div className="w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden" style={{ animation: 'intelSlideInRight 0.25s ease-out' }}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif">Company Intel</h2>
+                  {intelItems.length > 1 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      {intelItems.map((item, i) => (
+                        <button
+                          key={item.conference_id}
+                          onClick={() => setSelectedIntelIdx(i)}
+                          className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${i === selectedIntelIdx ? 'bg-brand-primary text-white border-brand-primary' : 'text-gray-500 border-gray-300 hover:border-gray-400'}`}
+                        >
+                          {item.conference_name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {intelItems.length === 1 && (
+                    <p className="text-xs text-gray-500 mt-0.5">{intel.conference_name}</p>
+                  )}
+                </div>
+                <button onClick={() => setShowIntelDrawer(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                {intel.is_fallback && (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    Generated from ICP profile — company-specific data limited
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Summary</p>
+                  <p className="text-sm text-gray-600 leading-relaxed">{intel.summary}</p>
+                </div>
+
+                {intel.pain_point_signals.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Pain Point Signals</p>
+                    <ul className="space-y-1">
+                      {intel.pain_point_signals.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-amber-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.trigger_events.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Trigger Events</p>
+                    <ul className="space-y-1">
+                      {intel.trigger_events.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-blue-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.buying_signals.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Buying Signals</p>
+                    <ul className="space-y-1">
+                      {intel.buying_signals.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-green-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.opening_angles.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Opening Angles</p>
+                    <ul className="space-y-1">
+                      {intel.opening_angles.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-purple-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.generated_at && (
+                  <p className="text-xs text-gray-400">Generated {new Date(intel.generated_at).toLocaleDateString()}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
