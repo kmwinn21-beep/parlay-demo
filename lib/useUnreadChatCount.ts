@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-const POLL_INTERVAL_MS = 10_000;
+import { startPolling, stopPolling } from '@/lib/pollingManager';
 
 export function useUnreadChatCount(): number {
   const [count, setCount] = useState(0);
@@ -33,8 +32,8 @@ export function useUnreadChatCount(): number {
     }
 
     fetchCount();
-    const id = setInterval(fetchCount, POLL_INTERVAL_MS);
-    return () => { cancelled = true; clearInterval(id); };
+    startPolling('chat-unread', fetchCount, 15_000, 30_000);
+    return () => { cancelled = true; stopPolling('chat-unread'); };
   }, []);
 
   return count;
