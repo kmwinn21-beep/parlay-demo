@@ -584,7 +584,7 @@ async function initDbWithRetry(): Promise<void> {
   const TIMEOUT_MS = 10_000;
   const isNetworkError = (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
-    return msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED') || msg.includes('fetch failed');
+    return msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('fetch failed') || msg.includes('[db-init] connection timeout');
   };
 
   const attempt = () => Promise.race([
