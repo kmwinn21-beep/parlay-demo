@@ -1745,8 +1745,12 @@ export default function CompanyDetailPage() {
         const intel = intelItems[selectedIntelIdx];
         return (
           <div className="fixed inset-0 z-50 flex">
-            <div className="flex-1" onClick={() => setShowIntelDrawer(false)} />
-            <div className="w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden">
+            <style>{`
+              @keyframes intelFadeIn { from { opacity: 0; } to { opacity: 1; } }
+              @keyframes intelSlideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            `}</style>
+            <div className="flex-1" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
+            <div className="w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden" style={{ animation: 'intelSlideInRight 0.25s ease-out' }}>
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div>
