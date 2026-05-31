@@ -478,7 +478,7 @@ export function InternalRelationshipsSection({
       </div>
 
       {relationships.length > 0 && (
-        <div className="mt-1.5">
+        <div className="mt-1.5 pl-6">
           <button
             type="button"
             onClick={() => setShowMapDrawer(true)}
