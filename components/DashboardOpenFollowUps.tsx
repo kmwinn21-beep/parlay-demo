@@ -300,9 +300,17 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             style={{ animation: 'slideInRight 0.25s ease-out' }}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-800">{companyDrawerName}</h3>
-                <p className="text-xs text-gray-500">Company Record</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">{companyDrawerName}</h3>
+                  <p className="text-xs text-gray-500">Company Record</p>
+                </div>
+                <a
+                  href={`/companies/${companyDrawerId}`}
+                  className="text-xs text-brand-secondary hover:underline font-medium flex-shrink-0"
+                >
+                  Go to Company Record →
+                </a>
               </div>
               <button
                 type="button"
@@ -337,9 +345,17 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             style={{ animation: 'slideInRight 0.25s ease-out' }}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-800">{drawerConfName}</h3>
-                <p className="text-xs text-gray-500">Open Follow-Ups</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">{drawerConfName}</h3>
+                  <p className="text-xs text-gray-500">Open Follow-Ups</p>
+                </div>
+                <a
+                  href={`/conferences/${drawerConfId}`}
+                  className="text-xs text-brand-secondary hover:underline font-medium flex-shrink-0"
+                >
+                  Go to Conference Record →
+                </a>
               </div>
               <button
                 type="button"

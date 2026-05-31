@@ -360,9 +360,17 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             style={{ animation: 'slideInRight 0.25s ease-out' }}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-800">{drawerAttendeeName}</h3>
-                <p className="text-xs text-gray-500">Attendee Record</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">{drawerAttendeeName}</h3>
+                  <p className="text-xs text-gray-500">Attendee Record</p>
+                </div>
+                <a
+                  href={`/attendees/${drawerAttendeeId}`}
+                  className="text-xs text-brand-secondary hover:underline font-medium flex-shrink-0"
+                >
+                  Go to Attendee Record →
+                </a>
               </div>
               <button
                 type="button"

@@ -170,6 +170,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [showAddToConf, setShowAddToConf] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('last_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
@@ -750,6 +751,17 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => setQuickViewId(attendee.id)}
+                      className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
+                      title="Quick view"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
                     <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm truncate">
                       {attendee.first_name} {attendee.last_name}
                     </Link>
@@ -871,7 +883,18 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                       switch (key) {
                         case 'name': return (
                           <td key="name" className="px-3 py-3 overflow-visible">
-                            <div className="text-left">
+                            <div className="flex items-center gap-1 text-left">
+                              <button
+                                type="button"
+                                onClick={() => setQuickViewId(attendee.id)}
+                                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
+                                title="Quick view"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
                               <Link href={`/attendees/${attendee.id}`} className="text-sm text-brand-secondary hover:underline break-words whitespace-normal leading-snug">
                                 {attendee.first_name} {attendee.last_name}
                               </Link>
@@ -1094,6 +1117,41 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           onClose={() => setShowBulkClassify(false)}
           onSaved={() => { setShowBulkClassify(false); setTitleMetaRefetch(c => c + 1); }}
         />
+      )}
+
+      {/* Quick View iframe drawer */}
+      {quickViewId !== null && (
+        <>
+          <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
+          <div
+            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
+            style={{ animation: 'slideInRight 0.25s ease-out' }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+              <a
+                href={`/attendees/${quickViewId}`}
+                className="text-xs text-brand-secondary hover:underline font-medium"
+              >
+                Go to Attendee Record →
+              </a>
+              <button
+                type="button"
+                onClick={() => setQuickViewId(null)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              src={`/attendees/${quickViewId}?embed=true`}
+              className="flex-1 w-full border-0"
+              title="Quick View"
+            />
+          </div>
+        </>
       )}
     </div>
   );
