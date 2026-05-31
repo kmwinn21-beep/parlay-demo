@@ -145,7 +145,8 @@ export async function initDb(): Promise<void> {
     });
     const currentSql = masterRow.rows.length > 0 ? String(masterRow.rows[0].sql ?? '') : '';
     if (!currentSql.includes('sales_rep') || !currentSql.includes('stakeholder')) {
-      await db.execute({ sql: `CREATE TABLE IF NOT EXISTS users_new (
+      await db.execute({ sql: `DROP TABLE IF EXISTS users_new`, args: [] });
+      await db.execute({ sql: `CREATE TABLE users_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
