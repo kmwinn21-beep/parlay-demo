@@ -3347,32 +3347,61 @@ export default function AdminPage() {
             <div className="border-t border-gray-100 my-4" />
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority Prioritization</label>
-              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
-              <table className="w-full text-sm max-w-xs">
-                <thead>
-                  <tr className="text-xs text-gray-500 border-b border-gray-100">
-                    <th className="text-left pb-1 font-medium">Seniority Level</th>
-                    <th className="text-left pb-1 font-medium">Priority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(optionsByCategory['seniority'] ?? []).map(s => (
-                    <tr key={s.value} className="border-b border-gray-50">
-                      <td className="py-1.5 pr-4">{s.value}</td>
-                      <td className="py-1.5">
-                        <select
-                          value={icpSeniorityPriority[s.value] ?? 'Medium'}
-                          onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                          className="input-field text-sm py-0.5"
-                        >
-                          {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                      </td>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority &amp; Function Prioritization</label>
+              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and contact function. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
+              <div className="grid grid-cols-2 gap-6">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <th className="text-left pb-1 font-medium">Seniority Level</th>
+                      <th className="text-left pb-1 font-medium">Priority</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(optionsByCategory['seniority'] ?? []).map(s => (
+                      <tr key={s.value} className="border-b border-gray-50">
+                        <td className="py-1.5 pr-4">{s.value}</td>
+                        <td className="py-1.5">
+                          <select
+                            value={icpSeniorityPriority[s.value] ?? 'Medium'}
+                            onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                            className="input-field text-sm py-0.5"
+                          >
+                            {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <th className="text-left pb-1 font-medium">Function</th>
+                      <th className="text-left pb-1 font-medium">Priority</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(optionsByCategory['function'] ?? []).map(f => (
+                      <tr key={f.value} className="border-b border-gray-50">
+                        <td className="py-1.5 pr-4">{f.value}</td>
+                        <td className="py-1.5">
+                          <select
+                            value={icpFunctionPriority[f.value] ?? 'Medium'}
+                            onChange={e => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
+                            className="input-field text-sm py-0.5"
+                          >
+                            {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                    {(optionsByCategory['function'] ?? []).length === 0 && (
+                      <tr><td colSpan={2} className="py-2 text-xs text-gray-400">No function options configured.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="border-t border-gray-100 my-4" />
