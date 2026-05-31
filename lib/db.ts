@@ -577,8 +577,49 @@ export async function initDb(): Promise<void> {
   ));
 }
 
-// Run initDb once at module load so tables exist before any query
-export const dbReady: Promise<void> = initDb().catch((err) => {
+// Tracks the last initDb failure so getDb can surface it as a 503
+export let dbInitError: Error | null = null;
+
+async function initDbWithRetry(): Promise<void> {
+  const TIMEOUT_MS = 10_000;
+  const isNetworkError = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    return msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED') || msg.includes('fetch failed');
+  };
+
+  const attempt = () => Promise.race([
+    initDb(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('[db-init] connection timeout after 10s')), TIMEOUT_MS)
+    ),
+  ]);
+
+  try {
+    await attempt();
+    dbInitError = null;
+  } catch (firstErr) {
+    if (isNetworkError(firstErr)) {
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        await attempt();
+        dbInitError = null;
+      } catch (secondErr) {
+        const err = secondErr instanceof Error ? secondErr : new Error(String(secondErr));
+        console.error(`[db-init] failed after 2 attempts: ${err.message}`);
+        dbInitError = err;
+      }
+    } else {
+      const err = firstErr instanceof Error ? firstErr : new Error(String(firstErr));
+      console.error('[db-init] non-network error:', err.message);
+      dbInitError = err;
+    }
+  }
+}
+
+// Run initDb once at module load so tables exist before any query.
+// Always resolves (never rejects) to keep backward-compat with 50+ callers.
+// Check dbInitError after awaiting if you need to distinguish success vs failure.
+export const dbReady: Promise<void> = initDbWithRetry().catch((err) => {
   console.error('Failed to initialize database schema:', err);
 });
 

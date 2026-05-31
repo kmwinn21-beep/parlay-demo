@@ -1,5 +1,13 @@
 import { createClient, type Client } from '@libsql/client';
-import { db, dbReady, migrateTenantDb } from '@/lib/db';
+import { db, dbReady, dbInitError, migrateTenantDb } from '@/lib/db';
+
+export class DatabaseUnavailableError extends Error {
+  readonly status = 503;
+  constructor(cause: Error) {
+    super('database_unavailable');
+    this.cause = cause;
+  }
+}
 
 const tenantCache = new Map<string, Client>();
 // Deduplicates concurrent first-access calls — prevents multiple migration runs
@@ -16,6 +24,7 @@ export async function getDb(accountId: string | undefined): Promise<Client> {
 
   const init = (async () => {
     await dbReady;
+    if (dbInitError) throw new DatabaseUnavailableError(dbInitError);
     const row = await db.execute({
       sql: `SELECT turso_db_url, turso_auth_token FROM accounts WHERE id = ?`,
       args: [accountId],
@@ -50,6 +59,7 @@ export async function findDbByToken(
   selectColumns = 'id'
 ): Promise<{ client: Client; row: Record<string, unknown>; accountId?: string } | null> {
   await dbReady;
+  if (dbInitError) throw new DatabaseUnavailableError(dbInitError);
 
   // Try master DB first (covers ops/single-tenant users)
   const masterResult = await db.execute({
