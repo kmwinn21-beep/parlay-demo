@@ -1,34 +1,62 @@
 'use client';
 
-let cachedData: unknown = null;
-let cachedAt = 0;
-let inFlight: Promise<unknown> | null = null;
-const CACHE_TTL = 60_000; // 60 seconds
+// ---------------------------------------------------------------------------
+// Generic request deduplication + TTL cache
+// ---------------------------------------------------------------------------
 
-export async function getConfig(): Promise<unknown> {
-  if (cachedData !== null && Date.now() - cachedAt < CACHE_TTL) {
-    return cachedData;
+type CacheEntry<T> = { data: T; cachedAt: number };
+
+const cache = new Map<string, CacheEntry<unknown>>();
+const inFlight = new Map<string, Promise<unknown>>();
+
+const DEFAULT_TTL = 60_000; // 60 seconds
+
+/**
+ * Fetch with in-flight deduplication and TTL caching.
+ * Concurrent callers with the same key share one Promise.
+ * Subsequent callers within ttlMs get the cached result immediately.
+ */
+export function getCached<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlMs: number = DEFAULT_TTL,
+): Promise<T> {
+  const entry = cache.get(key) as CacheEntry<T> | undefined;
+  if (entry && Date.now() - entry.cachedAt < ttlMs) {
+    return Promise.resolve(entry.data);
   }
-  if (inFlight) return inFlight;
 
-  inFlight = fetch('/api/config')
-    .then(r => r.json())
+  const existing = inFlight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const promise = fetcher()
     .then(data => {
-      cachedData = data;
-      cachedAt = Date.now();
-      inFlight = null;
+      cache.set(key, { data, cachedAt: Date.now() });
+      inFlight.delete(key);
       return data;
     })
     .catch(err => {
-      inFlight = null;
+      inFlight.delete(key);
       throw err;
     });
 
-  return inFlight;
+  inFlight.set(key, promise as Promise<unknown>);
+  return promise;
+}
+
+export function invalidateCached(key: string) {
+  cache.delete(key);
+  inFlight.delete(key);
+}
+
+// ---------------------------------------------------------------------------
+// /api/config convenience wrapper (backwards-compat with Prompt 5 callers)
+// ---------------------------------------------------------------------------
+
+export function getConfig(): Promise<unknown> {
+  return getCached('__config__', () => fetch('/api/config').then(r => r.json()));
 }
 
 export function invalidateConfigCache() {
-  cachedData = null;
-  cachedAt = 0;
-  inFlight = null;
+  invalidateCached('__config__');
 }
