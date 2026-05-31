@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { compressImage } from './DashboardActionCard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -602,15 +603,10 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
   const handleFile = useCallback(async (file: File) => {
     setScanning(true);
     try {
-      const base64: string = await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = e => res((e.target?.result as string).split(',')[1]);
-        reader.onerror = rej;
-        reader.readAsDataURL(file);
-      });
+      const { base64, mediaType } = await compressImage(file);
       const response = await fetch('/api/scan-card/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: base64, media_type: file.type || 'image/jpeg' }),
+        body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
       });
       if (!response.ok) throw new Error('Scan failed');
       const { cards: rawCards } = await response.json();

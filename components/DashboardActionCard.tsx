@@ -65,7 +65,7 @@ export async function fileToBase64(file: File): Promise<string> {
 
 // Resize and compress an image file to JPEG before sending to the API.
 // Mobile camera photos can be 5–15 MB; this keeps them under 1 MB.
-async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<{ base64: string; mediaType: 'image/jpeg' }> {
+export async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<{ base64: string; mediaType: 'image/jpeg' }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();

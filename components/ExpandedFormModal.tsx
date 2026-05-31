@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
+import { compressImage } from './DashboardActionCard';
 
 export interface FormField {
   id: number;
@@ -266,16 +267,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     setScanCompanyMatches([]);
     setLastScanResult(null);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const { base64, mediaType } = await compressImage(file);
       const res = await fetch('/api/scan-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: base64, media_type: file.type }),
+        body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
       });
       if (res.status === 503) {
         toast.error('Card scanning is not configured on this server.');
