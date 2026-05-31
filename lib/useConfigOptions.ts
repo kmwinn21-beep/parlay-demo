@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getConfig } from '@/lib/configCache';
 
 interface ConfigOption {
   id: number;
@@ -16,6 +17,7 @@ interface ConfigOption {
  */
 let globalCache: Record<string, { options: Record<string, string[]>; ts: number }> = {};
 const CACHE_TTL = 5 * 60_000; // 5 minutes
+const formKeyInFlight = new Map<string, Promise<unknown>>();
 
 // Legacy "True"/"False" values should never appear in ICP options
 const BLOCKED_ICP_VALUES = new Set(['True', 'False']);
@@ -30,10 +32,22 @@ export function useConfigOptions(formKey?: string): Record<string, string[]> {
       return;
     }
 
-    const url = formKey ? `/api/config?form=${encodeURIComponent(formKey)}` : '/api/config';
-    fetch(url, formKey ? { cache: 'no-store' } : undefined)
-      .then(r => r.json())
-      .then((rows: ConfigOption[]) => {
+    let fetchPromise: Promise<unknown>;
+    if (formKey) {
+      if (!formKeyInFlight.has(formKey)) {
+        const p = fetch(`/api/config?form=${encodeURIComponent(formKey)}`, { cache: 'no-store' })
+          .then(r => r.json())
+          .finally(() => formKeyInFlight.delete(formKey));
+        formKeyInFlight.set(formKey, p);
+      }
+      fetchPromise = formKeyInFlight.get(formKey)!;
+    } else {
+      fetchPromise = getConfig();
+    }
+
+    fetchPromise
+      .then((data: unknown) => {
+        const rows = data as ConfigOption[];
         const byCategory: Record<string, ConfigOption[]> = {};
         for (const row of rows) {
           (byCategory[row.category] ??= []).push(row);
@@ -52,7 +66,7 @@ export function useConfigOptions(formKey?: string): Record<string, string[]> {
         setOptions(result);
       })
       .catch(() => { /* keep existing/empty options */ });
-  }, [cacheKey, formKey]);
+  }, [cacheKey, formKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return options;
 }

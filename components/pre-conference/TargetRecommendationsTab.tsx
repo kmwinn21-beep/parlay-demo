@@ -20,6 +20,7 @@ import {
   type TargetingCompanyRecommendation,
 } from '@/lib/targeting/targetRecommendationsView';
 import type { TargetEntry } from '../PreConferenceReview';
+import { getConfig } from '@/lib/configCache';
 
 type FilterState = {
   tier: string;
@@ -537,9 +538,9 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
   }, [conferenceId]);
 
   useEffect(() => {
-    fetch('/api/config')
-      .then(res => res.json())
-      .then((rows: ConfigOptionRecord[]) => {
+    getConfig()
+      .then((data: unknown) => {
+        const rows = data as ConfigOptionRecord[];
         setFunctionOptions(rows.filter(row => row.category === 'function'));
         setSeniorityOptions(rows.filter(row => row.category === 'seniority'));
       })
