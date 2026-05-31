@@ -11,7 +11,7 @@ import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 import { useUnreadChatCount } from '@/lib/useUnreadChatCount';
 import { useChatPanel } from './ChatPanelContext';
-import { BadgeScanResultsModal, type BadgeScanCard, fileToBase64, formatCardAsText } from './DashboardActionCard';
+import { BadgeScanResultsModal, type BadgeScanCard, compressImage, formatCardAsText } from './DashboardActionCard';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 
@@ -192,10 +192,10 @@ export function FloatingNav() {
 
   const handleFloatingBadgeFile = useCallback(async (file: File) => {
     try {
-      const base64 = await fileToBase64(file);
+      const { base64, mediaType } = await compressImage(file);
       const scanRes = await fetch('/api/scan-card/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: base64, media_type: file.type || 'image/jpeg' }),
+        body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
       });
       if (!scanRes.ok) throw new Error();
       const { cards: rawCards } = await scanRes.json() as { cards: Partial<CardDraft>[] };
