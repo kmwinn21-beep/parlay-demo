@@ -17,6 +17,9 @@ function parseIdList(raw: unknown): number[] {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const t0 = Date.now();
+  console.log('[intel-timing] step: handler_start, elapsed: 0ms');
+
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
 
@@ -99,6 +102,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const brandSettings: Record<string, string> = {};
     for (const r of brandRows.rows) brandSettings[String(r.key)] = String(r.value);
 
+    console.log(`[intel-timing] step: db_queries_complete, elapsed: ${Date.now() - t0}ms`);
+
     // Ensure table exists
     await db.execute({
       sql: `CREATE TABLE IF NOT EXISTS conference_company_intel (
@@ -135,6 +140,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       args: [conferenceId, companyId, String(company.name), tier],
     });
 
+    console.log(`[intel-timing] step: stub_written, elapsed: ${Date.now() - t0}ms`);
+
     const input = {
       companyName: String(company.name),
       companyType: company.company_type as string | null,
@@ -151,8 +158,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Run generation in background — returns immediately, keeps function alive via waitUntil
     waitUntil((async () => {
+      console.log(`[intel-timing] step: anthropic_call_start, elapsed: ${Date.now() - t0}ms`);
       try {
         const result = await generateCompanyIntel(input);
+        console.log(`[intel-timing] step: anthropic_call_complete, elapsed: ${Date.now() - t0}ms`);
         await db.execute({
           sql: `INSERT INTO conference_company_intel
                   (conference_id, company_id, company_name, tier, summary, pain_point_signals, trigger_events, buying_signals, opening_angles, used_icp_fallback, is_fallback, generated_at)
@@ -177,8 +186,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             result.is_fallback ? 1 : 0,
           ],
         });
+        console.log(`[intel-timing] step: result_db_write_complete, elapsed: ${Date.now() - t0}ms`);
       } catch (err) {
-        console.error('[intel/generate] background error for company', companyId, ':', err);
+        console.error(`[intel-timing] step: anthropic_call_error, elapsed: ${Date.now() - t0}ms`, err);
         await db.execute({
           sql: `UPDATE conference_company_intel SET summary = 'Error: generation failed', is_fallback = 1 WHERE conference_id = ? AND company_id = ?`,
           args: [conferenceId, companyId],
@@ -186,6 +196,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     })());
 
+    console.log(`[intel-timing] step: http_response_sent, elapsed: ${Date.now() - t0}ms`);
     return NextResponse.json({ ok: true, company_id: companyId, status: 'generating' });
   } catch (err) {
     console.error('[intel/generate]', err);
