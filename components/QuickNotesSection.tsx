@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { compressImage } from './DashboardActionCard';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
@@ -906,10 +907,10 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const handleBadgeFile = useCallback(async (file: File) => {
     setScanningBadge(true); setShowCameraMenu(false);
     try {
-      const base64 = await fileToBase64(file);
+      const { base64, mediaType } = await compressImage(file);
       const scanRes = await fetch('/api/scan-card/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: base64, media_type: file.type || 'image/jpeg' }),
+        body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
       });
       if (!scanRes.ok) throw new Error();
       const { cards: rawCards } = await scanRes.json() as { cards: Partial<CardDraft>[] };
