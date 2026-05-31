@@ -817,38 +817,56 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     if (!isCompanyIntelGenerating || !meeting?.conference_id || !meeting?.company_id) return;
     const conferenceId = meeting.conference_id;
     const companyId = meeting.company_id;
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
-      // Fix 3: 25 attempts × 3s = 75s timeout; show explicit error instead of silent null
-      if (attempts > 25) {
-        clearInterval(interval);
+
+    function getIntervalMs(attempt: number): number {
+      if (attempt <= 5) return 3000;
+      if (attempt <= 10) return 6000;
+      return 10000;
+    }
+
+    let attempt = 0;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    function poll() {
+      attempt += 1;
+      if (cancelled) return;
+
+      if (attempt > 20) {
         setCompanyIntel(null);
         setIntelError('Intel generation timed out — the server may still be processing. Try clicking Generate again in a moment.');
         return;
       }
-      const res = await fetch(`/api/conferences/${conferenceId}/intel`).catch(() => null);
-      if (!res?.ok) return;
-      const data = await res.json() as { intel: CompanyIntelRow[] };
-      const row = data.intel.find(r => Number(r.company_id) === Number(companyId));
-      if (!row || row.summary === 'Generating…' || row.summary === null) return;
-      // Fix 4: detect error summaries written by the background job catch block
-      if (row.summary.startsWith('Error:')) {
-        clearInterval(interval);
-        setCompanyIntel(null);
-        setIntelError('Intel generation failed. Try again.');
-        // Clear the error row so next attempt starts fresh
-        fetch(`/api/conferences/${conferenceId}/intel/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ company_id: companyId }),
-        }).catch(() => {});
-        return;
-      }
-      setCompanyIntel(row);
-      window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: conferenceId } }));
-    }, 3000);
-    return () => clearInterval(interval);
+
+      timeoutId = setTimeout(async () => {
+        if (cancelled) return;
+        const res = await fetch(`/api/conferences/${conferenceId}/intel?company_id=${companyId}`).catch(() => null);
+        if (!res?.ok) { poll(); return; }
+        const data = await res.json() as { summary: string | null; is_fallback: number; generated_at: string | null };
+
+        if (!data.summary || data.summary === 'Generating…') { poll(); return; }
+
+        if (data.summary.startsWith('Error:')) {
+          setCompanyIntel(null);
+          setIntelError('Intel generation failed. Try again.');
+          // Clear the error row so next attempt starts fresh
+          fetch(`/api/conferences/${conferenceId}/intel/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ company_id: companyId }),
+          }).catch(() => {});
+          return;
+        }
+
+        if (!cancelled) {
+          setCompanyIntel(prev => prev ? { ...prev, summary: data.summary!, is_fallback: Boolean(data.is_fallback), generated_at: data.generated_at } : prev);
+          window.dispatchEvent(new CustomEvent('parlay:intel-updated', { detail: { conference_id: conferenceId } }));
+        }
+      }, getIntervalMs(attempt));
+    }
+
+    poll();
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [isCompanyIntelGenerating, meeting?.conference_id, meeting?.company_id]);
 
   const handleGetMeetingIntel = useCallback(async () => {

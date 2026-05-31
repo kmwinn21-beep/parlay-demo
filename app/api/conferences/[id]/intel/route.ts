@@ -47,6 +47,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const db = await getDb(authResult.accountId);
 
+    // Lightweight poll path — single query when polling for one company's status
+    const pollCompanyId = request.nextUrl.searchParams.get('company_id');
+    if (pollCompanyId) {
+      const cid = parseInt(pollCompanyId, 10);
+      if (isNaN(cid)) return NextResponse.json({ error: 'Invalid company_id' }, { status: 400 });
+      const row = await db.execute({
+        sql: `SELECT summary, is_fallback, generated_at FROM conference_company_intel WHERE conference_id = ? AND company_id = ? LIMIT 1`,
+        args: [conferenceId, cid],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      if (row.rows.length === 0) return NextResponse.json({ summary: null, is_fallback: 0, generated_at: null });
+      const r = row.rows[0];
+      return NextResponse.json({ summary: r.summary ?? null, is_fallback: r.is_fallback ?? 0, generated_at: r.generated_at ?? null });
+    }
+
     // Get conference refresh counts — catch in case column doesn't exist yet
     const confRow = await db.execute({
       sql: 'SELECT intel_refresh_count, intel_last_refresh_at FROM conferences WHERE id = ?',
