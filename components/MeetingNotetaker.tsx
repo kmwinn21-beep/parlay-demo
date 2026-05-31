@@ -2441,7 +2441,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       >
         {recordDrawer != null && (
           <>
-            <div className="flex items-center justify-end px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
+              <a
+                href={`/${recordDrawer.type === 'attendee' ? 'attendees' : recordDrawer.type === 'company' ? 'companies' : 'conferences'}/${recordDrawer.id}`}
+                className="text-xs text-brand-secondary hover:underline font-medium"
+              >
+                Go to {recordDrawer.type === 'attendee' ? 'Attendee' : recordDrawer.type === 'company' ? 'Company' : 'Conference'} Record →
+              </a>
               <button type="button" onClick={closeRecord} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
