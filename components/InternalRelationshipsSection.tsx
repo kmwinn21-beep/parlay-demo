@@ -468,14 +468,12 @@ export function InternalRelationshipsSection({
           </h2>
         </button>
         <div className="flex items-center gap-3">
-          {sectionExpanded && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="text-xs text-brand-secondary hover:underline font-medium"
-            >
-              + Add
-            </button>
-          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="text-xs text-brand-secondary hover:underline font-medium"
+          >
+            + Add
+          </button>
         </div>
       </div>
 
