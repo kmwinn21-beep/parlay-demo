@@ -263,20 +263,28 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // Auto-create a Post-Mtg follow-up when outcome changes away from Scheduled
+    // Auto-create follow-ups when outcome changes
     if (
       oldOutcome && outcome && oldOutcome !== outcome &&
       meeting.rows.length > 0 &&
       meeting.rows[0].attendee_id != null &&
       meeting.rows[0].conference_id != null
     ) {
-      // Resolve old outcome's action_key
-      const oldKeyRes = await db.execute({
-        sql: "SELECT action_key FROM config_options WHERE category = 'action' AND value = ?",
-        args: [oldOutcome],
-      });
+      // Resolve old and new outcome action keys
+      const [oldKeyRes, newKeyRes] = await Promise.all([
+        db.execute({
+          sql: "SELECT action_key FROM config_options WHERE category = 'action' AND value = ?",
+          args: [oldOutcome],
+        }),
+        db.execute({
+          sql: "SELECT action_key FROM config_options WHERE category = 'action' AND value = ?",
+          args: [outcome],
+        }),
+      ]);
       const oldActionKey = oldKeyRes.rows.length > 0 && oldKeyRes.rows[0].action_key
         ? String(oldKeyRes.rows[0].action_key) : null;
+      const newActionKey = newKeyRes.rows.length > 0 && newKeyRes.rows[0].action_key
+        ? String(newKeyRes.rows[0].action_key) : null;
 
       if (oldActionKey === 'meeting_scheduled') {
         // Look up the Post-Mtg next_steps option
@@ -297,6 +305,37 @@ export async function PATCH(request: NextRequest) {
             ],
           });
         }
+      }
+
+      // Auto-create a No-Show follow-up with the logged-in user as assigned rep
+      if (newActionKey === 'no_show') {
+        const userRow = await db.execute({
+          sql: 'SELECT first_name, last_name FROM users WHERE id = ? LIMIT 1',
+          args: [authResult.id],
+        });
+        const repName = userRow.rows.length > 0
+          ? [userRow.rows[0].first_name, userRow.rows[0].last_name].filter(Boolean).join(' ')
+          : null;
+
+        const noShowRes = await db.execute({
+          sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'no_show' LIMIT 1",
+          args: [],
+        });
+        const noShowValue = noShowRes.rows.length > 0
+          ? String(noShowRes.rows[0].value)
+          : 'Meeting No-Show';
+
+        await db.execute({
+          sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, assigned_rep)
+                VALUES (?, ?, ?, ?, 0, ?)`,
+          args: [
+            meeting.rows[0].attendee_id as number,
+            meeting.rows[0].conference_id as number,
+            noShowValue,
+            'Auto-created from No-Show Meeting',
+            repName,
+          ],
+        });
       }
     }
 

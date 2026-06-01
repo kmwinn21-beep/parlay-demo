@@ -76,6 +76,7 @@ interface DisplayItem {
   attendee_name: string | null;
   attendee_title: string | null;
   company_name: string | null;
+  meeting_status: string | null;
 }
 
 function formatTime12h(time: string | null): string {
@@ -119,6 +120,22 @@ const SESSION_TYPE_COLORS: Record<string, string> = {
   lunch: 'bg-orange-100 text-orange-700', breakfast: 'bg-orange-100 text-orange-700',
   dinner: 'bg-rose-100 text-rose-700', meeting: 'bg-sky-100 text-sky-700',
 };
+
+const MEETING_STATUS_CLASSES: Record<string, string> = {
+  held: 'bg-green-100 text-green-700',
+  scheduled: 'bg-sky-100 text-sky-700',
+  'no-show': 'bg-red-100 text-red-600',
+  'no show': 'bg-red-100 text-red-600',
+  cancelled: 'bg-red-100 text-red-600',
+  rescheduled: 'bg-amber-100 text-amber-700',
+};
+
+function meetingStatusPill(status: string | null) {
+  if (!status) return null;
+  const key = status.toLowerCase();
+  const cls = MEETING_STATUS_CLASSES[key] ?? 'bg-gray-100 text-gray-600';
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
+}
 
 function sessionBadgeClass(type: string | null): string {
   if (!type) return '';
@@ -248,6 +265,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
         start_time: mi.start_time, end_time: mi.end_time, session_type: mi.session_type,
         title: mi.title, description: mi.description, location: mi.location, note_content: mi.note_content,
         attendee_id: null, company_id: null, attendee_name: null, attendee_title: null, company_name: null,
+        meeting_status: null,
       });
     }
     for (const m of meetings) {
@@ -259,10 +277,11 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
         key, myItemId: myItemRow?.id ?? keyToMyItemId.get(key) ?? null, sourceType: 'meeting', sourceId: m.id,
         day_label: dayLabel, sort_date: m.meeting_date, sort_minutes: parseMinutes(m.meeting_time || null),
         start_time: m.meeting_time || null, end_time: null, session_type: 'Meeting',
-        title: attendeeName || 'Meeting', description: m.outcome ?? null, location: m.location,
+        title: attendeeName || 'Meeting', description: null, location: m.location,
         note_content: myItemRow?.note_content ?? null,
         attendee_id: m.attendee_id, company_id: m.company_id,
         attendee_name: attendeeName || null, attendee_title: m.attendee_title ?? null, company_name: m.company_name,
+        meeting_status: m.outcome ?? 'Scheduled',
       });
     }
     return items;
@@ -330,15 +349,16 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                         const subtitle = isMeeting ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ') : null;
                         return (
                           <div key={item.key}>
-                            <div className="flex gap-3 px-4 py-2.5">
+                            <div className={`flex gap-3 px-4 py-2.5 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
                               <div className="w-20 shrink-0 pt-0.5">
                                 {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{formatTime12h(item.start_time)}</p>}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <ExpandableItemText>
                                   <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                                    {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
                                     <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
+                                    {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
+                                    {isMeeting && meetingStatusPill(item.meeting_status)}
                                   </div>
                                   {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
                                   {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
