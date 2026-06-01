@@ -8,6 +8,7 @@ import { useBottomNav } from './BottomNavContext';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { GlobalSearchModal } from './GlobalSearch';
 import { QuickNoteInlineModal } from './QuickNotesSection';
+import { HelpChatDrawer } from './HelpChatDrawer';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 import { useUnreadChatCount } from '@/lib/useUnreadChatCount';
 import { useChatPanel } from './ChatPanelContext';
@@ -104,6 +105,7 @@ export function FloatingNav() {
   const [dragging, setDragging] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
+  const [showHelpChat, setShowHelpChat] = useState(false);
   const [badgeFileKey, setBadgeFileKey] = useState(0);
   const [badgeScanCards, setBadgeScanCards] = useState<BadgeScanCard[]>([]);
   const [showScanModal, setShowScanModal] = useState(false);
@@ -281,9 +283,21 @@ export function FloatingNav() {
   const above = pos.y > vh / 2;            // menu goes above FAB
   const onRight = pos.x + BTN / 2 > vw / 2; // menu right-aligns to FAB
 
-  // Build menu items: Dashboard→…→Meetings + Search at end
+  // Build menu items: Parlay AI→Dashboard→…→Meetings + Search at end
   // Reverse order when rendering above so Dashboard is nearest the FAB
   const items = [
+    {
+      key: 'help-chat',
+      label: 'Parlay AI',
+      icon: (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      href: null as string | null,
+      active: false,
+      action: 'help-chat' as const,
+    },
     ...NAV_ITEMS.map(n => ({
       key: n.href,
       label: n.label,
@@ -370,6 +384,8 @@ export function FloatingNav() {
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
       {/* Quick note modal */}
       {showQuickNote && <QuickNoteInlineModal onClose={() => setShowQuickNote(false)} />}
+      {/* Parlay AI help chat */}
+      {showHelpChat && <HelpChatDrawer onClose={() => setShowHelpChat(false)} onUnread={() => {}} />}
 
       {/* Hidden file input for badge scan */}
       <input
@@ -463,6 +479,7 @@ export function FloatingNav() {
                     setOpen(false);
                     if (item.key === 'quick-note') setShowQuickNote(true);
                     else if (item.key === 'chat') setPanelOpen(true);
+                    else if (item.key === 'help-chat') setShowHelpChat(true);
                     else if (item.key === 'scan') { setBadgeFileKey(k => k + 1); floatingBadgeRef.current?.click(); }
                     else setShowSearch(true);
                   }}
