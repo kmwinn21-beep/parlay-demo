@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useUser } from './UserContext';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
+import { useNeedsAttentionCount } from '@/lib/useNeedsAttentionCount';
 import { useAppName } from '@/lib/useAppName';
 import { useTagline } from '@/lib/useTagline';
 import { LogoImage } from './LogoImage';
@@ -94,6 +95,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const unreadCount = useUnreadNotificationCount();
+  const needsAttentionCount = useNeedsAttentionCount();
   const appName = useAppName();
   const tagline = useTagline();
   const { faviconUrl } = useLogoConfig();
@@ -145,11 +147,11 @@ export function Sidebar() {
             <div className="space-y-1 mb-2">
               {operationsItems.map((item) => (
                 <Link key={item.href} href={item.href} className={navLinkClass(item.href)}>
-                  {item.href === '/notifications' && unreadCount > 0 ? (
+                  {(item.href === '/notifications' && unreadCount > 0) || (item.href === '/follow-ups' && needsAttentionCount > 0) ? (
                     <span className="relative flex-shrink-0">
                       {item.icon}
                       <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                        {unreadCount > 99 ? '99+' : unreadCount}
+                        {item.href === '/notifications' ? (unreadCount > 99 ? '99+' : unreadCount) : (needsAttentionCount > 99 ? '99+' : needsAttentionCount)}
                       </span>
                     </span>
                   ) : item.icon}

@@ -463,7 +463,43 @@ function NeedsAttentionSection({
   };
 
   if (loading) return null;
+  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({});
+  const toggleMobile = (key: string) => setMobileExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+
   if (totalCount === 0) return null;
+
+  const sections = [
+    {
+      key: 'past',
+      title: 'Past meetings — update outcome',
+      count: pastScheduled.length,
+      content: pastScheduled.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+      ) : pastScheduled.map(m => (
+        <PastScheduledRow key={m.id} meeting={m} actionOptions={actionOptions} colorMap={colorMap} onOutcomeChange={onOutcomeChange} onRemove={removePastScheduled} onFollowUp={onFollowUp} />
+      )),
+    },
+    {
+      key: 'overdue',
+      title: 'Overdue follow-ups',
+      count: overdueFollowups.length,
+      content: overdueFollowups.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+      ) : overdueFollowups.map(f => (
+        <OverdueFollowupRow key={f.id} followup={f} onDone={handleDoneFollowup} onRemove={handleDeleteFollowup} />
+      )),
+    },
+    {
+      key: 'notes',
+      title: 'Held meetings — no notes',
+      count: heldNoNotes.length,
+      content: heldNoNotes.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+      ) : heldNoNotes.map(m => (
+        <HeldNoNotesRow key={m.id} meeting={m} onAddNotes={onOpenNotes} onRemove={removeHeldNoNotes} />
+      )),
+    },
+  ];
 
   return (
     <div className="card mb-4 overflow-hidden border border-red-300">
@@ -477,62 +513,50 @@ function NeedsAttentionSection({
           {totalCount}
         </span>
       </div>
-      {/* 3-column grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
-        {/* Column 1: Past meetings */}
-        <div style={{ borderRight: '1px solid #f3f4f6' }}>
-          <ColumnHeader title="Past meetings — update outcome" count={pastScheduled.length} />
-          <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className="no-scroll-col1">
-            <style>{`.no-scroll-col1::-webkit-scrollbar { display: none }`}</style>
-            {pastScheduled.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-            ) : pastScheduled.map(m => (
-              <PastScheduledRow
-                key={m.id}
-                meeting={m}
-                actionOptions={actionOptions}
-                colorMap={colorMap}
-                onOutcomeChange={onOutcomeChange}
-                onRemove={removePastScheduled}
-                onFollowUp={onFollowUp}
-              />
-            ))}
+
+      {/* Desktop: 3-column grid */}
+      <div className="hidden sm:grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        {sections.map((s, i) => (
+          <div key={s.key} style={i < 2 ? { borderRight: '1px solid #e5e7eb' } : {}}>
+            <ColumnHeader title={s.title} count={s.count} />
+            <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
+              <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
+              {s.content}
+            </div>
           </div>
-        </div>
-        {/* Column 2: Overdue follow-ups */}
-        <div style={{ borderRight: '1px solid #f3f4f6' }}>
-          <ColumnHeader title="Overdue follow-ups" count={overdueFollowups.length} />
-          <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className="no-scroll-col2">
-            <style>{`.no-scroll-col2::-webkit-scrollbar { display: none }`}</style>
-            {overdueFollowups.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-            ) : overdueFollowups.map(f => (
-              <OverdueFollowupRow
-                key={f.id}
-                followup={f}
-                onDone={handleDoneFollowup}
-                onRemove={handleDeleteFollowup}
-              />
-            ))}
-          </div>
-        </div>
-        {/* Column 3: Held meetings without notes */}
-        <div>
-          <ColumnHeader title="Held meetings — no notes" count={heldNoNotes.length} />
-          <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className="no-scroll-col3">
-            <style>{`.no-scroll-col3::-webkit-scrollbar { display: none }`}</style>
-            {heldNoNotes.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-            ) : heldNoNotes.map(m => (
-              <HeldNoNotesRow
-                key={m.id}
-                meeting={m}
-                onAddNotes={onOpenNotes}
-                onRemove={removeHeldNoNotes}
-              />
-            ))}
-          </div>
-        </div>
+        ))}
+      </div>
+
+      {/* Mobile: stacked collapsible sections */}
+      <div className="sm:hidden divide-y divide-gray-200">
+        {sections.map(s => {
+          const isOpen = !!mobileExpanded[s.key];
+          return (
+            <div key={s.key}>
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                onClick={() => toggleMobile(s.key)}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{s.title}</span>
+                  <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
+                </span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {isOpen && (
+                <div className="border-t border-gray-100">
+                  {s.content}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
