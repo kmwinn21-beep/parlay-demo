@@ -258,22 +258,33 @@ function PastScheduledRow({
       className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
-      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-      <p className="text-[12px] font-medium text-gray-800 truncate flex-1 min-w-0">{meeting.first_name} {meeting.last_name}</p>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <MiniOutcomeButton
-          value={meeting.outcome}
-          options={actionOptions}
-          colorMap={colorMap}
-          onChange={handleOutcomeChange}
-        />
-        <button
-          type="button"
-          className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
-          onClick={() => onFollowUp(meeting)}
-        >
-          + Follow up
-        </button>
+      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 self-start mt-1.5" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-[12px] font-medium text-gray-800 truncate flex-1 min-w-0">{meeting.first_name} {meeting.last_name}</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <MiniOutcomeButton
+              value={meeting.outcome}
+              options={actionOptions}
+              colorMap={colorMap}
+              onChange={handleOutcomeChange}
+            />
+            <button
+              type="button"
+              className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
+              onClick={() => onFollowUp(meeting)}
+            >
+              + Follow up
+            </button>
+          </div>
+        </div>
+        {(meeting.title || meeting.conference_name) && (
+          <p className="text-[10px] text-gray-400 truncate mt-0.5">
+            {meeting.title && <span>{meeting.title}</span>}
+            {meeting.title && meeting.conference_name && <span className="mx-1">·</span>}
+            {meeting.conference_name && <span>{meeting.conference_name}</span>}
+          </p>
+        )}
       </div>
     </div>
   );
