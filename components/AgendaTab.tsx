@@ -497,7 +497,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
     return (
       <div>
         {/* Main row — same layout as Full Agenda items */}
-        <div className={`flex gap-3 px-4 py-3 ${isMeeting ? 'bg-brand-accent/30' : ''}`}>
+        <div className={`flex gap-3 px-4 py-3 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
           <div className="w-20 sm:w-28 shrink-0 pt-0.5">
             {(item.start_time || item.end_time) && (
               <p className="text-xs text-gray-500 tabular-nums leading-snug">
@@ -509,13 +509,13 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+              <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
               {item.session_type && (
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>
                   {item.session_type}
                 </span>
               )}
               {isMeeting && meetingStatusPill(item.meeting_status)}
-              <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
             </div>
             {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
             {item.description && (

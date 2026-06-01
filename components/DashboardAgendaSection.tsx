@@ -349,16 +349,16 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                         const subtitle = isMeeting ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ') : null;
                         return (
                           <div key={item.key}>
-                            <div className={`flex gap-3 px-4 py-2.5 ${isMeeting ? 'bg-brand-accent/30' : ''}`}>
+                            <div className={`flex gap-3 px-4 py-2.5 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
                               <div className="w-20 shrink-0 pt-0.5">
                                 {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{formatTime12h(item.start_time)}</p>}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <ExpandableItemText>
                                   <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                                    <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
                                     {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
                                     {isMeeting && meetingStatusPill(item.meeting_status)}
-                                    <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
                                   </div>
                                   {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
                                   {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
