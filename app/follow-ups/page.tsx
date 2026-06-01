@@ -255,28 +255,28 @@ function PastScheduledRow({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 hover:bg-gray-50"
+      className="flex items-start gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
-      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-1" />
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-medium text-gray-800 truncate">{meeting.first_name} {meeting.last_name}</p>
         <p className="text-[10px] text-gray-400 truncate">{meeting.conference_name || ''}</p>
-      </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <MiniOutcomeButton
-          value={meeting.outcome}
-          options={actionOptions}
-          colorMap={colorMap}
-          onChange={handleOutcomeChange}
-        />
-        <button
-          type="button"
-          className="text-[10px] text-brand-secondary bg-transparent border-0 p-0 cursor-pointer hover:underline whitespace-nowrap"
-          onClick={() => onFollowUp(meeting)}
-        >
-          + Follow up
-        </button>
+        <div className="flex items-center gap-2 mt-1.5">
+          <MiniOutcomeButton
+            value={meeting.outcome}
+            options={actionOptions}
+            colorMap={colorMap}
+            onChange={handleOutcomeChange}
+          />
+          <button
+            type="button"
+            className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
+            onClick={() => onFollowUp(meeting)}
+          >
+            + Follow up
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -307,19 +307,21 @@ function OverdueFollowupRow({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 hover:bg-gray-50"
+      className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isVeryOverdue ? 'bg-red-500' : 'bg-amber-400'}`} />
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-medium text-gray-800 truncate">{followup.first_name} {followup.last_name}</p>
-        <p className="text-[10px] text-gray-400 truncate">{followup.conference_name || ''}</p>
+        <p className="text-[10px] text-gray-400 truncate flex items-center gap-1.5">
+          {followup.conference_name || ''}
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[9px] font-medium leading-none">{days}d overdue</span>
+        </p>
       </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <span className={`text-[10px] font-medium ${isVeryOverdue ? 'text-red-500' : 'text-amber-600'}`}>{days}d</span>
+      <div className="flex items-center gap-3 flex-shrink-0">
         <button
           type="button"
-          className="text-[10px] text-brand-secondary bg-transparent border-0 p-0 cursor-pointer hover:underline"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600 text-[11px]"
           onClick={handleDone}
         >
           Done
@@ -361,7 +363,7 @@ function HeldNoNotesRow({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 hover:bg-gray-50"
+      className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
       <span className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
@@ -371,7 +373,7 @@ function HeldNoNotesRow({
       </div>
       <button
         type="button"
-        className="text-[10px] text-brand-secondary bg-transparent border-0 p-0 cursor-pointer hover:underline flex-shrink-0"
+        className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary flex-shrink-0 transition-colors whitespace-nowrap"
         onClick={handleAddNotes}
       >
         + Notes
@@ -471,7 +473,7 @@ function NeedsAttentionSection({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
         </svg>
         <span className="text-sm font-medium text-gray-700">Needs attention</span>
-        <span className="ml-auto bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+        <span className="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">
           {totalCount}
         </span>
       </div>
