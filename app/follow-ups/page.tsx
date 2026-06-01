@@ -255,28 +255,36 @@ function PastScheduledRow({
 
   return (
     <div
-      className="flex items-start gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
+      className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
-      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-1" />
+      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 self-start mt-1.5" />
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium text-gray-800 truncate">{meeting.first_name} {meeting.last_name}</p>
-        <p className="text-[10px] text-gray-400 truncate">{meeting.conference_name || ''}</p>
-        <div className="flex items-center gap-2 mt-1.5">
-          <MiniOutcomeButton
-            value={meeting.outcome}
-            options={actionOptions}
-            colorMap={colorMap}
-            onChange={handleOutcomeChange}
-          />
-          <button
-            type="button"
-            className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
-            onClick={() => onFollowUp(meeting)}
-          >
-            + Follow up
-          </button>
+        <div className="flex items-center gap-2">
+          <p className="text-[12px] font-medium text-gray-800 truncate flex-1 min-w-0">{meeting.first_name} {meeting.last_name}</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <MiniOutcomeButton
+              value={meeting.outcome}
+              options={actionOptions}
+              colorMap={colorMap}
+              onChange={handleOutcomeChange}
+            />
+            <button
+              type="button"
+              className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
+              onClick={() => onFollowUp(meeting)}
+            >
+              + Follow up
+            </button>
+          </div>
         </div>
+        {(meeting.title || meeting.conference_name) && (
+          <p className="text-[10px] text-gray-400 truncate mt-0.5">
+            {meeting.title && <span>{meeting.title}</span>}
+            {meeting.title && meeting.conference_name && <span className="mx-1">·</span>}
+            {meeting.conference_name && <span>{meeting.conference_name}</span>}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -403,6 +411,8 @@ function NeedsAttentionSection({
   const [overdueFollowups, setOverdueFollowups] = useState<OverdueFollowup[]>([]);
   const [heldNoNotes, setHeldNoNotes] = useState<HeldNoNotesMeeting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({});
+  const toggleMobile = (key: string) => setMobileExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     fetch('/api/meetings/needs-attention')
@@ -465,6 +475,39 @@ function NeedsAttentionSection({
   if (loading) return null;
   if (totalCount === 0) return null;
 
+  const sections = [
+    {
+      key: 'past',
+      title: 'Past meetings — update outcome',
+      count: pastScheduled.length,
+      content: pastScheduled.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+      ) : pastScheduled.map(m => (
+        <PastScheduledRow key={m.id} meeting={m} actionOptions={actionOptions} colorMap={colorMap} onOutcomeChange={onOutcomeChange} onRemove={removePastScheduled} onFollowUp={onFollowUp} />
+      )),
+    },
+    {
+      key: 'overdue',
+      title: 'Overdue follow-ups',
+      count: overdueFollowups.length,
+      content: overdueFollowups.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+      ) : overdueFollowups.map(f => (
+        <OverdueFollowupRow key={f.id} followup={f} onDone={handleDoneFollowup} onRemove={handleDeleteFollowup} />
+      )),
+    },
+    {
+      key: 'notes',
+      title: 'Held meetings — no notes',
+      count: heldNoNotes.length,
+      content: heldNoNotes.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+      ) : heldNoNotes.map(m => (
+        <HeldNoNotesRow key={m.id} meeting={m} onAddNotes={onOpenNotes} onRemove={removeHeldNoNotes} />
+      )),
+    },
+  ];
+
   return (
     <div className="card mb-4 overflow-hidden border border-red-300">
       {/* Header */}
@@ -477,62 +520,50 @@ function NeedsAttentionSection({
           {totalCount}
         </span>
       </div>
-      {/* 3-column grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
-        {/* Column 1: Past meetings */}
-        <div style={{ borderRight: '1px solid #f3f4f6' }}>
-          <ColumnHeader title="Past meetings — update outcome" count={pastScheduled.length} />
-          <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className="no-scroll-col1">
-            <style>{`.no-scroll-col1::-webkit-scrollbar { display: none }`}</style>
-            {pastScheduled.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-            ) : pastScheduled.map(m => (
-              <PastScheduledRow
-                key={m.id}
-                meeting={m}
-                actionOptions={actionOptions}
-                colorMap={colorMap}
-                onOutcomeChange={onOutcomeChange}
-                onRemove={removePastScheduled}
-                onFollowUp={onFollowUp}
-              />
-            ))}
+
+      {/* Desktop: 3-column grid */}
+      <div className="hidden sm:grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        {sections.map((s, i) => (
+          <div key={s.key} style={i < 2 ? { borderRight: '1px solid #e5e7eb' } : {}}>
+            <ColumnHeader title={s.title} count={s.count} />
+            <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
+              <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
+              {s.content}
+            </div>
           </div>
-        </div>
-        {/* Column 2: Overdue follow-ups */}
-        <div style={{ borderRight: '1px solid #f3f4f6' }}>
-          <ColumnHeader title="Overdue follow-ups" count={overdueFollowups.length} />
-          <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className="no-scroll-col2">
-            <style>{`.no-scroll-col2::-webkit-scrollbar { display: none }`}</style>
-            {overdueFollowups.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-            ) : overdueFollowups.map(f => (
-              <OverdueFollowupRow
-                key={f.id}
-                followup={f}
-                onDone={handleDoneFollowup}
-                onRemove={handleDeleteFollowup}
-              />
-            ))}
-          </div>
-        </div>
-        {/* Column 3: Held meetings without notes */}
-        <div>
-          <ColumnHeader title="Held meetings — no notes" count={heldNoNotes.length} />
-          <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className="no-scroll-col3">
-            <style>{`.no-scroll-col3::-webkit-scrollbar { display: none }`}</style>
-            {heldNoNotes.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-            ) : heldNoNotes.map(m => (
-              <HeldNoNotesRow
-                key={m.id}
-                meeting={m}
-                onAddNotes={onOpenNotes}
-                onRemove={removeHeldNoNotes}
-              />
-            ))}
-          </div>
-        </div>
+        ))}
+      </div>
+
+      {/* Mobile: stacked collapsible sections */}
+      <div className="sm:hidden divide-y divide-gray-200">
+        {sections.map(s => {
+          const isOpen = !!mobileExpanded[s.key];
+          return (
+            <div key={s.key}>
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                onClick={() => toggleMobile(s.key)}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{s.title}</span>
+                  <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
+                </span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {isOpen && (
+                <div className="border-t border-gray-100">
+                  {s.content}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
