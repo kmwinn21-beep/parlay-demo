@@ -9,11 +9,22 @@ export interface OpsAdmin {
   email: string;
 }
 
+// Emails listed in OPS_ADMIN_EMAILS (comma-separated) are always granted ops access
+// regardless of the is_admin DB column — useful for bootstrapping without direct DB access.
+function isEnvOpsAdmin(email: string): boolean {
+  const envList = process.env.OPS_ADMIN_EMAILS ?? '';
+  if (!envList.trim()) return false;
+  return envList.split(',').map(e => e.trim().toLowerCase()).includes(email.toLowerCase());
+}
+
 // For API route handlers (has access to NextRequest)
 export async function requireOpsAdmin(request: NextRequest): Promise<OpsAdmin | NextResponse> {
   const user = await getSessionUser(request);
   if (!user) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
+  }
+  if (isEnvOpsAdmin(user.email)) {
+    return { userId: user.id, email: user.email };
   }
   await dbReady;
   const row = await db.execute({
@@ -29,12 +40,15 @@ export async function requireOpsAdmin(request: NextRequest): Promise<OpsAdmin | 
 // For server components / layouts (reads cookies() directly)
 export async function getOpsAdmin(): Promise<OpsAdmin | null> {
   try {
-    await dbReady;
     const cookieStore = cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
     if (!token) return null;
     const user = await verifyToken(token);
     if (!user) return null;
+    if (isEnvOpsAdmin(user.email)) {
+      return { userId: user.id, email: user.email };
+    }
+    await dbReady;
     const row = await db.execute({
       sql: `SELECT is_admin FROM users WHERE id = ? AND active = 1`,
       args: [user.id],
@@ -52,3 +66,4 @@ export async function requireOpsAdminPage(): Promise<OpsAdmin> {
   if (!admin) redirect('/auth/login');
   return admin;
 }
+
