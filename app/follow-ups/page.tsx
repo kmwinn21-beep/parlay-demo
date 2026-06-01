@@ -466,7 +466,7 @@ function NeedsAttentionSection({
   if (totalCount === 0) return null;
 
   return (
-    <div className="card mb-4 overflow-hidden">
+    <div className="card mb-4 overflow-hidden border border-red-300">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
         <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
