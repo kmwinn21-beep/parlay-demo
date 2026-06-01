@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -508,6 +509,7 @@ export function MeetingsTable({
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const hasActions = !!onEdit;
 
@@ -604,14 +606,20 @@ export function MeetingsTable({
               <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
-                      {m.first_name} {m.last_name}
-                    </Link>
+                    <div className="flex items-center gap-1 group">
+                      <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
+                      <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
+                        {m.first_name} {m.last_name}
+                      </Link>
+                    </div>
                     {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
                     {!hideCompany && (m.company_name && m.company_id ? (
-                      <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline mt-0.5">
-                        {m.company_name}
-                      </Link>
+                      <div className="flex items-center gap-1 group mt-0.5">
+                        <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
+                        <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline">
+                          {m.company_name}
+                        </Link>
+                      </div>
                     ) : m.company_name ? (
                       <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
                     ) : null)}
@@ -719,15 +727,21 @@ export function MeetingsTable({
                     if (!isVisible(col.key)) return null;
                     switch (col.key) {
                       case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                        <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
-                          {m.first_name} {m.last_name}
-                        </Link>
+                        <div className="flex items-center gap-1 group">
+                          <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
+                          <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
+                            {m.first_name} {m.last_name}
+                          </Link>
+                        </div>
                       </td>;
                       case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug"><span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span></td>;
                       case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} /></td>;
                       case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
                         {m.company_name && m.company_id ? (
-                          <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{m.company_name}</Link>
+                          <div className="flex items-center gap-1 group">
+                            <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
+                            <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{m.company_name}</Link>
+                          </div>
                         ) : (<span className="text-gray-300">—</span>)}
                       </td> : null;
                       case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug">
@@ -774,6 +788,9 @@ export function MeetingsTable({
           </tbody>
         </table>
       </div>
+      {quickView && (
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, Fragment } from 'react';
 import Link from 'next/link';
+import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -25,6 +26,7 @@ export interface FollowUp {
   first_name: string;
   last_name: string;
   title: string | null;
+  company_id: number | null;
   company_name: string | null;
   conference_name: string;
   start_date: string;
@@ -161,6 +163,7 @@ export function FollowUpsTable({
   const nextStepsOpts = useConfigWithIds('next_steps');
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
   const [bulkLoadingKeys, setBulkLoadingKeys] = useState<Set<string>>(new Set());
@@ -219,9 +222,12 @@ export function FollowUpsTable({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link href={`/attendees/${fu.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
-                {fu.first_name} {fu.last_name}
-              </Link>
+              <div className="flex items-center gap-1 group">
+                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: fu.attendee_id, name: `${fu.first_name} ${fu.last_name}` })} />
+                <Link href={`/attendees/${fu.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
+                  {fu.first_name} {fu.last_name}
+                </Link>
+              </div>
               {canEditRep ? (
                 isEditingRep ? (
                   <div className="w-40">
@@ -246,7 +252,14 @@ export function FollowUpsTable({
               ) : null}
             </div>
             {fu.title && <p className="text-xs text-gray-500 mt-0.5">{fu.title}</p>}
-            {fu.company_name && <p className="text-xs text-gray-500">{fu.company_name}</p>}
+            {fu.company_name && fu.company_id ? (
+              <div className="flex items-center gap-1 group">
+                <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! })} />
+                <Link href={`/companies/${fu.company_id}`} className="text-xs text-brand-secondary hover:underline">{fu.company_name}</Link>
+              </div>
+            ) : fu.company_name ? (
+              <p className="text-xs text-gray-500">{fu.company_name}</p>
+            ) : null}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
@@ -324,12 +337,22 @@ export function FollowUpsTable({
           if (!isVisible(col.key)) return null;
           switch (col.key) {
             case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-              <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
-                {fu.first_name} {fu.last_name}
-              </Link>
+              <div className="flex items-center gap-1 group">
+                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: fu.attendee_id, name: `${fu.first_name} ${fu.last_name}` })} />
+                <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
+                  {fu.first_name} {fu.last_name}
+                </Link>
+              </div>
             </td>;
             case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{fu.title || <span className="text-gray-300">—</span>}</td>;
-            case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug"><span className="text-xs break-words whitespace-normal leading-snug">{fu.company_name || <span className="text-gray-300">—</span>}</span></td>;
+            case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
+              {fu.company_name && fu.company_id ? (
+                <div className="flex items-center gap-1 group">
+                  <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! })} />
+                  <Link href={`/companies/${fu.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{fu.company_name}</Link>
+                </div>
+              ) : <span className="text-gray-300">—</span>}
+            </td>;
             case 'next_step': return <td key="next_step" className="px-3 py-2">
               <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
                 {resolveConfigValue(fu.next_steps, nextStepsOpts)}
@@ -669,6 +692,9 @@ export function FollowUpsTable({
           </tbody>
         </table>
       </div>
+      {quickView && (
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
     </>
   );
 }
