@@ -400,6 +400,8 @@ function NeedsAttentionSection({
   const [overdueFollowups, setOverdueFollowups] = useState<OverdueFollowup[]>([]);
   const [heldNoNotes, setHeldNoNotes] = useState<HeldNoNotesMeeting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({});
+  const toggleMobile = (key: string) => setMobileExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     fetch('/api/meetings/needs-attention')
@@ -460,9 +462,6 @@ function NeedsAttentionSection({
   };
 
   if (loading) return null;
-  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({});
-  const toggleMobile = (key: string) => setMobileExpanded(prev => ({ ...prev, [key]: !prev[key] }));
-
   if (totalCount === 0) return null;
 
   const sections = [
