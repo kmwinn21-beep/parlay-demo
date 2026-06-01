@@ -406,12 +406,12 @@ export function Header() {
           </Link>
         )}
 
-        {/* Help / Parlay AI */}
+        {/* Help / Parlay AI — desktop only; mobile uses FloatingNav */}
         <button
           type="button"
           aria-label="Ask Parlay AI"
           onClick={() => { setShowHelpChat(true); setHelpUnread(false); }}
-          className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="relative hidden lg:flex p-2 rounded-lg hover:bg-gray-100 transition-colors"
           title="Ask Parlay AI"
         >
           <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
