@@ -509,9 +509,9 @@ function NeedsAttentionSection({
   ];
 
   return (
-    <div className="card mb-4 overflow-hidden border border-red-300">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+    <div className="mb-4">
+      {/* Eyebrow header — outside the card */}
+      <div className="flex items-center gap-2 mb-2">
         <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
         </svg>
@@ -521,39 +521,40 @@ function NeedsAttentionSection({
         </span>
       </div>
 
-      {/* Desktop: 3-column grid */}
-      <div className="hidden sm:grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-        {sections.map((s, i) => (
-          <div key={s.key} style={i < 2 ? { borderRight: '1px solid #e5e7eb' } : {}}>
-            <ColumnHeader title={s.title} count={s.count} />
-            <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
-              <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
-              {s.content}
+      <div className="card overflow-hidden border border-red-300">
+        {/* Desktop: 3-column grid */}
+        <div className="hidden sm:grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+          {sections.map((s, i) => (
+            <div key={s.key} style={i < 2 ? { borderRight: '1px solid #e5e7eb' } : {}}>
+              <ColumnHeader title={s.title} count={s.count} />
+              <div style={{ height: 168, overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
+                <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
+                {s.content}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {/* Mobile: stacked collapsible sections */}
-      <div className="sm:hidden divide-y divide-gray-200">
-        {sections.map(s => {
-          const isOpen = !!mobileExpanded[s.key];
-          return (
-            <div key={s.key}>
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left"
-                onClick={() => toggleMobile(s.key)}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{s.title}</span>
-                  <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
-                </span>
-                <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        {/* Mobile: stacked collapsible sections */}
+        <div className="sm:hidden divide-y divide-gray-200">
+          {sections.map(s => {
+            const isOpen = !!mobileExpanded[s.key];
+            return (
+              <div key={s.key}>
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  onClick={() => toggleMobile(s.key)}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <span className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{s.title}</span>
+                    <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {isOpen && (
@@ -564,6 +565,7 @@ function NeedsAttentionSection({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );
