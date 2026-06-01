@@ -217,9 +217,9 @@ function MiniOutcomeButton({
 function ColumnHeader({ title, count }: { title: string; count: number }) {
   return (
     <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{title}</span>
+      <span className="text-[12px] font-semibold text-gray-600">{title}</span>
       {count > 0 && (
-        <span className="text-[10px] font-semibold text-gray-400">{count}</span>
+        <span className="text-[12px] font-semibold text-gray-400">{count}</span>
       )}
     </div>
   );
@@ -521,40 +521,39 @@ function NeedsAttentionSection({
         </span>
       </div>
 
-      <div className="card overflow-hidden border border-red-300">
-        {/* Desktop: 3-column grid */}
-        <div className="hidden sm:grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-          {sections.map((s, i) => (
-            <div key={s.key} style={i < 2 ? { borderRight: '1px solid #e5e7eb' } : {}}>
-              <ColumnHeader title={s.title} count={s.count} />
-              <div style={{ height: 168, overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
-                <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
-                {s.content}
-              </div>
+      {/* Desktop: 3 separate cards */}
+      <div className="hidden sm:grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        {sections.map((s, i) => (
+          <div key={s.key} className="card overflow-hidden border border-red-300" style={{ height: 300 }}>
+            <ColumnHeader title={s.title} count={s.count} />
+            <div style={{ height: 'calc(300px - 41px)', overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
+              <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
+              {s.content}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
 
-        {/* Mobile: stacked collapsible sections */}
-        <div className="sm:hidden divide-y divide-gray-200">
-          {sections.map(s => {
-            const isOpen = !!mobileExpanded[s.key];
-            return (
-              <div key={s.key}>
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between px-4 py-3 text-left"
-                  onClick={() => toggleMobile(s.key)}
+      {/* Mobile: stacked collapsible cards */}
+      <div className="sm:hidden flex flex-col gap-3">
+        {sections.map(s => {
+          const isOpen = !!mobileExpanded[s.key];
+          return (
+            <div key={s.key} className="card overflow-hidden border border-red-300">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                onClick={() => toggleMobile(s.key)}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-[12px] font-semibold text-gray-600">{s.title}</span>
+                  <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
+                </span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{s.title}</span>
-                    <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
-                  </span>
-                  <svg
-                    className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {isOpen && (
@@ -565,7 +564,6 @@ function NeedsAttentionSection({
             </div>
           );
         })}
-      </div>
       </div>
     </div>
   );
