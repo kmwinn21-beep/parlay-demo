@@ -11,6 +11,7 @@ import { NewRelationshipModal } from './NewRelationshipModal';
 import { AgendaUploadModal } from './AgendaUploadModal';
 import { TouchpointQuickModal } from './DashboardActionCard';
 import { GlobalSearchModal } from './GlobalSearch';
+import { HelpChatDrawer } from './HelpChatDrawer';
 import { NotificationBell } from './NotificationBell';
 import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
@@ -99,6 +100,8 @@ export function Header() {
   const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showHelpChat, setShowHelpChat] = useState(false);
+  const [helpUnread, setHelpUnread] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
 
@@ -403,6 +406,22 @@ export function Header() {
           </Link>
         )}
 
+        {/* Help / Parlay AI */}
+        <button
+          type="button"
+          aria-label="Ask Parlay AI"
+          onClick={() => { setShowHelpChat(true); setHelpUnread(false); }}
+          className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Ask Parlay AI"
+        >
+          <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          {helpUnread && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 border border-white" />
+          )}
+        </button>
+
         {/* User menu — hidden on mobile */}
         {user && (
           <div className="hidden sm:flex items-center gap-1">
@@ -439,6 +458,12 @@ export function Header() {
       {showAgendaModal && <AgendaUploadModal onClose={() => setShowAgendaModal(false)} />}
       {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} />}
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
+      {showHelpChat && (
+        <HelpChatDrawer
+          onClose={() => setShowHelpChat(false)}
+          onUnread={() => { if (!showHelpChat) setHelpUnread(true); }}
+        />
+      )}
     </header>
   );
 }
