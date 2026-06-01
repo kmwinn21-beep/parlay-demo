@@ -323,7 +323,7 @@ export async function PATCH(request: NextRequest) {
         });
         const noShowValue = noShowRes.rows.length > 0
           ? String(noShowRes.rows[0].value)
-          : 'No-Show Follow-Up';
+          : 'Meeting No-Show';
 
         await db.execute({
           sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, assigned_rep)
