@@ -81,6 +81,7 @@ interface DisplayItem {
   attendee_title: string | null;
   company_name: string | null;
   conference_name: string | null;
+  meeting_status: string | null;
 }
 
 interface Props {
@@ -144,6 +145,22 @@ const SESSION_TYPE_COLORS: Record<string, string> = {
   dinner: 'bg-rose-100 text-rose-700',
   meeting: 'bg-sky-100 text-sky-700',
 };
+
+const MEETING_STATUS_CLASSES: Record<string, string> = {
+  held: 'bg-green-100 text-green-700',
+  scheduled: 'bg-sky-100 text-sky-700',
+  'no-show': 'bg-red-100 text-red-600',
+  'no show': 'bg-red-100 text-red-600',
+  cancelled: 'bg-red-100 text-red-600',
+  rescheduled: 'bg-amber-100 text-amber-700',
+};
+
+function meetingStatusPill(status: string | null) {
+  if (!status) return null;
+  const key = status.toLowerCase();
+  const cls = MEETING_STATUS_CLASSES[key] ?? 'bg-gray-100 text-gray-600';
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
+}
 
 function sessionBadgeClass(type: string | null): string {
   if (!type) return '';
@@ -476,10 +493,11 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ')
       : null;
 
+    const isMeeting = item.sourceType === 'meeting';
     return (
       <div>
         {/* Main row — same layout as Full Agenda items */}
-        <div className="flex gap-3 px-4 py-3">
+        <div className={`flex gap-3 px-4 py-3 ${isMeeting ? 'bg-brand-accent/30' : ''}`}>
           <div className="w-20 sm:w-28 shrink-0 pt-0.5">
             {(item.start_time || item.end_time) && (
               <p className="text-xs text-gray-500 tabular-nums leading-snug">
@@ -496,6 +514,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                   {item.session_type}
                 </span>
               )}
+              {isMeeting && meetingStatusPill(item.meeting_status)}
               <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
             </div>
             {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
@@ -594,7 +613,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         note_content: mi.note_content, entity_note_ids: mi.entity_note_ids,
         attendee_id: mi.attendee_id, company_id: mi.company_id,
         attendee_name: mi.attendee_name, attendee_title: null, company_name: mi.company_name,
-        conference_name: mi.conference_name,
+        conference_name: mi.conference_name, meeting_status: null,
       });
     }
 
@@ -612,12 +631,13 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         sort_minutes: parseMinutes(m.meeting_time || null),
         start_time: m.meeting_time || null, end_time: null,
         session_type: 'Meeting', title: attendeeName || 'Meeting',
-        description: m.outcome ?? null, location: m.location,
+        description: null, location: m.location,
         note_content: myItemRow?.note_content ?? null,
         entity_note_ids: myItemRow?.entity_note_ids ?? null,
         attendee_id: m.attendee_id, company_id: m.company_id,
         attendee_name: attendeeName || null, attendee_title: m.attendee_title ?? null, company_name: m.company_name,
         conference_name: m.conference_name,
+        meeting_status: m.outcome ?? 'Scheduled',
       });
     }
     // Remove duplicates if meeting already has a saved my_agenda row
