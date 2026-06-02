@@ -207,66 +207,67 @@ export function SeriesSeasonCombobox({ seriesId, seasonId, onSeriesChange, onSea
         )}
       </div>
 
-      {/* Season combobox — only shown when a series is selected */}
-      {selectedSeries && (
-        <div ref={seasonRef} className="relative">
-          <label className="label">Season <span className="text-gray-400 font-normal">(optional)</span></label>
-          <div className="relative">
-            <input
-              type="text"
-              value={seasonQuery}
-              onChange={(e) => { setSeasonQuery(e.target.value); setSeasonOpen(true); }}
-              onFocus={() => setSeasonOpen(true)}
-              placeholder="Search or create a season…"
-              className="input-field pr-8"
-              autoComplete="off"
-            />
-            {selectedSeason && (
+      {/* Track combobox — always visible, disabled when no series selected */}
+      <div ref={seasonRef} className="relative">
+        <label className={`label ${!selectedSeries ? 'text-gray-400' : ''}`}>
+          Conference Track <span className="font-normal opacity-60">(optional)</span>
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            value={seasonQuery}
+            onChange={(e) => { setSeasonQuery(e.target.value); setSeasonOpen(true); }}
+            onFocus={() => { if (selectedSeries) setSeasonOpen(true); }}
+            placeholder="Search or create a track (ie, Spring, Northwest, Growth, etc.)"
+            className={`input-field pr-8 text-[11px] placeholder:text-[11px] ${!selectedSeries ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
+            autoComplete="off"
+            disabled={!selectedSeries}
+          />
+          {selectedSeason && (
+            <button
+              type="button"
+              onClick={() => { onSeasonChange(null); setSeasonQuery(''); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              title="Clear track"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {selectedSeries && seasonOpen && (filteredSeasons.length > 0 || showCreateSeason) && (
+          <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+            {filteredSeasons.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => { onSeasonChange(s.id); setSeasonQuery(s.season_name); setSeasonOpen(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${s.id === seasonId ? 'bg-blue-50 text-brand-secondary font-medium' : 'text-gray-800'}`}
+              >
+                {s.season_name}
+              </button>
+            ))}
+            {showCreateSeason && (
               <button
                 type="button"
-                onClick={() => { onSeasonChange(null); setSeasonQuery(''); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                title="Clear season"
+                onClick={handleCreateSeason}
+                disabled={creating === 'season'}
+                className="w-full text-left px-3 py-2 text-sm text-brand-secondary hover:bg-blue-50 flex items-center gap-2 border-t border-gray-100"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                {creating === 'season' ? (
+                  <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full inline-block" />
+                ) : (
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
+                Create track: <span className="font-medium">&ldquo;{seasonQuery.trim()}&rdquo;</span>
               </button>
             )}
           </div>
-          {seasonOpen && (filteredSeasons.length > 0 || showCreateSeason) && (
-            <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
-              {filteredSeasons.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => { onSeasonChange(s.id); setSeasonQuery(s.season_name); setSeasonOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${s.id === seasonId ? 'bg-blue-50 text-brand-secondary font-medium' : 'text-gray-800'}`}
-                >
-                  {s.season_name}
-                </button>
-              ))}
-              {showCreateSeason && (
-                <button
-                  type="button"
-                  onClick={handleCreateSeason}
-                  disabled={creating === 'season'}
-                  className="w-full text-left px-3 py-2 text-sm text-brand-secondary hover:bg-blue-50 flex items-center gap-2 border-t border-gray-100"
-                >
-                  {creating === 'season' ? (
-                    <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full inline-block" />
-                  ) : (
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  )}
-                  Create season: <span className="font-medium">&ldquo;{seasonQuery.trim()}&rdquo;</span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
