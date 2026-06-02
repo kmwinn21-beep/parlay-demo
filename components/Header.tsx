@@ -13,8 +13,8 @@ import { TouchpointQuickModal } from './DashboardActionCard';
 import { GlobalSearchModal } from './GlobalSearch';
 import { HelpChatDrawer } from './HelpChatDrawer';
 import { NotificationBell } from './NotificationBell';
-import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
+import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
@@ -85,7 +85,7 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const appName = useAppName();
-  const { navHidden, setNavHidden } = useFloatingNavHidden();
+  const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -410,7 +410,7 @@ export function Header() {
         <button
           type="button"
           aria-label="Ask Parlay AI"
-          onClick={() => { setShowHelpChat(true); setHelpUnread(false); }}
+          onClick={() => { setShowHelpChat(true); setHelpUnread(false); setHelpChatOpen(true); }}
           className="relative hidden lg:flex p-2 rounded-lg hover:bg-gray-100 transition-colors"
           title="Ask Parlay AI"
         >
@@ -460,7 +460,7 @@ export function Header() {
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
       {showHelpChat && (
         <HelpChatDrawer
-          onClose={() => setShowHelpChat(false)}
+          onClose={() => { setShowHelpChat(false); setHelpChatOpen(false); }}
           onUnread={() => { if (!showHelpChat) setHelpUnread(true); }}
         />
       )}

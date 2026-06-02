@@ -96,7 +96,7 @@ function safeClamp(p: { x: number; y: number }): { x: number; y: number } {
 export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
-  const { navHidden, setNavHidden } = useFloatingNavHidden();
+  const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
   const unreadCount = useUnreadNotificationCount();
   const unreadChatCount = useUnreadChatCount();
   const { setPanelOpen } = useChatPanel();
@@ -385,7 +385,7 @@ export function FloatingNav() {
       {/* Quick note modal */}
       {showQuickNote && <QuickNoteInlineModal onClose={() => setShowQuickNote(false)} />}
       {/* Parlay AI help chat */}
-      {showHelpChat && <HelpChatDrawer onClose={() => setShowHelpChat(false)} onUnread={() => {}} />}
+      {showHelpChat && <HelpChatDrawer onClose={() => { setShowHelpChat(false); setHelpChatOpen(false); }} onUnread={() => {}} />}
 
       {/* Hidden file input for badge scan */}
       <input
@@ -479,7 +479,7 @@ export function FloatingNav() {
                     setOpen(false);
                     if (item.key === 'quick-note') setShowQuickNote(true);
                     else if (item.key === 'chat') setPanelOpen(true);
-                    else if (item.key === 'help-chat') setShowHelpChat(true);
+                    else if (item.key === 'help-chat') { setShowHelpChat(true); setHelpChatOpen(true); }
                     else if (item.key === 'scan') { setBadgeFileKey(k => k + 1); floatingBadgeRef.current?.click(); }
                     else setShowSearch(true);
                   }}
