@@ -526,6 +526,18 @@ function MeetingNotesPanel({
   );
 }
 
+// ─── Session Note Types ───────────────────────────────────────────────────────
+
+interface AgendaItemWithNote {
+  id: number;
+  title: string;
+  day_label: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  session_type: string | null;
+  note_content: string;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 type MobileTab = 'companies' | 'activity' | 'followups';
@@ -563,6 +575,10 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   } | null>(null);
   const [tpMapLoading, setTpMapLoading] = useState(false);
   const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const [sessionNotesOpen, setSessionNotesOpen] = useState(false);
+  const [sessionNotes, setSessionNotes] = useState<AgendaItemWithNote[]>([]);
+  const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
+  const [expandedSessionNoteIds, setExpandedSessionNoteIds] = useState<Set<number>>(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -603,6 +619,18 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
       .then((notes: DebriefNote[]) => setCompanyNotes(notes.filter(n => n.conference_name === data.conference.name)))
       .catch(() => setCompanyNotes([]));
   }, [selectedCompanyId, data]);
+
+  useEffect(() => {
+    if (!sessionNotesOpen) return;
+    setSessionNotesLoading(true);
+    fetch(`/api/conferences/${conferenceId}/my-agenda`)
+      .then(r => r.ok ? r.json() : { myItems: [] })
+      .then((d: { myItems: AgendaItemWithNote[] }) => {
+        setSessionNotes((d.myItems ?? []).filter(item => item.note_content?.trim()));
+      })
+      .catch(() => setSessionNotes([]))
+      .finally(() => setSessionNotesLoading(false));
+  }, [sessionNotesOpen, conferenceId]);
 
   const repSesScore = useMemo(() => {
     if (!data) return null;
@@ -791,6 +819,19 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {data && <p className="text-xs text-white/60 hidden sm:block">{data.conference.location}</p>}
+                {data && (
+                  <button
+                    type="button"
+                    onClick={() => setSessionNotesOpen(v => !v)}
+                    className={`text-xs font-semibold px-3 py-1 rounded-full border transition-colors flex-shrink-0 ${
+                      sessionNotesOpen
+                        ? 'bg-white text-brand-primary border-white'
+                        : 'bg-white/10 text-white/80 border-white/30 hover:bg-white/20 hover:text-white'
+                    }`}
+                  >
+                    Session Notes
+                  </button>
+                )}
                 {/* Mobile stats toggle */}
                 {data && (
                   <button
@@ -852,6 +893,70 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
               </div>
             )}
           </div>
+
+          {/* ── Session Notes panel ── */}
+          {sessionNotesOpen && (
+            <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 max-h-72 overflow-y-auto">
+              {sessionNotesLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <svg className="w-5 h-5 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                </div>
+              ) : sessionNotes.length === 0 ? (
+                <div className="px-4 py-5 text-center">
+                  <p className="text-sm text-gray-400">No session notes found for this conference.</p>
+                  <p className="text-xs text-gray-400 mt-1">Add notes to sessions in My Agenda and they will appear here.</p>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {sessionNotes.map(item => {
+                    const isExpanded = expandedSessionNoteIds.has(item.id);
+                    const timeLabel = [item.start_time, item.end_time].filter(Boolean).join(' – ');
+                    return (
+                      <div key={item.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSessionNoteIds(prev => {
+                            const n = new Set(prev);
+                            n.has(item.id) ? n.delete(item.id) : n.add(item.id);
+                            return n;
+                          })}
+                          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">{item.title}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {[item.day_label, timeLabel].filter(Boolean).join(' · ')}
+                              </p>
+                            </div>
+                            {item.session_type && (
+                              <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+                                {item.session_type}
+                              </span>
+                            )}
+                          </div>
+                          <svg
+                            className={`w-4 h-4 text-gray-400 flex-shrink-0 ml-2 transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {isExpanded && (
+                          <div className="px-3 pb-3 border-t border-gray-100">
+                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap pt-2">{item.note_content}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Mobile tab bar ── */}
           {data && !loading && !error && (
