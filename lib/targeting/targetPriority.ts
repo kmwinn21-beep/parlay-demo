@@ -402,20 +402,12 @@ function scoreRelationship(company: TargetingCompanyInput, signals: TargetingCom
   return { score: weighted([[internal, w.internal_relationship ?? 35], [prior, w.prior_engagement ?? 25], [owner, w.assigned_owner ?? 15], [known, w.known_prospect ?? 15], [recent, w.recent_interaction ?? 10]]), reasons };
 }
 
-function scoreOpportunity(attendees: AttendeeBuyerFitScore[], signals: TargetingCompanySignals, config: TargetingScoringConfig) {
-  const w = config.conference_opportunity_weights;
+function scoreOpportunity(attendees: AttendeeBuyerFitScore[], _signals: TargetingCompanySignals, _config: TargetingScoringConfig) {
   const highPriorityCount = attendees.filter(a => a.buyer_fit_score >= 70).length;
-  const high = highPriorityCount > 0 ? 100 : 0;
-  const multi = attendees.length > 1 ? 100 : attendees.length === 1 ? 50 : 0;
-  const meeting = signals.scheduled_meeting_count ? 100 : 0;
-  const hosted = signals.hosted_event_count ? 100 : 0;
-  const netNewExpansion = signals.is_known_prospect ? 80 : config.include_new_companies ? 100 : 40;
+  const score = highPriorityCount >= 3 ? 100 : highPriorityCount === 2 ? 80 : highPriorityCount === 1 ? 60 : 0;
   const reasons: string[] = [];
-  if (high) reasons.push(`${highPriorityCount} high-priority buyer attendee${highPriorityCount === 1 ? '' : 's'} present.`);
-  if (attendees.length > 1) reasons.push(`${attendees.length} attendees from this company are registered.`);
-  if (meeting) reasons.push('Scheduled meeting already exists.');
-  if (hosted) reasons.push('Hosted or social event opportunity exists.');
-  return { score: weighted([[high, w.high_priority_attendee ?? 30], [multi, w.multiple_attendees ?? 20], [meeting, w.scheduled_meeting ?? 20], [hosted, w.hosted_event ?? 15], [netNewExpansion, w.net_new_or_expansion ?? 15]]), reasons, highPriorityCount };
+  if (highPriorityCount > 0) reasons.push(`${highPriorityCount} high-priority buyer attendee${highPriorityCount === 1 ? '' : 's'} present.`);
+  return { score, reasons, highPriorityCount };
 }
 
 function recommendAction(args: { targetScore: number; icp: number; buyer: number; relationship: number; opportunity: number; signals: TargetingCompanySignals; exclusionMatch: boolean; config: TargetingScoringConfig }) {
