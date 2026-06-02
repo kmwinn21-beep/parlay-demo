@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -198,10 +199,18 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   const [noteContents, setNoteContents] = useState<Map<string, string>>(new Map());
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
+  // Track last-saved content per key so we can detect unsaved changes for agenda items
+  const [savedNoteContents, setSavedNoteContents] = useState<Map<string, string>>(new Map());
   // Maps display key → myItemId (needed when meeting note is first saved, creating a row)
   const [keyToMyItemId, setKeyToMyItemId] = useState<Map<string, number>>(new Map());
+  // Inline panel unsaved-changes prompt
+  const [pendingCloseKey, setPendingCloseKey] = useState<string | null>(null);
+  // Expand drawer
+  const [noteDrawerItem, setNoteDrawerItem] = useState<DisplayItem | null>(null);
+  const [drawerDraft, setDrawerDraft] = useState('');
+  const [drawerSaving, setDrawerSaving] = useState(false);
+  const [drawerDiscardPrompt, setDrawerDiscardPrompt] = useState(false);
 
-  const debounceRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -237,6 +246,15 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         for (const item of (data.myItems ?? [])) {
           const k = item.source_type === 'meeting' ? `meeting-${item.meeting_id}` : `agenda-${item.id}`;
           if (!next.has(k) && item.note_content) next.set(k, item.note_content);
+        }
+        return next;
+      });
+      // Seed saved note contents (used for unsaved-changes detection on agenda items)
+      setSavedNoteContents(prev => {
+        const next = new Map(prev);
+        for (const item of (data.myItems ?? [])) {
+          const k = item.source_type === 'meeting' ? `meeting-${item.meeting_id}` : `agenda-${item.id}`;
+          if (!next.has(k)) next.set(k, item.note_content ?? '');
         }
         return next;
       });
@@ -387,6 +405,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       });
       if (res.ok) {
         const data = await res.json() as { id: number; entity_note_ids: string | null };
+        // Track the saved content so unsaved-changes detection stays accurate
+        setSavedNoteContents(prev => new Map(Array.from(prev).concat([[key, content]])));
+        setNoteContents(prev => new Map(Array.from(prev).concat([[key, content]])));
         // Update myItemId if newly created (meeting first save)
         if (!currentMyItemId && data.id) {
           setKeyToMyItemId(prev => new Map(Array.from(prev).concat([[key, data.id]])));
@@ -414,13 +435,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   const handleNoteChange = useCallback((key: string, value: string) => {
     setNoteContents(prev => new Map(Array.from(prev).concat([[key, value]])));
   }, []);
-
-  const handleNoteBlur = useCallback((key: string, meetingId?: number) => {
-    const existing = debounceRefs.current.get(key);
-    if (existing) { clearTimeout(existing); debounceRefs.current.delete(key); }
-    const content = noteContents.get(key) ?? '';
-    void saveNote(key, content, meetingId);
-  }, [saveNote, noteContents]);
 
   // ── FullAgendaItem ────────────────────────────────────────────────────────────
 
@@ -486,8 +500,13 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   function MyAgendaItemCard({ item }: { item: DisplayItem }) {
     const noteOpen = expandedNotes.has(item.key);
     const saving = savingNotes.has(item.key);
-    const noteVal = noteContents.get(item.key) ?? item.note_content ?? '';
     const meetingId = item.sourceType === 'meeting' ? item.sourceId : undefined;
+
+    // Dirty tracking
+    const savedVal = savedNoteContents.get(item.key) ?? item.note_content ?? '';
+    const currentVal = noteContents.get(item.key) ?? item.note_content ?? '';
+    const isDirty = currentVal !== savedVal;
+
     // For meeting subtitle: show attendee_title · company; for agenda: nothing
     const subtitle = item.sourceType === 'meeting'
       ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ')
@@ -531,25 +550,51 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               </p>
             )}
             {/* Note preview when panel is closed */}
-            {!noteOpen && noteVal && (
-              <p className="mt-1 text-xs text-gray-400 italic line-clamp-2">{noteVal}</p>
+            {!noteOpen && currentVal && (
+              <p className="mt-1 text-xs text-gray-400 italic line-clamp-2">{currentVal}</p>
             )}
           </div>
           {/* Actions — no borders, text links */}
           <div className="shrink-0 flex flex-col items-end gap-1.5 pl-2 pt-0.5">
-            <button
-              onClick={() => setExpandedNotes(prev => {
-                const s = new Set(prev);
-                if (s.has(item.key)) s.delete(item.key); else s.add(item.key);
-                return s;
-              })}
-              className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
-            >
-              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              {noteOpen ? 'Close' : 'Notes'}
-            </button>
+            <div className="flex items-center gap-1.5">
+              {!isMeeting && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNoteDrawerItem(item);
+                    setDrawerDraft(currentVal);
+                    setDrawerDiscardPrompt(false);
+                  }}
+                  className="text-gray-300 hover:text-brand-secondary transition-colors"
+                  title="Expand notes"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (noteOpen) {
+                    if (isDirty) {
+                      setPendingCloseKey(item.key);
+                    } else {
+                      setPendingCloseKey(null);
+                      setExpandedNotes(prev => { const s = new Set(prev); s.delete(item.key); return s; });
+                    }
+                  } else {
+                    setPendingCloseKey(null);
+                    setExpandedNotes(prev => { const s = new Set(prev); s.add(item.key); return s; });
+                  }
+                }}
+                className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                {noteOpen ? 'Close' : 'Notes'}
+              </button>
+            </div>
             {item.sourceType === 'agenda' && item.myItemId && (
               <button
                 onClick={() => void handleRemoveMyItem(item.myItemId!, item.sourceId)}
@@ -568,26 +613,48 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         {noteOpen && (
           <div className="px-4 pb-3 space-y-1.5">
             <textarea
-              value={noteVal}
+              value={currentVal}
               onChange={e => handleNoteChange(item.key, e.target.value)}
-              onBlur={() => handleNoteBlur(item.key, meetingId)}
               placeholder="Add notes…"
               rows={3}
               className="input-field resize-none w-full text-xs"
             />
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-400">
-                {saving ? 'Saving…' : noteVal ? 'Saved' : 'Notes save when you click away'}
-              </p>
-              {noteVal && !saving && (
+            {pendingCloseKey === item.key ? (
+              <div className="flex items-center justify-between py-1.5 px-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-xs text-amber-700">Unsaved changes</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await saveNote(item.key, currentVal, meetingId);
+                      setPendingCloseKey(null);
+                      setExpandedNotes(prev => { const s = new Set(prev); s.delete(item.key); return s; });
+                    }}
+                    className="text-xs font-semibold text-brand-secondary hover:underline"
+                  >Save &amp; Exit</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteContents(prev => { const m = new Map(prev); m.set(item.key, savedVal); return m; });
+                      setPendingCloseKey(null);
+                      setExpandedNotes(prev => { const s = new Set(prev); s.delete(item.key); return s; });
+                    }}
+                    className="text-xs text-gray-500 hover:underline"
+                  >Discard</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end">
                 <button
-                  onClick={() => handleNoteBlur(item.key, meetingId)}
-                  className="text-xs font-medium text-brand-secondary hover:underline transition-colors"
+                  type="button"
+                  onClick={() => void saveNote(item.key, currentVal, meetingId)}
+                  disabled={!isDirty || saving}
+                  className="text-xs font-medium text-brand-secondary hover:underline disabled:opacity-40 transition-colors"
                 >
-                  Save
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -932,6 +999,128 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           )}
         </div>
       </div>
+
+      {/* Note Expand Drawer */}
+      {noteDrawerItem && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => {
+            const drawerSavedVal = savedNoteContents.get(noteDrawerItem.key) ?? noteDrawerItem.note_content ?? '';
+            if (drawerDraft !== drawerSavedVal) {
+              setDrawerDiscardPrompt(true);
+            } else {
+              setNoteDrawerItem(null);
+            }
+          }} />
+          <div
+            className="relative flex flex-col bg-white w-full sm:w-[560px] h-full shadow-2xl"
+            style={{ animation: 'slideInRight 200ms ease-out' }}
+          >
+            {/* Header */}
+            <div className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate leading-tight">{noteDrawerItem.title}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {noteDrawerItem.start_time && (
+                    <span className="text-xs text-gray-400">
+                      {noteDrawerItem.start_time}{noteDrawerItem.end_time ? ` – ${noteDrawerItem.end_time}` : ''}
+                    </span>
+                  )}
+                  {noteDrawerItem.session_type && (
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(noteDrawerItem.session_type)}`}>
+                      {noteDrawerItem.session_type}
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-400">{noteDrawerItem.day_label}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setDrawerSaving(true);
+                    const drawerMeetingId = noteDrawerItem.sourceType === 'meeting' ? noteDrawerItem.sourceId : undefined;
+                    await saveNote(noteDrawerItem.key, drawerDraft, drawerMeetingId);
+                    setDrawerSaving(false);
+                    setDrawerDiscardPrompt(false);
+                    setNoteDrawerItem(null);
+                  }}
+                  disabled={drawerSaving}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-primary text-white hover:bg-brand-primary/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+                >
+                  {drawerSaving ? 'Saving…' : 'Save & Exit'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const drawerSavedVal = savedNoteContents.get(noteDrawerItem.key) ?? noteDrawerItem.note_content ?? '';
+                    if (drawerDraft !== drawerSavedVal) {
+                      setDrawerDiscardPrompt(true);
+                    } else {
+                      setNoteDrawerItem(null);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap"
+                >
+                  Discard &amp; Exit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const drawerSavedVal = savedNoteContents.get(noteDrawerItem.key) ?? noteDrawerItem.note_content ?? '';
+                    if (drawerDraft !== drawerSavedVal) {
+                      setDrawerDiscardPrompt(true);
+                    } else {
+                      setNoteDrawerItem(null);
+                    }
+                  }}
+                  className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* Discard prompt bar */}
+            {drawerDiscardPrompt && (
+              <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+                <p className="text-xs text-amber-700 font-medium">You have unsaved changes.</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setDrawerSaving(true);
+                      const drawerMeetingId = noteDrawerItem.sourceType === 'meeting' ? noteDrawerItem.sourceId : undefined;
+                      await saveNote(noteDrawerItem.key, drawerDraft, drawerMeetingId);
+                      setDrawerSaving(false);
+                      setDrawerDiscardPrompt(false);
+                      setNoteDrawerItem(null);
+                    }}
+                    className="text-xs font-semibold text-brand-secondary hover:underline"
+                  >Save &amp; Exit</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawerDiscardPrompt(false);
+                      setNoteDrawerItem(null);
+                    }}
+                    className="text-xs text-gray-500 hover:underline"
+                  >Discard &amp; Exit</button>
+                </div>
+              </div>
+            )}
+            {/* Note textarea */}
+            <textarea
+              value={drawerDraft}
+              onChange={e => setDrawerDraft(e.target.value)}
+              placeholder="Add session notes…"
+              className="flex-1 p-4 resize-none border-0 outline-none text-sm text-gray-700 placeholder:text-gray-400 bg-white"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
