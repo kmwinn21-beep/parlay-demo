@@ -422,7 +422,13 @@ function groupRelationshipsByCompany(relationships: RelationshipRow[]): CompanyG
     // Merge attendees (deduplicate by id)
     for (const a of rel.attendees) {
       if (!group.attendees.find(x => x.id === a.id)) {
-        group.attendees.push({ ...a, company_name: rel.company_name, company_id: rel.company_id, rep_names: rel.rep_names });
+        group.attendees.push({ ...a, company_name: rel.company_name, company_id: rel.company_id, rep_names: [...rel.rep_names] });
+      } else {
+        // Attendee appears in multiple relationship rows — merge rep names
+        const existing = group.attendees.find(x => x.id === a.id)!;
+        for (const r of rel.rep_names) {
+          if (!existing.rep_names.includes(r)) existing.rep_names.push(r);
+        }
       }
     }
   }
