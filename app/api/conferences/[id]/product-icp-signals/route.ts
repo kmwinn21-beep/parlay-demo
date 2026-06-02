@@ -185,14 +185,19 @@ export async function GET(
       if (Array.isArray(km)) keywordMatches = km;
     } catch { /* ignore */ }
 
+    // Skip attendees with no function set or no buyer role — they show as "not mapped"
+    const buyerRole = row.buyer_role ? String(row.buyer_role) : null;
+    const attendeeFunction = row.attendee_function ? String(row.attendee_function) : null;
+    if (!buyerRole || !attendeeFunction) continue;
+
     company.attendees.push({
       id: Number(row.attendee_id),
       firstName: String(row.first_name ?? ''),
       lastName: String(row.last_name ?? ''),
       title: row.title ? String(row.title) : null,
       seniority: row.seniority ? String(row.seniority) : null,
-      function: row.attendee_function ? String(row.attendee_function) : null,
-      buyerRole: row.buyer_role ? String(row.buyer_role) : null,
+      function: attendeeFunction,
+      buyerRole,
       functionMatch,
       industryMatch: Number(row.industry_match ?? 0) === 1,
       keywordMatches,
@@ -204,13 +209,13 @@ export async function GET(
   }
 
   const columns: ColumnEntry[] = Array.from(columnMap.entries()).map(([, col]) => {
-    const companies = Array.from(col.companyMap.values()).sort((a, b) =>
-      a.companyName.localeCompare(b.companyName),
-    );
+    const companies = Array.from(col.companyMap.values())
+      .filter((c) => c.attendees.length > 0)
+      .sort((a, b) => a.companyName.localeCompare(b.companyName));
     const totalAttendees = companies.reduce((sum, c) => sum + c.attendees.length, 0);
     const hasBuyerRole = companies.some((c) => c.attendees.some((a) => a.buyerRole !== null));
     return { product: col.product, companies, totalAttendees, hasBuyerRole };
-  }).sort((a, b) => {
+  }).filter((col) => col.companies.length > 0).sort((a, b) => {
     const catCmp = a.product.categoryLabel.localeCompare(b.product.categoryLabel);
     return catCmp !== 0 ? catCmp : a.product.name.localeCompare(b.product.name);
   });
