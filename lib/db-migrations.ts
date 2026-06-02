@@ -954,4 +954,34 @@ export const migrations: string[] = [
   )`,
   `ALTER TABLE conferences ADD COLUMN series_id TEXT REFERENCES conference_series(id)`,
   `ALTER TABLE conferences ADD COLUMN season_id TEXT REFERENCES conference_seasons(id)`,
+  // Conference saturation tracking
+  `CREATE TABLE IF NOT EXISTS contact_conference_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    attendee_id INTEGER NOT NULL REFERENCES attendees(id) ON DELETE CASCADE,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    series_id TEXT NOT NULL,
+    recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(attendee_id, conference_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_contact_conf_history_series ON contact_conference_history(series_id, attendee_id)`,
+  `CREATE TABLE IF NOT EXISTS conference_saturation_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    series_id TEXT NOT NULL,
+    saturation_score INTEGER NOT NULL DEFAULT 0,
+    contacts_total INTEGER NOT NULL DEFAULT 0,
+    contacts_net_new INTEGER NOT NULL DEFAULT 0,
+    contacts_returning INTEGER NOT NULL DEFAULT 0,
+    meetings_held INTEGER NOT NULL DEFAULT 0,
+    substitutable_count INTEGER NOT NULL DEFAULT 0,
+    health_green INTEGER NOT NULL DEFAULT 0,
+    health_amber INTEGER NOT NULL DEFAULT 0,
+    health_red INTEGER NOT NULL DEFAULT 0,
+    companies_total INTEGER NOT NULL DEFAULT 0,
+    companies_returning INTEGER NOT NULL DEFAULT 0,
+    computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(conference_id)
+  )`,
+  `ALTER TABLE conferences ADD COLUMN total_registered INTEGER`,
+  `ALTER TABLE conferences ADD COLUMN total_addressable INTEGER`,
 ];
