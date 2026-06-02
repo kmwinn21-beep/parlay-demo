@@ -220,8 +220,9 @@ export default function AttendeeDetailPage() {
         fetch('/api/config?category=products'),
       ]);
       if (!atRes.ok) throw new Error('Not found');
+      const safeJson = async (r: Response, fallback: any = []): Promise<any> => r.ok ? r.json().catch(() => fallback) : fallback;
       const [atData, coData, statusData, actionData, seniorityData, userData, relTypeData, functionData, productsData] = await Promise.all([
-        atRes.json(), coRes.json(), statusRes.json(), actionRes.json(), seniorityRes.json(), userRes.json(), relTypeRes.json(), functionRes.json(), productsRes.json(),
+        atRes.json(), safeJson(coRes, []), safeJson(statusRes), safeJson(actionRes), safeJson(seniorityRes), safeJson(userRes), safeJson(relTypeRes), safeJson(functionRes), safeJson(productsRes),
       ]);
       setAttendee(atData);
       setCompanies(coData);

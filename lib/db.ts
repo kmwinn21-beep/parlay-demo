@@ -119,21 +119,19 @@ export async function initDb(): Promise<void> {
   const currentVersion = versionRow.rows.length > 0 ? Number(versionRow.rows[0].version) : 0;
   const pendingMigrations = migrations.slice(currentVersion);
 
-  for (const sql of pendingMigrations) {
-    await db.execute({ sql, args: [] }).catch(() => {});
-  }
-
-  if (pendingMigrations.length > 0) {
-    if (currentVersion === 0) {
-      await db.execute({
-        sql: `INSERT INTO _schema_version (version) VALUES (?)`,
-        args: [migrations.length],
-      }).catch(() => {});
-    } else {
-      await db.execute({
-        sql: `UPDATE _schema_version SET version = ?`,
-        args: [migrations.length],
-      }).catch(() => {});
+  // Write checkpoints every 50 migrations so a cold-start timeout doesn't reset progress.
+  // Each checkpoint advances the stored version — next cold start resumes from there.
+  let versionRowExists = versionRow.rows.length > 0;
+  for (let i = 0; i < pendingMigrations.length; i++) {
+    await db.execute({ sql: pendingMigrations[i], args: [] }).catch(() => {});
+    if ((i + 1) % 50 === 0 || i === pendingMigrations.length - 1) {
+      const checkpoint = currentVersion + i + 1;
+      if (!versionRowExists) {
+        await db.execute({ sql: `INSERT INTO _schema_version (version) VALUES (?)`, args: [checkpoint] }).catch(() => {});
+        versionRowExists = true;
+      } else {
+        await db.execute({ sql: `UPDATE _schema_version SET version = ?`, args: [checkpoint] }).catch(() => {});
+      }
     }
   }
 
@@ -987,21 +985,17 @@ export async function migrateTenantDb(client: Client): Promise<void> {
   const currentVersion = versionRow.rows.length > 0 ? Number(versionRow.rows[0].version) : 0;
   const pending = migrations.slice(currentVersion);
 
-  for (const sql of pending) {
-    await client.execute({ sql, args: [] }).catch(() => {});
-  }
-
-  if (pending.length > 0) {
-    if (currentVersion === 0) {
-      await client.execute({
-        sql: `INSERT INTO _schema_version (version) VALUES (?)`,
-        args: [migrations.length],
-      }).catch(() => {});
-    } else {
-      await client.execute({
-        sql: `UPDATE _schema_version SET version = ?`,
-        args: [migrations.length],
-      }).catch(() => {});
+  let rowExists = versionRow.rows.length > 0;
+  for (let i = 0; i < pending.length; i++) {
+    await client.execute({ sql: pending[i], args: [] }).catch(() => {});
+    if ((i + 1) % 50 === 0 || i === pending.length - 1) {
+      const checkpoint = currentVersion + i + 1;
+      if (!rowExists) {
+        await client.execute({ sql: `INSERT INTO _schema_version (version) VALUES (?)`, args: [checkpoint] }).catch(() => {});
+        rowExists = true;
+      } else {
+        await client.execute({ sql: `UPDATE _schema_version SET version = ?`, args: [checkpoint] }).catch(() => {});
+      }
     }
   }
 }
