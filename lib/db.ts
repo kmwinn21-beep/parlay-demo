@@ -25,8 +25,62 @@ async function ensureConfigOptionsColumns(client: Client): Promise<void> {
   );
 }
 
-export async function initDb(): Promise<void> {
-  await db.executeMultiple(`
+async function tryAcquireMigrationLock(workerId: string): Promise<boolean> {
+  await db.execute({
+    sql: `CREATE TABLE IF NOT EXISTS _migration_lock (id INTEGER PRIMARY KEY DEFAULT 1, worker_id TEXT, locked_at TEXT)`,
+    args: [],
+  }).catch(() => {});
+
+  await db.execute({
+    sql: `INSERT INTO _migration_lock (id, worker_id, locked_at) VALUES (1, ?, datetime('now'))
+          ON CONFLICT(id) DO UPDATE SET worker_id = ?, locked_at = datetime('now')
+          WHERE datetime('now') > datetime(locked_at, '+120 seconds')`,
+    args: [workerId, workerId],
+  }).catch(() => {});
+
+  const row = await db.execute({
+    sql: `SELECT worker_id FROM _migration_lock WHERE id = 1`,
+    args: [],
+  }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
+
+  return row.rows.length > 0 && String(row.rows[0].worker_id) === workerId;
+}
+
+async function releaseMigrationLock(workerId: string): Promise<void> {
+  await db.execute({
+    sql: `DELETE FROM _migration_lock WHERE id = 1 AND worker_id = ?`,
+    args: [workerId],
+  }).catch(() => {});
+}
+
+async function runFullMigrations(): Promise<void> {
+  // Fast-path: if schema is current, skip all setup work
+  await db.execute({
+    sql: `CREATE TABLE IF NOT EXISTS _schema_version (version INTEGER NOT NULL DEFAULT 0)`,
+    args: [],
+  }).catch(() => {});
+
+  const vFast = await db.execute({
+    sql: `SELECT version FROM _schema_version LIMIT 1`,
+    args: [],
+  }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
+
+  const fastVersion = vFast.rows.length > 0 ? Number(vFast.rows[0].version) : 0;
+  if (fastVersion >= migrations.length) {
+    console.log(`[db-init] schema current at v${fastVersion}, skipping`);
+    return;
+  }
+
+  // Need to run migrations — acquire lock so only one worker does this
+  const workerId = `worker-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const locked = await tryAcquireMigrationLock(workerId);
+  if (!locked) {
+    console.log('[db-init] migration lock held by another worker, skipping');
+    return;
+  }
+
+  try {
+    await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS conferences (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -104,28 +158,13 @@ export async function initDb(): Promise<void> {
     args: [],
   });
 
-  // Schema version tracking — only run migrations not yet applied to this DB.
-  // Reduces warm cold-start from 345 sequential round-trips to 3.
-  await db.execute({
-    sql: `CREATE TABLE IF NOT EXISTS _schema_version (version INTEGER NOT NULL DEFAULT 0)`,
-    args: [],
-  }).catch(() => {});
-
-  const versionRow = await db.execute({
-    sql: `SELECT version FROM _schema_version LIMIT 1`,
-    args: [],
-  }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
-
-  const currentVersion = versionRow.rows.length > 0 ? Number(versionRow.rows[0].version) : 0;
-  const pendingMigrations = migrations.slice(currentVersion);
-
-  // Write checkpoints every 50 migrations so a cold-start timeout doesn't reset progress.
-  // Each checkpoint advances the stored version — next cold start resumes from there.
-  let versionRowExists = versionRow.rows.length > 0;
+  // fastVersion already read at top of runFullMigrations() — reuse it
+  const pendingMigrations = migrations.slice(fastVersion);
+  let versionRowExists = vFast.rows.length > 0;
   for (let i = 0; i < pendingMigrations.length; i++) {
     await db.execute({ sql: pendingMigrations[i], args: [] }).catch(() => {});
     if ((i + 1) % 20 === 0 || i === pendingMigrations.length - 1) {
-      const checkpoint = currentVersion + i + 1;
+      const checkpoint = fastVersion + i + 1;
       if (!versionRowExists) {
         await db.execute({ sql: `INSERT INTO _schema_version (version) VALUES (?)`, args: [checkpoint] }).catch(() => {});
         versionRowExists = true;
@@ -573,6 +612,20 @@ export async function initDb(): Promise<void> {
       args: [key, pattern],
     }).catch(() => {})
   ));
+  } finally {
+    await releaseMigrationLock(workerId);
+  }
+}
+
+export async function initDb(): Promise<void> {
+  // Phase 1 (blocking): verify connection only — resolves in <500ms
+  await db.execute({ sql: 'SELECT 1', args: [] });
+
+  // Phase 2 (non-blocking): run full migrations + seeding in background
+  runFullMigrations().catch(err => {
+    dbInitError = err instanceof Error ? err : new Error(String(err));
+    console.error('[db-init] background migration error:', err instanceof Error ? err.message : String(err));
+  });
 }
 
 // Tracks the last initDb failure so getDb can surface it as a 503
@@ -983,6 +1036,10 @@ export async function migrateTenantDb(client: Client): Promise<void> {
   }).catch(() => ({ rows: [] as { version: unknown }[] }));
 
   const currentVersion = versionRow.rows.length > 0 ? Number(versionRow.rows[0].version) : 0;
+  if (currentVersion >= migrations.length) {
+    console.log(`[db-init] tenant schema current at v${currentVersion}, skipping`);
+    return;
+  }
   const pending = migrations.slice(currentVersion);
 
   let rowExists = versionRow.rows.length > 0;
