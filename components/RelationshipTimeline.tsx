@@ -77,9 +77,10 @@ function fmtDateShort(d: string | null | undefined) {
 // ── Compact Health Ring ────────────────────────────────────────────────────────
 
 function SmallHealthRing({ score }: { score: number }) {
+  const displayScore = Math.min(score, 100);
   const color = scoreColor(score);
   const r = 22; const cx = 28; const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - score / 100);
+  const offset = circ * (1 - displayScore / 100);
   return (
     <svg width={56} height={56} viewBox="0 0 56 56" className="flex-shrink-0">
       <circle cx={cx} cy={cx} r={r} fill="none" stroke="rgba(34,58,94,0.08)" strokeWidth={4} />
@@ -87,7 +88,7 @@ function SmallHealthRing({ score }: { score: number }) {
         strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
         transform={`rotate(-90 ${cx} ${cx})`} />
       <text x={cx} y={cx - 2} textAnchor="middle" dominantBaseline="middle"
-        style={{ fontSize: 11, fill: '#223A5E', fontWeight: 700, fontFamily: 'inherit' }}>{score}</text>
+        style={{ fontSize: 11, fill: '#223A5E', fontWeight: 700, fontFamily: 'inherit' }}>{displayScore}</text>
       <text x={cx} y={cx + 10} textAnchor="middle" dominantBaseline="middle"
         style={{ fontSize: 7, fill: '#475569', letterSpacing: 0.5, fontFamily: 'inherit' }}>HLTH</text>
     </svg>

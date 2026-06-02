@@ -984,4 +984,13 @@ export const migrations: string[] = [
   )`,
   `ALTER TABLE conferences ADD COLUMN total_registered INTEGER`,
   `ALTER TABLE conferences ADD COLUMN total_addressable INTEGER`,
+  // Relationship health: add health_score storage column to attendees (computed on post-conference processing)
+  `ALTER TABLE attendees ADD COLUMN health_score INTEGER`,
+  // Relationship health: upgrade rep_relationship_type options with action_keys and colors
+  `UPDATE config_options SET action_key = 'strong', color = '#3B6D11', is_system = 1 WHERE category = 'rep_relationship_type' AND value = 'Strong'`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Trusted', 2, 'trusted', 1, '#185FA5')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Personal', 3, 'personal', 1, '#854F0B')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Family', 4, 'family', 1, '#A32D2D')`,
+  // Relationship health: floor score cache on attendees
+  `ALTER TABLE attendees ADD COLUMN relationship_floor INTEGER NOT NULL DEFAULT 0`,
 ];

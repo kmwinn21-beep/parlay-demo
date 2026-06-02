@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { requireAuth } from '@/lib/auth';
 import { getConfigIdByEmail, parseNotifIds, resolveUserIds, createNotifications } from '@/lib/notifications';
+import { computeRelationshipFloorBatch } from '@/lib/relationship-floor';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -103,6 +104,14 @@ export async function POST(request: NextRequest) {
       created_at: String(row.created_at),
     };
 
+    // Recompute relationship floors for affected attendees (best-effort)
+    if (contact_ids) {
+      const affectedIds = String(contact_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
+      if (affectedIds.length > 0) {
+        computeRelationshipFloorBatch(affectedIds, user?.accountId ?? '', db).catch(() => {});
+      }
+    }
+
     // Notify rep_ids users (best-effort)
     if (rep_ids) {
       const changedByConfigId = await getConfigIdByEmail(user.email);
@@ -140,7 +149,22 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
+
+    // Capture affected attendees before delete
+    const existing = await db.execute({
+      sql: 'SELECT contact_ids FROM internal_relationships WHERE id = ?',
+      args: [Number(id)],
+    });
+    const contactIdsRaw = existing.rows[0]?.contact_ids ? String(existing.rows[0].contact_ids) : '';
+
     await db.execute({ sql: 'DELETE FROM internal_relationships WHERE id = ?', args: [Number(id)] });
+
+    // Recompute floors for affected attendees (best-effort)
+    const affectedIds = contactIdsRaw.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
+    if (affectedIds.length > 0) {
+      computeRelationshipFloorBatch(affectedIds, authResult?.accountId ?? '', db).catch(() => {});
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/internal-relationships error:', error);

@@ -1958,9 +1958,10 @@ export default function ProgramIntelligencePage() {
                                               </thead>
                                               <tbody>
                                                 {satDetail.substitutable_contacts.map(c => {
+                                                  const displayHealth = Math.min(c.health_score, 100);
                                                   const hColor = c.health_score >= 70 ? '#059669' : c.health_score >= 40 ? '#d97706' : '#dc2626';
                                                   const r = 11; const cx2 = 14; const circ = 2 * Math.PI * r;
-                                                  const offset = circ * (1 - c.health_score / 100);
+                                                  const offset = circ * (1 - displayHealth / 100);
                                                   return (
                                                     <tr key={c.attendee_id} className="border-b border-gray-50 hover:bg-gray-50/50">
                                                       <td className="py-1.5 pr-3">
@@ -1982,7 +1983,7 @@ export default function ProgramIntelligencePage() {
                                                               transform={`rotate(-90 ${cx2} ${cx2})`} />
                                                             <text x={cx2} y={cx2} textAnchor="middle" dominantBaseline="middle"
                                                               style={{ fontSize: 7, fill: '#223A5E', fontWeight: 700, fontFamily: 'inherit' }}>
-                                                              {c.health_score}
+                                                              {displayHealth}
                                                             </text>
                                                           </svg>
                                                         </div>
