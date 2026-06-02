@@ -198,6 +198,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   const [noteContents, setNoteContents] = useState<Map<string, string>>(new Map());
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
+  // Track last-saved content per key so we can detect unsaved changes for agenda items
+  const [savedNoteContents, setSavedNoteContents] = useState<Map<string, string>>(new Map());
   // Maps display key → myItemId (needed when meeting note is first saved, creating a row)
   const [keyToMyItemId, setKeyToMyItemId] = useState<Map<string, number>>(new Map());
 
@@ -237,6 +239,15 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         for (const item of (data.myItems ?? [])) {
           const k = item.source_type === 'meeting' ? `meeting-${item.meeting_id}` : `agenda-${item.id}`;
           if (!next.has(k) && item.note_content) next.set(k, item.note_content);
+        }
+        return next;
+      });
+      // Seed saved note contents (used for unsaved-changes detection on agenda items)
+      setSavedNoteContents(prev => {
+        const next = new Map(prev);
+        for (const item of (data.myItems ?? [])) {
+          const k = item.source_type === 'meeting' ? `meeting-${item.meeting_id}` : `agenda-${item.id}`;
+          if (!next.has(k)) next.set(k, item.note_content ?? '');
         }
         return next;
       });
@@ -387,6 +398,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       });
       if (res.ok) {
         const data = await res.json() as { id: number; entity_note_ids: string | null };
+        // Track the saved content so unsaved-changes detection stays accurate
+        setSavedNoteContents(prev => new Map(Array.from(prev).concat([[key, content]])));
         // Update myItemId if newly created (meeting first save)
         if (!currentMyItemId && data.id) {
           setKeyToMyItemId(prev => new Map(Array.from(prev).concat([[key, data.id]])));
@@ -494,6 +507,23 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       : null;
 
     const isMeeting = item.sourceType === 'meeting';
+    // For agenda items: detect unsaved changes by comparing current content to last-saved
+    const savedVal = isMeeting ? noteVal : (savedNoteContents.get(item.key) ?? item.note_content ?? '');
+    const hasUnsavedChanges = !isMeeting && noteVal !== savedVal;
+
+    function handleToggleNotes() {
+      const isOpen = expandedNotes.has(item.key);
+      if (isOpen && hasUnsavedChanges) {
+        if (!window.confirm('You have unsaved notes. Close without saving?')) return;
+        // Revert to last saved content
+        setNoteContents(prev => new Map(Array.from(prev).concat([[item.key, savedVal]])));
+      }
+      setExpandedNotes(prev => {
+        const s = new Set(prev);
+        if (s.has(item.key)) s.delete(item.key); else s.add(item.key);
+        return s;
+      });
+    }
     return (
       <div>
         {/* Main row — same layout as Full Agenda items */}
@@ -570,21 +600,24 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             <textarea
               value={noteVal}
               onChange={e => handleNoteChange(item.key, e.target.value)}
-              onBlur={() => handleNoteBlur(item.key, meetingId)}
+              onBlur={isMeeting ? () => handleNoteBlur(item.key, meetingId) : undefined}
               placeholder="Add notes…"
               rows={3}
               className="input-field resize-none w-full text-xs"
             />
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-400">
-                {saving ? 'Saving…' : noteVal ? 'Saved' : 'Notes save when you click away'}
+                {saving ? 'Saving…' : isMeeting
+                  ? (noteVal ? 'Saved' : 'Notes save when you click away')
+                  : (noteVal ? 'Unsaved changes' : '')}
               </p>
-              {noteVal && !saving && (
+              {!isMeeting && (
                 <button
-                  onClick={() => handleNoteBlur(item.key, meetingId)}
-                  className="text-xs font-medium text-brand-secondary hover:underline transition-colors"
+                  onClick={() => handleNoteBlur(item.key, undefined)}
+                  disabled={saving}
+                  className="text-xs font-medium text-brand-secondary hover:underline transition-colors disabled:opacity-50"
                 >
-                  Save
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               )}
             </div>
