@@ -124,7 +124,7 @@ export async function initDb(): Promise<void> {
   let versionRowExists = versionRow.rows.length > 0;
   for (let i = 0; i < pendingMigrations.length; i++) {
     await db.execute({ sql: pendingMigrations[i], args: [] }).catch(() => {});
-    if ((i + 1) % 50 === 0 || i === pendingMigrations.length - 1) {
+    if ((i + 1) % 20 === 0 || i === pendingMigrations.length - 1) {
       const checkpoint = currentVersion + i + 1;
       if (!versionRowExists) {
         await db.execute({ sql: `INSERT INTO _schema_version (version) VALUES (?)`, args: [checkpoint] }).catch(() => {});
@@ -988,7 +988,7 @@ export async function migrateTenantDb(client: Client): Promise<void> {
   let rowExists = versionRow.rows.length > 0;
   for (let i = 0; i < pending.length; i++) {
     await client.execute({ sql: pending[i], args: [] }).catch(() => {});
-    if ((i + 1) % 50 === 0 || i === pending.length - 1) {
+    if ((i + 1) % 20 === 0 || i === pending.length - 1) {
       const checkpoint = currentVersion + i + 1;
       if (!rowExists) {
         await client.execute({ sql: `INSERT INTO _schema_version (version) VALUES (?)`, args: [checkpoint] }).catch(() => {});
