@@ -22,6 +22,7 @@ export async function GET(
   const [attRow, actionOptsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
+                   a.relationship_floor,
                    c.name as company_name, c.company_type, c.icp, c.wse
             FROM attendees a LEFT JOIN companies c ON a.company_id = c.id
             WHERE a.id = ?`,
@@ -209,8 +210,10 @@ export async function GET(
   const ghostCount = touchpointResults.filter(r => r.isZeroEngagement).length;
   const ghostPenalty = totalConferences > 0 ? (ghostCount / totalConferences) * 100 : 0;
 
-  const rawScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
-  const healthScore = Math.round(Math.max(0, Math.min(100, rawScore)));
+  const floor = Number(attendee.relationship_floor ?? 0);
+  const activityScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
+  // Raw stored value is uncapped; callers use Math.min(healthScore, 100) for display
+  const healthScore = Math.round(Math.max(0, activityScore + floor));
 
   // Total logged touchpoints from attendee_touchpoints table
   const tpCountRes = await db.execute({

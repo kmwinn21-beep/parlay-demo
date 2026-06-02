@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { classifySeniority } from '@/lib/parsers';
+import { computeRelationshipFloorBatch } from '@/lib/relationship-floor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,11 +71,12 @@ function computeHealthScore(params: {
   socialByConf: Map<number, { rsvp_status: string }[]>;
   actionKeyMap: Map<string, string>;
   excludeConfId?: number;
+  floor?: number;
 }): number {
   const { attendeeConfs, detailsByConf, meetingsByConf, followUpsByConf,
-    noteCountByConf, socialByConf, actionKeyMap, excludeConfId } = params;
+    noteCountByConf, socialByConf, actionKeyMap, excludeConfId, floor = 0 } = params;
   const confs = excludeConfId ? attendeeConfs.filter(c => c !== excludeConfId) : attendeeConfs;
-  if (confs.length === 0) return 0;
+  if (confs.length === 0) return floor;
   let totalDepth = 0, totalFus = 0, completedFus = 0, ghostCount = 0;
   for (const confId of confs) {
     const details = detailsByConf.get(confId);
@@ -109,7 +111,9 @@ function computeHealthScore(params: {
   const avgDepth = totalDepth / confs.length;
   const fuScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 0;
   const ghostPenalty = (ghostCount / confs.length) * 100;
-  return Math.round(Math.max(0, Math.min(100, avgDepth * 0.60 + fuScore * 0.30 - ghostPenalty * 0.10)));
+  const activityScore = avgDepth * 0.60 + fuScore * 0.30 - ghostPenalty * 0.10;
+  // Raw score is uncapped (floor can push it above 100); caller caps for display
+  return Math.round(Math.max(0, activityScore + floor));
 }
 
 // Resolved at route-init time once users are fetched
@@ -696,11 +700,19 @@ export async function GET(
   const healthDeltaByAttendee = new Map<number, number>();
   const healthBeforeByAttendee = new Map<number, number>();
 
+  // Refresh relationship floors before scoring so they're fresh
+  const floorMap = await computeRelationshipFloorBatch(
+    attendeeIds,
+    authResult?.accountId ?? '',
+    db,
+  );
+
   for (const a of attendees) {
     const aid = Number(a.id);
     const allConfs = allConfByAttendee.get(aid) ?? [confId]; // at least this conf
     const priorConfs = allConfs.filter(c => priorConfIds.has(c));
     const maps = buildAttMaps(aid, allConfs);
+    const floor = floorMap.get(aid) ?? 0;
 
     const healthAfter = computeHealthScore({
       attendeeConfs: allConfs,
@@ -710,8 +722,9 @@ export async function GET(
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
       actionKeyMap,
+      floor,
     });
-    const healthBefore = priorConfs.length === 0 ? 0 : computeHealthScore({
+    const healthBefore = priorConfs.length === 0 ? floor : computeHealthScore({
       attendeeConfs: allConfs,
       detailsByConf: maps.detailsByConf,
       meetingsByConf: maps.meetingsByConf,
@@ -720,6 +733,7 @@ export async function GET(
       socialByConf: maps.socialByConf,
       actionKeyMap,
       excludeConfId: confId,
+      floor,
     });
     const healthDelta = healthAfter - healthBefore;
     healthDeltaByAttendee.set(aid, healthDelta);
@@ -761,6 +775,14 @@ export async function GET(
       healthDelta,
       meetingHeld,
       hasNotes,
+    });
+  }
+
+  // Persist raw (uncapped) health scores back to attendees table
+  for (const row of contactRows) {
+    await db.execute({
+      sql: `UPDATE attendees SET health_score = ? WHERE id = ?`,
+      args: [row.healthScore, row.attendee_id],
     });
   }
 
