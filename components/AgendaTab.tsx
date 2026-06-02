@@ -568,11 +568,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           {/* Actions — no borders, text links */}
           <div className="shrink-0 flex flex-col items-end gap-1.5 pl-2 pt-0.5">
             <button
-              onClick={() => setExpandedNotes(prev => {
-                const s = new Set(prev);
-                if (s.has(item.key)) s.delete(item.key); else s.add(item.key);
-                return s;
-              })}
+              onClick={handleToggleNotes}
               className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-brand-secondary transition-colors whitespace-nowrap"
             >
               <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -609,7 +605,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               <p className="text-xs text-gray-400">
                 {saving ? 'Saving…' : isMeeting
                   ? (noteVal ? 'Saved' : 'Notes save when you click away')
-                  : (noteVal ? 'Unsaved changes' : '')}
+                  : (hasUnsavedChanges ? 'Unsaved changes' : (noteVal ? 'Saved' : ''))}
               </p>
               {!isMeeting && (
                 <button
