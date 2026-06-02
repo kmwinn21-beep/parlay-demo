@@ -12,6 +12,70 @@ import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useUser } from '@/components/UserContext';
 import { getPreset, type ColorMap } from '@/lib/colors';
 
+// ─── Horizontally scrollable filter bar with chevron hints ───────────────────
+
+function HScrollFilterBar({ children }: { children: React.ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const check = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro.disconnect(); };
+  }, [check]);
+
+  const nudge = (dir: 'left' | 'right') =>
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -120 : 120, behavior: 'smooth' });
+
+  return (
+    <div className="relative flex items-center">
+      {canLeft && (
+        <button
+          type="button"
+          onClick={() => nudge('left')}
+          className="absolute left-0 z-10 flex items-center justify-center pl-0.5 pr-1 h-full bg-gradient-to-r from-white via-white/90 to-transparent text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Scroll left"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
+      <div
+        ref={scrollRef}
+        className="hide-scrollbar flex items-center gap-2 overflow-x-auto"
+        style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+      >
+        {children}
+      </div>
+      {canRight && (
+        <button
+          type="button"
+          onClick={() => nudge('right')}
+          className="absolute right-0 z-10 flex items-center justify-center pr-0.5 pl-1 h-full bg-gradient-to-l from-white via-white/90 to-transparent text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Scroll right"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Types for Needs Attention ────────────────────────────────────────────────
 
 interface PastScheduledMeeting {
@@ -1014,9 +1078,56 @@ export default function FollowUpsPage() {
         <div className="card p-0 overflow-hidden">
           {/* Card header */}
           <div className="px-4 py-3 border-b border-gray-100">
-            {/* Filter bar */}
-            <div className="flex items-center justify-between gap-3">
-              {/* Left: status chips */}
+            {/* Mobile: single scrollable row with chevron hints */}
+            <div className="sm:hidden">
+              <HScrollFilterBar>
+                {['All', 'Held', 'Scheduled', 'Cancelled / No-show', 'Rescheduled'].map(status => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setStatusFilter(status)}
+                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      statusFilter === status
+                        ? 'bg-brand-primary text-white border-brand-primary'
+                        : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('mine')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'mine' ? 'bg-teal-50 text-teal-800 border-teal-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  {userName}&apos;s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('all')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'all' ? 'bg-gray-100 text-gray-800 border-gray-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  All reps
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMeetingsFiltersOpen(o => !o)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${meetingsFilterCount > 0 ? 'border-brand-secondary text-brand-secondary' : 'border-gray-200 text-gray-600'}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                  Filters
+                  {meetingsFilterCount > 0 && (
+                    <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                      {meetingsFilterCount}
+                    </span>
+                  )}
+                </button>
+              </HScrollFilterBar>
+            </div>
+            {/* Desktop: two-column layout */}
+            <div className="hidden sm:flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 {['All', 'Held', 'Scheduled', 'Cancelled / No-show', 'Rescheduled'].map(status => (
                   <button
@@ -1033,7 +1144,6 @@ export default function FollowUpsPage() {
                   </button>
                 ))}
               </div>
-              {/* Right */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
@@ -1221,8 +1331,68 @@ export default function FollowUpsPage() {
         <div className="card p-0 overflow-hidden">
           {/* Card header with filter bar */}
           <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center justify-between gap-3">
-              {/* Left: status chips */}
+            {/* Mobile: single scrollable row with chevron hints */}
+            <div className="sm:hidden">
+              <HScrollFilterBar>
+                <button
+                  type="button"
+                  onClick={() => { setFollowupStatusFilter('overdue'); setFilter('all'); }}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${followupStatusFilter === 'overdue' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  Overdue
+                </button>
+                {(['All', 'Pending', 'Completed'] as const).map(s => {
+                  const key = s.toLowerCase();
+                  const isActive = followupStatusFilter === key;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        setFollowupStatusFilter(key);
+                        if (key === 'pending') setFilter('pending');
+                        else if (key === 'completed') setFilter('completed');
+                        else setFilter('all');
+                      }}
+                      className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${isActive ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-600 border-gray-200'}`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('mine')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'mine' ? 'bg-teal-50 text-teal-800 border-teal-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  {userName}&apos;s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('all')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'all' ? 'bg-gray-100 text-gray-800 border-gray-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  All reps
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFollowUpsFiltersOpen(o => !o)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${followUpsFilterCount > 0 ? 'border-brand-secondary text-brand-secondary' : 'border-gray-200 text-gray-600'}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                  Filters
+                  {followUpsFilterCount > 0 && (
+                    <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                      {followUpsFilterCount}
+                    </span>
+                  )}
+                </button>
+              </HScrollFilterBar>
+            </div>
+            {/* Desktop: two-column layout */}
+            <div className="hidden sm:flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
@@ -1251,7 +1421,6 @@ export default function FollowUpsPage() {
                   );
                 })}
               </div>
-              {/* Right */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
