@@ -557,20 +557,22 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           {/* Actions — no borders, text links */}
           <div className="shrink-0 flex flex-col items-end gap-1.5 pl-2 pt-0.5">
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setNoteDrawerItem(item);
-                  setDrawerDraft(currentVal);
-                  setDrawerDiscardPrompt(false);
-                }}
-                className="text-gray-300 hover:text-brand-secondary transition-colors"
-                title="Expand notes"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-              </button>
+              {!isMeeting && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNoteDrawerItem(item);
+                    setDrawerDraft(currentVal);
+                    setDrawerDiscardPrompt(false);
+                  }}
+                  className="text-gray-300 hover:text-brand-secondary transition-colors"
+                  title="Expand notes"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (noteOpen) {
