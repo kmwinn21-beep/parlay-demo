@@ -929,4 +929,7 @@ export const migrations: string[] = [
   `ALTER TABLE conferences ADD COLUMN intel_job_completed INTEGER DEFAULT 0`,
   `ALTER TABLE conferences ADD COLUMN intel_job_total INTEGER DEFAULT 0`,
   `ALTER TABLE conference_company_intel ADD COLUMN is_fallback INTEGER DEFAULT 0`,
+  `ALTER TABLE entity_notes ADD COLUMN note_type TEXT DEFAULT 'note'`,
+  `ALTER TABLE entity_notes ADD COLUMN meeting_id INTEGER`,
+  `ALTER TABLE entity_notes ADD COLUMN insight_counts TEXT`,
 ];
