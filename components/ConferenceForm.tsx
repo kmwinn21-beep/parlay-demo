@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { ColumnMappingModal } from './ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
+import { SeriesSeasonCombobox, type SeriesOption } from './SeriesSeasonCombobox';
 
 interface ConferenceFormData {
   name: string;
@@ -40,6 +41,8 @@ export function ConferenceForm() {
   const userOptions = configOptions.user ?? [];
   const [conferenceStrategyOptions, setConferenceStrategyOptions] = useState<{ id: number; value: string }[]>([]);
   const [conferenceMode, setConferenceMode] = useState<ConferenceMode>('new');
+  const [selectedSeries, setSelectedSeries] = useState<SeriesOption | null>(null);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
   useEffect(() => {
     fetch('/api/config?category=conference_strategy_type&form=conference_form')
       .then((r) => r.json())
@@ -106,6 +109,8 @@ export function ConferenceForm() {
       formData.append('notes', data.notes || '');
       formData.append('internal_attendees', selectedInternalAttendees.join(','));
       if (conferenceMode === 'new') formData.append('conference_strategy_type_id', data.conference_strategy_type_id);
+      if (selectedSeries) formData.append('series_id', selectedSeries.id);
+      if (selectedSeasonId) formData.append('season_id', selectedSeasonId);
       formData.append('is_historical', conferenceMode === 'historical' ? '1' : '0');
 
       if (file) {
@@ -168,6 +173,13 @@ export function ConferenceForm() {
             />
             {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
           </div>
+
+          <SeriesSeasonCombobox
+            seriesId={selectedSeries?.id ?? null}
+            seasonId={selectedSeasonId}
+            onSeriesChange={(s) => { setSelectedSeries(s); if (!s) setSelectedSeasonId(null); }}
+            onSeasonChange={setSelectedSeasonId}
+          />
 
           <div>
             <label className="label">Start Date *</label>

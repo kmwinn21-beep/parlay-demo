@@ -47,6 +47,7 @@ import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/title
 import { ClassifyTitleModal } from '@/components/ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
 import { MergeModal } from '@/components/MergeModal';
+import { SeriesSeasonCombobox, type SeriesOption } from '@/components/SeriesSeasonCombobox';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 
@@ -129,6 +130,8 @@ interface Conference {
   stage_override?: string | null;
   stage_override_by?: string | null;
   stage_override_reason?: string | null;
+  series_id?: string | null;
+  season_id?: string | null;
   created_at: string;
   attendees: Attendee[];
 }
@@ -356,6 +359,8 @@ export default function ConferenceDetailPage() {
   const [editInternalAttendees, setEditInternalAttendees] = useState<string[]>([]);
   const [internalDropdownOpen, setInternalDropdownOpen] = useState(false);
   const internalDropdownRef = useRef<HTMLDivElement>(null);
+  const [editSeries, setEditSeries] = useState<SeriesOption | null>(null);
+  const [editSeasonId, setEditSeasonId] = useState<string | null>(null);
 
   // Resizable column widths
   const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
@@ -491,7 +496,7 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes, conferenceStrategyRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes, conferenceStrategyRes, allSeriesRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
@@ -504,6 +509,7 @@ export default function ConferenceDetailPage() {
         fetch('/api/config?category=company_type&form=conference_detail'),
         fetch('/api/config?category=seniority&form=conference_detail'),
         fetch('/api/config?category=conference_strategy_type&form=conference_detail'),
+        fetch('/api/conference-series'),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -518,7 +524,12 @@ export default function ConferenceDetailPage() {
       const companyTypeData = companyTypeRes.ok ? await companyTypeRes.json() : [];
       const seniorityData = seniorityRes.ok ? await seniorityRes.json() : [];
       const conferenceStrategyData = conferenceStrategyRes.ok ? await conferenceStrategyRes.json() : [];
+      const allSeriesData: SeriesOption[] = allSeriesRes.ok ? await allSeriesRes.json() : [];
       setConference(data);
+      if (data.series_id) {
+        setEditSeries(allSeriesData.find((s) => s.id === data.series_id) ?? null);
+      }
+      setEditSeasonId(data.season_id ?? null);
       setConferenceDetails(Array.isArray(detailsData) ? detailsData : []);
       setConfFollowUps(Array.isArray(followUpsData) ? followUpsData : []);
       setConfNotes(Array.isArray(notesData) ? notesData : []);
@@ -542,7 +553,10 @@ export default function ConferenceDetailPage() {
         location: data.location,
         notes: data.notes || '',
         conference_strategy_type_id: data.conference_strategy_type_id ?? null,
+        series_id: data.series_id ?? null,
+        season_id: data.season_id ?? null,
       });
+      setEditSeasonId(data.season_id ?? null);
       setEditInternalAttendees(
         data.internal_attendees ? data.internal_attendees.split(',').filter(Boolean) : []
       );
@@ -648,7 +662,7 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editData, internal_attendees: editInternalAttendees.join(',') }),
+        body: JSON.stringify({ ...editData, internal_attendees: editInternalAttendees.join(','), series_id: editSeries?.id ?? editData.series_id ?? null, season_id: editSeasonId ?? null }),
       });
       if (!res.ok) throw new Error('Update failed');
       const updated = await res.json();
@@ -1246,6 +1260,15 @@ export default function ConferenceDetailPage() {
                   className="input-field"
                 />
               </div>
+              <div className="md:col-span-2">
+                <SeriesSeasonCombobox
+                  seriesId={editSeries?.id ?? editData.series_id ?? null}
+                  seasonId={editSeasonId}
+                  onSeriesChange={(s) => { setEditSeries(s); setEditData((p) => ({ ...p, series_id: s?.id ?? null })); if (!s) { setEditSeasonId(null); setEditData((p2) => ({ ...p2, season_id: null })); } }}
+                  onSeasonChange={(sid) => { setEditSeasonId(sid); setEditData((p) => ({ ...p, season_id: sid })); }}
+                />
+              </div>
+
               <div className="md:col-span-2" ref={internalDropdownRef}>
                 <label className="label">Internal Attendees</label>
                 <div className="relative">
