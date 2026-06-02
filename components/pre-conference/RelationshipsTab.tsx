@@ -451,8 +451,9 @@ export function RelationshipsTab({
   const openRecord = useRecordDrawer();
   const companies = groupRelationshipsByCompany(relationships);
   const [selectedId, setSelectedId] = useState<number | null>(companies[0]?.id ?? null);
+  // Mobile: 'companies' | 'relationships'
+  const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
 
-  // Auto-select first company if none selected yet
   useEffect(() => {
     if (selectedId === null && companies.length > 0) setSelectedId(companies[0].id);
   }, [companies, selectedId]);
@@ -467,11 +468,10 @@ export function RelationshipsTab({
 
   const selectedCompany = companies.find(c => c.id === selectedId) ?? null;
 
-  return (
-    <div className="flex gap-4 h-full min-h-0">
-
-      {/* ── Left: company list ── */}
-      <div className="w-56 flex-shrink-0 overflow-y-auto space-y-2 pr-1">
+  // Shared company card renderer
+  function CompanyList({ onSelect }: { onSelect?: () => void }) {
+    return (
+      <>
         <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide px-1 mb-3">
           {companies.length} Compan{companies.length !== 1 ? 'ies' : 'y'}
         </p>
@@ -481,7 +481,7 @@ export function RelationshipsTab({
             <button
               key={co.id}
               type="button"
-              onClick={() => setSelectedId(co.id)}
+              onClick={() => { setSelectedId(co.id); onSelect?.(); }}
               className={`w-full text-left rounded-xl border p-3 transition-all ${
                 isSelected
                   ? 'border-brand-primary bg-brand-primary/5 shadow-sm'
@@ -513,45 +513,109 @@ export function RelationshipsTab({
             </button>
           );
         })}
-      </div>
+      </>
+    );
+  }
 
-      {/* ── Right: attendee cards ── */}
-      <div className="flex-1 overflow-y-auto min-w-0">
-        {selectedCompany ? (
-          selectedCompany.attendees.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-center">
-              <p className="text-gray-400 text-sm">No contacts from {selectedCompany.name} are attending this conference.</p>
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start pb-4">
-              {selectedCompany.attendees.map(a => (
-                <RelationshipAttendeeCard
-                  key={a.id}
-                  attendee={a}
-                  repNames={a.rep_names}
-                  isTarget={targetMap.has(a.id)}
-                  onToggleTarget={() => onToggleTarget({
-                    attendeeId: a.id,
-                    firstName: a.first_name,
-                    lastName: a.last_name,
-                    title: a.title,
-                    seniority: a.seniority ?? null,
-                    companyName: a.company_name,
-                    companyId: a.company_id,
-                    companyWse: null,
-                    assignedUserNames: a.rep_names,
-                  })}
-                  readOnly={readOnly}
-                />
-              ))}
-            </div>
-          )
-        ) : (
-          <div className="flex flex-col items-center justify-center h-48 text-center">
-            <p className="text-gray-400 text-sm">Select a company to view relationship contacts.</p>
+  // Shared attendee cards renderer
+  function AttendeeCards({ stackedMobile = false }: { stackedMobile?: boolean }) {
+    if (!selectedCompany) {
+      return (
+        <div className="flex flex-col items-center justify-center h-48 text-center">
+          <p className="text-gray-400 text-sm">Select a company to view relationship contacts.</p>
+        </div>
+      );
+    }
+    if (selectedCompany.attendees.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-48 text-center">
+          <p className="text-gray-400 text-sm">No contacts from {selectedCompany.name} are attending this conference.</p>
+        </div>
+      );
+    }
+    return (
+      <div className={stackedMobile ? 'space-y-4 pb-4' : 'grid sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start pb-4'}>
+        {selectedCompany.attendees.map(a => (
+          <RelationshipAttendeeCard
+            key={a.id}
+            attendee={a}
+            repNames={a.rep_names}
+            isTarget={targetMap.has(a.id)}
+            onToggleTarget={() => onToggleTarget({
+              attendeeId: a.id,
+              firstName: a.first_name,
+              lastName: a.last_name,
+              title: a.title,
+              seniority: a.seniority ?? null,
+              companyName: a.company_name,
+              companyId: a.company_id,
+              companyWse: null,
+              assignedUserNames: a.rep_names,
+            })}
+            readOnly={readOnly}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* ── Mobile layout ── */}
+      <div className="sm:hidden flex flex-col h-full min-h-0">
+        {/* Toggle bar */}
+        <div className="flex flex-shrink-0 border-b border-gray-200 mb-3">
+          <button
+            type="button"
+            onClick={() => setMobileTab('companies')}
+            className={`flex-1 py-2 text-sm font-semibold transition-colors ${
+              mobileTab === 'companies'
+                ? 'text-brand-primary border-b-2 border-brand-primary'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Companies
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('relationships')}
+            className={`flex-1 py-2 text-sm font-semibold transition-colors ${
+              mobileTab === 'relationships'
+                ? 'text-brand-primary border-b-2 border-brand-primary'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {selectedCompany ? selectedCompany.name : 'Relationships'}
+          </button>
+        </div>
+
+        {/* Companies panel */}
+        {mobileTab === 'companies' && (
+          <div className="flex-1 overflow-y-auto space-y-2" style={{ scrollbarWidth: 'none' }}>
+            <CompanyList onSelect={() => setMobileTab('relationships')} />
+          </div>
+        )}
+
+        {/* Relationships panel */}
+        {mobileTab === 'relationships' && (
+          <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+            <AttendeeCards stackedMobile />
           </div>
         )}
       </div>
-    </div>
+
+      {/* ── Desktop layout ── */}
+      <div className="hidden sm:flex gap-4 h-full min-h-0">
+        {/* Left: company list */}
+        <div className="w-56 flex-shrink-0 overflow-y-auto space-y-2 pr-1">
+          <CompanyList />
+        </div>
+
+        {/* Right: attendee cards */}
+        <div className="flex-1 overflow-y-auto min-w-0">
+          <AttendeeCards />
+        </div>
+      </div>
+    </>
   );
 }
