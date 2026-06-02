@@ -932,4 +932,6 @@ export const migrations: string[] = [
   `ALTER TABLE entity_notes ADD COLUMN note_type TEXT DEFAULT 'note'`,
   `ALTER TABLE entity_notes ADD COLUMN meeting_id INTEGER`,
   `ALTER TABLE entity_notes ADD COLUMN insight_counts TEXT`,
+  `ALTER TABLE follow_ups ADD COLUMN meeting_id INTEGER REFERENCES meetings(id)`,
+  `ALTER TABLE meeting_notes ADD COLUMN analysis_status TEXT DEFAULT 'idle'`,
 ];
