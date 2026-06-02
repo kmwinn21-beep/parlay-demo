@@ -934,4 +934,24 @@ export const migrations: string[] = [
   `ALTER TABLE entity_notes ADD COLUMN insight_counts TEXT`,
   `ALTER TABLE follow_ups ADD COLUMN meeting_id INTEGER REFERENCES meetings(id)`,
   `ALTER TABLE meeting_notes ADD COLUMN analysis_status TEXT DEFAULT 'idle'`,
+  `CREATE TABLE IF NOT EXISTS conference_series (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    series_key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(account_id, series_key)
+  )`,
+  `CREATE TABLE IF NOT EXISTS conference_seasons (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    season_name TEXT NOT NULL,
+    season_key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (series_id) REFERENCES conference_series(id),
+    UNIQUE(series_id, season_key)
+  )`,
+  `ALTER TABLE conferences ADD COLUMN series_id TEXT REFERENCES conference_series(id)`,
+  `ALTER TABLE conferences ADD COLUMN season_id TEXT REFERENCES conference_seasons(id)`,
 ];

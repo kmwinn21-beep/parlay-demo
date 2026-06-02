@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
     const internal_attendees = formData.get('internal_attendees') as string | null;
     const conference_strategy_type_id = formData.get('conference_strategy_type_id') as string | null;
     const is_historical = formData.get('is_historical') === '1';
+    const series_id = (formData.get('series_id') as string | null) || null;
+    const season_id = (formData.get('season_id') as string | null) || null;
     const file = formData.get('file') as File | null;
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -103,8 +105,8 @@ export async function POST(request: NextRequest) {
 
     // Create the conference record
     const confResult = await db.execute({
-      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, is_historical, post_conference_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
-      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, is_historical ? 1 : 0, defaultPostConferenceDays],
+      sql: 'INSERT INTO conferences (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, is_historical, post_conference_days, series_id, season_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, is_historical ? 1 : 0, defaultPostConferenceDays, series_id, season_id],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;
