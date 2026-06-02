@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { startPolling, stopPolling } from '@/lib/pollingManager';
 import { useUser } from '@/components/UserContext';
 import { useChatPanel } from '@/components/ChatPanelContext';
+import { useFloatingNavHidden } from '@/components/FloatingNavHiddenContext';
 
 interface ChatUser {
   id: number;
@@ -427,6 +428,7 @@ function GroupChatWindow({
 export function FooterChat() {
   const { user, loading: userLoading } = useUser();
   const { panelOpen, setPanelOpen } = useChatPanel();
+  const { helpChatOpen } = useFloatingNavHidden();
   // Direct message state
   const [view, setView] = useState<'conversations' | 'new'>('conversations');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -589,8 +591,8 @@ export function FooterChat() {
       })
     : allUsers;
 
-  // Don't render for unauthenticated users
-  if (userLoading || !user) return null;
+  // Don't render for unauthenticated users or when Parlay AI chat is open
+  if (userLoading || !user || helpChatOpen) return null;
 
   return (
     <>
