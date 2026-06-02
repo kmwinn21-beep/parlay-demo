@@ -1046,4 +1046,13 @@ export const migrations: string[] = [
     FOREIGN KEY (series_id) REFERENCES conference_series(id),
     FOREIGN KEY (season_id) REFERENCES conference_seasons(id)
   )`,
+  // Fix: ensure rep_relationship_type options have action_keys set (INSERT OR IGNORE didn't update pre-existing rows)
+  `UPDATE config_options SET action_key = 'strong',   color = '#3B6D11', is_system = 1 WHERE category = 'rep_relationship_type' AND LOWER(value) = 'strong'`,
+  `UPDATE config_options SET action_key = 'trusted',  color = '#185FA5', is_system = 1 WHERE category = 'rep_relationship_type' AND LOWER(value) = 'trusted'`,
+  `UPDATE config_options SET action_key = 'personal', color = '#854F0B', is_system = 1 WHERE category = 'rep_relationship_type' AND LOWER(value) = 'personal'`,
+  `UPDATE config_options SET action_key = 'family',   color = '#A32D2D', is_system = 1 WHERE category = 'rep_relationship_type' AND LOWER(value) = 'family'`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Strong',   1, 'strong',   1, '#3B6D11')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Trusted',  2, 'trusted',  1, '#185FA5')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Personal', 3, 'personal', 1, '#854F0B')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Family',   4, 'family',   1, '#A32D2D')`,
 ];

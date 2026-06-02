@@ -30,7 +30,7 @@ export async function computeRelationshipFloor(
   // 1. contact_ids contains this attendee
   // 2. relationship_status matches a qualifying value or ID
   const allRelsRes = await db.execute({
-    sql: `SELECT rep_ids, relationship_status FROM internal_relationships`,
+    sql: `SELECT rep_ids, contact_ids, relationship_status FROM internal_relationships`,
     args: [],
   });
 
