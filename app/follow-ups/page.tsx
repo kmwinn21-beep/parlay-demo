@@ -12,6 +12,70 @@ import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useUser } from '@/components/UserContext';
 import { getPreset, type ColorMap } from '@/lib/colors';
 
+// ─── Horizontally scrollable filter bar with chevron hints ───────────────────
+
+function HScrollFilterBar({ children }: { children: React.ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const check = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro.disconnect(); };
+  }, [check]);
+
+  const nudge = (dir: 'left' | 'right') =>
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -120 : 120, behavior: 'smooth' });
+
+  return (
+    <div className="relative flex items-center">
+      {canLeft && (
+        <button
+          type="button"
+          onClick={() => nudge('left')}
+          className="absolute left-0 z-10 flex items-center justify-center pl-0.5 pr-1 h-full bg-gradient-to-r from-white via-white/90 to-transparent text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Scroll left"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
+      <div
+        ref={scrollRef}
+        className="hide-scrollbar flex items-center gap-2 overflow-x-auto"
+        style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+      >
+        {children}
+      </div>
+      {canRight && (
+        <button
+          type="button"
+          onClick={() => nudge('right')}
+          className="absolute right-0 z-10 flex items-center justify-center pr-0.5 pl-1 h-full bg-gradient-to-l from-white via-white/90 to-transparent text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Scroll right"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Types for Needs Attention ────────────────────────────────────────────────
 
 interface PastScheduledMeeting {
@@ -212,20 +276,9 @@ function MiniOutcomeButton({
   );
 }
 
-// ─── Needs Attention rows ─────────────────────────────────────────────────────
+// ─── Needs Attention item cards ───────────────────────────────────────────────
 
-function ColumnHeader({ title, count }: { title: string; count: number }) {
-  return (
-    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{title}</span>
-      {count > 0 && (
-        <span className="text-[10px] font-semibold text-gray-400">{count}</span>
-      )}
-    </div>
-  );
-}
-
-function PastScheduledRow({
+function PastScheduledCard({
   meeting,
   actionOptions,
   colorMap,
@@ -255,42 +308,40 @@ function PastScheduledRow({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
+      className="bg-white border border-gray-200 rounded-xl p-3 hover:shadow-sm transition-all"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
-      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 self-start mt-1.5" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-[12px] font-medium text-gray-800 truncate flex-1 min-w-0">{meeting.first_name} {meeting.last_name}</p>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <MiniOutcomeButton
-              value={meeting.outcome}
-              options={actionOptions}
-              colorMap={colorMap}
-              onChange={handleOutcomeChange}
-            />
-            <button
-              type="button"
-              className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
-              onClick={() => onFollowUp(meeting)}
-            >
-              + Follow up
-            </button>
-          </div>
-        </div>
-        {(meeting.title || meeting.conference_name) && (
-          <p className="text-[10px] text-gray-400 truncate mt-0.5">
-            {meeting.title && <span>{meeting.title}</span>}
-            {meeting.title && meeting.conference_name && <span className="mx-1">·</span>}
-            {meeting.conference_name && <span>{meeting.conference_name}</span>}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-brand-primary leading-tight">
+            {meeting.first_name} {meeting.last_name}
+            {meeting.title && <span className="font-normal text-xs text-gray-500">, {meeting.title}</span>}
           </p>
-        )}
+          {meeting.conference_name && (
+            <p className="text-xs text-gray-400 mt-0.5">{meeting.conference_name}</p>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <MiniOutcomeButton
+            value={meeting.outcome}
+            options={actionOptions}
+            colorMap={colorMap}
+            onChange={handleOutcomeChange}
+          />
+          <button
+            type="button"
+            className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-brand-secondary/30 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary whitespace-nowrap transition-colors"
+            onClick={() => onFollowUp(meeting)}
+          >
+            + Follow up
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function OverdueFollowupRow({
+function OverdueFollowupCard({
   followup,
   onDone,
   onRemove,
@@ -301,7 +352,6 @@ function OverdueFollowupRow({
 }) {
   const [removing, setRemoving] = useState(false);
   const days = daysSince(followup.created_at);
-  const isVeryOverdue = days > 30;
 
   const handleDone = async () => {
     setRemoving(true);
@@ -315,44 +365,47 @@ function OverdueFollowupRow({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
+      className="bg-white border border-gray-200 rounded-xl p-3 hover:shadow-sm transition-all"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
-      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isVeryOverdue ? 'bg-red-500' : 'bg-amber-400'}`} />
-      <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium text-gray-800 truncate">{followup.first_name} {followup.last_name}</p>
-        <p className="text-[10px] text-gray-400 truncate flex items-center gap-1.5">
-          {followup.conference_name || ''}
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[9px] font-medium leading-none">{days}d overdue</span>
-        </p>
-      </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <button
-          type="button"
-          className="flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600 text-[11px]"
-          onClick={handleDone}
-        >
-          Done
-        </button>
-        <button
-          type="button"
-          className="p-0 border-0 bg-transparent cursor-pointer flex-shrink-0"
-          title="Delete follow-up"
-          onClick={handleDelete}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-            <path d="M10 11v6M14 11v6" />
-            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-          </svg>
-        </button>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-brand-primary leading-tight">
+            {followup.first_name} {followup.last_name}
+          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {followup.conference_name && <span className="text-xs text-gray-400">{followup.conference_name}</span>}
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[9px] font-medium leading-none">{days}d overdue</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600 text-[11px]"
+            onClick={handleDone}
+          >
+            Done
+          </button>
+          <button
+            type="button"
+            className="p-0 border-0 bg-transparent cursor-pointer flex-shrink-0"
+            title="Delete follow-up"
+            onClick={handleDelete}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function HeldNoNotesRow({
+function HeldNoNotesCard({
   meeting,
   onAddNotes,
   onRemove,
@@ -371,21 +424,27 @@ function HeldNoNotesRow({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 hover:bg-gray-50"
+      className="bg-white border border-gray-200 rounded-xl p-3 hover:shadow-sm transition-all"
       style={{ opacity: removing ? 0 : 1, transform: removing ? 'translateY(-4px)' : 'none', transition: 'opacity 200ms, transform 200ms' }}
     >
-      <span className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium text-gray-800 truncate">{meeting.first_name} {meeting.last_name}</p>
-        <p className="text-[10px] text-gray-400 truncate">{meeting.conference_name || ''}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-brand-primary leading-tight">
+            {meeting.first_name} {meeting.last_name}
+            {meeting.title && <span className="font-normal text-xs text-gray-500">, {meeting.title}</span>}
+          </p>
+          {meeting.conference_name && (
+            <p className="text-xs text-gray-400 mt-0.5">{meeting.conference_name}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-brand-secondary/30 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary flex-shrink-0 transition-colors whitespace-nowrap mt-0.5"
+          onClick={handleAddNotes}
+        >
+          + Notes
+        </button>
       </div>
-      <button
-        type="button"
-        className="text-[10px] font-semibold text-brand-secondary bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-brand-secondary flex-shrink-0 transition-colors whitespace-nowrap"
-        onClick={handleAddNotes}
-      >
-        + Notes
-      </button>
     </div>
   );
 }
@@ -477,41 +536,47 @@ function NeedsAttentionSection({
 
   const sections = [
     {
-      key: 'past',
-      title: 'Past meetings — update outcome',
-      count: pastScheduled.length,
-      content: pastScheduled.length === 0 ? (
-        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-      ) : pastScheduled.map(m => (
-        <PastScheduledRow key={m.id} meeting={m} actionOptions={actionOptions} colorMap={colorMap} onOutcomeChange={onOutcomeChange} onRemove={removePastScheduled} onFollowUp={onFollowUp} />
+      key: 'overdue',
+      title: 'Overdue Follow-ups',
+      count: overdueFollowups.length,
+      containerClass: 'rounded-xl border-2 border-red-200 bg-red-50 p-3',
+      headerClass: 'text-red-600',
+      content: overdueFollowups.length === 0 ? (
+        <p className="py-3 text-[11px] text-red-400 text-center">All clear</p>
+      ) : overdueFollowups.map(f => (
+        <OverdueFollowupCard key={f.id} followup={f} onDone={handleDoneFollowup} onRemove={handleDeleteFollowup} />
       )),
     },
     {
-      key: 'overdue',
-      title: 'Overdue follow-ups',
-      count: overdueFollowups.length,
-      content: overdueFollowups.length === 0 ? (
-        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
-      ) : overdueFollowups.map(f => (
-        <OverdueFollowupRow key={f.id} followup={f} onDone={handleDoneFollowup} onRemove={handleDeleteFollowup} />
+      key: 'past',
+      title: 'Meetings Needing Outcome',
+      count: pastScheduled.length,
+      containerClass: 'rounded-xl border-2 border-brand-primary/40 bg-brand-primary/10 p-3',
+      headerClass: 'text-brand-primary',
+      content: pastScheduled.length === 0 ? (
+        <p className="py-3 text-[11px] text-brand-primary/50 text-center">All clear</p>
+      ) : pastScheduled.map(m => (
+        <PastScheduledCard key={m.id} meeting={m} actionOptions={actionOptions} colorMap={colorMap} onOutcomeChange={onOutcomeChange} onRemove={removePastScheduled} onFollowUp={onFollowUp} />
       )),
     },
     {
       key: 'notes',
-      title: 'Held meetings — no notes',
+      title: 'Held — No Notes',
       count: heldNoNotes.length,
+      containerClass: 'rounded-xl border-2 border-gray-200 bg-gray-50 p-3',
+      headerClass: 'text-gray-500',
       content: heldNoNotes.length === 0 ? (
-        <p className="px-3 py-4 text-[11px] text-gray-400">All clear</p>
+        <p className="py-3 text-[11px] text-gray-400 text-center">All clear</p>
       ) : heldNoNotes.map(m => (
-        <HeldNoNotesRow key={m.id} meeting={m} onAddNotes={onOpenNotes} onRemove={removeHeldNoNotes} />
+        <HeldNoNotesCard key={m.id} meeting={m} onAddNotes={onOpenNotes} onRemove={removeHeldNoNotes} />
       )),
     },
   ];
 
   return (
-    <div className="card mb-4 overflow-hidden border border-red-300">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+    <div className="mb-4">
+      {/* Eyebrow header — outside the card */}
+      <div className="flex items-center gap-2 mb-2">
         <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
         </svg>
@@ -521,43 +586,45 @@ function NeedsAttentionSection({
         </span>
       </div>
 
-      {/* Desktop: 3-column grid */}
-      <div className="hidden sm:grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-        {sections.map((s, i) => (
-          <div key={s.key} style={i < 2 ? { borderRight: '1px solid #e5e7eb' } : {}}>
-            <ColumnHeader title={s.title} count={s.count} />
-            <div style={{ height: 200, overflowY: 'auto', scrollbarWidth: 'none' }} className={`no-scroll-col${i + 1}`}>
-              <style>{`.no-scroll-col${i + 1}::-webkit-scrollbar { display: none }`}</style>
+      {/* Desktop: 3 tier-style cards */}
+      <div className="hidden sm:grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        {sections.map(s => (
+          <div key={s.key} className={s.containerClass} style={{ height: 375 }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className={`text-xs font-bold uppercase tracking-wider ${s.headerClass}`}>{s.title}</span>
+              <span className={`text-xs font-semibold ${s.headerClass}`}>{s.count}</span>
+            </div>
+            <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 'calc(375px - 44px)', scrollbarWidth: 'none' }}>
               {s.content}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Mobile: stacked collapsible sections */}
-      <div className="sm:hidden divide-y divide-gray-200">
+      {/* Mobile: stacked collapsible cards */}
+      <div className="sm:hidden flex flex-col gap-3">
         {sections.map(s => {
           const isOpen = !!mobileExpanded[s.key];
           return (
-            <div key={s.key}>
+            <div key={s.key} className={s.containerClass}>
               <button
                 type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                className="w-full flex items-center justify-between text-left"
                 onClick={() => toggleMobile(s.key)}
               >
+                <span className={`text-xs font-bold uppercase tracking-wider ${s.headerClass}`}>{s.title}</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{s.title}</span>
-                  <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{s.count}</span>
+                  <span className={`text-xs font-semibold ${s.headerClass}`}>{s.count}</span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </span>
-                <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
               </button>
               {isOpen && (
-                <div className="border-t border-gray-100">
+                <div className="flex flex-col gap-2 mt-3">
                   {s.content}
                 </div>
               )}
@@ -1011,9 +1078,56 @@ export default function FollowUpsPage() {
         <div className="card p-0 overflow-hidden">
           {/* Card header */}
           <div className="px-4 py-3 border-b border-gray-100">
-            {/* Filter bar */}
-            <div className="flex items-center justify-between gap-3">
-              {/* Left: status chips */}
+            {/* Mobile: single scrollable row with chevron hints */}
+            <div className="sm:hidden">
+              <HScrollFilterBar>
+                {['All', 'Held', 'Scheduled', 'Cancelled / No-show', 'Rescheduled'].map(status => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setStatusFilter(status)}
+                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      statusFilter === status
+                        ? 'bg-brand-primary text-white border-brand-primary'
+                        : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('mine')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'mine' ? 'bg-teal-50 text-teal-800 border-teal-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  {userName}&apos;s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('all')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'all' ? 'bg-gray-100 text-gray-800 border-gray-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  All reps
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMeetingsFiltersOpen(o => !o)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${meetingsFilterCount > 0 ? 'border-brand-secondary text-brand-secondary' : 'border-gray-200 text-gray-600'}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                  Filters
+                  {meetingsFilterCount > 0 && (
+                    <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                      {meetingsFilterCount}
+                    </span>
+                  )}
+                </button>
+              </HScrollFilterBar>
+            </div>
+            {/* Desktop: two-column layout */}
+            <div className="hidden sm:flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 {['All', 'Held', 'Scheduled', 'Cancelled / No-show', 'Rescheduled'].map(status => (
                   <button
@@ -1030,7 +1144,6 @@ export default function FollowUpsPage() {
                   </button>
                 ))}
               </div>
-              {/* Right */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
@@ -1218,8 +1331,68 @@ export default function FollowUpsPage() {
         <div className="card p-0 overflow-hidden">
           {/* Card header with filter bar */}
           <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center justify-between gap-3">
-              {/* Left: status chips */}
+            {/* Mobile: single scrollable row with chevron hints */}
+            <div className="sm:hidden">
+              <HScrollFilterBar>
+                <button
+                  type="button"
+                  onClick={() => { setFollowupStatusFilter('overdue'); setFilter('all'); }}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${followupStatusFilter === 'overdue' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  Overdue
+                </button>
+                {(['All', 'Pending', 'Completed'] as const).map(s => {
+                  const key = s.toLowerCase();
+                  const isActive = followupStatusFilter === key;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        setFollowupStatusFilter(key);
+                        if (key === 'pending') setFilter('pending');
+                        else if (key === 'completed') setFilter('completed');
+                        else setFilter('all');
+                      }}
+                      className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${isActive ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-600 border-gray-200'}`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('mine')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'mine' ? 'bg-teal-50 text-teal-800 border-teal-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  {userName}&apos;s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRepFilter('all')}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${repFilter === 'all' ? 'bg-gray-100 text-gray-800 border-gray-300' : 'bg-white text-gray-600 border-gray-200'}`}
+                >
+                  All reps
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFollowUpsFiltersOpen(o => !o)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${followUpsFilterCount > 0 ? 'border-brand-secondary text-brand-secondary' : 'border-gray-200 text-gray-600'}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                  Filters
+                  {followUpsFilterCount > 0 && (
+                    <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                      {followUpsFilterCount}
+                    </span>
+                  )}
+                </button>
+              </HScrollFilterBar>
+            </div>
+            {/* Desktop: two-column layout */}
+            <div className="hidden sm:flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
@@ -1248,7 +1421,6 @@ export default function FollowUpsPage() {
                   );
                 })}
               </div>
-              {/* Right */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"

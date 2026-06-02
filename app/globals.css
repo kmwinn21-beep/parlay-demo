@@ -103,3 +103,8 @@ h1, h2, h3 {
     display: none;
   }
 }
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
