@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, recomputed: 1 });
   }
 
-  // Recompute all conferences that have a series_id
+  // Recompute all conferences with a series, ordered by date (chronological history matters)
   const confs = await db.execute(
     `SELECT id FROM conferences WHERE series_id IS NOT NULL ORDER BY start_date ASC`,
   );

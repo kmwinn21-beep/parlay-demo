@@ -176,30 +176,36 @@ interface SaturationConferenceEntry {
   conference_id: number;
   conference_name: string;
   start_date: string;
+  season_id: string | null;
+  snapshot_date: string;
   saturation_score: number;
-  contacts_total: number;
+  contacts_ever_touched: number;
+  contacts_touched_this_conf: number;
   contacts_net_new: number;
   contacts_returning: number;
-  meetings_held: number;
-  substitutable_count: number;
-  health_green: number;
-  health_amber: number;
-  health_red: number;
-  companies_total: number;
+  contacts_droppable: number;
+  contacts_high_health: number;
+  contacts_mid_health: number;
+  contacts_low_health: number;
+  companies_ever_touched: number;
+  companies_net_new: number;
   companies_returning: number;
-  computed_at: string;
+  meetings_held: number;
+  meetings_with_outcome: number;
+  new_contact_rate: number;
+  droppable_rate: number;
 }
 
-interface SaturationSeriesEntry {
+interface SaturationSeriesGroup {
   series_id: string;
   series_name: string;
   conferences: SaturationConferenceEntry[];
 }
 
 interface SaturationPortfolioData {
-  series: SaturationSeriesEntry[];
-  avgSaturationScore: number;
-  highSaturationAlerts: number;
+  seriesGroups: SaturationSeriesGroup[];
+  avg_saturation_score: number;
+  high_saturation_count: number;
 }
 
 interface SaturationDetail {
@@ -208,25 +214,33 @@ interface SaturationDetail {
   start_date: string;
   series_name: string;
   series_id: string;
+  snapshot_date: string;
   saturation_score: number;
-  contacts_total: number;
+  contacts_ever_touched: number;
+  contacts_touched_this_conf: number;
   contacts_net_new: number;
   contacts_returning: number;
-  meetings_held: number;
-  substitutable_count: number;
-  health_green: number;
-  health_amber: number;
-  health_red: number;
-  companies_total: number;
+  contacts_droppable: number;
+  contacts_high_health: number;
+  contacts_mid_health: number;
+  contacts_low_health: number;
+  companies_ever_touched: number;
+  companies_net_new: number;
   companies_returning: number;
-  computed_at: string;
-  substitutable_contacts: {
+  meetings_held: number;
+  meetings_with_outcome: number;
+  new_contact_rate: number;
+  droppable_rate: number;
+  droppable_contacts: {
     attendee_id: number;
-    name: string;
+    first_name: string;
+    last_name: string;
     title: string;
     company_name: string;
     health_score: number;
-    times_seen: number;
+    interaction_count: number;
+    cumulative_meetings: number;
+    last_meeting_outcome: string | null;
   }[];
 }
 
@@ -1051,7 +1065,7 @@ export default function ProgramIntelligencePage() {
       .finally(() => setSatLoading(false));
   }, [activeTab, satData]);
 
-  // Saturation detail fetch
+  // Saturation detail fetch (droppable contacts)
   useEffect(() => {
     if (!satDetailId) { setSatDetail(null); return; }
     setSatDetailLoading(true);
@@ -1761,29 +1775,35 @@ export default function ProgramIntelligencePage() {
               {/* ── Section C: Conference Saturation ── */}
               {(() => {
                 const satScoreColor = (score: number) => {
-                  if (score < 30) return '#059669';
-                  if (score < 50) return '#d97706';
-                  if (score < 65) return '#f97316';
-                  return '#dc2626';
+                  if (score <= 30) return '#97C459';
+                  if (score <= 60) return '#EF9F27';
+                  if (score <= 80) return '#E24B4A';
+                  return '#A32D2D';
                 };
                 const satLabel = (score: number) => {
-                  if (score < 30) return 'Fresh';
-                  if (score < 50) return 'Moderate';
-                  if (score < 65) return 'High';
+                  if (score <= 30) return 'Fresh';
+                  if (score <= 60) return 'Moderate';
+                  if (score <= 80) return 'High';
                   return 'Critical';
+                };
+                const satBg = (score: number) => {
+                  if (score <= 30) return '#f0fdf4';
+                  if (score <= 60) return '#fffbeb';
+                  if (score <= 80) return '#fff7ed';
+                  return '#fef2f2';
                 };
                 const recommendationText = (entry: SaturationConferenceEntry): string => {
                   const score = entry.saturation_score;
-                  const pctNew = entry.contacts_total > 0
-                    ? Math.round(entry.contacts_net_new / entry.contacts_total * 100)
+                  const pctNew = entry.contacts_touched_this_conf > 0
+                    ? Math.round(entry.contacts_net_new / entry.contacts_touched_this_conf * 100)
                     : 0;
-                  if (score < 30) return `Strong audience renewal — ${pctNew}% new contacts. Continue current outreach strategy.`;
-                  if (score < 50) return `Moderate saturation. Consider targeted outreach to expand net-new contacts next cycle.`;
-                  if (score < 65) return `High saturation — most attendees are returning with limited fresh engagement. Prioritize new prospect sourcing before next conference.`;
-                  return `Critical saturation — audience is heavily recycled with low engagement uplift. Evaluate conference ROI carefully. Consider substituting ${entry.substitutable_count} disengaged returning contacts.`;
+                  if (score <= 30) return `Strong audience renewal — ${pctNew}% net-new contacts. Continue current outreach strategy.`;
+                  if (score <= 60) return `Moderate saturation. Consider targeted prospecting to expand net-new contacts before next cycle.`;
+                  if (score <= 80) return `High saturation — ${entry.contacts_droppable} contacts (health ≥ 50) may no longer need active coverage. Prioritize fresh prospect sourcing.`;
+                  return `Critical saturation — audience is heavily recycled with ${entry.contacts_droppable} droppable contacts. Evaluate conference ROI and explore list diversification.`;
                 };
 
-                const allConferences = satData?.series.flatMap(s => s.conferences) ?? [];
+                const allConferences = satData?.seriesGroups.flatMap(s => s.conferences) ?? [];
                 return (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -1793,7 +1813,6 @@ export default function ProgramIntelligencePage() {
                       )}
                     </div>
 
-                    {/* Portfolio saturation KPI tiles — inserted after existing 4 */}
                     {satLoading ? (
                       <div className="grid grid-cols-2 gap-4 animate-pulse">
                         <div className="h-20 bg-gray-100 rounded-lg" />
@@ -1804,24 +1823,24 @@ export default function ProgramIntelligencePage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="card text-center">
                             <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Avg Saturation Score</p>
-                            <p className="text-3xl font-bold" style={{ color: satScoreColor(satData.avgSaturationScore) }}>
-                              {satData.avgSaturationScore}
+                            <p className="text-3xl font-bold" style={{ color: satScoreColor(satData.avg_saturation_score) }}>
+                              {satData.avg_saturation_score}
                             </p>
-                            <p className="text-xs mt-0.5" style={{ color: satScoreColor(satData.avgSaturationScore) }}>
-                              {satLabel(satData.avgSaturationScore)}
+                            <p className="text-xs mt-0.5" style={{ color: satScoreColor(satData.avg_saturation_score) }}>
+                              {satLabel(satData.avg_saturation_score)}
                             </p>
                           </div>
                           <div className="card text-center">
                             <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">High Saturation Alerts</p>
-                            <p className={`text-3xl font-bold ${satData.highSaturationAlerts > 0 ? 'text-red-600' : 'text-brand-primary'}`}>
-                              {satData.highSaturationAlerts}
+                            <p className={`text-3xl font-bold ${satData.high_saturation_count > 0 ? 'text-red-600' : 'text-brand-primary'}`}>
+                              {satData.high_saturation_count}
                             </p>
-                            <p className="text-xs text-gray-400 mt-0.5">score ≥ 65</p>
+                            <p className="text-xs text-gray-400 mt-0.5">score &gt; 60</p>
                           </div>
                         </div>
 
                         {/* Saturation trend dots per series */}
-                        {satData.series.map(series => (
+                        {satData.seriesGroups.map(series => (
                           <div key={series.series_id} className="card">
                             <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                               {series.series_name}
@@ -1859,7 +1878,7 @@ export default function ProgramIntelligencePage() {
                             {/* Detail panel for selected conference */}
                             {satDetailId && series.conferences.some(c => c.conference_id === satDetailId) && (() => {
                               const conf = series.conferences.find(c => c.conference_id === satDetailId)!;
-                              const totalBar = conf.contacts_total || 1;
+                              const totalBar = conf.contacts_touched_this_conf || 1;
                               const netNewPct = Math.round(conf.contacts_net_new / totalBar * 100);
                               const returningPct = 100 - netNewPct;
                               return (
@@ -1868,10 +1887,7 @@ export default function ProgramIntelligencePage() {
                                   <div
                                     className="rounded-lg px-4 py-3 text-sm"
                                     style={{
-                                      background: conf.saturation_score < 30 ? '#f0fdf4'
-                                        : conf.saturation_score < 50 ? '#fffbeb'
-                                        : conf.saturation_score < 65 ? '#fff7ed'
-                                        : '#fef2f2',
+                                      background: satBg(conf.saturation_score),
                                       borderLeft: `4px solid ${satScoreColor(conf.saturation_score)}`,
                                     }}
                                   >
@@ -1881,16 +1897,16 @@ export default function ProgramIntelligencePage() {
                                     <p className="text-gray-700 text-xs">{recommendationText(conf)}</p>
                                   </div>
 
-                                  {/* New vs Returning + cost bar */}
+                                  {/* New vs Returning bar */}
                                   <div>
                                     <div className="flex items-center justify-between mb-1">
                                       <span className="text-xs font-medium text-gray-600">New vs. Known Contacts</span>
-                                      <span className="text-xs text-gray-400">{conf.contacts_total} total</span>
+                                      <span className="text-xs text-gray-400">{conf.contacts_touched_this_conf} at this conference</span>
                                     </div>
                                     <div className="flex h-6 rounded overflow-hidden text-xs font-semibold">
                                       <div
                                         className="flex items-center justify-center text-white"
-                                        style={{ width: `${netNewPct}%`, background: '#059669', minWidth: netNewPct > 0 ? 24 : 0 }}
+                                        style={{ width: `${netNewPct}%`, background: '#97C459', minWidth: netNewPct > 0 ? 24 : 0 }}
                                       >
                                         {netNewPct > 8 && `${netNewPct}%`}
                                       </div>
@@ -1903,16 +1919,16 @@ export default function ProgramIntelligencePage() {
                                     </div>
                                     <div className="flex items-center gap-4 mt-1.5">
                                       <span className="flex items-center gap-1 text-xs text-gray-500">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
+                                        <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#97C459' }} />
                                         Net new ({conf.contacts_net_new})
                                       </span>
                                       <span className="flex items-center gap-1 text-xs text-gray-500">
                                         <span className="w-2 h-2 rounded-full inline-block" style={{ background: satScoreColor(conf.saturation_score) }} />
                                         Returning ({conf.contacts_returning})
                                       </span>
-                                      {conf.substitutable_count > 0 && (
+                                      {conf.contacts_droppable > 0 && (
                                         <span className="flex items-center gap-1 text-xs text-gray-400">
-                                          · {conf.substitutable_count} substitutable
+                                          · {conf.contacts_droppable} droppable
                                         </span>
                                       )}
                                     </div>
@@ -1921,9 +1937,9 @@ export default function ProgramIntelligencePage() {
                                   {/* Health breakdown */}
                                   <div className="grid grid-cols-3 gap-2 text-center">
                                     {[
-                                      { label: 'Strong', count: conf.health_green, color: '#059669', bg: '#f0fdf4' },
-                                      { label: 'Developing', count: conf.health_amber, color: '#d97706', bg: '#fffbeb' },
-                                      { label: 'At Risk', count: conf.health_red, color: '#dc2626', bg: '#fef2f2' },
+                                      { label: 'Strong', count: conf.contacts_high_health, color: '#059669', bg: '#f0fdf4' },
+                                      { label: 'Developing', count: conf.contacts_mid_health, color: '#d97706', bg: '#fffbeb' },
+                                      { label: 'At Risk', count: conf.contacts_low_health, color: '#dc2626', bg: '#fef2f2' },
                                     ].map(({ label, count, color, bg }) => (
                                       <div key={label} className="rounded-lg p-2" style={{ background: bg }}>
                                         <p className="text-lg font-bold" style={{ color }}>{count}</p>
@@ -1932,18 +1948,18 @@ export default function ProgramIntelligencePage() {
                                     ))}
                                   </div>
 
-                                  {/* Substitutable contacts table */}
-                                  {conf.substitutable_count > 0 && (
+                                  {/* Droppable contacts table */}
+                                  {conf.contacts_droppable > 0 && (
                                     <div>
                                       <div className="flex items-center justify-between mb-2">
                                         <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                          Substitutable Contacts
+                                          Droppable Contacts
                                         </h5>
                                         {satDetailLoading && <span className="text-xs text-gray-400">Loading…</span>}
                                       </div>
                                       {satDetail && satDetail.conference_id === satDetailId ? (
-                                        satDetail.substitutable_contacts.length === 0 ? (
-                                          <p className="text-xs text-gray-400">No substitutable contacts found.</p>
+                                        satDetail.droppable_contacts.length === 0 ? (
+                                          <p className="text-xs text-gray-400">No droppable contacts found.</p>
                                         ) : (
                                           <div className="overflow-x-auto">
                                             <table className="w-full text-xs">
@@ -1951,28 +1967,35 @@ export default function ProgramIntelligencePage() {
                                                 <tr className="border-b border-gray-100">
                                                   <th className="text-left font-medium text-gray-400 py-1.5 pr-3">Name</th>
                                                   <th className="text-left font-medium text-gray-400 py-1.5 pr-3">Company</th>
-                                                  <th className="text-center font-medium text-gray-400 py-1.5 pr-3">Times Seen</th>
+                                                  <th className="text-center font-medium text-gray-400 py-1.5 pr-3">Interactions</th>
+                                                  <th className="text-center font-medium text-gray-400 py-1.5 pr-3">Meetings</th>
                                                   <th className="text-center font-medium text-gray-400 py-1.5 pr-3">Health</th>
                                                   <th className="py-1.5" />
                                                 </tr>
                                               </thead>
                                               <tbody>
-                                                {satDetail.substitutable_contacts.map(c => {
+                                                {satDetail.droppable_contacts.map(c => {
                                                   const displayHealth = Math.min(c.health_score, 100);
                                                   const hColor = c.health_score >= 70 ? '#059669' : c.health_score >= 40 ? '#d97706' : '#dc2626';
                                                   const r = 11; const cx2 = 14; const circ = 2 * Math.PI * r;
                                                   const offset = circ * (1 - displayHealth / 100);
+                                                  const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
                                                   return (
                                                     <tr key={c.attendee_id} className="border-b border-gray-50 hover:bg-gray-50/50">
                                                       <td className="py-1.5 pr-3">
-                                                        <p className="font-medium text-gray-800 truncate max-w-[140px]">{c.name || '—'}</p>
+                                                        <p className="font-medium text-gray-800 truncate max-w-[140px]">{fullName}</p>
                                                         {c.title && <p className="text-gray-400 truncate max-w-[140px]">{c.title}</p>}
                                                       </td>
-                                                      <td className="py-1.5 pr-3 text-gray-600 truncate max-w-[120px]">{c.company_name || '—'}</td>
+                                                      <td className="py-1.5 pr-3 text-gray-600 truncate max-w-[100px]">{c.company_name || '—'}</td>
                                                       <td className="py-1.5 pr-3 text-center">
                                                         <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary/10 text-brand-primary">
-                                                          {c.times_seen}×
+                                                          {c.interaction_count}×
                                                         </span>
+                                                      </td>
+                                                      <td className="py-1.5 pr-3 text-center text-gray-600">
+                                                        {c.cumulative_meetings > 0 ? (
+                                                          <span title={c.last_meeting_outcome ?? undefined}>{c.cumulative_meetings}</span>
+                                                        ) : '—'}
                                                       </td>
                                                       <td className="py-1.5 pr-3">
                                                         <div className="flex justify-center">
@@ -1994,7 +2017,7 @@ export default function ProgramIntelligencePage() {
                                                           onClick={() => setSatFollowUpAttendeeId(c.attendee_id)}
                                                           className="text-xs text-brand-secondary hover:underline font-medium whitespace-nowrap"
                                                         >
-                                                          Direct outreach →
+                                                          Outreach →
                                                         </button>
                                                       </td>
                                                     </tr>
