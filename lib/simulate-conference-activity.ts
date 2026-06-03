@@ -45,6 +45,8 @@ export type SimulationResult = {
     followUps: number
     touchpoints: number
   }
+  convergenceWarning?: string
+  dim3Warning?: string
 }
 
 const densityPresets = {
@@ -192,7 +194,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const confStartDate = String(conf.start_date);
   const confEndDate = String(conf.end_date);
 
-  // Sum line items to get total event cost
+  // Priority 1: conference_budget.line_items
   let totalCost = 0;
   try {
     const lineItems = JSON.parse(String(conf.budget_line_items ?? '[]'));
@@ -200,6 +202,15 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       totalCost = lineItems.reduce((sum: number, item: { amount?: number }) => sum + (Number(item.amount) || 0), 0);
     }
   } catch { /* no budget data */ }
+
+  // Priority 2: conferences.total_cost column (may not exist in all tenant schemas)
+  if (!totalCost) {
+    const confCostRow = await client.execute({
+      sql: `SELECT total_cost FROM conferences WHERE id = ?`,
+      args: [conferenceId],
+    }).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
+    totalCost = Number(confCostRow.rows[0]?.total_cost ?? 0) || 0;
+  }
 
   // Fetch all attendees at conference
   const attendeesRes = await client.execute({
@@ -265,7 +276,8 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
             )`,
     args: [conferenceId, conferenceId],
   }).catch(() => ({ rows: [] as { id: unknown }[] }));
-  const netNewCount = netNewRes.rows.length;
+  const rawNetNewCount = netNewRes.rows.length;
+  const netNewCount = Math.min(rawNetNewCount, totalCompanies);
 
   // Effectiveness defaults
   const defaultsRes = await client.execute({
@@ -285,7 +297,40 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     meetings_held_conversion_rate: defaultsMap['meetings_held_conversion_rate'] ?? 0.30,
     expected_return_on_event_cost: defaultsMap['expected_return_on_event_cost'] ?? 3.0,
   };
+  // Dim3 weight handling — redistribute if no cost basis
+  let dim3Weight = 0.30;
+  let dim2Weight = 0.20;
+  let dim5Weight = 0.10;
+  let dim3Warning: string | undefined;
+  if (!totalCost) {
+    dim3Weight = 0;
+    dim2Weight = 0.38; // 0.20 + 0.30 * 0.6
+    dim5Weight = 0.22; // 0.10 + 0.30 * 0.4
+    dim3Warning = 'Dim3 excluded — no cost basis found. Weight redistributed to Dim2 (38%) and Dim5 (22%).';
+  }
+
   const targetInfluence = totalCost * defaults.expected_return_on_event_cost;
+
+  // Dynamic CES using redistributable weights
+  const computeScore = (dims: DimensionBreakdown): number => Math.round(
+    dims.dim1_icp_quality * 0.20 +
+    dims.dim2_meeting_execution * dim2Weight +
+    dims.dim3_pipeline_influence * dim3Weight +
+    dims.dim4_breadth * 0.05 +
+    dims.dim7_cost_efficiency * 0.10 +
+    dims.dim5_followup_execution * dim5Weight +
+    dims.dim6_net_new * 0.05
+  );
+
+  const computeDynamicWeightedContributions = (dims: DimensionBreakdown): DimensionBreakdown => ({
+    dim1_icp_quality: Math.round(dims.dim1_icp_quality * 0.20 * 10) / 10,
+    dim2_meeting_execution: Math.round(dims.dim2_meeting_execution * dim2Weight * 10) / 10,
+    dim3_pipeline_influence: Math.round(dims.dim3_pipeline_influence * dim3Weight * 10) / 10,
+    dim4_breadth: Math.round(dims.dim4_breadth * 0.05 * 10) / 10,
+    dim5_followup_execution: Math.round(dims.dim5_followup_execution * dim5Weight * 10) / 10,
+    dim6_net_new: Math.round(dims.dim6_net_new * 0.05 * 10) / 10,
+    dim7_cost_efficiency: Math.round(dims.dim7_cost_efficiency * 0.10 * 10) / 10,
+  });
 
   // Config options: meeting_held value and touchpoint option_id
   const configRes = await client.execute({
@@ -348,9 +393,13 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     }
   }
 
+  // Hard ceiling: cannot schedule more meetings than unique ICP attendees
+  const icpMatchedAttendees = allAttendees.filter(a => a.company_id != null && icpCompanyIds.has(a.company_id));
+  const maxMeetings = Math.max(icpMatchedAttendees.length, 1);
+
   // Compute fixed dimensions
   const dim4 = totalCompanies > 0 ? clamp((companiesEngagedCount / totalCompanies) * 100, 0, 100) : 0;
-  const dim6 = companiesEngagedCount > 0 ? clamp((netNewCount / companiesEngagedCount) * 100, 0, 100) : 0;
+  const dim6 = totalCompanies > 0 ? clamp((netNewCount / totalCompanies) * 100, 0, 100) : 0;
   const dim7 = 65;
 
   // Solve for required controllable score
@@ -370,6 +419,11 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const meetingsPerCompany = densityKey === 'light' ? 1 : densityKey === 'moderate' ? 1.5 : 2;
   let baseScheduled = Math.max(companiesEngagedCount, Math.round(companiesEngagedCount * meetingsPerCompany));
 
+  let touchMultiplier = 1.0;
+  let coverageMultiplier = 1.0;
+  let completionRateOverride = density.completionRate;
+  let convergenceWarning: string | undefined;
+
   let projectedDims: DimensionBreakdown;
   let projectedScore = 0;
   let pipelineInfluenced = 0;
@@ -381,9 +435,10 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   for (let iter = 0; iter < 20; iter++) {
     meetingsScheduled = baseScheduled;
     meetingsHeld = Math.round(meetingsScheduled * density.holdRate);
-    followUpsCreated = Math.round(companiesEngagedCount * density.followUpRate);
-    followUpsCompleted = Math.round(followUpsCreated * density.completionRate);
-    touchpointsCount = Math.round(companiesEngagedCount * density.touchesPerCompany);
+    const estCompaniesWithHeld = Math.min(meetingsHeld, companiesEngagedCount);
+    followUpsCreated = Math.round(estCompaniesWithHeld * density.followUpRate);
+    followUpsCompleted = Math.round(followUpsCreated * completionRateOverride);
+    touchpointsCount = Math.round(companiesEngagedCount * density.touchesPerCompany * touchMultiplier);
 
     // Compute pipeline influence
     pipelineInfluenced = 0;
@@ -409,7 +464,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       pipelineInfluenced += adjConvRate * dealValue;
     }
 
-    const dim3 = targetInfluence > 0 ? clamp((pipelineInfluenced / targetInfluence) * 100, 0, 100) : 0;
+    const dim3 = (dim3Weight > 0 && targetInfluence > 0) ? clamp((pipelineInfluenced / targetInfluence) * 100, 0, 100) : 0;
 
     const dim1 = clamp(icpEngagedForDim1 * 0.5 + targetEngaged * 0.5, 0, 100);
     const holdRatePct = meetingsScheduled > 0 ? clamp((meetingsHeld / meetingsScheduled) * 100, 0, 100) : 0;
@@ -427,23 +482,48 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       dim7_cost_efficiency: Math.round(dim7 * 10) / 10,
     };
 
-    projectedScore = computeCES(projectedDims);
+    projectedScore = computeScore(projectedDims);
 
     if (projectedScore >= targetScoreMin && projectedScore <= targetScoreMax) break;
 
     // Adjust activity counts to push CES toward target range
     if (projectedScore < targetScoreMin) {
-      baseScheduled = Math.round(baseScheduled * 1.15);
+      const dim3Gap = targetAvg - (projectedDims?.dim3_pipeline_influence ?? 0);
+      const dim2Gap = targetAvg - (projectedDims?.dim2_meeting_execution ?? 0);
+      const dim5Gap = targetAvg - (projectedDims?.dim5_followup_execution ?? 0);
+      const dim4Gap = targetAvg - (projectedDims?.dim4_breadth ?? 0);
+
+      if (dim3Gap > 10) {
+        touchMultiplier = Math.min(touchMultiplier * 1.2, 3.0);
+      }
+      if (dim2Gap > 10) {
+        baseScheduled = Math.min(Math.round(baseScheduled * 1.1), maxMeetings);
+      }
+      if (dim5Gap > 10) {
+        completionRateOverride = Math.min(completionRateOverride * 1.1, density.completionRate);
+      }
+      if (dim4Gap > 10) {
+        coverageMultiplier = Math.min(coverageMultiplier * 1.1, 2.0);
+      }
+      if (dim3Gap <= 10 && dim2Gap <= 10 && dim5Gap <= 10) {
+        baseScheduled = Math.min(Math.round(baseScheduled * 1.15), maxMeetings);
+      }
     } else {
-      baseScheduled = Math.max(1, Math.round(baseScheduled * 0.90));
+      baseScheduled = Math.max(1, Math.round(baseScheduled * 0.92));
+      touchMultiplier = Math.max(touchMultiplier * 0.92, 1.0);
     }
+  }
+
+  if (projectedScore < targetScoreMin || projectedScore > targetScoreMax) {
+    convergenceWarning = `Could not reach target range ${targetScoreMin}–${targetScoreMax}. Closest achieved: ${Math.round(projectedScore)}. Try adjusting density to Heavy or expanding coverage.`;
   }
 
   meetingsScheduled = baseScheduled;
   meetingsHeld = Math.round(meetingsScheduled * density.holdRate);
-  followUpsCreated = Math.round(companiesEngagedCount * density.followUpRate);
-  followUpsCompleted = Math.round(followUpsCreated * density.completionRate);
-  touchpointsCount = Math.round(companiesEngagedCount * density.touchesPerCompany);
+  const estCompaniesWithHeldFinal = Math.min(meetingsHeld, companiesEngagedCount);
+  followUpsCreated = Math.round(estCompaniesWithHeldFinal * density.followUpRate);
+  followUpsCompleted = Math.round(followUpsCreated * completionRateOverride);
+  touchpointsCount = Math.round(companiesEngagedCount * density.touchesPerCompany * touchMultiplier);
 
   const plan: SimulationPlan = {
     meetingsScheduled,
@@ -458,7 +538,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   };
 
   // Final dimension recomputation
-  const finalDim3 = targetInfluence > 0 ? clamp((pipelineInfluenced / targetInfluence) * 100, 0, 100) : 0;
+  const finalDim3 = (dim3Weight > 0 && targetInfluence > 0) ? clamp((pipelineInfluenced / targetInfluence) * 100, 0, 100) : 0;
   const finalDim1 = clamp(icpEngagedForDim1 * 0.5 + targetEngaged * 0.5, 0, 100);
   const holdRatePct = meetingsScheduled > 0 ? clamp((meetingsHeld / meetingsScheduled) * 100, 0, 100) : 0;
   const fuSchedulingRatePct = companiesEngagedCount > 0 ? clamp((followUpsCreated / companiesEngagedCount) * 100, 0, 100) : 0;
@@ -475,8 +555,21 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     dim7_cost_efficiency: Math.round(dim7 * 10) / 10,
   };
 
-  const finalScore = computeCES(finalDims);
-  const weightedContributions = computeWeightedContributions(finalDims);
+  const finalScore = computeScore(finalDims);
+  const weightedContributions = computeDynamicWeightedContributions(finalDims);
+
+  // Pre-return assertions
+  const assertions: Array<{ check: boolean; msg: string }> = [
+    { check: plan.meetingsScheduled <= maxMeetings, msg: `meetingsScheduled (${plan.meetingsScheduled}) exceeds attendee count (${maxMeetings})` },
+    { check: plan.followUpsCreated <= plan.companiesEngaged, msg: `followUpsCreated (${plan.followUpsCreated}) exceeds companiesEngaged (${plan.companiesEngaged})` },
+    { check: plan.netNewLogos <= totalCompanies, msg: `netNewLogos (${plan.netNewLogos}) exceeds totalCompanies (${totalCompanies})` },
+    { check: !isNaN(finalScore) && finalScore >= 0 && finalScore <= 100, msg: `projectedScore out of range or NaN: ${finalScore}` },
+  ];
+  for (const { check, msg } of assertions) {
+    if (!check) {
+      console.error(`[simulate] assertion failed: ${msg}`);
+    }
+  }
 
   if (dryRun) {
     return {
@@ -485,6 +578,8 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       weightedContributions,
       plan,
       written: false,
+      convergenceWarning,
+      dim3Warning,
     };
   }
 
@@ -528,12 +623,17 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   let meetingIdx = 0;
   const perCompanyMeetings = Math.max(1, Math.round(meetingsScheduled / Math.max(companiesEngagedCount, 1)));
 
+  const assignedAttendeeIds = new Set<number>();
+
   for (const company of engagedCompanies) {
     const atts = (attendeesByCompany.get(company.id) ?? []).slice(0, perCompanyMeetings);
     if (atts.length === 0) continue;
 
     for (let mi = 0; mi < Math.min(atts.length, perCompanyMeetings); mi++) {
-      const att = atts[mi % atts.length];
+      const availableAtts = atts.filter(a => !assignedAttendeeIds.has(a.id));
+      if (availableAtts.length === 0) break;
+      const att = availableAtts[0];
+      assignedAttendeeIds.add(att.id);
       const dayIdx = meetingIdx % confDates.length;
       const confDay = confDates[dayIdx];
 
@@ -577,6 +677,11 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       meetingIdx++;
     }
   }
+
+  // Recompute follow-up counts based on actual companies with held meetings
+  const companiesWithHeld = new Set(meetingRecords.filter(m => m.isHeld).map(m => m.companyId)).size;
+  followUpsCreated = Math.round(companiesWithHeld * density.followUpRate);
+  followUpsCompleted = Math.round(followUpsCreated * density.completionRate);
 
   // Write meetings
   const insertedMeetingIds: number[] = [];
@@ -683,5 +788,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       followUps: followUpsWritten,
       touchpoints: touchpointsWritten,
     },
+    convergenceWarning,
+    dim3Warning,
   };
 }
