@@ -50,6 +50,7 @@ interface SignalRow {
   attendeeId: number;
   productName: string;
   buyerRole: string | null;
+  hasFunctionMatch: boolean;
   firstName: string;
   lastName: string;
   title: string | null;
@@ -140,7 +141,7 @@ export async function GET(
             FROM attendee_product_signals aps
             JOIN attendees a ON a.id = aps.attendee_id
             LEFT JOIN companies c ON c.id = a.company_id
-            WHERE aps.conference_id = ? AND aps.function_match IS NOT NULL`,
+            WHERE aps.conference_id = ?`,
       args: [conferenceId],
     }),
     db.execute({
@@ -159,6 +160,7 @@ export async function GET(
     attendeeId: Number(r.attendee_id),
     productName: String(r.product_name ?? ''),
     buyerRole: r.buyer_role ? String(r.buyer_role) : null,
+    hasFunctionMatch: r.function_match != null,
     firstName: String(r.first_name ?? ''),
     lastName: String(r.last_name ?? ''),
     title: r.title ? String(r.title) : null,
@@ -166,11 +168,12 @@ export async function GET(
     companyName: String(r.company_name ?? 'Unknown company'),
   }));
 
-  // Global summary counts
+  // Global summary counts — require function_match so these reflect full ICP signal quality
   const icpMatchedIds = new Set<number>();
   const dmIds = new Set<number>();
   const ttIds = new Set<number>();
   for (const sig of allSignals) {
+    if (!sig.hasFunctionMatch) continue;
     icpMatchedIds.add(sig.attendeeId);
     if (sig.buyerRole === 'decision_maker') dmIds.add(sig.attendeeId);
     if (sig.buyerRole === 'target_title') ttIds.add(sig.attendeeId);
