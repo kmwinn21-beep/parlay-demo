@@ -1057,4 +1057,57 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Family',   4, 'family',   1, '#A32D2D')`,
   // Buying committee: backfill default config into existing product metadata rows
   `UPDATE config_options SET metadata = json_patch(metadata, '{"buying_committee": {"decision_maker": true, "influencer": true, "target_title": true}}') WHERE category = 'products' AND metadata IS NOT NULL AND json_extract(metadata, '$.buying_committee') IS NULL`,
+  // Seniority: lock existing options as system-managed (classifySeniority() can only output these nine strings)
+  `UPDATE config_options SET is_system = 1 WHERE category = 'seniority' AND value IN ('C-Suite', 'VP/SVP', 'BOD', 'ED', 'Director', 'Manager', 'Associate', 'Admin', 'Other')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'C-Suite',   1, 1, 'dark-blue')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'VP/SVP',    2, 1, 'yellow')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'BOD',       3, 1, 'purple')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'ED',        4, 1, 'teal')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'Director',  5, 1, 'dark')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'Manager',   6, 1, 'orange')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'Associate', 7, 1, 'green')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'Admin',     8, 1, 'red')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('seniority', 'Other',     9, 1, 'gray')`,
+  // Seniority: backfill NULL seniority on existing attendees using SQL approximation of classifySeniority()
+  `UPDATE attendees SET seniority = CASE
+    WHEN lower(title) LIKE '%vice president%'
+      OR lower(title) LIKE '% svp %' OR lower(title) LIKE 'svp %' OR lower(title) LIKE '% svp' OR lower(title) = 'svp'
+      OR lower(title) LIKE '% evp %' OR lower(title) LIKE 'evp %' OR lower(title) LIKE '% evp' OR lower(title) = 'evp'
+      OR lower(title) LIKE '% avp %' OR lower(title) LIKE 'avp %' OR lower(title) LIKE '% avp' OR lower(title) = 'avp'
+      OR lower(title) = 'vp' OR lower(title) LIKE 'vp %' OR lower(title) LIKE '% vp %' OR lower(title) LIKE '% vp'
+      OR lower(title) LIKE '%controller%'
+      THEN 'VP/SVP'
+    WHEN lower(title) LIKE '%chief%'
+      OR lower(title) LIKE '%president%'
+      OR lower(title) LIKE '%founder%'
+      OR lower(title) LIKE '%owner%'
+      OR lower(title) LIKE '%principal%'
+      OR lower(title) = 'ceo' OR lower(title) LIKE 'ceo %' OR lower(title) LIKE '% ceo %' OR lower(title) LIKE '% ceo'
+      OR lower(title) = 'cfo' OR lower(title) LIKE 'cfo %' OR lower(title) LIKE '% cfo %' OR lower(title) LIKE '% cfo'
+      OR lower(title) = 'coo' OR lower(title) LIKE 'coo %' OR lower(title) LIKE '% coo %' OR lower(title) LIKE '% coo'
+      OR lower(title) = 'cto' OR lower(title) LIKE 'cto %' OR lower(title) LIKE '% cto %' OR lower(title) LIKE '% cto'
+      OR lower(title) = 'cmo' OR lower(title) LIKE 'cmo %' OR lower(title) LIKE '% cmo %' OR lower(title) LIKE '% cmo'
+      OR lower(title) = 'cio' OR lower(title) LIKE 'cio %' OR lower(title) LIKE '% cio %' OR lower(title) LIKE '% cio'
+      OR lower(title) = 'chro' OR lower(title) LIKE 'chro %' OR lower(title) LIKE '% chro %' OR lower(title) LIKE '% chro'
+      OR lower(title) = 'cpo' OR lower(title) LIKE 'cpo %' OR lower(title) LIKE '% cpo %' OR lower(title) LIKE '% cpo'
+      OR lower(title) = 'cdo' OR lower(title) LIKE 'cdo %' OR lower(title) LIKE '% cdo %' OR lower(title) LIKE '% cdo'
+      THEN 'C-Suite'
+    WHEN lower(title) LIKE '%board%'
+      OR lower(title) LIKE '%chairman%'
+      OR lower(title) LIKE '%chairwoman%'
+      OR lower(title) LIKE '%executive chairman%'
+      THEN 'BOD'
+    WHEN lower(title) LIKE '%executive director%'
+      THEN 'ED'
+    WHEN lower(title) LIKE '%director%'
+      THEN 'Director'
+    WHEN lower(title) LIKE '%manager%'
+      THEN 'Manager'
+    WHEN lower(title) LIKE '%associate%'
+      THEN 'Associate'
+    WHEN lower(title) LIKE '%assistant administrator%'
+      THEN 'Admin'
+    ELSE 'Other'
+  END
+  WHERE seniority IS NULL`,
 ];

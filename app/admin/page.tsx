@@ -605,6 +605,11 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
               })}
             </ul>
           )}
+          {category === 'seniority' ? (
+            <p className="pt-3 border-t border-gray-100 text-xs text-gray-400 italic">
+              Seniority levels are system-managed and match the classifier output exactly. No custom levels can be added.
+            </p>
+          ) : (
           <form onSubmit={handleAdd} className="pt-3 border-t border-gray-100 space-y-2">
             <div className="flex gap-2">
               <input name="newOption" placeholder={`Add new ${label.toLowerCase().replace(/s$/, '')}...`} className="input-field flex-1 text-sm" autoComplete="off" />
@@ -626,6 +631,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
               <input name="newDescription" placeholder="Description (optional)" className="input-field w-full text-sm" autoComplete="off" />
             )}
           </form>
+          )}
         </div>
       )}
     </div>

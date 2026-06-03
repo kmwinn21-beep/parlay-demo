@@ -761,7 +761,7 @@ export async function POST(
     };
 
     const attendeeIdCache = new Map<string, number>();
-    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string; consent?: string };
+    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string; consent?: string; seniority?: string };
     const newAttendees: NewAttendee[] = [];
     type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string; consent?: string };
     const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
@@ -814,6 +814,7 @@ export async function POST(
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
+          seniority: classifySeniority(p.title?.trim()),
         });
       }
     }
@@ -919,8 +920,8 @@ export async function POST(
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
       const results = await batchInsert(db, newAttendees, (a) => ({
-        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products, consent) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded'],
+        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products, consent, seniority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null],
       }));
       for (let i = 0; i < newAttendees.length; i++) {
         const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();

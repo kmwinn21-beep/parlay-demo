@@ -1,4 +1,5 @@
 import type { Client } from '@libsql/client';
+import { effectiveSeniority } from '@/lib/parsers';
 
 interface ProductMeta {
   functions: Record<string, 'high' | 'med' | 'ignore'>;
@@ -80,13 +81,18 @@ export async function computeAttendeeProductSignals(
   for (const product of products) {
     const meta = product.meta;
     for (const a of attendees) {
-      const buyerRole: string | null = a.seniority
-        ? (meta.seniority[a.seniority] ?? null)
-        : null;
+      const sen = effectiveSeniority(a.seniority ?? undefined, a.title ?? undefined);
+      const senLower = sen.trim().toLowerCase();
+      const buyerRole: string | null = Object.entries(meta.seniority).find(
+        ([k]) => k.trim().toLowerCase() === senLower,
+      )?.[1] ?? null;
 
       let functionMatch: string | null = null;
       if (a.function) {
-        const level = meta.functions[a.function];
+        const fnLower = a.function.trim().toLowerCase();
+        const level = Object.entries(meta.functions).find(
+          ([k]) => k.trim().toLowerCase() === fnLower,
+        )?.[1] ?? undefined;
         if (level === 'high' || level === 'med') {
           functionMatch = JSON.stringify({ fn: a.function, level });
         }
