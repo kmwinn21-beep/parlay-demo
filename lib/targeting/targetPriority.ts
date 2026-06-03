@@ -132,9 +132,9 @@ export interface AttendeeBuyerFitScore {
 }
 
 export const DEFAULT_TARGET_PRIORITY_WEIGHTS: TargetPriorityWeights = {
-  icp_fit: 40,
-  buyer_access: 30,
-  relationship_leverage: 20,
+  icp_fit: 42,
+  buyer_access: 33,
+  relationship_leverage: 15,
   conference_opportunity: 10,
 };
 
