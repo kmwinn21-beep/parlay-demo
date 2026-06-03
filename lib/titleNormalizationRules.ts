@@ -1,6 +1,32 @@
 import type { Client } from '@libsql/client';
 import { db, dbReady } from '@/lib/db';
 import { buildTitleMetadata, conservativeTitleSimilarity, normalizeTitleKey, type BuyerRoleKey, type TitleMatchConfidence, type TitleMatchMetadata, type TitleNormalizationRuleLike } from '@/lib/titleNormalization';
+import { classifySeniority } from '@/lib/parsers';
+
+interface ProductMeta {
+  functions: Record<string, 'high' | 'med' | 'ignore'>;
+  seniority: Record<string, 'decision_maker' | 'influencer' | 'target_title'>;
+  industries: number[];
+  keywords: string[];
+  aliases: string;
+  active: boolean;
+}
+
+function parseMeta(s: string | null | undefined): ProductMeta {
+  try {
+    const p = JSON.parse(s ?? '');
+    return {
+      functions: p.functions ?? {},
+      seniority: p.seniority ?? {},
+      industries: Array.isArray(p.industries) ? p.industries : [],
+      keywords: Array.isArray(p.keywords) ? p.keywords : [],
+      aliases: p.aliases ?? '',
+      active: p.active !== false,
+    };
+  } catch {
+    return { functions: {}, seniority: {}, industries: [], keywords: [], aliases: '', active: true };
+  }
+}
 
 // Ordering matters — findSystemAlias uses .find() so more specific entries must come first.
 // VP+function entries must precede generic C-Suite so "VP of Finance" ≠ CFO.
@@ -55,6 +81,7 @@ interface ResolveContext {
   functions: ConfigLookup;
   seniorities: ConfigLookup;
   configuredTitles: Array<{ title: string; buyerRole: BuyerRoleKey }>;
+  products: Array<{ id: number; meta: ProductMeta }>;
 }
 
 async function getConfigLookup(tenantDb: Client, category: string): Promise<ConfigLookup> {
@@ -280,11 +307,15 @@ function exactOrFuzzyFromConfigSync(ctx: ResolveContext, rawTitle: string): Titl
 }
 
 async function buildResolveContext(tenantDb: Client): Promise<ResolveContext> {
-  const [functions, seniorities, settingsResult] = await Promise.all([
+  const [functions, seniorities, settingsResult, productRows] = await Promise.all([
     getConfigLookup(tenantDb, 'function'),
     getConfigLookup(tenantDb, 'seniority'),
     tenantDb.execute({
       sql: "SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles', 'icp_influencer_titles')",
+      args: [],
+    }).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
+    tenantDb.execute({
+      sql: `SELECT id, metadata FROM config_options WHERE category = 'products' ORDER BY sort_order, value`,
       args: [],
     }).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
   ]);
@@ -303,7 +334,11 @@ async function buildResolveContext(tenantDb: Client): Promise<ResolveContext> {
     ...parse(byKey.get('icp_influencer_titles')).map(title => ({ title, buyerRole: 'influencer' as BuyerRoleKey })),
   ];
 
-  return { functions, seniorities, configuredTitles };
+  const products = productRows.rows
+    .map(row => ({ id: Number(row.id), meta: parseMeta(row.metadata as string | null) }))
+    .filter(p => p.meta.active !== false);
+
+  return { functions, seniorities, configuredTitles, products };
 }
 
 async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, ctx: ResolveContext, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
@@ -327,6 +362,45 @@ async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, ctx: Resol
 
   const configuredAlias = findConfiguredAliasSync(ctx, title);
   if (configuredAlias) return configuredAlias;
+
+  // Step 2.5 — product metadata seniority lookup
+  // classifySeniority() mirrors the upload-time classifier so detectedSeniority
+  // is consistent with what was stored on attendees.seniority at import time.
+  // 'Other' is excluded — it is the catch-all fallback meaning no pattern matched,
+  // so assigning a buyer role would be noise; those attendees keep the review badge.
+  const detectedSeniority = classifySeniority(title);
+  if (detectedSeniority && detectedSeniority !== 'Other') {
+    const roleMappings: Array<'decision_maker' | 'influencer' | 'target_title'> = [];
+    for (const product of ctx.products) {
+      const role = product.meta.seniority?.[detectedSeniority];
+      if (role) roleMappings.push(role);
+    }
+    if (roleMappings.length > 0) {
+      const counts = { decision_maker: 0, influencer: 0, target_title: 0 };
+      for (const r of roleMappings) counts[r]++;
+      let buyerRole: 'decision_maker' | 'influencer' | 'target_title';
+      if (counts.decision_maker >= counts.influencer && counts.decision_maker >= counts.target_title) {
+        buyerRole = 'decision_maker';
+      } else if (counts.influencer >= counts.target_title) {
+        buyerRole = 'influencer';
+      } else {
+        buyerRole = 'target_title';
+      }
+      const agreementRate = Math.max(...Object.values(counts)) / roleMappings.length;
+      const confidence: TitleMatchConfidence = agreementRate >= 0.75 ? 'high' : 'medium';
+      const seniorityOption = ctx.seniorities.options.find(o => o.value === detectedSeniority);
+      return buildTitleMetadata({
+        originalTitle: title,
+        normalizedTitle: title,
+        functionId: null,
+        seniorityId: seniorityOption?.id ?? null,
+        buyerRole,
+        matchType: 'seniority_config',
+        confidence,
+        source: 'seniority_config',
+      });
+    }
+  }
 
   const systemAlias = findSystemAliasSync(ctx, title);
   if (systemAlias) return systemAlias;

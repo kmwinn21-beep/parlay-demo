@@ -64,7 +64,7 @@ export interface StrategyAssessmentInput {
   icpCompanies: { wse: number | null; company_id?: number | null }[];
   icpTierCompanies?: { company_id: number; wse: number | null }[];
   attendeesForBuyerAccess?: Array<{ title: string | null; company_id: number | null; icp: string | null; function: string | null; seniority: string | null }>;
-  titleMetadataByKey?: Record<string, { buyer_role: 'decision_maker' | 'influencer' | 'target_title' | 'ignore' | null; match_type: 'confirmed' | 'configured_alias' | 'system_alias' | 'exact' | 'fuzzy' | 'none' }>;
+  titleMetadataByKey?: Record<string, { buyer_role: 'decision_maker' | 'influencer' | 'target_title' | 'ignore' | null; match_type: 'confirmed' | 'configured_alias' | 'system_alias' | 'seniority_config' | 'exact' | 'fuzzy' | 'none' }>;
   functionPriorityMap?: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>;
   seniorityPriorityMap?: Record<string, 'High' | 'Medium' | 'Low' | 'Ignore'>;
   organizationId?: number | null;
