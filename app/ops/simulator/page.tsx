@@ -53,6 +53,8 @@ interface SimulationResult {
     followUps: number;
     touchpoints: number;
   };
+  convergenceWarning?: string;
+  dim3Warning?: string;
 }
 
 type Density = 'light' | 'moderate' | 'heavy';
@@ -76,10 +78,6 @@ function formatPipeline(val: number): string {
   return `$${val}`;
 }
 
-function pad(s: string, width: number, right = false): string {
-  while (s.length < width) s = right ? s + ' ' : ' ' + s;
-  return s;
-}
 
 export default function SimulatorPage() {
   const [accountId, setAccountId] = useState('');
@@ -307,37 +305,84 @@ export default function SimulatorPage() {
       { label: 'ICP & Target Quality', val: dims.dim1_icp_quality, weight: '20%', contrib: wc.dim1_icp_quality },
       { label: 'Meeting Execution', val: dims.dim2_meeting_execution, weight: '20%', contrib: wc.dim2_meeting_execution },
       { label: 'Pipeline Influence', val: dims.dim3_pipeline_influence, weight: '30%', contrib: wc.dim3_pipeline_influence },
-      { label: 'Audience Breadth', val: dims.dim4_breadth, weight: ' 5%', contrib: wc.dim4_breadth },
+      { label: 'Audience Breadth', val: dims.dim4_breadth, weight: '5%', contrib: wc.dim4_breadth },
       { label: 'Follow-up Execution', val: dims.dim5_followup_execution, weight: '10%', contrib: wc.dim5_followup_execution },
-      { label: 'Net-New Logos', val: dims.dim6_net_new, weight: ' 5%', contrib: wc.dim6_net_new },
+      { label: 'Net-New Logos', val: dims.dim6_net_new, weight: '5%', contrib: wc.dim6_net_new },
       { label: 'Cost Efficiency', val: dims.dim7_cost_efficiency, weight: '10%', contrib: wc.dim7_cost_efficiency },
     ];
 
     const total = dimRows.reduce((s, r) => s + r.contrib, 0);
 
-    const lines = [
-      `Projected CES: ${result.projectedScore}  →  ${scoreTierInfo.label}`,
-      '',
-      'Dimension breakdown:',
-      ...dimRows.map(r =>
-        `  ${pad(r.label, 24, true)}  ${pad(r.val.toFixed(1), 5)}  × ${r.weight}  =  ${pad(r.contrib.toFixed(1), 5)}`
-      ),
-      `  ${'─'.repeat(49)}`,
-      `  ${'Total'.padEnd(24)}  ${' '.repeat(5)}  ${''.padEnd(8)}  ${pad(total.toFixed(1), 5)}`,
-      '',
-      'Activity to be written:',
-      `  ${plan.meetingsScheduled} meetings  (${plan.meetingsHeld} held · ${plan.meetingsScheduled - plan.meetingsHeld} no-show)`,
-      `  ${plan.followUpsCreated} follow-ups  (${plan.followUpsCompleted} completed)`,
-      `  ${plan.touchpoints} touchpoints`,
-      `  ${plan.companiesEngaged} companies engaged`,
-      `  ${plan.netNewLogos} net-new logos`,
-      `  ${formatPipeline(plan.pipelineInfluenced)} pipeline influenced`,
+    const activityItems = [
+      { label: 'Meetings scheduled', value: `${plan.meetingsScheduled} (${plan.meetingsHeld} held)` },
+      { label: 'Follow-ups', value: `${plan.followUpsCreated} (${plan.followUpsCompleted} done)` },
+      { label: 'Touchpoints', value: plan.touchpoints },
+      { label: 'Companies engaged', value: plan.companiesEngaged },
+      { label: 'Net-new logos', value: plan.netNewLogos },
+      { label: 'Pipeline influenced', value: formatPipeline(plan.pipelineInfluenced) },
     ];
 
     return (
-      <pre className="bg-gray-50 border border-gray-200 rounded-md p-4 text-xs font-mono text-gray-800 overflow-x-auto whitespace-pre">
-        {lines.join('\n')}
-      </pre>
+      <div className="space-y-3">
+        {/* Warnings */}
+        {result.convergenceWarning && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            ⚠ {result.convergenceWarning}
+          </p>
+        )}
+        {result.dim3Warning && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+            ℹ {result.dim3Warning}
+          </p>
+        )}
+
+        {/* Score badge */}
+        <div className="flex items-center gap-3">
+          <span className="text-4xl font-bold text-gray-900">{result.projectedScore}</span>
+          <span className={`text-sm font-semibold px-2.5 py-0.5 rounded-full text-white ${scoreTierInfo.color}`}>
+            {scoreTierInfo.label}
+          </span>
+          <span className="text-xs text-gray-400">projected CES</span>
+        </div>
+
+        {/* Dimension breakdown */}
+        <div className="border border-gray-200 rounded-md overflow-hidden">
+          <div className="bg-gray-50 px-3 py-2 flex justify-between text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+            <span>Dimension</span>
+            <span>Score · Weight · Contribution</span>
+          </div>
+          {dimRows.map(r => (
+            <div key={r.label} className="px-3 py-2.5 border-t border-gray-100">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-xs text-gray-700 font-medium">{r.label}</span>
+                <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
+                  {r.val.toFixed(1)} × {r.weight} = <span className="font-semibold text-gray-700">+{r.contrib.toFixed(1)}</span>
+                </span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-blue-400"
+                  style={{ width: `${Math.min(r.val, 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+          <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+            <span className="text-xs font-semibold text-gray-700">Weighted total</span>
+            <span className="text-sm font-bold text-gray-900">{total.toFixed(1)}</span>
+          </div>
+        </div>
+
+        {/* Activity plan */}
+        <div className="grid grid-cols-2 gap-2">
+          {activityItems.map(({ label, value }) => (
+            <div key={label} className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{label}</div>
+              <div className="text-sm font-semibold text-gray-900">{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   };
 
@@ -348,7 +393,7 @@ export default function SimulatorPage() {
       {/* Step 1: Account */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Step 1 — Account</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
             value={accountId}
@@ -356,12 +401,12 @@ export default function SimulatorPage() {
             onKeyDown={e => e.key === 'Enter' && loadAccount()}
             onBlur={loadAccount}
             placeholder="Account ID"
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-64"
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-64"
           />
           <button
             onClick={loadAccount}
             disabled={loadingAccount}
-            className="px-3 py-1.5 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50"
+            className="px-3 py-1.5 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50 sm:flex-shrink-0"
           >
             {loadingAccount ? 'Loading...' : 'Load'}
           </button>
@@ -400,8 +445,8 @@ export default function SimulatorPage() {
       {selectedConference && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h2 className="font-semibold text-gray-900 mb-4">Step 3 — Target Score Range</h2>
-          <div className="flex items-center gap-4 mb-4">
-            <div>
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="flex-1 min-w-[80px]">
               <label className="block text-xs text-gray-500 mb-1">Min</label>
               <input
                 type="number"
@@ -409,10 +454,10 @@ export default function SimulatorPage() {
                 max={100}
                 value={targetMin}
                 onChange={e => setTargetMin(Math.min(Number(e.target.value), targetMax))}
-                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-24"
+                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
               />
             </div>
-            <div>
+            <div className="flex-1 min-w-[80px]">
               <label className="block text-xs text-gray-500 mb-1">Max</label>
               <input
                 type="number"
@@ -420,7 +465,7 @@ export default function SimulatorPage() {
                 max={100}
                 value={targetMax}
                 onChange={e => setTargetMax(Math.max(Number(e.target.value), targetMin))}
-                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-24"
+                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
               />
             </div>
           </div>
@@ -461,15 +506,15 @@ export default function SimulatorPage() {
           </div>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {reps.map(rep => (
-              <label key={rep.id} className="flex items-center gap-2 text-sm cursor-pointer">
+              <label key={rep.id} className="flex items-center gap-2 text-sm cursor-pointer min-w-0">
                 <input
                   type="checkbox"
                   checked={selectedRepIds.has(rep.id)}
                   onChange={() => toggleRep(rep.id)}
-                  className="rounded"
+                  className="rounded flex-shrink-0"
                 />
-                <span className="text-gray-900">{rep.name}</span>
-                <span className="text-gray-400 text-xs">{rep.email}</span>
+                <span className="text-gray-900 flex-shrink-0">{rep.name}</span>
+                <span className="text-gray-400 text-xs truncate">{rep.email}</span>
               </label>
             ))}
           </div>
@@ -491,7 +536,7 @@ export default function SimulatorPage() {
               step={5}
               value={coverage}
               onChange={e => setCoverage(Number(e.target.value))}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-32"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-32"
             />
           </div>
           <div>
@@ -505,11 +550,11 @@ export default function SimulatorPage() {
                     value={d}
                     checked={density === d}
                     onChange={() => setDensity(d)}
-                    className="mt-0.5"
+                    className="mt-0.5 flex-shrink-0"
                   />
                   <div>
                     <span className="text-sm font-medium text-gray-900 capitalize">{d}</span>
-                    <span className="ml-2 text-xs text-gray-500">{densityDescriptions[d]}</span>
+                    <p className="text-xs text-gray-500 mt-0.5">{densityDescriptions[d]}</p>
                   </div>
                 </label>
               ))}
@@ -547,16 +592,21 @@ export default function SimulatorPage() {
           ) : !confirmWrite ? (
             <button
               onClick={() => setConfirmWrite(true)}
-              className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+              className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 w-full sm:w-auto"
             >
-              Write {previewResult.plan.meetingsScheduled} meetings, {previewResult.plan.followUpsCreated} follow-ups, {previewResult.plan.touchpoints} touchpoints
+              Write simulation to {selectedConference?.name}
             </button>
           ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-gray-700">
-                This will write {previewResult.plan.meetingsScheduled} meetings, {previewResult.plan.followUpsCreated} follow-ups, and {previewResult.plan.touchpoints} touchpoints to <strong>{selectedConference.name}</strong> for account <strong>{companyName || accountId}</strong>. Continue?
-              </p>
-              <div className="flex gap-2">
+            <div className="space-y-3">
+              <div className="text-sm text-gray-700 space-y-1">
+                <p>Writing to <strong>{selectedConference.name}</strong> ({companyName || accountId}):</p>
+                <ul className="list-disc list-inside text-gray-600 space-y-0.5 pl-1">
+                  <li>{previewResult.plan.meetingsScheduled} meetings ({previewResult.plan.meetingsHeld} held)</li>
+                  <li>{previewResult.plan.followUpsCreated} follow-ups</li>
+                  <li>{previewResult.plan.touchpoints} touchpoints</li>
+                </ul>
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={runWrite}
                   disabled={writeLoading}
@@ -588,16 +638,16 @@ export default function SimulatorPage() {
           {!confirmReset ? (
             <button
               onClick={() => setConfirmReset(true)}
-              className="px-4 py-2 border border-red-300 text-red-700 text-sm rounded-md hover:bg-red-50"
+              className="px-4 py-2 border border-red-300 text-red-700 text-sm rounded-md hover:bg-red-50 w-full sm:w-auto"
             >
               Reset simulated activity
             </button>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-sm text-gray-700">
-                This will permanently delete all records with <code className="text-xs bg-gray-100 px-1 rounded">source=&apos;simulated&apos;</code> for <strong>{selectedConference.name}</strong>. This cannot be undone.
+                Permanently delete all <code className="text-xs bg-gray-100 px-1 rounded">source=simulated</code> records for <strong>{selectedConference.name}</strong>. Cannot be undone.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={runReset}
                   disabled={resetLoading}
