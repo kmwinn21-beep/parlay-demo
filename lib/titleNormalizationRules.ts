@@ -234,7 +234,17 @@ function findSystemAliasSync(ctx: ResolveContext, rawTitle: string): TitleMatchM
 
 function exactOrFuzzyFromConfigSync(ctx: ResolveContext, rawTitle: string): TitleMatchMetadata {
   const rawKey = normalizeTitleKey(rawTitle);
-  const seniorityExact = ctx.seniorities.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
+
+  // Token-based seniority match: split each label's normalized value into tokens
+  // and check each token as a whole word. This fixes multi-token labels like
+  // "VP/SVP" (→ "vp svp" → ["vp","svp"]) and "C-Suite" (→ "c suite" → ["suite"])
+  // where a simple substring check for the joined string always fails.
+  // Single-token labels (Director, Manager, etc.) produce one token and behave
+  // identically to the old substring check.
+  const seniorityExact = ctx.seniorities.options.find(o => {
+    const tokens = normalizeTitleKey(o.value).split(/\s+/).filter(t => t.length >= 2);
+    return tokens.some(token => new RegExp(`\\b${token}\\b`).test(rawKey));
+  });
   const functionExact = ctx.functions.options.find(o => rawKey.includes(normalizeTitleKey(o.value)));
   if (seniorityExact || functionExact) {
     return buildTitleMetadata({
