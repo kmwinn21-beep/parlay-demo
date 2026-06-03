@@ -32,6 +32,7 @@ interface ProductMeta {
   keywords: string[];
   aliases: string;
   active: boolean;
+  buying_committee?: { decision_maker: boolean; influencer: boolean; target_title: boolean };
 }
 
 // Module-level session cache — invalidated by admin Products & Solutions saves

@@ -19,6 +19,12 @@ interface ConfigOption {
   metadata?: string | null;
 }
 
+interface BuyingCommittee {
+  decision_maker: boolean;
+  influencer: boolean;
+  target_title: boolean;
+}
+
 interface ProductMeta {
   functions: Record<string, 'high' | 'med' | 'ignore'>;
   seniority: Record<string, 'decision_maker' | 'influencer' | 'target_title'>;
@@ -26,6 +32,7 @@ interface ProductMeta {
   keywords: string[];
   aliases: string;
   active: boolean;
+  buying_committee?: BuyingCommittee;
 }
 
 function parseMeta(s: string | null | undefined): ProductMeta {
@@ -39,10 +46,15 @@ function parseMeta(s: string | null | undefined): ProductMeta {
       keywords: Array.isArray(p.keywords) ? p.keywords : [],
       aliases: p.aliases ?? '',
       active: p.active !== false,
+      buying_committee: p.buying_committee ?? undefined,
     };
   } catch {
     return { functions: {}, seniority: {}, industries: [], keywords: [], aliases: '', active: true };
   }
+}
+
+function getBuyingCommittee(meta: ProductMeta): BuyingCommittee {
+  return meta.buying_committee ?? { decision_maker: true, influencer: true, target_title: true };
 }
 
 interface Props {
@@ -267,6 +279,61 @@ function DetailPanel({
           </button>
         </div>
       </div>
+
+      {/* Section 0 — Buying committee */}
+      <SectionCard title="Buying committee" description="Select which roles must be present for a complete buying committee. Decision maker is always required.">
+        {(() => {
+          const bc = getBuyingCommittee(meta);
+          const activeCount = 1 + (bc.influencer ? 1 : 0) + (bc.target_title ? 1 : 0);
+          const roleLabels = ['Decision maker', ...(bc.influencer ? ['Influencer'] : []), ...(bc.target_title ? ['Target title'] : [])];
+          const descriptor = `${activeCount}-role committee · ${roleLabels.join(' + ')} required`;
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Decision maker — always locked */}
+                <span
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
+                  style={{ background: '#E6F1FB', color: '#0C447C', borderColor: '#185FA5' }}
+                >
+                  <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                  Decision maker
+                </span>
+                {/* Influencer — toggleable */}
+                <button
+                  type="button"
+                  onClick={() => onUpdateMeta(product.id, m => ({
+                    ...m,
+                    buying_committee: { ...getBuyingCommittee(m), influencer: !getBuyingCommittee(m).influencer },
+                  }))}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
+                  style={bc.influencer
+                    ? { background: '#EEEDFE', color: '#3C3489', borderColor: '#534AB7' }
+                    : { background: 'white', color: '#6B7280', borderColor: '#D1D5DB' }}
+                >
+                  Influencer
+                </button>
+                {/* Target title — toggleable */}
+                <button
+                  type="button"
+                  onClick={() => onUpdateMeta(product.id, m => ({
+                    ...m,
+                    buying_committee: { ...getBuyingCommittee(m), target_title: !getBuyingCommittee(m).target_title },
+                  }))}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
+                  style={bc.target_title
+                    ? { background: '#FAEEDA', color: '#633806', borderColor: '#854F0B' }
+                    : { background: 'white', color: '#6B7280', borderColor: '#D1D5DB' }}
+                >
+                  Target title
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">{descriptor}</p>
+            </div>
+          );
+        })()}
+      </SectionCard>
 
       {/* Section 1 — Target functions */}
       <SectionCard title="Target functions" description="How relevant is each buyer function to this product?">
