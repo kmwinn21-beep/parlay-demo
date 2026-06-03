@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import type { TargetEntry } from '../PreConferenceReview';
+import { CommitteeDrawer } from './CommitteeDrawer';
+import type { CompanyCommittee } from '@/app/api/conferences/[id]/buying-committee-coverage/route';
 
 // ── Buying committee coverage types ───────────────────────────────────────────
 
@@ -13,7 +15,10 @@ interface BcProduct {
   decision_maker_count: number;
   influencer_count: number;
   target_title_count: number;
-  committee_presence: number;
+  full_committee_count: number;
+  partial_committee_count: number;
+  full_committee_companies: CompanyCommittee[];
+  partial_committee_companies: CompanyCommittee[];
   strength: 'high' | 'moderate' | 'low' | 'none';
   floor_priority: 'high' | 'medium' | 'low' | 'partial' | 'gap';
 }
@@ -24,6 +29,13 @@ interface BcCoverage {
   decision_makers: number;
   target_titles: number;
   products: BcProduct[];
+}
+
+interface DrawerState {
+  productName: string;
+  mode: 'full' | 'partial';
+  companies: CompanyCommittee[];
+  configuredRoles: ('decision_maker' | 'influencer' | 'target_title')[];
 }
 
 // ── Pill helpers ──────────────────────────────────────────────────────────────
@@ -51,8 +63,30 @@ const floorPill = (p: BcProduct['floor_priority']) => {
   return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ ...style, borderColor: style.color + '44' }}>{label}</span>;
 };
 
-const presenceColor = (pct: number) =>
-  pct === 100 ? '#0F6E56' : pct >= 50 ? '#854F0B' : '#A32D2D';
+function CommitteeCountPill({
+  count,
+  variant,
+  onClick,
+}: {
+  count: number;
+  variant: 'full' | 'partial';
+  onClick: () => void;
+}) {
+  if (count === 0) return <span className="text-gray-400">—</span>;
+  const style = variant === 'full'
+    ? { background: '#EAF3DE', color: '#0F6E56', borderColor: '#0F6E5644' }
+    : { background: '#FAEEDA', color: '#854F0B', borderColor: '#854F0B44' };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-2 py-0.5 rounded-full text-[11px] font-semibold border hover:opacity-80 transition-opacity"
+      style={style}
+    >
+      {count} {count === 1 ? 'co.' : 'cos.'}
+    </button>
+  );
+}
 
 // ── Main export ────────────────────────────────────────────────────────────────
 
@@ -67,6 +101,7 @@ export function ProductIcpTab({
   const [coverage, setCoverage] = useState<BcCoverage | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [drawer, setDrawer] = useState<DrawerState | null>(null);
 
   const fetchCoverage = useCallback(async () => {
     try {
@@ -91,6 +126,21 @@ export function ProductIcpTab({
       setRefreshing(false);
     }
   }, [conferenceId, fetchCoverage]);
+
+  const openDrawer = useCallback((prod: BcProduct, mode: 'full' | 'partial') => {
+    const bc = prod.buying_committee;
+    const configuredRoles: ('decision_maker' | 'influencer' | 'target_title')[] = [
+      'decision_maker',
+      ...(bc.influencer ? ['influencer' as const] : []),
+      ...(bc.target_title ? ['target_title' as const] : []),
+    ];
+    setDrawer({
+      productName: prod.product_name,
+      mode,
+      companies: mode === 'full' ? prod.full_committee_companies : prod.partial_committee_companies,
+      configuredRoles,
+    });
+  }, []);
 
   if (loading) {
     return (
@@ -171,7 +221,8 @@ export function ProductIcpTab({
                   <th className="text-center font-semibold text-gray-500 px-3 py-2.5">DMs</th>
                   <th className="text-center font-semibold px-3 py-2.5" style={{ color: '#6B7280' }}>Influencers</th>
                   <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Target titles</th>
-                  <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Committee %</th>
+                  <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Full committee</th>
+                  <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Partial committee</th>
                   <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Strength</th>
                   <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Floor priority</th>
                 </tr>
@@ -187,8 +238,19 @@ export function ProductIcpTab({
                         {influencerDisabled ? '—' : (prod.influencer_count || '—')}
                       </td>
                       <td className="px-3 py-2.5 text-center text-gray-700">{prod.target_title_count || '—'}</td>
-                      <td className="px-3 py-2.5 text-center font-semibold tabular-nums" style={{ color: presenceColor(prod.committee_presence) }}>
-                        {prod.committee_presence}%
+                      <td className="px-3 py-2.5 text-center">
+                        <CommitteeCountPill
+                          count={prod.full_committee_count}
+                          variant="full"
+                          onClick={() => openDrawer(prod, 'full')}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <CommitteeCountPill
+                          count={prod.partial_committee_count}
+                          variant="partial"
+                          onClick={() => openDrawer(prod, 'partial')}
+                        />
                       </td>
                       <td className="px-3 py-2.5 text-center">{strengthPill(prod.strength)}</td>
                       <td className="px-3 py-2.5 text-center">{floorPill(prod.floor_priority)}</td>
@@ -208,7 +270,7 @@ export function ProductIcpTab({
                 </span>
               ))}
             </div>
-            <p className="text-[11px] text-gray-400 w-full">Committee presence = required roles present / roles configured per product in admin settings</p>
+            <p className="text-[11px] text-gray-400 w-full">Full/Partial committee = companies where all / some configured roles are present among ICP-matched attendees</p>
           </div>
         </div>
       ) : (
@@ -216,6 +278,19 @@ export function ProductIcpTab({
           <p className="text-sm text-gray-500">No product ICP matches found for this conference.</p>
           <p className="text-xs text-gray-400 mt-1">Configure products and their function/seniority mappings in admin settings, then refresh.</p>
         </div>
+      )}
+
+      {/* Committee drawer */}
+      {drawer && (
+        <CommitteeDrawer
+          isOpen={true}
+          onClose={() => setDrawer(null)}
+          productName={drawer.productName}
+          mode={drawer.mode}
+          companies={drawer.companies}
+          configuredRoles={drawer.configuredRoles}
+          conferenceId={conferenceId}
+        />
       )}
     </div>
   );

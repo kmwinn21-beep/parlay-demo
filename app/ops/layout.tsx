@@ -15,6 +15,9 @@ export default async function OpsLayout({ children }: { children: React.ReactNod
           <Link href="/ops/metrics" className="text-sm text-gray-600 hover:text-gray-900">
             Metrics
           </Link>
+          <Link href="/ops/simulator" className="text-sm text-gray-600 hover:text-gray-900">
+            Simulator
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-sm text-gray-600">
           <span>{admin.email}</span>
