@@ -28,7 +28,13 @@ export async function GET(
 
   try {
     const confsRes = await client.execute({
-      sql: `SELECT id, name, status, strategy, total_cost, start_date, end_date FROM conferences ORDER BY start_date DESC`,
+      sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.stage_override,
+                   co.action_key AS strategy_key,
+                   cb.return_on_cost
+            FROM conferences c
+            LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+            LEFT JOIN conference_budget cb ON cb.conference_id = c.id
+            ORDER BY c.start_date DESC`,
       args: [],
     });
 
@@ -65,9 +71,9 @@ export async function GET(
       return {
         id: confId,
         name: String(row.name),
-        status: row.status ? String(row.status) : null,
-        strategy: row.strategy ? String(row.strategy) : null,
-        totalCost: row.total_cost != null ? Number(row.total_cost) : null,
+        status: row.stage_override ? String(row.stage_override) : null,
+        strategy: row.strategy_key ? String(row.strategy_key) : null,
+        totalCost: null,
         attendeeCount,
         currentCes: null,
         hasSimulatedActivity,
