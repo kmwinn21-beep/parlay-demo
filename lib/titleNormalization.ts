@@ -1,6 +1,6 @@
 export type BuyerRoleKey = 'decision_maker' | 'influencer' | 'target_title' | 'ignore';
 export type TitleRuleSource = 'user_confirmed' | 'system_alias' | 'fuzzy_match' | 'imported';
-export type TitleMatchType = 'confirmed' | 'configured_alias' | 'system_alias' | 'exact' | 'fuzzy' | 'none';
+export type TitleMatchType = 'confirmed' | 'configured_alias' | 'system_alias' | 'seniority_config' | 'exact' | 'fuzzy' | 'none';
 export type TitleMatchConfidence = 'high' | 'medium' | 'low';
 
 export interface TitleNormalizationRuleLike {
@@ -23,7 +23,7 @@ export interface TitleMatchMetadata {
   buyer_role: BuyerRoleKey | null;
   match_type: TitleMatchType;
   match_confidence: TitleMatchConfidence;
-  source: TitleRuleSource | 'configured_alias' | 'exact' | 'none';
+  source: TitleRuleSource | 'configured_alias' | 'seniority_config' | 'exact' | 'none';
   suggested_match?: string | null;
   needs_review: boolean;
   explanation?: string;
