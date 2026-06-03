@@ -163,8 +163,8 @@ export function CommitteeDrawer({
 
       {/* Drawer panel */}
       <div
-        className="fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden w-full sm:w-[560px]"
-        style={{ animation: 'committeeSlideIn 0.25s ease-out' }}
+        className="fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden"
+        style={{ width: 'calc((100vw - 16rem) / 2)', animation: 'committeeSlideIn 0.25s ease-out' }}
       >
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
