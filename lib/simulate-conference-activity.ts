@@ -177,7 +177,13 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
 
   // Fetch conference record
   const confRes = await client.execute({
-    sql: `SELECT id, name, start_date, end_date, strategy, total_cost, status FROM conferences WHERE id = ?`,
+    sql: `SELECT c.id, c.name, c.start_date, c.end_date,
+                 co.action_key AS strategy_key,
+                 cb.line_items AS budget_line_items
+          FROM conferences c
+          LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+          LEFT JOIN conference_budget cb ON cb.conference_id = c.id
+          WHERE c.id = ?`,
     args: [conferenceId],
   });
   if (!confRes.rows[0]) throw new Error(`Conference ${conferenceId} not found`);
@@ -185,7 +191,15 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const confName = String(conf.name);
   const confStartDate = String(conf.start_date);
   const confEndDate = String(conf.end_date);
-  const totalCost = Number(conf.total_cost ?? 0);
+
+  // Sum line items to get total event cost
+  let totalCost = 0;
+  try {
+    const lineItems = JSON.parse(String(conf.budget_line_items ?? '[]'));
+    if (Array.isArray(lineItems)) {
+      totalCost = lineItems.reduce((sum: number, item: { amount?: number }) => sum + (Number(item.amount) || 0), 0);
+    }
+  } catch { /* no budget data */ }
 
   // Fetch all attendees at conference
   const attendeesRes = await client.execute({
@@ -226,9 +240,12 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const icpCompanies = allCompanies.filter(c => c.icp === 'Yes');
   const icpCompanyIds = new Set(icpCompanies.map(c => c.id));
 
-  // Fetch conference targets
+  // Fetch conference targets (join attendees to get company_id)
   const targetsRes = await client.execute({
-    sql: `SELECT company_id FROM conference_targets WHERE conference_id = ?`,
+    sql: `SELECT DISTINCT a.company_id
+          FROM conference_targets ct
+          JOIN attendees a ON a.id = ct.attendee_id
+          WHERE ct.conference_id = ? AND a.company_id IS NOT NULL`,
     args: [conferenceId],
   }).catch(() => ({ rows: [] as { company_id: unknown }[] }));
   const targetCompanyIds = new Set(targetsRes.rows.map(r => Number(r.company_id)));
