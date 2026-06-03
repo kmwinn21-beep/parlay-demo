@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 
 interface ConferenceItem {
   id: number;
@@ -20,16 +20,6 @@ interface RepItem {
   role: string;
 }
 
-interface DimensionBreakdown {
-  dim1_icp_quality: number;
-  dim2_meeting_execution: number;
-  dim3_pipeline_influence: number;
-  dim4_breadth: number;
-  dim5_followup_execution: number;
-  dim6_net_new: number;
-  dim7_cost_efficiency: number;
-}
-
 interface SimulationPlan {
   meetingsScheduled: number;
   meetingsHeld: number;
@@ -39,22 +29,24 @@ interface SimulationPlan {
   touchpoints: number;
   companiesEngaged: number;
   netNewLogos: number;
-  pipelineInfluenced: number;
 }
 
 interface SimulationResult {
-  projectedScore: number;
-  projectedDimensions: DimensionBreakdown;
-  weightedContributions: DimensionBreakdown;
   plan: SimulationPlan;
+  activitySummary: {
+    targetRange: string;
+    density: string;
+    coveragePct: number;
+    icpAttendeesTotal: number;
+    icpAttendeesTouched: number;
+  };
   written: boolean;
   recordsWritten?: {
     meetings: number;
     followUps: number;
     touchpoints: number;
   };
-  convergenceWarning?: string;
-  dim3Warning?: string;
+  warning?: string;
 }
 
 type Density = 'light' | 'moderate' | 'heavy';
@@ -70,12 +62,6 @@ function scoreTier(score: number): { label: string; color: string } {
   if (score >= 75) return { label: 'Strong', color: 'bg-blue-500' };
   if (score >= 60) return { label: 'Moderate', color: 'bg-amber-500' };
   return { label: 'Weak', color: 'bg-red-500' };
-}
-
-function formatPipeline(val: number): string {
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
-  if (val >= 1_000) return `$${(val / 1_000).toFixed(0)}K`;
-  return `$${val}`;
 }
 
 
@@ -296,92 +282,69 @@ export default function SimulatorPage() {
   const tier = scoreTier(midScore);
 
   const renderPreviewBlock = (result: SimulationResult) => {
-    const dims = result.projectedDimensions;
-    const wc = result.weightedContributions;
-    const plan = result.plan;
-    const scoreTierInfo = scoreTier(result.projectedScore);
+    const { plan, activitySummary } = result;
+    const noShows = plan.meetingsScheduled - plan.meetingsHeld;
 
-    const dimRows: Array<{ label: string; val: number; weight: string; contrib: number }> = [
-      { label: 'ICP & Target Quality', val: dims.dim1_icp_quality, weight: '20%', contrib: wc.dim1_icp_quality },
-      { label: 'Meeting Execution', val: dims.dim2_meeting_execution, weight: '20%', contrib: wc.dim2_meeting_execution },
-      { label: 'Pipeline Influence', val: dims.dim3_pipeline_influence, weight: '30%', contrib: wc.dim3_pipeline_influence },
-      { label: 'Audience Breadth', val: dims.dim4_breadth, weight: '5%', contrib: wc.dim4_breadth },
-      { label: 'Follow-up Execution', val: dims.dim5_followup_execution, weight: '10%', contrib: wc.dim5_followup_execution },
-      { label: 'Net-New Logos', val: dims.dim6_net_new, weight: '5%', contrib: wc.dim6_net_new },
-      { label: 'Cost Efficiency', val: dims.dim7_cost_efficiency, weight: '10%', contrib: wc.dim7_cost_efficiency },
-    ];
+    if (result.warning) {
+      return (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          {result.warning}
+        </p>
+      );
+    }
 
-    const total = dimRows.reduce((s, r) => s + r.contrib, 0);
-
-    const activityItems = [
-      { label: 'Meetings scheduled', value: `${plan.meetingsScheduled} (${plan.meetingsHeld} held)` },
-      { label: 'Follow-ups', value: `${plan.followUpsCreated} (${plan.followUpsCompleted} done)` },
-      { label: 'Touchpoints', value: plan.touchpoints },
-      { label: 'Companies engaged', value: plan.companiesEngaged },
-      { label: 'Net-new logos', value: plan.netNewLogos },
-      { label: 'Pipeline influenced', value: formatPipeline(plan.pipelineInfluenced) },
+    const rows: Array<{ label: string; value: React.ReactNode }> = [
+      {
+        label: 'Attendees touched',
+        value: (
+          <>
+            <span className="font-semibold">{activitySummary.icpAttendeesTouched}</span>
+            {' '}of {activitySummary.icpAttendeesTotal}
+            <span className="text-gray-400"> ({activitySummary.coveragePct}%)</span>
+          </>
+        ),
+      },
+      {
+        label: 'Meetings scheduled',
+        value: (
+          <>
+            <span className="font-semibold">{plan.meetingsScheduled}</span>
+            <span className="text-gray-400"> · {plan.meetingsHeld} held · {noShows} no-show</span>
+          </>
+        ),
+      },
+      {
+        label: 'Follow-ups',
+        value: (
+          <>
+            <span className="font-semibold">{plan.followUpsCreated}</span>
+            <span className="text-gray-400"> · {plan.followUpsCompleted} completed</span>
+          </>
+        ),
+      },
+      { label: 'Touchpoints', value: <span className="font-semibold">{plan.touchpoints}</span> },
+      { label: 'Companies engaged', value: <span className="font-semibold">{plan.companiesEngaged}</span> },
+      { label: 'Net-new logos', value: <span className="font-semibold">{plan.netNewLogos}</span> },
     ];
 
     return (
       <div className="space-y-3">
-        {/* Warnings */}
-        {result.convergenceWarning && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            ⚠ {result.convergenceWarning}
-          </p>
-        )}
-        {result.dim3Warning && (
-          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
-            ℹ {result.dim3Warning}
-          </p>
-        )}
-
-        {/* Score badge */}
-        <div className="flex items-center gap-3">
-          <span className="text-4xl font-bold text-gray-900">{result.projectedScore}</span>
-          <span className={`text-sm font-semibold px-2.5 py-0.5 rounded-full text-white ${scoreTierInfo.color}`}>
-            {scoreTierInfo.label}
-          </span>
-          <span className="text-xs text-gray-400">projected CES</span>
-        </div>
-
-        {/* Dimension breakdown */}
-        <div className="border border-gray-200 rounded-md overflow-hidden">
-          <div className="bg-gray-50 px-3 py-2 flex justify-between text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-            <span>Dimension</span>
-            <span>Score · Weight · Contribution</span>
-          </div>
-          {dimRows.map(r => (
-            <div key={r.label} className="px-3 py-2.5 border-t border-gray-100">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-xs text-gray-700 font-medium">{r.label}</span>
-                <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
-                  {r.val.toFixed(1)} × {r.weight} = <span className="font-semibold text-gray-700">+{r.contrib.toFixed(1)}</span>
-                </span>
-              </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-blue-400"
-                  style={{ width: `${Math.min(r.val, 100)}%` }}
-                />
-              </div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Activity to be written</p>
+        <div className="border border-gray-200 rounded-md overflow-hidden divide-y divide-gray-100">
+          {rows.map(({ label, value }) => (
+            <div key={label} className="flex items-baseline justify-between px-3 py-2 text-sm">
+              <span className="text-gray-500">{label}</span>
+              <span className="text-gray-900 tabular-nums">{value}</span>
             </div>
           ))}
-          <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-            <span className="text-xs font-semibold text-gray-700">Weighted total</span>
-            <span className="text-sm font-bold text-gray-900">{total.toFixed(1)}</span>
+          <div className="px-3 py-2 bg-gray-50 text-xs text-gray-500">
+            Density: <span className="font-medium capitalize text-gray-700">{activitySummary.density}</span>
+            {' · '}Target range: <span className="font-medium text-gray-700">{activitySummary.targetRange}</span>
           </div>
         </div>
-
-        {/* Activity plan */}
-        <div className="grid grid-cols-2 gap-2">
-          {activityItems.map(({ label, value }) => (
-            <div key={label} className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
-              <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{label}</div>
-              <div className="text-sm font-semibold text-gray-900">{value}</div>
-            </div>
-          ))}
-        </div>
+        <p className="text-xs text-gray-400">
+          Actual CES will compute from written activity — this preview shows activity volume only.
+        </p>
       </div>
     );
   };
@@ -602,8 +565,9 @@ export default function SimulatorPage() {
                 <p>Writing to <strong>{selectedConference.name}</strong> ({companyName || accountId}):</p>
                 <ul className="list-disc list-inside text-gray-600 space-y-0.5 pl-1">
                   <li>{previewResult.plan.meetingsScheduled} meetings ({previewResult.plan.meetingsHeld} held)</li>
-                  <li>{previewResult.plan.followUpsCreated} follow-ups</li>
+                  <li>{previewResult.plan.followUpsCreated} follow-ups ({previewResult.plan.followUpsCompleted} completed)</li>
                   <li>{previewResult.plan.touchpoints} touchpoints</li>
+                  <li>{previewResult.plan.companiesEngaged} companies engaged</li>
                 </ul>
               </div>
               <div className="flex flex-wrap gap-2">
