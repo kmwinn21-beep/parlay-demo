@@ -51,6 +51,7 @@ export function normalizeTitleKey(title: string | null | undefined): string {
 
 export function shouldWarnForTitleMetadata(meta: TitleMatchMetadata | null | undefined): boolean {
   if (!meta) return true;
+  if (meta.match_type === 'seniority_config' && meta.buyer_role != null && meta.seniority_id != null) return false;
   return meta.needs_review
     || meta.match_type === 'fuzzy'
     || meta.match_type === 'none'
