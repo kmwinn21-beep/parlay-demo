@@ -514,7 +514,7 @@ export default function SimulatorPage() {
                   className="rounded flex-shrink-0"
                 />
                 <span className="text-gray-900 flex-shrink-0">{rep.name}</span>
-                <span className="text-gray-400 text-xs truncate">{rep.email}</span>
+                <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex-shrink-0">Rep</span>
               </label>
             ))}
           </div>

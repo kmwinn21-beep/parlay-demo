@@ -348,17 +348,15 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     }
   }
 
-  // Rep info
+  // Rep info — IDs reference config_options.id (category='user'), not users.id
   let repNames: Map<number, string> = new Map();
   if (repIds.length > 0) {
     const repRes = await client.execute({
-      sql: `SELECT id, first_name, last_name, email FROM users WHERE id IN (${repIds.map(() => '?').join(',')})`,
+      sql: `SELECT id, value FROM config_options WHERE category = 'user' AND id IN (${repIds.map(() => '?').join(',')})`,
       args: repIds,
-    }).catch(() => ({ rows: [] as { id: unknown; first_name: unknown; last_name: unknown; email: unknown }[] }));
+    }).catch(() => ({ rows: [] as { id: unknown; value: unknown }[] }));
     for (const r of repRes.rows) {
-      const fn = r.first_name ? String(r.first_name) : '';
-      const ln = r.last_name ? String(r.last_name) : '';
-      repNames.set(Number(r.id), `${fn} ${ln}`.trim() || String(r.email));
+      repNames.set(Number(r.id), String(r.value ?? ''));
     }
   }
   // Fallback if no reps configured
@@ -695,7 +693,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, outcome, scheduled_by, source, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 'simulated', ?)
             RETURNING id`,
-      args: [m.attendeeId, conferenceId, meetingDate, meetingTime, m.outcome, m.repId, m.timestamp],
+      args: [m.attendeeId, conferenceId, meetingDate, meetingTime, m.outcome, m.repName, m.timestamp],
     }).catch(() => null);
 
     const meetingId = res?.rows?.[0]?.id != null ? Number(res.rows[0].id) : null;
@@ -711,7 +709,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
         await client.execute({
           sql: `INSERT INTO meeting_notes (meeting_id, notes_text, created_by, created_at)
                 VALUES (?, ?, ?, ?)`,
-          args: [meetingId, noteText, m.repId, m.timestamp],
+          args: [meetingId, noteText, null, m.timestamp],
         }).catch(() => {});
       }
       notesMeetingIdx++;
@@ -738,10 +736,12 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     // Cap to today
     const fuTimestamp = toISOTimestamp(fuDate > today ? today : fuDate);
 
+    const fuRepId = effectiveRepIds[fuIdx % effectiveRepIds.length];
+    const fuRepName = repNames.get(fuRepId) ?? null;
     await client.execute({
-      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, completed, meeting_id, source, created_at)
-            VALUES (?, ?, ?, ?, ?, 'simulated', ?)`,
-      args: [att.id, conferenceId, nextStepsOptions[fuIdx % nextStepsOptions.length], isCompleted ? 1 : 0, parentMeetingId, fuTimestamp],
+      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, assigned_rep, completed, meeting_id, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'simulated', ?)`,
+      args: [att.id, conferenceId, nextStepsOptions[fuIdx % nextStepsOptions.length], fuRepName, isCompleted ? 1 : 0, parentMeetingId, fuTimestamp],
     }).catch(() => {});
 
     followUpsWritten++;
