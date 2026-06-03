@@ -7,6 +7,7 @@ interface ProductMeta {
   keywords: string[];
   aliases: string;
   active: boolean;
+  buying_committee?: { decision_maker: boolean; influencer: boolean; target_title: boolean };
 }
 
 function parseMeta(s: string | null | undefined): ProductMeta {

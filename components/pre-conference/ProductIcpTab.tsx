@@ -53,6 +53,28 @@ interface ApiResponse {
 
 type BuyerRole = 'decision_maker' | 'influencer' | 'target_title' | null;
 
+// ── Buying committee coverage types ───────────────────────────────────────────
+
+interface BcProduct {
+  product_id: number;
+  product_name: string;
+  buying_committee: { decision_maker: boolean; influencer: boolean; target_title: boolean };
+  decision_maker_count: number;
+  influencer_count: number;
+  target_title_count: number;
+  committee_presence: number;
+  strength: 'high' | 'moderate' | 'low' | 'none';
+  floor_priority: 'high' | 'medium' | 'low' | 'partial' | 'gap';
+}
+
+interface BcCoverage {
+  total_attendees: number;
+  icp_matched: number;
+  decision_makers: number;
+  target_titles: number;
+  products: BcProduct[];
+}
+
 // ── Category color palette ─────────────────────────────────────────────────────
 
 const CAT_PALETTE = [
@@ -355,6 +377,9 @@ export function ProductIcpTab({
   const [sortMode, setSortMode] = useState<'buyer_role' | 'function' | 'company_name'>('buyer_role');
   const avgCostPerUnit = useAvgCostPerUnit();
 
+  // Buying committee coverage
+  const [coverage, setCoverage] = useState<BcCoverage | null>(null);
+
   const fetchSignals = useCallback(async () => {
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/product-icp-signals`);
@@ -363,21 +388,28 @@ export function ProductIcpTab({
     finally { setLoading(false); }
   }, [conferenceId]);
 
-  useEffect(() => { fetchSignals(); }, [fetchSignals]);
+  const fetchCoverage = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/buying-committee-coverage`);
+      if (res.ok) setCoverage(await res.json());
+    } catch { /* non-fatal */ }
+  }, [conferenceId]);
+
+  useEffect(() => { fetchSignals(); fetchCoverage(); }, [fetchSignals, fetchCoverage]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/refresh-icp`, { method: 'POST' });
       if (!res.ok) throw new Error('Refresh failed');
-      await fetchSignals();
+      await Promise.all([fetchSignals(), fetchCoverage()]);
       toast.success('Product ICP signals refreshed');
     } catch {
       toast.error('Failed to refresh signals');
     } finally {
       setRefreshing(false);
     }
-  }, [conferenceId, fetchSignals]);
+  }, [conferenceId, fetchSignals, fetchCoverage]);
 
   const columns = data?.columns ?? [];
   const computedAt = data?.computedAt ?? null;
@@ -462,8 +494,113 @@ export function ProductIcpTab({
     );
   }
 
+  // ── Priority pill helpers ──────────────────────────────────────────────────
+  const strengthPill = (s: BcProduct['strength']) => {
+    const map = {
+      high:     { label: 'High',     style: { background: '#EAF3DE', color: '#27500A' } },
+      moderate: { label: 'Moderate', style: { background: '#FAEEDA', color: '#633806' } },
+      low:      { label: 'Low',      style: { background: '#FCEBEB', color: '#791F1F' } },
+      none:     { label: 'None',     style: { background: '#F1EFE8', color: '#5F5E5A' } },
+    };
+    const { label, style } = map[s];
+    return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ ...style, borderColor: style.color + '44' }}>{label}</span>;
+  };
+
+  const floorPill = (p: BcProduct['floor_priority']) => {
+    const map = {
+      high:    { label: 'High',    style: { background: '#EAF3DE', color: '#0F6E56' } },
+      medium:  { label: 'Medium',  style: { background: '#E6F1FB', color: '#0C447C' } },
+      low:     { label: 'Low',     style: { background: '#FAEEDA', color: '#633806' } },
+      partial: { label: 'Partial', style: { background: '#FAEEDA', color: '#633806' } },
+      gap:     { label: 'Gap',     style: { background: '#FCEBEB', color: '#A32D2D' } },
+    };
+    const { label, style } = map[p];
+    return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ ...style, borderColor: style.color + '44' }}>{label}</span>;
+  };
+
+  const presenceColor = (pct: number) =>
+    pct === 100 ? '#0F6E56' : pct >= 50 ? '#854F0B' : '#A32D2D';
+
   return (
     <div className="flex flex-col gap-4 min-h-0">
+      {/* ── Buying committee presence ── */}
+      {coverage && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-brand-primary">Buying committee presence</h3>
+
+          {/* Summary stat cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total attendees', value: coverage.total_attendees },
+              { label: 'ICP matched', value: coverage.icp_matched },
+              { label: 'Decision makers', value: coverage.decision_makers },
+              { label: 'Target titles', value: coverage.target_titles },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+                <p className="text-2xl font-bold text-brand-primary">{value}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-product floor priority table */}
+          {coverage.products.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50/60">
+                      <th className="text-left font-semibold text-gray-500 px-4 py-2.5">Product</th>
+                      <th className="text-center font-semibold text-gray-500 px-3 py-2.5">DMs</th>
+                      <th className="text-center font-semibold px-3 py-2.5" style={{ color: '#6B7280' }}>Influencers</th>
+                      <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Target titles</th>
+                      <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Committee %</th>
+                      <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Strength</th>
+                      <th className="text-center font-semibold text-gray-500 px-3 py-2.5">Floor priority</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coverage.products.map(prod => {
+                      const influencerDisabled = !prod.buying_committee.influencer;
+                      return (
+                        <tr key={prod.product_id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td className="px-4 py-2.5 font-medium text-gray-800">{prod.product_name}</td>
+                          <td className="px-3 py-2.5 text-center text-gray-700">{prod.decision_maker_count || '—'}</td>
+                          <td className="px-3 py-2.5 text-center" style={{ color: influencerDisabled ? '#9CA3AF' : '#374151' }}>
+                            {influencerDisabled ? '—' : (prod.influencer_count || '—')}
+                          </td>
+                          <td className="px-3 py-2.5 text-center text-gray-700">{prod.target_title_count || '—'}</td>
+                          <td className="px-3 py-2.5 text-center font-semibold tabular-nums" style={{ color: presenceColor(prod.committee_presence) }}>
+                            {prod.committee_presence}%
+                          </td>
+                          <td className="px-3 py-2.5 text-center">{strengthPill(prod.strength)}</td>
+                          <td className="px-3 py-2.5 text-center">{floorPill(prod.floor_priority)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Legend */}
+              <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap gap-x-5 gap-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Strength:</span>
+                  {(['high', 'moderate', 'low', 'none'] as const).map(s => (
+                    <span key={s} className="flex items-center gap-1 text-[11px] text-gray-500">
+                      <span className="w-2 h-2 rounded-full inline-block" style={{ background: s === 'high' ? '#27500A' : s === 'moderate' ? '#633806' : s === 'low' ? '#791F1F' : '#9CA3AF' }} />
+                      {s === 'high' ? 'High (5+)' : s === 'moderate' ? 'Moderate (2–4)' : s === 'low' ? 'Low (1)' : 'None (0)'}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 w-full">Committee presence = required roles present / roles configured per product in admin settings</p>
+              </div>
+            </div>
+          )}
+
+          <hr className="border-gray-200" />
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
         {/* Category filter chips */}

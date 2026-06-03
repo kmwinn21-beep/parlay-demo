@@ -1055,4 +1055,6 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Trusted',  2, 'trusted',  1, '#185FA5')`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Personal', 3, 'personal', 1, '#854F0B')`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES ('rep_relationship_type', 'Family',   4, 'family',   1, '#A32D2D')`,
+  // Buying committee: backfill default config into existing product metadata rows
+  `UPDATE config_options SET metadata = json_patch(metadata, '{"buying_committee": {"decision_maker": true, "influencer": true, "target_title": true}}') WHERE category = 'products' AND metadata IS NOT NULL AND json_extract(metadata, '$.buying_committee') IS NULL`,
 ];
