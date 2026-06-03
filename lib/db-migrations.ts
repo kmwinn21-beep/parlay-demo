@@ -1110,4 +1110,7 @@ export const migrations: string[] = [
     ELSE 'Other'
   END
   WHERE seniority IS NULL`,
+  `ALTER TABLE meetings ADD COLUMN source TEXT DEFAULT 'rep'`,
+  `ALTER TABLE follow_ups ADD COLUMN source TEXT DEFAULT 'rep'`,
+  `ALTER TABLE attendee_touchpoints ADD COLUMN source TEXT DEFAULT 'rep'`,
 ];
