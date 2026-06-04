@@ -2,6 +2,17 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 
+interface PreflightChecks {
+  effectivenessDefaults: { ok: boolean; missing: string[]; values: Record<string, number> }
+  budget: { ok: boolean; totalSpend: number; requiredPipelineAmount: number | null }
+  wse: { ok: boolean; totalIcp: number; withWse: number }
+  icpAttendees: { ok: boolean; count: number }
+}
+interface PreflightResult {
+  checks: PreflightChecks
+  allOk: boolean
+}
+
 interface ConferenceItem {
   id: number;
   name: string;
@@ -126,6 +137,12 @@ export default function SimulatorPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetStatus, setResetStatus] = useState('');
 
+  const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightError, setPreflightError] = useState('');
+  const [budgetInput, setBudgetInput] = useState(50000);
+  const [fixLoading, setFixLoading] = useState(false);
+
   const loadAccount = useCallback(async () => {
     if (!accountId.trim()) return;
     setLoadingAccount(true);
@@ -137,6 +154,8 @@ export default function SimulatorPage() {
     setWriteStatus('');
     setResetStatus('');
     setIcpAttendeeCount(0);
+    setPreflightResult(null);
+    setPreflightError('');
 
     try {
       const [confsRes, repsRes] = await Promise.all([
@@ -180,6 +199,8 @@ export default function SimulatorPage() {
     setIcpAttendeeCount(conf?.icpAttendeeCount ?? 0);
     setMeetingsHeld(10);
     setTouchpointsCount(5);
+    setPreflightResult(null);
+    setPreflightError('');
   };
 
   const toggleRep = (id: number) => {
@@ -316,6 +337,65 @@ export default function SimulatorPage() {
       setResetStatus(`Error: ${e instanceof Error ? e.message : 'Reset failed'}`);
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const runPreflight = async () => {
+    if (!selectedConference) return;
+    setPreflightLoading(true);
+    setPreflightError('');
+    setPreflightResult(null);
+    try {
+      const res = await fetch(
+        `/api/ops/simulate-conference-activity/preflight?accountId=${encodeURIComponent(accountId.trim())}&conferenceId=${selectedConference.id}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setPreflightError(data.error ?? 'Preflight check failed');
+        return;
+      }
+      setPreflightResult(data as PreflightResult);
+    } catch (e) {
+      setPreflightError(e instanceof Error ? e.message : 'Preflight check failed');
+    } finally {
+      setPreflightLoading(false);
+    }
+  };
+
+  const runFix = async () => {
+    if (!selectedConference || !preflightResult) return;
+    setFixLoading(true);
+    try {
+      const { checks } = preflightResult;
+      const fixes: {
+        seedEffectivenessDefaults?: boolean;
+        seedBudget?: { totalSpend: number };
+        seedWse?: boolean;
+      } = {};
+      if (!checks.effectivenessDefaults.ok) fixes.seedEffectivenessDefaults = true;
+      if (!checks.budget.ok) fixes.seedBudget = { totalSpend: budgetInput };
+      if (!checks.wse.ok) fixes.seedWse = true;
+
+      const res = await fetch('/api/ops/simulate-conference-activity/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: accountId.trim(),
+          conferenceId: selectedConference.id,
+          fixes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPreflightError(data.error ?? 'Fix failed');
+        return;
+      }
+      // Re-run preflight to refresh status
+      await runPreflight();
+    } catch (e) {
+      setPreflightError(e instanceof Error ? e.message : 'Fix failed');
+    } finally {
+      setFixLoading(false);
     }
   };
 
@@ -496,10 +576,119 @@ export default function SimulatorPage() {
         </div>
       )}
 
-      {/* Step 4: Activity sliders */}
+      {/* Step 4: Environment Setup (pre-flight) */}
       {selectedConference && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 4 — Activity Volume</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Step 4 — Environment Setup</h2>
+          <button
+            onClick={runPreflight}
+            disabled={preflightLoading}
+            className="px-4 py-2 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50"
+          >
+            {preflightLoading ? 'Checking...' : 'Run Pre-flight Check'}
+          </button>
+          {preflightError && <p className="mt-2 text-sm text-red-600">{preflightError}</p>}
+          {preflightResult && (
+            <div className="mt-4 space-y-3">
+              {/* Check: Effectiveness Defaults */}
+              <div className="border border-gray-200 rounded-md p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className={preflightResult.checks.effectivenessDefaults.ok ? 'text-green-600' : 'text-red-600'}>
+                    {preflightResult.checks.effectivenessDefaults.ok ? '✓' : '✗'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900">Effectiveness defaults</span>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {Object.keys(preflightResult.checks.effectivenessDefaults.values).length}/5 keys configured
+                  </span>
+                </div>
+                {!preflightResult.checks.effectivenessDefaults.ok && (
+                  <p className="text-xs text-gray-500 pl-5">
+                    Missing: {preflightResult.checks.effectivenessDefaults.missing.join(', ')}
+                  </p>
+                )}
+              </div>
+
+              {/* Check: Budget */}
+              <div className="border border-gray-200 rounded-md p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={preflightResult.checks.budget.ok ? 'text-green-600' : 'text-red-600'}>
+                    {preflightResult.checks.budget.ok ? '✓' : '✗'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900">Conference budget</span>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {preflightResult.checks.budget.ok
+                      ? `$${preflightResult.checks.budget.totalSpend.toLocaleString()} spend`
+                      : 'No spend data'}
+                  </span>
+                </div>
+                {!preflightResult.checks.budget.ok && (
+                  <div className="flex items-center gap-2 pl-5">
+                    <label className="text-xs text-gray-600">Event spend:</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={budgetInput}
+                      onChange={e => setBudgetInput(Number(e.target.value))}
+                      className="border border-gray-300 rounded px-2 py-0.5 text-sm w-32 tabular-nums"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Check: WSE */}
+              <div className="border border-gray-200 rounded-md p-3 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={preflightResult.checks.wse.ok ? 'text-green-600' : 'text-red-600'}>
+                    {preflightResult.checks.wse.ok ? '✓' : '✗'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900">ICP company deal values</span>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {preflightResult.checks.wse.withWse}/{preflightResult.checks.wse.totalIcp} companies have WSE values
+                  </span>
+                </div>
+                {!preflightResult.checks.wse.ok && (
+                  <span className="ml-5 inline-block text-xs bg-amber-100 text-amber-800 border border-amber-200 rounded px-2 py-0.5">
+                    {preflightResult.checks.wse.totalIcp - preflightResult.checks.wse.withWse} missing — will auto-assign on Fix
+                  </span>
+                )}
+              </div>
+
+              {/* Check: ICP Attendees */}
+              <div className="border border-gray-200 rounded-md p-3">
+                <div className="flex items-center gap-2">
+                  <span className={preflightResult.checks.icpAttendees.ok ? 'text-green-600' : 'text-red-600'}>
+                    {preflightResult.checks.icpAttendees.ok ? '✓' : '✗'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900">ICP attendees</span>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {preflightResult.checks.icpAttendees.count} ICP-matched attendees
+                  </span>
+                </div>
+              </div>
+
+              {!preflightResult.allOk && (
+                <div className="space-y-2">
+                  <button
+                    onClick={runFix}
+                    disabled={fixLoading}
+                    className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {fixLoading ? 'Fixing...' : 'Fix All Issues'}
+                  </button>
+                  <p className="text-xs text-amber-700">
+                    WSE values assigned to companies are permanent and will affect CES calculations for all conferences.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 5: Activity sliders */}
+      {selectedConference && preflightResult?.allOk === true && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Step 5 — Activity Volume</h2>
           <div className="space-y-5">
             <div>
               <div className="flex justify-between items-baseline mb-1">
