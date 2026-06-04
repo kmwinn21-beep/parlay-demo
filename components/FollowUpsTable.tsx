@@ -147,6 +147,7 @@ export function FollowUpsTable({
   onDelete,
   userOptions = [],
   onRepChange,
+  onNextStepsChange,
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
@@ -156,6 +157,7 @@ export function FollowUpsTable({
   onDelete?: (id: number) => void;
   userOptions?: UserOption[];
   onRepChange?: (id: number, rep: string | null) => void;
+  onNextStepsChange?: (id: number, nextSteps: string) => void;
   onBulkToggle?: (ids: number[]) => Promise<void>;
   tableName?: string;
   groupBy?: 'conference' | 'conference-attendee' | 'none';
@@ -163,6 +165,7 @@ export function FollowUpsTable({
   const nextStepsOpts = useConfigWithIds('next_steps');
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
+  const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
@@ -176,6 +179,7 @@ export function FollowUpsTable({
   }
 
   const canEditRep = !!onRepChange && userOptions.length > 0;
+  const canEditNextSteps = !!onNextStepsChange && nextStepsOpts.length > 0;
 
   const startEditRep = (fu: FollowUp) => {
     setEditingRepKey(fu.id);
@@ -281,9 +285,27 @@ export function FollowUpsTable({
           </div>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
-            {resolveConfigValue(fu.next_steps, nextStepsOpts)}
-          </span>
+          {canEditNextSteps && editingNextStepsKey === fu.id ? (
+            <select
+              autoFocus
+              className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              defaultValue={fu.next_steps}
+              onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
+              onBlur={() => setEditingNextStepsKey(null)}
+            >
+              {nextStepsOpts.map(opt => (
+                <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
+              className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+              title={canEditNextSteps ? 'Click to change' : undefined}
+            >
+              {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+            </span>
+          )}
           {(() => {
             const taskLines = parseTaskLines(fu.next_steps_notes);
             if (taskLines.length > 1) {
@@ -354,9 +376,27 @@ export function FollowUpsTable({
               ) : <span className="text-gray-300">—</span>}
             </td>;
             case 'next_step': return <td key="next_step" className="px-3 py-2">
-              <span className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'}`}>
-                {resolveConfigValue(fu.next_steps, nextStepsOpts)}
-              </span>
+              {canEditNextSteps && editingNextStepsKey === fu.id ? (
+                <select
+                  autoFocus
+                  className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                  defaultValue={fu.next_steps}
+                  onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
+                  onBlur={() => setEditingNextStepsKey(null)}
+                >
+                  {nextStepsOpts.map(opt => (
+                    <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
+                  className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+                  title={canEditNextSteps ? 'Click to change' : undefined}
+                >
+                  {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+                </span>
+              )}
               {(() => {
                 const taskLines = parseTaskLines(fu.next_steps_notes);
                 if (taskLines.length > 1) {
@@ -495,6 +535,9 @@ export function FollowUpsTable({
             </tbody>
           </table>
         </div>
+        {quickView && (
+          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+        )}
       </>
     );
   }
@@ -584,6 +627,9 @@ export function FollowUpsTable({
             </tbody>
           </table>
         </div>
+        {quickView && (
+          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+        )}
       </>
     );
   }

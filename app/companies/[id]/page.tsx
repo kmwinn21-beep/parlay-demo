@@ -683,6 +683,26 @@ export default function CompanyDetailPage() {
     }
   };
 
+  const handleNextStepsChange = async (id: number, nextSteps: string) => {
+    setCompanyFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.id === id ? { ...fu, next_steps: nextSteps } : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, next_steps: nextSteps }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Next step updated.');
+    } catch {
+      fetchCompany();
+      toast.error('Failed to update next step.');
+    }
+  };
+
   const handleBulkToggleFollowUp = async (ids: number[]) => {
     // Optimistic: mark all as complete immediately
     setCompanyFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
@@ -1307,7 +1327,7 @@ export default function CompanyDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
               </button>
             </div>
-            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" />
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" />
           </div>
 
           {/* Notes */}

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 
 export interface QuickViewTarget {
   type: 'attendee' | 'company';
@@ -17,16 +16,11 @@ interface Props {
 
 export function QuickViewDrawer({ target, onClose }: Props) {
   const [mounted, setMounted] = useState(false);
-  const { setNavHidden } = useFloatingNavHidden();
 
   useEffect(() => {
     setMounted(true);
-    setNavHidden(true);
-    return () => {
-      setMounted(false);
-      setNavHidden(false);
-    };
-  }, [setNavHidden]);
+    return () => setMounted(false);
+  }, []);
 
   const basePath = target.type === 'attendee' ? '/attendees' : '/companies';
   const href = `${basePath}/${target.id}`;

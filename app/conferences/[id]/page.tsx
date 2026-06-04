@@ -2588,6 +2588,25 @@ export default function ConferenceDetailPage() {
                 toast.error('Failed to update rep.');
               }
             }}
+            onNextStepsChange={async (id, nextSteps) => {
+              setConfFollowUps(prev =>
+                prev.map(fu =>
+                  fu.id === id ? { ...fu, next_steps: nextSteps } : fu
+                )
+              );
+              try {
+                const res = await fetch('/api/follow-ups', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id, next_steps: nextSteps }),
+                });
+                if (!res.ok) throw new Error();
+                toast.success('Next step updated.');
+              } catch {
+                fetchConference();
+                toast.error('Failed to update next step.');
+              }
+            }}
           />
             );
           })()}

@@ -214,17 +214,21 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const totalTargets = targetsRes.rows.length;
 
   const configRes = await client.execute({
-    sql: `SELECT id, category, value, action_key FROM config_options WHERE (action_key = 'meeting_held' AND category = 'action') OR category = 'touchpoints' ORDER BY sort_order`,
+    sql: `SELECT id, category, value, action_key FROM config_options WHERE (action_key = 'meeting_held' AND category = 'action') OR category = 'touchpoints' OR category = 'next_steps' ORDER BY sort_order`,
     args: [],
   });
   let meetingHeldValue = 'Held';
   let touchpointOptionId: number | null = null;
+  const nextStepsIds: number[] = [];
   for (const r of configRes.rows) {
     if (String(r.action_key) === 'meeting_held') {
       meetingHeldValue = String(r.value);
     }
     if (String(r.category) === 'touchpoints' && touchpointOptionId === null) {
       touchpointOptionId = Number(r.id);
+    }
+    if (String(r.category) === 'next_steps') {
+      nextStepsIds.push(Number(r.id));
     }
   }
 
@@ -416,11 +420,12 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     const meetingDateStr = timestamp.slice(0, 10);
     const meetingTime = timestamp.slice(11, 19);
 
+    const scheduledBy = repId > 0 ? String(repId) : null;
     const res = await client.execute({
       sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, outcome, scheduled_by, source, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 'simulated', ?)
             RETURNING id`,
-      args: [att.id, conferenceId, meetingDateStr, meetingTime, outcome.outcome, repName, timestamp],
+      args: [att.id, conferenceId, meetingDateStr, meetingTime, outcome.outcome, scheduledBy, timestamp],
     }).catch(() => null);
 
     const meetingId = res?.rows?.[0]?.id != null ? Number(res.rows[0].id) : null;
@@ -445,7 +450,7 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
 
   // Write follow-ups (one per meeting held, then per touchpoint, up to followUpsCreated)
   let followUpsWritten = 0;
-  const nextStepsOptions = ['Schedule Follow Up Meeting', 'General Follow Up', 'Other'];
+  const nextStepsOptions = ['Schedule Follow Up Meeting', 'General Follow Up', 'Other']; // fallback labels if config not loaded
 
   for (let fuIdx = 0; fuIdx < followUpsCreated; fuIdx++) {
     const isMeetingFu = fuIdx < meetingAttendees.length;
@@ -469,12 +474,15 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     const fuDaysAfter = randInt(2, 10);
     const fuDate = addDays(confEndDate, fuDaysAfter);
     const fuTimestamp = toISOTimestamp(fuDate > today ? today : fuDate);
-    const fuRepName = repNames.get(fuRepId) ?? null;
+    const fuAssignedRep = fuRepId > 0 ? String(fuRepId) : null;
+    const fuNextStepsId = nextStepsIds.length > 0
+      ? String(nextStepsIds[fuIdx % nextStepsIds.length])
+      : nextStepsOptions[fuIdx % nextStepsOptions.length];
 
     await client.execute({
       sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, assigned_rep, completed, meeting_id, source, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 'simulated', ?)`,
-      args: [att.id, conferenceId, nextStepsOptions[fuIdx % nextStepsOptions.length], fuRepName, isCompleted ? 1 : 0, parentMeetingId, fuTimestamp],
+      args: [att.id, conferenceId, fuNextStepsId, fuAssignedRep, isCompleted ? 1 : 0, parentMeetingId, fuTimestamp],
     }).catch(() => {});
 
     followUpsWritten++;

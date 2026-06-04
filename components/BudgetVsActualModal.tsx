@@ -29,12 +29,13 @@ function genId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function parseDollar(val: string): number | null {
-  const n = parseFloat(val.replace(/[^0-9.]/g, ''));
+function parseDollar(val: string | number | null | undefined): number | null {
+  if (val == null) return null;
+  const n = parseFloat(String(val).replace(/[^0-9.]/g, ''));
   return isNaN(n) ? null : n;
 }
 
-function calcVariance(budget: string, actual: string): number | null {
+function calcVariance(budget: string | number | null | undefined, actual: string | number | null | undefined): number | null {
   const b = parseDollar(budget);
   const a = parseDollar(actual);
   if (b == null || a == null || b === 0) return null;
@@ -96,7 +97,11 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
       setRequiredPipelineMultiple(budgetData.required_pipeline_multiple ?? '3.5');
 
       if (budgetData.line_items && budgetData.line_items.length > 0) {
-        setItems(budgetData.line_items);
+        setItems(budgetData.line_items.map(it => ({
+          ...it,
+          budget: it.budget != null ? String(it.budget) : '',
+          actual: it.actual != null ? String(it.actual) : '',
+        })));
       } else {
         setItems(defaultTypes.map(label => ({ id: genId(), label, budget: '', actual: '' })));
       }
