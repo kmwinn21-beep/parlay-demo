@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
       if (valid.length > 0) {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
-        const [existingCoRes, existingAtRes] = await Promise.all([
+        const [existingCoRes, existingAtRes, userRows, usersWithConfig] = await Promise.all([
           db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user FROM companies', args: [] }),
           db.execute({
             sql: `SELECT a.id, a.first_name, a.last_name, a.email,
@@ -182,7 +182,79 @@ export async function POST(request: NextRequest) {
                   LEFT JOIN companies c ON a.company_id = c.id`,
             args: [],
           }),
+          db.execute({ sql: 'SELECT id, value FROM config_options WHERE category = ? ORDER BY sort_order, value', args: ['user'] }),
+          db.execute({ sql: 'SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL', args: [] }),
         ]);
+
+        // ── Step 1b: Build user resolution infrastructure (same as conference details upload) ──
+        const userOptions: Array<{ id: number; value: string }> = userRows.rows.map(r => ({
+          id: Number(r.id),
+          value: String(r.value),
+        }));
+        const userDisplayNameMap = new Map<string, number>();
+        for (const r of usersWithConfig.rows) {
+          const configId = Number(r.config_id);
+          if (r.display_name && String(r.display_name).trim()) {
+            userDisplayNameMap.set(String(r.display_name).trim().toLowerCase(), configId);
+          }
+          if (r.email && String(r.email).trim()) {
+            userDisplayNameMap.set(String(r.email).trim().toLowerCase(), configId);
+          }
+        }
+        const normalizeOwnerName = (value: string): string =>
+          value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+            .replace(/[,.‘’`\-]/g, ' ').replace(/\s+/g, ' ').trim();
+        const normalizeNameKey = (value: string): string => {
+          const tokens = normalizeOwnerName(value).split(' ').filter(Boolean);
+          if (tokens.length === 0) return '';
+          if (tokens.length === 1) return tokens[0];
+          return `${tokens[0]} ${tokens[tokens.length - 1]}`;
+        };
+        const normalizeReversedNameKey = (value: string): string => {
+          const v = value.trim();
+          if (!v.includes(',')) return '';
+          const parts = v.split(',').map(s => s.trim()).filter(Boolean);
+          if (parts.length < 2) return '';
+          return normalizeNameKey(`${parts.slice(1).join(' ')} ${parts[0]}`);
+        };
+        const splitOwnerTokens = (raw: string): string[] =>
+          raw.split(/\s*(?:;|\||\/|&|\band\b)\s*/i).map(s => s.trim()).filter(Boolean);
+        const userNameIndex = new Map<string, Set<number>>();
+        for (const r of usersWithConfig.rows) {
+          const id = Number(r.config_id);
+          const display = String(r.display_name ?? '').trim();
+          if (!id || !display) continue;
+          const key = normalizeNameKey(display);
+          if (key) {
+            const set = userNameIndex.get(key) ?? new Set<number>();
+            set.add(id);
+            userNameIndex.set(key, set);
+          }
+        }
+        const resolveUserId = (raw: string | undefined): string | null => {
+          if (!raw?.trim()) return null;
+          const ids = new Set<number>();
+          for (const part of splitOwnerTokens(raw)) {
+            const num = parseInt(part, 10);
+            if (!isNaN(num) && userOptions.some(u => u.id === num)) { ids.add(num); continue; }
+            const lower = part.toLowerCase();
+            const exactMatch = userOptions.find(u => u.value.toLowerCase() === lower);
+            if (exactMatch) { ids.add(exactMatch.id); continue; }
+            const displayId = userDisplayNameMap.get(lower);
+            if (displayId != null) { ids.add(displayId); continue; }
+            const directKey = normalizeNameKey(part);
+            const reversedKey = normalizeReversedNameKey(part);
+            const directMatches = directKey ? userNameIndex.get(directKey) : null;
+            const reversedMatches = reversedKey ? userNameIndex.get(reversedKey) : null;
+            const merged = new Set<number>([
+              ...(directMatches ? Array.from(directMatches) : []),
+              ...(reversedMatches ? Array.from(reversedMatches) : []),
+            ]);
+            if (merged.size === 1) ids.add(Array.from(merged)[0]);
+          }
+          if (ids.size === 0) return null;
+          return Array.from(ids).join(',');
+        };
 
         // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
         type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; assigned_user?: string | null };
@@ -210,7 +282,8 @@ export async function POST(request: NextRequest) {
               companyTypeMap.set(p.company.trim(), p.company_type.trim());
             }
             if (p.assigned_user?.trim() && !companyAssignedUserMap.has(p.company.trim())) {
-              companyAssignedUserMap.set(p.company.trim(), p.assigned_user.trim());
+              const resolved = resolveUserId(p.assigned_user.trim());
+              if (resolved) companyAssignedUserMap.set(p.company.trim(), resolved);
             }
             if (p.website?.trim() && !companyWebsiteMap.has(p.company.trim())) {
               companyWebsiteMap.set(p.company.trim(), p.website.trim());
@@ -268,9 +341,9 @@ export async function POST(request: NextRequest) {
           await batchInsert(db, existingToUpdate, (n) => {
             const coId = companyIdCache.get(n)!;
             const existingCompany = existingCompanies.find((c) => c.id === coId);
-            // If the company already has 2 or more assigned users in the DB, do not overwrite from the uploaded list
+            // If the company already has 2 or more valid resolved user IDs, do not overwrite from the uploaded list
             const existingAssignedCount = existingCompany?.assigned_user
-              ? existingCompany.assigned_user.split(',').filter((s) => s.trim()).length
+              ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).length
               : 0;
             const assignedUserArg = existingAssignedCount >= 2 ? null : (companyAssignedUserMap.get(n) || null);
             return {
