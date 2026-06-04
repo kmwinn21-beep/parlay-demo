@@ -762,18 +762,18 @@ export default function SimulatorPage() {
         </div>
       )}
 
-      {/* Step 5: Live CES estimate */}
-      {selectedConference && (
+      {/* Step 6: Live CES estimate */}
+      {selectedConference && preflightResult?.allOk === true && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 5 — CES Estimate</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Step 6 — CES Estimate</h2>
           {renderLiveEstimate()}
         </div>
       )}
 
-      {/* Step 6: Preview */}
-      {selectedConference && (
+      {/* Step 7: Preview */}
+      {selectedConference && preflightResult?.allOk === true && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 6 — Preview</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Step 7 — Preview</h2>
           <button
             onClick={runPreview}
             disabled={previewLoading}
@@ -790,10 +790,10 @@ export default function SimulatorPage() {
         </div>
       )}
 
-      {/* Step 7: Write */}
-      {selectedConference && (
+      {/* Step 8: Write */}
+      {selectedConference && preflightResult?.allOk === true && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 7 — Write</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Step 8 — Write</h2>
           {!previewResult ? (
             <p className="text-sm text-gray-500">Run preview first before writing.</p>
           ) : !confirmWrite ? (
@@ -839,10 +839,10 @@ export default function SimulatorPage() {
         </div>
       )}
 
-      {/* Step 8: Reset */}
+      {/* Step 9: Reset */}
       {selectedConference?.hasSimulatedActivity && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 8 — Reset Simulated Activity</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Step 9 — Reset Simulated Activity</h2>
           {!confirmReset ? (
             <button
               onClick={() => setConfirmReset(true)}
