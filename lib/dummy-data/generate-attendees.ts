@@ -169,7 +169,7 @@ function makeRow(
     'Services': '',
     'Conference': conferenceName,
     'Company Type': companyType,
-    'WSE': units,
+    'Units': units,
   };
   for (const col of customColumns) {
     row[col.name] = generateCustomValue(col, companyName, companyDomain);
@@ -233,7 +233,7 @@ function returningToRow(
     'Services': '',
     'Conference': conferenceName,
     'Company Type': r.company_type,
-    'WSE': '',
+    'Units': '',
   };
   for (const col of customColumns) {
     row[col.name] = generateCustomValue(col, String(r.company_name ?? ''), companyDomain);

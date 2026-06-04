@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 
 const STANDARD_COLUMNS = [
   'Full Name', 'Job Title', 'Email Address', 'Company Name', 'Website',
-  'Function', 'Assigned Rep', 'Services', 'Conference', 'Company Type', 'WSE',
+  'Function', 'Assigned Rep', 'Services', 'Conference', 'Company Type', 'Units',
 ];
 
 export function exportToXlsx(rows: Record<string, unknown>[]): Buffer {
