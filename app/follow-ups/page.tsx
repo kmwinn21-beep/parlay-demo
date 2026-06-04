@@ -896,6 +896,22 @@ export default function FollowUpsPage() {
     }
   };
 
+  const handleNextStepsChange = async (id: number, nextSteps: string) => {
+    setFollowUps((prev) => prev.map((fu) => fu.id === id ? { ...fu, next_steps: nextSteps } : fu));
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, next_steps: nextSteps }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Next step updated.');
+    } catch {
+      fetchData();
+      toast.error('Failed to update next step.');
+    }
+  };
+
   const toggleOutcome = (v: string) => setFilterOutcome(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
   const toggleNextStep = (v: string) => setFilterNextStep(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
 
@@ -1546,6 +1562,7 @@ export default function FollowUpsPage() {
                         onDelete={handleDeleteFollowUp}
                         userOptions={userOptions}
                         onRepChange={handleRepChange}
+                        onNextStepsChange={handleNextStepsChange}
                       />
                     )}
                   </div>

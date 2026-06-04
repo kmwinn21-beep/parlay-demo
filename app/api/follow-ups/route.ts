@@ -137,7 +137,7 @@ export async function PATCH(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { id, completed, assigned_rep } = body;
+    const { id, completed, assigned_rep, next_steps } = body;
 
     if (id == null) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -161,6 +161,11 @@ export async function PATCH(request: NextRequest) {
     if ('assigned_rep' in body) {
       setClauses.push('assigned_rep = ?');
       args.push(assigned_rep ?? null);
+    }
+
+    if ('next_steps' in body && next_steps != null) {
+      setClauses.push('next_steps = ?');
+      args.push(String(next_steps));
     }
 
     if (setClauses.length === 0) {
