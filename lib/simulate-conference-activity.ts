@@ -146,10 +146,16 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
 
   const confRes = await client.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date,
-                 c.required_pipeline_amount, c.total_cost,
-                 co.action_key AS strategy_key
+                 co.action_key AS strategy_key,
+                 cb.required_pipeline_amount,
+                 COALESCE((
+                   SELECT SUM(COALESCE(NULLIF(CAST(json_extract(li.value,'$.actual') AS REAL),0),
+                                       CAST(json_extract(li.value,'$.budget') AS REAL),0))
+                   FROM json_each(cb.line_items) li
+                 ), 0) AS total_cost
           FROM conferences c
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+          LEFT JOIN conference_budget cb ON cb.conference_id = c.id
           WHERE c.id = ?`,
     args: [conferenceId],
   });
