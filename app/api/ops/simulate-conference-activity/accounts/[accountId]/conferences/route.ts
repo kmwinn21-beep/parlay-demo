@@ -41,12 +41,23 @@ export async function GET(
     const conferences = await Promise.all(confsRes.rows.map(async (row) => {
       const confId = Number(row.id);
 
-      // Count attendees
-      const attRes = await client.execute({
-        sql: `SELECT COUNT(*) as cnt FROM conference_attendees WHERE conference_id = ?`,
-        args: [confId],
-      }).catch(() => ({ rows: [{ cnt: 0 }] }));
+      // Count attendees and ICP-matched attendees
+      const [attRes, icpRes] = await Promise.all([
+        client.execute({
+          sql: `SELECT COUNT(*) as cnt FROM conference_attendees WHERE conference_id = ?`,
+          args: [confId],
+        }).catch(() => ({ rows: [{ cnt: 0 }] })),
+        client.execute({
+          sql: `SELECT COUNT(DISTINCT a.id) as cnt
+                FROM conference_attendees ca
+                JOIN attendees a ON a.id = ca.attendee_id
+                JOIN companies co ON co.id = a.company_id
+                WHERE ca.conference_id = ? AND co.icp = 'Yes'`,
+          args: [confId],
+        }).catch(() => ({ rows: [{ cnt: 0 }] })),
+      ]);
       const attendeeCount = Number(attRes.rows[0]?.cnt ?? 0);
+      const icpAttendeeCount = Number(icpRes.rows[0]?.cnt ?? 0);
 
       // Check for simulated activity
       const [mRes, fRes, tRes] = await Promise.all([
@@ -75,6 +86,7 @@ export async function GET(
         strategy: row.strategy_key ? String(row.strategy_key) : null,
         totalCost: null,
         attendeeCount,
+        icpAttendeeCount,
         currentCes: null,
         hasSimulatedActivity,
       };

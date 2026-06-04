@@ -27,15 +27,15 @@ export async function GET(
 
   try {
     const usersRes = await client.execute({
-      sql: `SELECT id, first_name, last_name, email, role FROM users WHERE active = 1 ORDER BY first_name, last_name`,
+      sql: `SELECT id, value FROM config_options WHERE category = 'user' ORDER BY sort_order, value`,
       args: [],
     });
 
     const reps = usersRes.rows.map(r => ({
       id: Number(r.id),
-      name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || String(r.email),
-      email: String(r.email),
-      role: String(r.role),
+      name: String(r.value ?? ''),
+      email: '',
+      role: 'rep',
     }));
 
     return NextResponse.json({ reps });

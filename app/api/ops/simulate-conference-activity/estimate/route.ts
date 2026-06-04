@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { accountId, conferenceId, repIds, meetingsHeld, touchpoints, followUpCompletionPct, dryRun } = body;
+  const { accountId, conferenceId, repIds, meetingsHeld, touchpoints, followUpCompletionPct } = body;
 
   if (!accountId || typeof accountId !== 'string') {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
@@ -33,9 +33,6 @@ export async function POST(request: NextRequest) {
   if (typeof followUpCompletionPct !== 'number' || followUpCompletionPct < 0 || followUpCompletionPct > 100) {
     return NextResponse.json({ error: 'followUpCompletionPct must be 0-100' }, { status: 400 });
   }
-  if (typeof dryRun !== 'boolean') {
-    return NextResponse.json({ error: 'dryRun must be a boolean' }, { status: 400 });
-  }
 
   try {
     const result = await simulateConferenceActivity({
@@ -45,9 +42,9 @@ export async function POST(request: NextRequest) {
       meetingsHeld,
       touchpoints,
       followUpCompletionPct,
-      dryRun,
+      dryRun: true,
     });
-    return NextResponse.json(result);
+    return NextResponse.json({ plan: result.plan, cesEstimate: result.cesEstimate, warning: result.warning });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

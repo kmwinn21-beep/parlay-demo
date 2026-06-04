@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 
 interface ConferenceItem {
   id: number;
@@ -11,6 +11,7 @@ interface ConferenceItem {
   attendeeCount: number;
   currentCes: number | null;
   hasSimulatedActivity: boolean;
+  icpAttendeeCount?: number;
 }
 
 interface RepItem {
@@ -20,64 +21,83 @@ interface RepItem {
   role: string;
 }
 
-interface DimensionBreakdown {
-  dim1_icp_quality: number;
-  dim2_meeting_execution: number;
-  dim3_pipeline_influence: number;
-  dim4_breadth: number;
-  dim5_followup_execution: number;
-  dim6_net_new: number;
-  dim7_cost_efficiency: number;
-}
-
 interface SimulationPlan {
   meetingsScheduled: number;
   meetingsHeld: number;
-  meetingsWithOutcomes: number;
+  meetingsNoShow: number;
   followUpsCreated: number;
   followUpsCompleted: number;
+  followUpsOpen: number;
   touchpoints: number;
   companiesEngaged: number;
   netNewLogos: number;
-  pipelineInfluenced: number;
 }
 
 interface SimulationResult {
-  projectedScore: number;
-  projectedDimensions: DimensionBreakdown;
-  weightedContributions: DimensionBreakdown;
   plan: SimulationPlan;
+  cesEstimate: { low: number; high: number };
   written: boolean;
-  recordsWritten?: {
-    meetings: number;
-    followUps: number;
-    touchpoints: number;
-  };
-  convergenceWarning?: string;
-  dim3Warning?: string;
+  recordsWritten?: { meetings: number; followUps: number; touchpoints: number };
+  warning?: string;
 }
 
-type Density = 'light' | 'moderate' | 'heavy';
-
-const densityDescriptions: Record<Density, string> = {
-  light: 'Fewer meetings, lower follow-up rates — conservative simulation.',
-  moderate: 'Balanced activity mix — recommended for most conferences.',
-  heavy: 'High meeting volume and follow-up completion — aggressive simulation.',
-};
-
-function scoreTier(score: number): { label: string; color: string } {
-  if (score >= 90) return { label: 'Exceptional', color: 'bg-green-500' };
-  if (score >= 75) return { label: 'Strong', color: 'bg-blue-500' };
-  if (score >= 60) return { label: 'Moderate', color: 'bg-amber-500' };
-  return { label: 'Weak', color: 'bg-red-500' };
+function cesTierLabel(score: number): string {
+  if (score >= 90) return 'Exceptional';
+  if (score >= 75) return 'Strong';
+  if (score >= 60) return 'Moderate';
+  return 'Weak';
 }
 
-function formatPipeline(val: number): string {
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
-  if (val >= 1_000) return `$${(val / 1_000).toFixed(0)}K`;
-  return `$${val}`;
+function cesTierColor(score: number): string {
+  if (score >= 90) return 'text-green-700';
+  if (score >= 75) return 'text-blue-700';
+  if (score >= 60) return 'text-amber-700';
+  return 'text-red-700';
 }
 
+function computeClientCES(
+  meetingsHeld: number,
+  touchpoints: number,
+  followUpCompletionPct: number,
+  icpAttendeeCount: number,
+): { low: number; high: number } {
+  const meetingsScheduled = Math.round(meetingsHeld / 0.85);
+  const followUpsCreated = meetingsHeld + touchpoints;
+  const holdRate = meetingsHeld / Math.max(meetingsScheduled, 1);
+  const fuSchedulingRate = Math.min(followUpsCreated / Math.max(meetingsHeld, 1), 1);
+  const dim2 = ((holdRate + fuSchedulingRate) / 2) * 100;
+  const dim5 = followUpCompletionPct;
+
+  // Client-side approximations for known dims
+  // dim1 — assume engaged companies ≈ min(meetingsHeld, icpAttendeeCount) unique
+  const estimatedEngaged = Math.min(meetingsHeld, icpAttendeeCount);
+  const icpRate = Math.min(estimatedEngaged / Math.max(icpAttendeeCount, 1), 1);
+  const dim1 = icpRate * 100;
+  // dim4 — engagement breadth: same as icpRate
+  const dim4 = dim1;
+
+  // Uncertain dims: dim3 (pipeline), dim6 (net-new), dim7 (cost efficiency)
+  // Weights: dim1=0.20, dim2=0.20, dim3=0.30, dim4=0.05, dim5=0.10, dim6=0.05, dim7=0.10
+  // No pipeline target assumed client-side → redistribute dim3's 0.30 proportionally
+  const w1 = 0.20, w2 = 0.20, w4 = 0.05, w5 = 0.10, w6 = 0.05, w7 = 0.10;
+  const otherSum = w1 + w2 + w4 + w5 + w6 + w7;
+  const scale = (otherSum + 0.30) / otherSum;
+  const sw1 = w1 * scale, sw2 = w2 * scale, sw4 = w4 * scale, sw5 = w5 * scale, sw6 = w6 * scale, sw7 = w7 * scale;
+
+  const dim6Optimistic = 60;
+  const dim6Conservative = 0;
+  const dim7Optimistic = 75;
+  const dim7Conservative = 50;
+
+  const high = Math.min(100, Math.round(
+    dim1 * sw1 + dim2 * sw2 + dim4 * sw4 + dim5 * sw5 + dim6Optimistic * sw6 + dim7Optimistic * sw7
+  ));
+  const low = Math.min(100, Math.round(
+    dim1 * sw1 + dim2 * sw2 + dim4 * sw4 + dim5 * sw5 + dim6Conservative * sw6 + dim7Conservative * sw7
+  ));
+
+  return { low: Math.max(0, low), high: Math.max(0, high) };
+}
 
 export default function SimulatorPage() {
   const [accountId, setAccountId] = useState('');
@@ -88,11 +108,11 @@ export default function SimulatorPage() {
   const [accountError, setAccountError] = useState('');
 
   const [selectedConference, setSelectedConference] = useState<ConferenceItem | null>(null);
-  const [targetMin, setTargetMin] = useState(75);
-  const [targetMax, setTargetMax] = useState(85);
   const [selectedRepIds, setSelectedRepIds] = useState<Set<number>>(new Set());
-  const [coverage, setCoverage] = useState(70);
-  const [density, setDensity] = useState<Density>('moderate');
+  const [meetingsHeld, setMeetingsHeld] = useState(10);
+  const [touchpointsCount, setTouchpointsCount] = useState(5);
+  const [followUpCompletionPct, setFollowUpCompletionPct] = useState(75);
+  const [icpAttendeeCount, setIcpAttendeeCount] = useState(0);
 
   const [previewResult, setPreviewResult] = useState<SimulationResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -116,6 +136,7 @@ export default function SimulatorPage() {
     setPreviewResult(null);
     setWriteStatus('');
     setResetStatus('');
+    setIcpAttendeeCount(0);
 
     try {
       const [confsRes, repsRes] = await Promise.all([
@@ -156,6 +177,9 @@ export default function SimulatorPage() {
     setResetStatus('');
     setConfirmWrite(false);
     setConfirmReset(false);
+    setIcpAttendeeCount(conf?.icpAttendeeCount ?? 0);
+    setMeetingsHeld(10);
+    setTouchpointsCount(5);
   };
 
   const toggleRep = (id: number) => {
@@ -170,6 +194,14 @@ export default function SimulatorPage() {
   const selectAllReps = () => setSelectedRepIds(new Set(reps.map(r => r.id)));
   const deselectAllReps = () => setSelectedRepIds(new Set());
 
+  const followUpsCreated = meetingsHeld + touchpointsCount;
+  const followUpsCompleted = Math.round(followUpsCreated * (followUpCompletionPct / 100));
+
+  const liveEstimate = useMemo(
+    () => computeClientCES(meetingsHeld, touchpointsCount, followUpCompletionPct, icpAttendeeCount),
+    [meetingsHeld, touchpointsCount, followUpCompletionPct, icpAttendeeCount],
+  );
+
   const runPreview = async () => {
     if (!selectedConference) return;
     setPreviewLoading(true);
@@ -179,18 +211,16 @@ export default function SimulatorPage() {
     setWriteStatus('');
 
     try {
-      const res = await fetch('/api/ops/simulate-conference-activity', {
+      const res = await fetch('/api/ops/simulate-conference-activity/estimate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           accountId: accountId.trim(),
           conferenceId: selectedConference.id,
-          targetScoreMin: targetMin,
-          targetScoreMax: targetMax,
           repIds: Array.from(selectedRepIds),
-          attendeeCoverage: coverage / 100,
-          density,
-          dryRun: true,
+          meetingsHeld,
+          touchpoints: touchpointsCount,
+          followUpCompletionPct,
         }),
       });
       const data = await res.json();
@@ -218,11 +248,10 @@ export default function SimulatorPage() {
         body: JSON.stringify({
           accountId: accountId.trim(),
           conferenceId: selectedConference.id,
-          targetScoreMin: targetMin,
-          targetScoreMax: targetMax,
           repIds: Array.from(selectedRepIds),
-          attendeeCoverage: coverage / 100,
-          density,
+          meetingsHeld,
+          touchpoints: touchpointsCount,
+          followUpCompletionPct,
           dryRun: false,
         }),
       });
@@ -236,7 +265,6 @@ export default function SimulatorPage() {
         `Written: ${rw?.meetings ?? 0} meetings, ${rw?.followUps ?? 0} follow-ups, ${rw?.touchpoints ?? 0} touchpoints.`
       );
       setConfirmWrite(false);
-      // Refresh conferences to update hasSimulatedActivity
       const confsRes = await fetch(`/api/ops/simulate-conference-activity/accounts/${accountId.trim()}/conferences`);
       if (confsRes.ok) {
         const confsData = await confsRes.json();
@@ -277,7 +305,6 @@ export default function SimulatorPage() {
       setConfirmReset(false);
       setPreviewResult(null);
       setWriteStatus('');
-      // Refresh conferences
       const confsRes = await fetch(`/api/ops/simulate-conference-activity/accounts/${accountId.trim()}/conferences`);
       if (confsRes.ok) {
         const confsData = await confsRes.json();
@@ -292,96 +319,88 @@ export default function SimulatorPage() {
     }
   };
 
-  const midScore = Math.round((targetMin + targetMax) / 2);
-  const tier = scoreTier(midScore);
+  const renderLiveEstimate = () => {
+    const { low, high } = liveEstimate;
+    const lowLabel = cesTierLabel(low);
+    const highLabel = cesTierLabel(high);
+    const tierDisplay = lowLabel === highLabel
+      ? <span className={cesTierColor(low)}>{lowLabel}</span>
+      : (
+        <>
+          <span className={cesTierColor(low)}>{lowLabel}</span>
+          {' → '}
+          <span className={cesTierColor(high)}>{highLabel}</span>
+        </>
+      );
+
+    return (
+      <div className="border border-gray-200 rounded-md overflow-hidden">
+        <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Estimated CES</p>
+        </div>
+        <div className="px-3 py-3 space-y-1">
+          <p className="text-2xl font-bold text-gray-900 tabular-nums">{low} — {high}</p>
+          <p className="text-sm font-medium">{tierDisplay}</p>
+        </div>
+        <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
+          <p className="text-xs text-gray-500">
+            Range reflects uncertainty in pipeline influence and cost efficiency dimensions.
+            Actual CES computes from written activity.
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   const renderPreviewBlock = (result: SimulationResult) => {
-    const dims = result.projectedDimensions;
-    const wc = result.weightedContributions;
-    const plan = result.plan;
-    const scoreTierInfo = scoreTier(result.projectedScore);
+    if (result.warning) {
+      return (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          {result.warning}
+        </p>
+      );
+    }
 
-    const dimRows: Array<{ label: string; val: number; weight: string; contrib: number }> = [
-      { label: 'ICP & Target Quality', val: dims.dim1_icp_quality, weight: '20%', contrib: wc.dim1_icp_quality },
-      { label: 'Meeting Execution', val: dims.dim2_meeting_execution, weight: '20%', contrib: wc.dim2_meeting_execution },
-      { label: 'Pipeline Influence', val: dims.dim3_pipeline_influence, weight: '30%', contrib: wc.dim3_pipeline_influence },
-      { label: 'Audience Breadth', val: dims.dim4_breadth, weight: '5%', contrib: wc.dim4_breadth },
-      { label: 'Follow-up Execution', val: dims.dim5_followup_execution, weight: '10%', contrib: wc.dim5_followup_execution },
-      { label: 'Net-New Logos', val: dims.dim6_net_new, weight: '5%', contrib: wc.dim6_net_new },
-      { label: 'Cost Efficiency', val: dims.dim7_cost_efficiency, weight: '10%', contrib: wc.dim7_cost_efficiency },
-    ];
-
-    const total = dimRows.reduce((s, r) => s + r.contrib, 0);
-
-    const activityItems = [
-      { label: 'Meetings scheduled', value: `${plan.meetingsScheduled} (${plan.meetingsHeld} held)` },
-      { label: 'Follow-ups', value: `${plan.followUpsCreated} (${plan.followUpsCompleted} done)` },
-      { label: 'Touchpoints', value: plan.touchpoints },
-      { label: 'Companies engaged', value: plan.companiesEngaged },
-      { label: 'Net-new logos', value: plan.netNewLogos },
-      { label: 'Pipeline influenced', value: formatPipeline(plan.pipelineInfluenced) },
-    ];
+    const { plan, cesEstimate } = result;
 
     return (
       <div className="space-y-3">
-        {/* Warnings */}
-        {result.convergenceWarning && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            ⚠ {result.convergenceWarning}
-          </p>
-        )}
-        {result.dim3Warning && (
-          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
-            ℹ {result.dim3Warning}
-          </p>
-        )}
-
-        {/* Score badge */}
-        <div className="flex items-center gap-3">
-          <span className="text-4xl font-bold text-gray-900">{result.projectedScore}</span>
-          <span className={`text-sm font-semibold px-2.5 py-0.5 rounded-full text-white ${scoreTierInfo.color}`}>
-            {scoreTierInfo.label}
-          </span>
-          <span className="text-xs text-gray-400">projected CES</span>
-        </div>
-
-        {/* Dimension breakdown */}
-        <div className="border border-gray-200 rounded-md overflow-hidden">
-          <div className="bg-gray-50 px-3 py-2 flex justify-between text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-            <span>Dimension</span>
-            <span>Score · Weight · Contribution</span>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Activity to be written</p>
+        <div className="border border-gray-200 rounded-md overflow-hidden divide-y divide-gray-100">
+          <div className="flex items-baseline justify-between px-3 py-2 text-sm">
+            <span className="text-gray-500">Meetings</span>
+            <span className="text-gray-900 tabular-nums">
+              <span className="font-semibold">{plan.meetingsHeld}</span>
+              <span className="text-gray-400"> ({plan.meetingsScheduled} scheduled · {plan.meetingsNoShow} no-show)</span>
+            </span>
           </div>
-          {dimRows.map(r => (
-            <div key={r.label} className="px-3 py-2.5 border-t border-gray-100">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-xs text-gray-700 font-medium">{r.label}</span>
-                <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
-                  {r.val.toFixed(1)} × {r.weight} = <span className="font-semibold text-gray-700">+{r.contrib.toFixed(1)}</span>
-                </span>
-              </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-blue-400"
-                  style={{ width: `${Math.min(r.val, 100)}%` }}
-                />
-              </div>
-            </div>
-          ))}
-          <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-            <span className="text-xs font-semibold text-gray-700">Weighted total</span>
-            <span className="text-sm font-bold text-gray-900">{total.toFixed(1)}</span>
+          <div className="flex items-baseline justify-between px-3 py-2 text-sm">
+            <span className="text-gray-500">Follow-ups</span>
+            <span className="text-gray-900 tabular-nums">
+              <span className="font-semibold">{plan.followUpsCreated}</span>
+              <span className="text-gray-400"> ({plan.followUpsCompleted} completed · {plan.followUpsOpen} open)</span>
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between px-3 py-2 text-sm">
+            <span className="text-gray-500">Touchpoints</span>
+            <span className="font-semibold text-gray-900 tabular-nums">{plan.touchpoints}</span>
+          </div>
+          <div className="flex items-baseline justify-between px-3 py-2 text-sm">
+            <span className="text-gray-500">Companies</span>
+            <span className="font-semibold text-gray-900 tabular-nums">{plan.companiesEngaged}</span>
+          </div>
+          <div className="flex items-baseline justify-between px-3 py-2 text-sm">
+            <span className="text-gray-500">Net-new logos</span>
+            <span className="font-semibold text-gray-900 tabular-nums">{plan.netNewLogos}</span>
+          </div>
+          <div className="flex items-baseline justify-between px-3 py-2 text-sm bg-gray-50">
+            <span className="text-gray-500">Estimated CES</span>
+            <span className="font-semibold text-gray-900 tabular-nums">{cesEstimate.low}–{cesEstimate.high}</span>
           </div>
         </div>
-
-        {/* Activity plan */}
-        <div className="grid grid-cols-2 gap-2">
-          {activityItems.map(({ label, value }) => (
-            <div key={label} className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
-              <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{label}</div>
-              <div className="text-sm font-semibold text-gray-900">{value}</div>
-            </div>
-          ))}
-        </div>
+        <p className="text-xs text-gray-400">
+          Actual CES computes from written activity after simulation runs.
+        </p>
       </div>
     );
   };
@@ -441,54 +460,10 @@ export default function SimulatorPage() {
         </div>
       )}
 
-      {/* Step 3: Target score range */}
-      {selectedConference && (
-        <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 3 — Target Score Range</h2>
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="flex-1 min-w-[80px]">
-              <label className="block text-xs text-gray-500 mb-1">Min</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={targetMin}
-                onChange={e => setTargetMin(Math.min(Number(e.target.value), targetMax))}
-                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
-              />
-            </div>
-            <div className="flex-1 min-w-[80px]">
-              <label className="block text-xs text-gray-500 mb-1">Max</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={targetMax}
-                onChange={e => setTargetMax(Math.max(Number(e.target.value), targetMin))}
-                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
-              />
-            </div>
-          </div>
-          {/* Visual range bar */}
-          <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
-            <div
-              className={`absolute h-full rounded-full ${tier.color}`}
-              style={{
-                left: `${targetMin}%`,
-                width: `${targetMax - targetMin}%`,
-              }}
-            />
-          </div>
-          <p className="text-xs text-gray-500">
-            Targeting: <span className="font-medium text-gray-700">{tier.label} ({targetMin}–{targetMax})</span> · midpoint {midScore}
-          </p>
-        </div>
-      )}
-
-      {/* Step 4: Rep selector */}
+      {/* Step 3: Rep selector */}
       {selectedConference && reps.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 4 — Reps</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Step 3 — Reps</h2>
           <div className="flex gap-2 mb-3">
             <button
               onClick={selectAllReps}
@@ -514,52 +489,95 @@ export default function SimulatorPage() {
                   className="rounded flex-shrink-0"
                 />
                 <span className="text-gray-900 flex-shrink-0">{rep.name}</span>
-                <span className="text-gray-400 text-xs truncate">{rep.email}</span>
+                <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex-shrink-0">Rep</span>
               </label>
             ))}
           </div>
         </div>
       )}
 
-      {/* Step 5: Coverage and density */}
+      {/* Step 4: Activity sliders */}
       {selectedConference && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Step 5 — Coverage &amp; Density</h2>
-          <div className="mb-4">
-            <label className="block text-sm text-gray-700 mb-1">
-              ICP attendee coverage: <span className="font-medium">{coverage}%</span>
-            </label>
-            <input
-              type="number"
-              min={10}
-              max={100}
-              step={5}
-              value={coverage}
-              onChange={e => setCoverage(Number(e.target.value))}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-32"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-700 mb-2">Activity density</label>
-            <div className="space-y-2">
-              {(['light', 'moderate', 'heavy'] as Density[]).map(d => (
-                <label key={d} className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="density"
-                    value={d}
-                    checked={density === d}
-                    onChange={() => setDensity(d)}
-                    className="mt-0.5 flex-shrink-0"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-900 capitalize">{d}</span>
-                    <p className="text-xs text-gray-500 mt-0.5">{densityDescriptions[d]}</p>
-                  </div>
-                </label>
-              ))}
+          <h2 className="font-semibold text-gray-900 mb-4">Step 4 — Activity Volume</h2>
+          <div className="space-y-5">
+            <div>
+              <div className="flex justify-between items-baseline mb-1">
+                <label className="text-sm text-gray-700">Meetings held</label>
+                <span className="text-sm font-semibold text-gray-900 tabular-nums">{meetingsHeld}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(icpAttendeeCount, meetingsHeld, 1)}
+                step={1}
+                value={meetingsHeld}
+                onChange={e => setMeetingsHeld(Number(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                <span>0</span>
+                <span>{Math.max(icpAttendeeCount, meetingsHeld, 1)}</span>
+              </div>
             </div>
+
+            <div>
+              <div className="flex justify-between items-baseline mb-1">
+                <label className="text-sm text-gray-700">Touchpoints</label>
+                <span className="text-sm font-semibold text-gray-900 tabular-nums">{touchpointsCount}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(icpAttendeeCount * 2, touchpointsCount, 1)}
+                step={1}
+                value={touchpointsCount}
+                onChange={e => setTouchpointsCount(Number(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                <span>0</span>
+                <span>{Math.max(icpAttendeeCount * 2, touchpointsCount, 1)}</span>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-4 space-y-2">
+              <div className="flex justify-between items-baseline text-sm">
+                <span className="text-gray-500">Follow-ups created</span>
+                <span className="font-semibold text-gray-900 tabular-nums">{followUpsCreated}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500">Follow-up completion</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={followUpCompletionPct}
+                    onChange={e => setFollowUpCompletionPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                    className="border border-gray-300 rounded px-2 py-0.5 text-sm w-16 tabular-nums text-right"
+                  />
+                  <span className="text-gray-500 text-sm">%</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-baseline text-sm">
+                <span className="text-gray-500">Follow-ups completed</span>
+                <span className="font-semibold text-gray-900 tabular-nums">{followUpsCompleted}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400">
+              Follow-ups are auto-created from meetings held and touchpoints per system behavior.
+            </p>
           </div>
+        </div>
+      )}
+
+      {/* Step 5: Live CES estimate */}
+      {selectedConference && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Step 5 — CES Estimate</h2>
+          {renderLiveEstimate()}
         </div>
       )}
 
@@ -602,8 +620,9 @@ export default function SimulatorPage() {
                 <p>Writing to <strong>{selectedConference.name}</strong> ({companyName || accountId}):</p>
                 <ul className="list-disc list-inside text-gray-600 space-y-0.5 pl-1">
                   <li>{previewResult.plan.meetingsScheduled} meetings ({previewResult.plan.meetingsHeld} held)</li>
-                  <li>{previewResult.plan.followUpsCreated} follow-ups</li>
+                  <li>{previewResult.plan.followUpsCreated} follow-ups ({previewResult.plan.followUpsCompleted} completed)</li>
                   <li>{previewResult.plan.touchpoints} touchpoints</li>
+                  <li>{previewResult.plan.companiesEngaged} companies engaged</li>
                 </ul>
               </div>
               <div className="flex flex-wrap gap-2">
