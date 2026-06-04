@@ -36,13 +36,14 @@ export async function POST(request: NextRequest) {
   });
 
   try {
-    const [meetingsRes, fuRes, tpRes] = await Promise.all([
+    // follow_ups.meeting_id FK → meetings(id): delete follow_ups before meetings
+    const fuRes = await client.execute({
+      sql: `DELETE FROM follow_ups WHERE conference_id = ? AND source = 'simulated'`,
+      args: [conferenceId],
+    });
+    const [meetingsRes, tpRes] = await Promise.all([
       client.execute({
         sql: `DELETE FROM meetings WHERE conference_id = ? AND source = 'simulated'`,
-        args: [conferenceId],
-      }),
-      client.execute({
-        sql: `DELETE FROM follow_ups WHERE conference_id = ? AND source = 'simulated'`,
         args: [conferenceId],
       }),
       client.execute({
