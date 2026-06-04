@@ -4,33 +4,28 @@ import { db, dbReady } from '@/lib/db';
 export type SimulationParams = {
   accountId: string
   conferenceId: number
-  targetScoreMin: number
-  targetScoreMax: number
   repIds: number[]
-  attendeeCoverage: number   // fraction 0.0–1.0 (UI sends coverage/100)
-  density: 'light' | 'moderate' | 'heavy'
+  meetingsHeld: number
+  touchpoints: number
+  followUpCompletionPct: number  // 0–100
   dryRun: boolean
 }
 
-export type SimulationPlan = {
-  meetingsScheduled: number
-  meetingsHeld: number
-  meetingsWithOutcomes: number
-  followUpsCreated: number
-  followUpsCompleted: number
-  touchpoints: number
-  companiesEngaged: number
-  netNewLogos: number
-}
-
 export type SimulationResult = {
-  plan: SimulationPlan
-  activitySummary: {
-    targetRange: string
-    density: string
-    coveragePct: number
-    icpAttendeesTotal: number
-    icpAttendeesTouched: number
+  plan: {
+    meetingsScheduled: number
+    meetingsHeld: number
+    meetingsNoShow: number
+    followUpsCreated: number
+    followUpsCompleted: number
+    followUpsOpen: number
+    touchpoints: number
+    companiesEngaged: number
+    netNewLogos: number
+  }
+  cesEstimate: {
+    low: number
+    high: number
   }
   written: boolean
   recordsWritten?: {
@@ -39,12 +34,6 @@ export type SimulationResult = {
     touchpoints: number
   }
   warning?: string
-}
-
-const densityPresets = {
-  light:    { holdRate: 0.65, followUpRate: 0.55, completionRate: 0.60, touchesPerCompany: 1.2 },
-  moderate: { holdRate: 0.78, followUpRate: 0.70, completionRate: 0.75, touchesPerCompany: 1.8 },
-  heavy:    { holdRate: 0.90, followUpRate: 0.85, completionRate: 0.90, touchesPerCompany: 2.5 },
 }
 
 function randInt(min: number, max: number): number {
@@ -74,7 +63,6 @@ function conferenceDates(startDate: string, endDate: string): Date[] {
 }
 
 function businessTimestamp(date: Date, slotIndex: number, totalSlots: number): string {
-  // Spread across 8am-6pm (10 hour window)
   const minuteOffset = Math.floor((slotIndex / Math.max(totalSlots, 1)) * 600);
   const startMinute = 8 * 60 + minuteOffset;
   const h = Math.floor(startMinute / 60);
@@ -82,6 +70,30 @@ function businessTimestamp(date: Date, slotIndex: number, totalSlots: number): s
   const d = new Date(date);
   d.setUTCHours(h, m, 0, 0);
   return toISOTimestamp(d);
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function distributeWeighted(total: number, count: number): number[] {
+  if (count === 0 || total === 0) return [];
+  const weights = Array.from({ length: count }, () => Math.random() + 0.1);
+  const weightSum = weights.reduce((s, w) => s + w, 0);
+  const normalized = weights.map(w => w / weightSum);
+  const floored = normalized.map(w => Math.floor(w * total));
+  let remainder = total - floored.reduce((s, v) => s + v, 0);
+  const indices = Array.from({ length: count }, (_, i) => i)
+    .sort(() => Math.random() - 0.5);
+  for (let i = 0; i < remainder; i++) {
+    floored[indices[i % count]]++;
+  }
+  return floored;
 }
 
 type AttendeeRow = {
@@ -106,18 +118,19 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const {
     accountId,
     conferenceId,
-    targetScoreMin,
-    targetScoreMax,
     repIds,
-    attendeeCoverage,
-    density: densityKey,
+    meetingsHeld: meetingsHeldParam,
+    touchpoints: touchpointsParam,
+    followUpCompletionPct,
     dryRun,
   } = params;
 
-  const density = densityPresets[densityKey];
-  const targetMid = (targetScoreMin + targetScoreMax) / 2;
+  const followUpsCreated = meetingsHeldParam + touchpointsParam;
+  const followUpsCompleted = Math.round(followUpsCreated * (followUpCompletionPct / 100));
+  const followUpsOpen = followUpsCreated - followUpsCompleted;
+  const meetingsScheduled = Math.round(meetingsHeldParam / 0.85);
+  const meetingsNoShow = meetingsScheduled - meetingsHeldParam;
 
-  // Get tenant DB credentials
   await dbReady;
   const accountRow = await db.execute({
     sql: `SELECT turso_db_url, turso_auth_token, company_name FROM accounts WHERE id = ?`,
@@ -131,9 +144,9 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     authToken: String(accountRow.rows[0].turso_auth_token),
   });
 
-  // Fetch conference record
   const confRes = await client.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date,
+                 c.required_pipeline_amount, c.total_cost,
                  co.action_key AS strategy_key
           FROM conferences c
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -145,8 +158,9 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const confName = String(conf.name);
   const confStartDate = String(conf.start_date);
   const confEndDate = String(conf.end_date);
+  const requiredPipelineAmount = conf.required_pipeline_amount != null ? Number(conf.required_pipeline_amount) : null;
+  const totalCost = conf.total_cost != null ? Number(conf.total_cost) : null;
 
-  // Fetch all attendees at conference
   const attendeesRes = await client.execute({
     sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, a.seniority, a."function", a.health_score
           FROM attendees a
@@ -165,7 +179,6 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     health_score: r.health_score != null ? Number(r.health_score) : null,
   }));
 
-  // Fetch companies at conference
   const companiesRes = await client.execute({
     sql: `SELECT DISTINCT co.id, co.name, co.wse, co.icp
           FROM companies co
@@ -181,9 +194,10 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     icp: r.icp ? String(r.icp) : null,
   }));
 
-  const icpCompanyIds = new Set(allCompanies.filter(c => c.icp === 'Yes').map(c => c.id));
+  const icpCompanyIdSet = new Set(allCompanies.filter(c => c.icp === 'Yes').map(c => c.id));
+  const totalIcpCompanies = icpCompanyIdSet.size;
+  const totalCompanies = allCompanies.length;
 
-  // Fetch conference targets for attendee sort priority
   const targetsRes = await client.execute({
     sql: `SELECT DISTINCT a.company_id
           FROM conference_targets ct
@@ -191,9 +205,8 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
           WHERE ct.conference_id = ? AND a.company_id IS NOT NULL`,
     args: [conferenceId],
   }).catch(() => ({ rows: [] as { company_id: unknown }[] }));
-  const targetCompanyIds = new Set(targetsRes.rows.map(r => Number(r.company_id)));
+  const totalTargets = targetsRes.rows.length;
 
-  // Config options: meeting_held value and touchpoint option_id
   const configRes = await client.execute({
     sql: `SELECT id, category, value, action_key FROM config_options WHERE (action_key = 'meeting_held' AND category = 'action') OR category = 'touchpoints' ORDER BY sort_order`,
     args: [],
@@ -209,7 +222,6 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     }
   }
 
-  // Rep info — IDs reference config_options.id (category='user'), not users.id
   const repNames: Map<number, string> = new Map();
   if (repIds.length > 0) {
     const repRes = await client.execute({
@@ -222,67 +234,49 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   }
   const effectiveRepIds = repIds.length > 0 ? repIds : [0];
 
-  // ── Planning layer ──────────────────────────────────────────────────────────
-  // Map target score midpoint to an activity multiplier
-  const scoreMultiplier =
-    targetMid >= 85 ? 1.0 :
-    targetMid >= 75 ? 0.85 :
-    targetMid >= 65 ? 0.70 :
-    targetMid >= 55 ? 0.55 :
-    0.40;
-
-  // ICP attendees sorted: target-company attendees first, then by health score
-  const icpMatchedAttendees = allAttendees
-    .filter(a => a.company_id != null && icpCompanyIds.has(a.company_id))
-    .sort((a, b) => {
-      const aTarget = a.company_id !== null && targetCompanyIds.has(a.company_id) ? 1 : 0;
-      const bTarget = b.company_id !== null && targetCompanyIds.has(b.company_id) ? 1 : 0;
-      if (aTarget !== bTarget) return bTarget - aTarget;
-      return (b.health_score ?? 0) - (a.health_score ?? 0);
-    });
+  // Attendee selection
+  const icpMatchedAttendees = allAttendees.filter(a => a.company_id != null && icpCompanyIdSet.has(a.company_id));
 
   if (icpMatchedAttendees.length === 0) {
+    const emptyPlan = {
+      meetingsScheduled,
+      meetingsHeld: meetingsHeldParam,
+      meetingsNoShow,
+      followUpsCreated,
+      followUpsCompleted,
+      followUpsOpen,
+      touchpoints: touchpointsParam,
+      companiesEngaged: 0,
+      netNewLogos: 0,
+    };
     return {
-      plan: {
-        meetingsScheduled: 0, meetingsHeld: 0, meetingsWithOutcomes: 0,
-        followUpsCreated: 0, followUpsCompleted: 0, touchpoints: 0,
-        companiesEngaged: 0, netNewLogos: 0,
-      },
-      activitySummary: {
-        targetRange: `${targetScoreMin}–${targetScoreMax}`,
-        density: densityKey,
-        coveragePct: Math.round(attendeeCoverage * 100),
-        icpAttendeesTotal: 0,
-        icpAttendeesTouched: 0,
-      },
+      plan: emptyPlan,
+      cesEstimate: { low: 0, high: 0 },
       written: false,
       warning: 'No ICP-matched attendees found for this conference. Import an attendee list before running the simulation.',
     };
   }
 
-  // Attendee pool: one meeting scheduled per attendee in pool (hard cap)
-  const poolSize = Math.max(1, Math.floor(icpMatchedAttendees.length * attendeeCoverage * scoreMultiplier));
-  const attendeePool = icpMatchedAttendees.slice(0, poolSize);
+  const shuffled = shuffle(icpMatchedAttendees);
+  const meetingAttendees = shuffled.slice(0, Math.min(meetingsHeldParam, shuffled.length));
+  const meetingAttendeeIds = new Set(meetingAttendees.map(a => a.id));
+  const remainingForTouchpoints = shuffled.filter(a => !meetingAttendeeIds.has(a.id));
+  const touchpointPool = remainingForTouchpoints.length >= touchpointsParam
+    ? remainingForTouchpoints.slice(0, touchpointsParam)
+    : [
+        ...remainingForTouchpoints,
+        ...shuffled.slice(0, Math.max(0, touchpointsParam - remainingForTouchpoints.length)),
+      ];
+  const touchpointAttendees = touchpointPool.slice(0, touchpointsParam);
 
-  const meetingsScheduled = attendeePool.length;
-  const meetingsHeld = Math.round(meetingsScheduled * density.holdRate);
-  const heldAttendees = attendeePool.slice(0, meetingsHeld);
-  const companiesWithMeetingsSet = new Set(
-    heldAttendees.map(a => a.company_id).filter((id): id is number => id !== null)
-  );
-  let followUpsCreated = Math.round(companiesWithMeetingsSet.size * density.followUpRate);
-  let followUpsCompleted = Math.round(followUpsCreated * density.completionRate);
-  const touchpointsCount = Math.round(attendeePool.length * density.touchesPerCompany * 0.4);
+  const engagedCompanyIdsSet = new Set<number>();
+  for (const a of meetingAttendees) {
+    if (a.company_id != null) engagedCompanyIdsSet.add(a.company_id);
+  }
+  const companiesEngaged = engagedCompanyIdsSet.size;
+  const engagedCompanyIds = Array.from(engagedCompanyIdsSet);
 
-  // Engaged companies derived from attendee pool
-  const engagedCompanyIdsFromPool = new Set(
-    attendeePool.map(a => a.company_id).filter((id): id is number => id !== null)
-  );
-  const engagedCompanies = allCompanies.filter(c => engagedCompanyIdsFromPool.has(c.id));
-  const companiesEngagedCount = engagedCompanies.length;
-  const engagedCompanyIds = engagedCompanies.map(c => c.id);
-
-  // Net-new logos: engaged companies that have never appeared in any prior conference
+  // Net-new logos
   let netNewCount = 0;
   if (engagedCompanyIds.length > 0) {
     const nnPlaceholders = engagedCompanyIds.map(() => '?').join(',');
@@ -300,44 +294,49 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     netNewCount = Math.min(netNewRes.rows.length, engagedCompanyIds.length);
   }
 
-  // Build attendee map by company (used in write path)
-  const attendeesByCompany = new Map<number, AttendeeRow[]>();
-  for (const att of allAttendees) {
-    if (att.company_id) {
-      const list = attendeesByCompany.get(att.company_id) ?? [];
-      list.push(att);
-      attendeesByCompany.set(att.company_id, list);
-    }
+  // Hard assertion
+  if (netNewCount > companiesEngaged) {
+    console.warn(`[simulator] netNewCount (${netNewCount}) > companiesEngaged (${companiesEngaged}), capping`);
+    netNewCount = companiesEngaged;
   }
 
-  const plan: SimulationPlan = {
+  // CES estimation
+  const cesEstimate = estimateCESRange({
+    meetingAttendees,
+    meetingsHeld: meetingsHeldParam,
     meetingsScheduled,
-    meetingsHeld,
-    meetingsWithOutcomes: meetingsScheduled,
+    followUpsCreated,
+    followUpCompletionPct,
+    totalIcpCompanies,
+    totalTargets,
+    totalCompanies,
+    companiesEngaged,
+    netNewCount,
+    requiredPipelineAmount,
+    totalCost,
+  });
+
+  const plan = {
+    meetingsScheduled,
+    meetingsHeld: meetingsHeldParam,
+    meetingsNoShow,
     followUpsCreated,
     followUpsCompleted,
-    touchpoints: touchpointsCount,
-    companiesEngaged: companiesEngagedCount,
+    followUpsOpen,
+    touchpoints: touchpointsParam,
+    companiesEngaged,
     netNewLogos: netNewCount,
   };
 
-  const activitySummary = {
-    targetRange: `${targetScoreMin}–${targetScoreMax}`,
-    density: densityKey,
-    coveragePct: Math.round(attendeeCoverage * 100),
-    icpAttendeesTotal: icpMatchedAttendees.length,
-    icpAttendeesTouched: attendeePool.length,
-  };
-
   if (dryRun) {
-    return { plan, activitySummary, written: false };
+    return { plan, cesEstimate, written: false };
   }
 
-  // ── Write records ───────────────────────────────────────────────────────────
+  // Write records
   const confDates = conferenceDates(confStartDate, confEndDate);
   const today = new Date();
-  const cappedEndDate = confDates[confDates.length - 1] > today ? today : confDates[confDates.length - 1];
-  const effectiveEndDate = cappedEndDate;
+  const lastConfDate = confDates[confDates.length - 1];
+  const effectiveEndDate = lastConfDate > today ? today : lastConfDate;
 
   const outcomeDistribution: Array<{ outcome: string; note: string }> = [
     { outcome: meetingHeldValue, note: 'Strong interest indicated — next steps agreed.' },
@@ -352,99 +351,70 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     { outcome: 'Not Interested', note: 'Not a fit at this time.' },
   ];
 
-  const meetingRecords: Array<{
-    attendeeId: number
-    companyId: number
-    companyName: string
-    attendeeName: string
-    attendeeFunction: string | null
-    outcome: string
-    outcomeNote: string
-    repId: number
-    repName: string
-    timestamp: string
-    isHeld: boolean
-  }> = [];
-
-  // Distribute meetings across companies and dates
-  const repDayCount = new Map<string, number>(); // key: repId-dateStr
-
-  let meetingIdx = 0;
-  const perCompanyMeetings = Math.max(1, Math.round(meetingsScheduled / Math.max(companiesEngagedCount, 1)));
-
-  const assignedAttendeeIds = new Set<number>();
-
-  for (const company of engagedCompanies) {
-    const atts = (attendeesByCompany.get(company.id) ?? []).slice(0, perCompanyMeetings);
-    if (atts.length === 0) continue;
-
-    for (let mi = 0; mi < Math.min(atts.length, perCompanyMeetings); mi++) {
-      const availableAtts = atts.filter(a => !assignedAttendeeIds.has(a.id));
-      if (availableAtts.length === 0) break;
-      const att = availableAtts[0];
-      assignedAttendeeIds.add(att.id);
-      const dayIdx = meetingIdx % confDates.length;
-      const confDay = confDates[dayIdx];
-
-      // Cap to past dates
-      const meetingDate = confDay > effectiveEndDate ? effectiveEndDate : confDay;
-      const dateStr = meetingDate.toISOString().slice(0, 10);
-
-      const repId = effectiveRepIds[meetingIdx % effectiveRepIds.length];
-      const repKey = `${repId}-${dateStr}`;
-      const dayCount = repDayCount.get(repKey) ?? 0;
-
-      // Skip if rep already has 8 meetings that day
-      if (dayCount >= 8) {
-        meetingIdx++;
-        continue;
-      }
-      repDayCount.set(repKey, dayCount + 1);
-
-      const isHeld = meetingIdx < meetingsHeld;
-      const outcome = isHeld
-        ? outcomeDistribution[meetingIdx % outcomeDistribution.length]
-        : { outcome: 'No Show', note: '' };
-
-      const repName = repNames.get(repId) ?? 'Rep';
-      const attendeeName = `${att.first_name} ${att.last_name}`.trim();
-
-      meetingRecords.push({
-        attendeeId: att.id,
-        companyId: company.id,
-        companyName: company.name,
-        attendeeName,
-        attendeeFunction: att.function,
-        outcome: outcome.outcome,
-        outcomeNote: outcome.note,
-        repId,
-        repName,
-        timestamp: businessTimestamp(meetingDate, dayCount, 8),
-        isHeld,
-      });
-
-      meetingIdx++;
+  // Rep distribution for meetings (random weighted)
+  const meetingRepDist = distributeWeighted(meetingAttendees.length, effectiveRepIds.length);
+  const meetingRepAssignments: number[] = [];
+  for (let ri = 0; ri < effectiveRepIds.length; ri++) {
+    for (let j = 0; j < meetingRepDist[ri]; j++) {
+      meetingRepAssignments.push(effectiveRepIds[ri]);
     }
   }
+  const shuffledMeetingReps = shuffle(meetingRepAssignments);
 
-  // Recompute follow-up counts based on actual companies with held meetings
-  const companiesWithHeld = new Set(meetingRecords.filter(m => m.isHeld).map(m => m.companyId)).size;
-  followUpsCreated = Math.round(companiesWithHeld * density.followUpRate);
-  followUpsCompleted = Math.round(followUpsCreated * density.completionRate);
+  // Rep distribution for touchpoints (re-randomize)
+  const tpRepDist = distributeWeighted(touchpointAttendees.length, effectiveRepIds.length);
+  const tpRepAssignments: number[] = [];
+  for (let ri = 0; ri < effectiveRepIds.length; ri++) {
+    for (let j = 0; j < tpRepDist[ri]; j++) {
+      tpRepAssignments.push(effectiveRepIds[ri]);
+    }
+  }
+  const shuffledTpReps = shuffle(tpRepAssignments);
+
+  const attendeesByCompany = new Map<number, AttendeeRow[]>();
+  for (const att of allAttendees) {
+    if (att.company_id) {
+      const list = attendeesByCompany.get(att.company_id) ?? [];
+      list.push(att);
+      attendeesByCompany.set(att.company_id, list);
+    }
+  }
 
   // Write meetings
   const insertedMeetingIds: number[] = [];
   let meetingsWritten = 0;
   let notesMeetingIdx = 0;
+  const repDayCount = new Map<string, number>();
 
-  for (const m of meetingRecords) {
-    const meetingDate = m.timestamp.slice(0, 10);
-    const meetingTime = m.timestamp.slice(11, 19);
+  for (let mi = 0; mi < meetingAttendees.length; mi++) {
+    const att = meetingAttendees[mi];
+    const repId = shuffledMeetingReps[mi] ?? effectiveRepIds[0];
+    const repName = repNames.get(repId) ?? 'Rep';
+
+    const dayIdx = mi % confDates.length;
+    const confDay = confDates[dayIdx];
+    const meetingDate = confDay > effectiveEndDate ? effectiveEndDate : confDay;
+    const dateStr = meetingDate.toISOString().slice(0, 10);
+    const repKey = `${repId}-${dateStr}`;
+    const dayCount = repDayCount.get(repKey) ?? 0;
+
+    if (dayCount >= 8) continue;
+    repDayCount.set(repKey, dayCount + 1);
+
+    const isHeld = mi < meetingsHeldParam;
+    const outcome = isHeld
+      ? outcomeDistribution[mi % outcomeDistribution.length]
+      : { outcome: 'No Show', note: '' };
+
+    const timestamp = businessTimestamp(meetingDate, dayCount, 8);
+    const meetingDateStr = timestamp.slice(0, 10);
+    const meetingTime = timestamp.slice(11, 19);
+
     const res = await client.execute({
       sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, outcome, scheduled_by, source, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 'simulated', ?)
             RETURNING id`,
-      args: [m.attendeeId, conferenceId, meetingDate, meetingTime, m.outcome, m.repName, m.timestamp],
+      args: [att.id, conferenceId, meetingDateStr, meetingTime, outcome.outcome, repName, timestamp],
     }).catch(() => null);
 
     const meetingId = res?.rows?.[0]?.id != null ? Number(res.rows[0].id) : null;
@@ -452,43 +422,49 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
       insertedMeetingIds.push(meetingId);
       meetingsWritten++;
 
-      // Insert meeting notes for ~60% of held meetings
-      if (m.isHeld && notesMeetingIdx % 5 < 3) {
-        const productArea = 'solution';
-        const functionArea = m.attendeeFunction ?? 'business';
-        const noteText = `${m.repName} met with ${m.attendeeName} from ${m.companyName} at ${confName}. Discussion covered ${productArea} capabilities and alignment with their current ${functionArea} priorities. ${m.outcomeNote}`;
+      if (isHeld && notesMeetingIdx % 5 < 3) {
+        const functionArea = att.function ?? 'business';
+        const attendeeName = `${att.first_name} ${att.last_name}`.trim();
+        const companyName = allCompanies.find(c => c.id === att.company_id)?.name ?? '';
+        const noteText = `${repName} met with ${attendeeName} from ${companyName} at ${confName}. Discussion covered solution capabilities and alignment with their current ${functionArea} priorities. ${outcome.note}`;
         await client.execute({
           sql: `INSERT INTO meeting_notes (meeting_id, notes_text, created_by, created_at)
                 VALUES (?, ?, ?, ?)`,
-          args: [meetingId, noteText, null, m.timestamp],
+          args: [meetingId, noteText, null, timestamp],
         }).catch(() => {});
       }
       notesMeetingIdx++;
     }
   }
 
-  // Write follow-ups
+  // Write follow-ups (one per meeting held, then per touchpoint, up to followUpsCreated)
   let followUpsWritten = 0;
-  let fuIdx = 0;
   const nextStepsOptions = ['Schedule Follow Up Meeting', 'General Follow Up', 'Other'];
 
-  for (const company of engagedCompanies) {
-    if (fuIdx >= followUpsCreated) break;
-    const atts = attendeesByCompany.get(company.id) ?? [];
-    if (atts.length === 0) continue;
-    const att = atts[0];
+  for (let fuIdx = 0; fuIdx < followUpsCreated; fuIdx++) {
+    const isMeetingFu = fuIdx < meetingAttendees.length;
+    let att: AttendeeRow | undefined;
+    let parentMeetingId: number | null = null;
+    let fuRepId: number;
+
+    if (isMeetingFu) {
+      att = meetingAttendees[fuIdx];
+      parentMeetingId = insertedMeetingIds[fuIdx] ?? null;
+      fuRepId = shuffledMeetingReps[fuIdx] ?? effectiveRepIds[0];
+    } else {
+      const tpIdx = fuIdx - meetingAttendees.length;
+      att = touchpointAttendees[tpIdx % Math.max(touchpointAttendees.length, 1)];
+      fuRepId = shuffledTpReps[tpIdx % Math.max(shuffledTpReps.length, 1)] ?? effectiveRepIds[0];
+    }
+
+    if (!att) continue;
 
     const isCompleted = fuIdx < followUpsCompleted;
-    const parentMeetingId = insertedMeetingIds[fuIdx] ?? null;
-
-    // Follow-up date: conference_end + 2-10 days
     const fuDaysAfter = randInt(2, 10);
     const fuDate = addDays(confEndDate, fuDaysAfter);
-    // Cap to today
     const fuTimestamp = toISOTimestamp(fuDate > today ? today : fuDate);
-
-    const fuRepId = effectiveRepIds[fuIdx % effectiveRepIds.length];
     const fuRepName = repNames.get(fuRepId) ?? null;
+
     await client.execute({
       sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, assigned_rep, completed, meeting_id, source, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 'simulated', ?)`,
@@ -496,46 +472,114 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     }).catch(() => {});
 
     followUpsWritten++;
-    fuIdx++;
   }
 
   // Write touchpoints
   let touchpointsWritten = 0;
-  let tpIdx = 0;
 
   if (touchpointOptionId != null) {
-    for (const company of engagedCompanies) {
-      const tpPerCompany = Math.ceil(density.touchesPerCompany);
-      for (let ti = 0; ti < tpPerCompany; ti++) {
-        if (tpIdx >= touchpointsCount) break;
-        const atts = attendeesByCompany.get(company.id) ?? [];
-        if (atts.length === 0) continue;
-        const att = atts[ti % atts.length];
+    for (let tpIdx = 0; tpIdx < touchpointAttendees.length; tpIdx++) {
+      const att = touchpointAttendees[tpIdx];
+      const dayIdx = tpIdx % confDates.length;
+      const tpDay = confDates[dayIdx];
+      const tpDate = tpDay > effectiveEndDate ? effectiveEndDate : tpDay;
+      const tpTimestamp = businessTimestamp(tpDate, tpIdx % 8, 8);
 
-        const dayIdx = tpIdx % confDates.length;
-        const tpDate = confDates[dayIdx] > effectiveEndDate ? effectiveEndDate : confDates[dayIdx];
-        const tpTimestamp = businessTimestamp(tpDate, ti, tpPerCompany);
+      await client.execute({
+        sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id, source, created_at)
+              VALUES (?, ?, ?, 'simulated', ?)`,
+        args: [att.id, conferenceId, touchpointOptionId, tpTimestamp],
+      }).catch(() => {});
 
-        await client.execute({
-          sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id, source, created_at)
-                VALUES (?, ?, ?, 'simulated', ?)`,
-          args: [att.id, conferenceId, touchpointOptionId, tpTimestamp],
-        }).catch(() => {});
-
-        touchpointsWritten++;
-        tpIdx++;
-      }
+      touchpointsWritten++;
     }
   }
 
   return {
     plan,
-    activitySummary,
+    cesEstimate,
     written: true,
     recordsWritten: {
       meetings: meetingsWritten,
       followUps: followUpsWritten,
       touchpoints: touchpointsWritten,
     },
+  };
+}
+
+type CESRangeParams = {
+  meetingAttendees: AttendeeRow[]
+  meetingsHeld: number
+  meetingsScheduled: number
+  followUpsCreated: number
+  followUpCompletionPct: number
+  totalIcpCompanies: number
+  totalTargets: number
+  totalCompanies: number
+  companiesEngaged: number
+  netNewCount: number
+  requiredPipelineAmount: number | null
+  totalCost: number | null
+}
+
+function estimateCESRange(p: CESRangeParams): { low: number; high: number } {
+  const icpCompanyIds = new Set(p.meetingAttendees.map(a => a.company_id).filter((id): id is number => id !== null));
+
+  // Dim1 — ICP & Target Quality
+  const icpEngagementRate = Math.min(icpCompanyIds.size / Math.max(p.totalIcpCompanies, 1), 1);
+  const targetEngagementRate = Math.min(icpCompanyIds.size / Math.max(p.totalTargets, 1), 1);
+  const dim1 = ((icpEngagementRate + targetEngagementRate) / 2) * 100;
+
+  // Dim2 — Meeting Execution
+  const holdRate = p.meetingsHeld / Math.max(p.meetingsScheduled, 1);
+  const fuSchedulingRate = Math.min(p.followUpsCreated / Math.max(icpCompanyIds.size, 1), 1);
+  const dim2 = ((holdRate + fuSchedulingRate) / 2) * 100;
+
+  // Dim4 — Engagement Breadth
+  const dim4 = Math.min(icpCompanyIds.size / Math.max(p.totalCompanies, 1), 1) * 100;
+
+  // Dim5 — Follow-up Execution
+  const dim5 = p.followUpCompletionPct;
+
+  // Dim6 — Net-New Logos
+  const dim6 = p.companiesEngaged > 0
+    ? Math.min((p.netNewCount / p.companiesEngaged) * 100, 100)
+    : 0;
+
+  // Pipeline target availability
+  const hasPipelineTarget = p.requiredPipelineAmount != null || (p.totalCost != null && p.totalCost > 0);
+
+  // Optimistic vs conservative for uncertain dims
+  // Dim3 — Pipeline Influence: optimistic 70, conservative 0 (unknown without actual pipeline data)
+  const dim3Optimistic = hasPipelineTarget ? 50 : 70;
+  const dim3Conservative = 0;
+
+  // Dim7 — Cost Efficiency: optimistic 75, conservative 50
+  const dim7Optimistic = 75;
+  const dim7Conservative = 50;
+
+  // Weights (from CES formula): dim1=0.20, dim2=0.20, dim3=0.30, dim4=0.05, dim5=0.10, dim6=0.05, dim7=0.10
+  // If no pipeline target, redistribute dim3's 0.30 proportionally to others
+  let w1 = 0.20, w2 = 0.20, w3 = 0.30, w4 = 0.05, w5 = 0.10, w6 = 0.05, w7 = 0.10;
+
+  if (!hasPipelineTarget) {
+    const redistributed = w3;
+    w3 = 0;
+    const otherSum = w1 + w2 + w4 + w5 + w6 + w7;
+    const scale = (otherSum + redistributed) / otherSum;
+    w1 *= scale; w2 *= scale; w4 *= scale; w5 *= scale; w6 *= scale; w7 *= scale;
+  }
+
+  const cesOptimistic = Math.min(100, Math.round(
+    dim1 * w1 + dim2 * w2 + dim3Optimistic * w3 + dim4 * w4 + dim5 * w5 + dim6 * w6 + dim7Optimistic * w7
+  ));
+
+  const cesConservative = Math.min(100, Math.round(
+    dim1 * w1 + dim2 * w2 + dim3Conservative * w3 + dim4 * w4 + dim5 * w5 + dim6 * w6 + dim7Conservative * w7
+  ));
+
+  return {
+    low: Math.min(cesConservative, cesOptimistic),
+    high: Math.max(cesConservative, cesOptimistic),
   };
 }
