@@ -495,6 +495,9 @@ export function FollowUpsTable({
             </tbody>
           </table>
         </div>
+        {quickView && (
+          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+        )}
       </>
     );
   }
@@ -584,6 +587,9 @@ export function FollowUpsTable({
             </tbody>
           </table>
         </div>
+        {quickView && (
+          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+        )}
       </>
     );
   }
