@@ -105,11 +105,10 @@ export function generateSyntheticCompanyName(
     const r2 = seededRand(index * 1234567 + attempts * 987654321);
 
     if (keywords && keywords.length > 0) {
-      // Keyword-driven: use provided suffixes for any vertical/role
+      // Keyword-driven: merge both prefix pools to maximize unique combinations
       const keyword = pickAt(keywords, r2);
-      name = role === 'prospects' || role === 'competitors'
-        ? `${pickAt(GEO_PREFIXES, r2)} ${keyword}`
-        : `${pickAt(CITY_PREFIXES, r2)} ${keyword}`;
+      const prefixPool = [...GEO_PREFIXES, ...CITY_PREFIXES];
+      name = `${pickAt(prefixPool, r2)} ${keyword}`;
     } else if (vertical === 'healthcare') {
       if (role === 'prospects' || role === 'competitors') {
         name = `${pickAt(GEO_PREFIXES, r2)} ${pickAt(HEALTHCARE_PROSPECT_SUFFIXES, r2)}`;
@@ -146,9 +145,14 @@ export function generateSyntheticCompanyName(
   }
 
   // Ultimate fallback: append index
-  const roleLabel = role === 'prospects' || role === 'competitors' ? 'Group' : role === 'partners' ? 'Partners' : 'Technologies';
-  const verticalLabel = vertical === 'generic_b2b' ? 'Axiom' : vertical === 'healthcare' ? 'Regional' : 'Heritage';
-  const fallback = `${verticalLabel} ${roleLabel} ${index}`;
+  let fallback: string;
+  if (keywords && keywords.length > 0) {
+    fallback = `${keywords[index % keywords.length]} ${index + 1}`;
+  } else {
+    const roleLabel = role === 'prospects' || role === 'competitors' ? 'Group' : role === 'partners' ? 'Partners' : 'Technologies';
+    const verticalLabel = vertical === 'generic_b2b' ? 'Axiom' : vertical === 'healthcare' ? 'Regional' : 'Heritage';
+    fallback = `${verticalLabel} ${roleLabel} ${index}`;
+  }
   usedNames.add(fallback);
   return fallback;
 }

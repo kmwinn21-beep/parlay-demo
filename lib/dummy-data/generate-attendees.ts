@@ -331,7 +331,7 @@ export async function generateDummyData(
       const email = generateEmail(firstName, lastName, domain, usedEmails);
       allRows.push(makeRow(
         firstName, lastName, title, email, companyName, domain,
-        fn, seniority, repName, companyType, conferenceName, units, customColumns,
+        fn, seniority, companyType === 'Prospect' ? repName : '', companyType, conferenceName, units, customColumns,
       ));
     }
   }
