@@ -289,7 +289,7 @@ export default function GeneratorPage() {
             <select
               value={vertical}
               onChange={e => setVertical(e.target.value as Vertical)}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-auto"
             >
               {(Object.entries(VERTICAL_LABELS) as [Vertical, string][]).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
@@ -305,7 +305,7 @@ export default function GeneratorPage() {
               value={keywordsRaw}
               onChange={e => setKeywordsRaw(e.target.value)}
               placeholder="e.g. Hotels, Resorts, Hospitality, Properties"
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-96"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
             />
           </div>
         </div>
@@ -315,142 +315,143 @@ export default function GeneratorPage() {
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Step 3 — Company Counts</h2>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {/* Prospects */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="text-sm font-medium text-gray-700 w-20">Prospects</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={MAX_COMPANIES}
-                value={prospectCount}
-                onChange={e => setProspectCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
-              />
-              <span className="text-xs text-gray-400">companies</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Attendees/company</span>
-              <div className="flex gap-1">
-                {([2, 3, 4] as const).map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setProspectAttendees(n)}
-                    className={`w-8 h-8 text-sm rounded border font-medium transition-colors ${
-                      prospectAttendees === n
-                        ? 'bg-gray-900 text-white border-gray-900'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-gray-700">Prospects</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_COMPANIES}
+                  value={prospectCount}
+                  onChange={e => setProspectCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
+                />
+                <span className="text-xs text-gray-400">companies</span>
               </div>
-              <span className="text-xs text-gray-400">(C-Suite + VP always included)</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500">Attendees/co.</span>
+                <div className="flex gap-1">
+                  {([2, 3, 4] as const).map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setProspectAttendees(n)}
+                      className={`w-8 h-8 text-sm rounded border font-medium transition-colors ${
+                        prospectAttendees === n
+                          ? 'bg-gray-900 text-white border-gray-900'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-gray-400 hidden sm:inline">(C-Suite + VP always included)</span>
+              </div>
             </div>
           </div>
 
           {/* Partners */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="text-sm font-medium text-gray-700 w-20">Partners</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={MAX_COMPANIES}
-                value={partnerCount}
-                onChange={e => setPartnerCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
-              />
-              <span className="text-xs text-gray-400">companies</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Attendees/company</span>
-              <input
-                type="number"
-                min={1}
-                max={8}
-                value={partnerAttendees}
-                onChange={e => setPartnerAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm w-16 tabular-nums"
-              />
-            </div>
-          </div>
-
-          {/* Vendors */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="text-sm font-medium text-gray-700 w-20">Vendors</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={MAX_COMPANIES}
-                value={vendorCount}
-                onChange={e => setVendorCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
-              />
-              <span className="text-xs text-gray-400">companies</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Attendees/company</span>
-              <input
-                type="number"
-                min={1}
-                max={8}
-                value={vendorAttendees}
-                onChange={e => setVendorAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm w-16 tabular-nums"
-              />
-            </div>
-          </div>
-
-          {/* Competitors */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="text-sm font-medium text-gray-700 w-20">Competitors</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={MAX_COMPANIES}
-                value={competitorCount}
-                onChange={e => setCompetitorCount(Math.min(MAX_COMPANIES, Math.max(0, Number(e.target.value))))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
-              />
-              <span className="text-xs text-gray-400">companies</span>
-            </div>
-            {competitorCount > 0 && (
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-gray-700">Partners</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Attendees/company</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_COMPANIES}
+                  value={partnerCount}
+                  onChange={e => setPartnerCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
+                />
+                <span className="text-xs text-gray-400">companies</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Attendees/co.</span>
                 <input
                   type="number"
                   min={1}
                   max={8}
-                  value={competitorAttendees}
-                  onChange={e => setCompetitorAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
+                  value={partnerAttendees}
+                  onChange={e => setPartnerAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
                   className="border border-gray-300 rounded px-2 py-1 text-sm w-16 tabular-nums"
                 />
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* Vendors */}
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-gray-700">Vendors</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_COMPANIES}
+                  value={vendorCount}
+                  onChange={e => setVendorCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
+                />
+                <span className="text-xs text-gray-400">companies</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Attendees/co.</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={vendorAttendees}
+                  onChange={e => setVendorAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-16 tabular-nums"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Competitors */}
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-gray-700">Competitors</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={MAX_COMPANIES}
+                  value={competitorCount}
+                  onChange={e => setCompetitorCount(Math.min(MAX_COMPANIES, Math.max(0, Number(e.target.value))))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
+                />
+                <span className="text-xs text-gray-400">companies</span>
+              </div>
+              {competitorCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Attendees/co.</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={8}
+                    value={competitorAttendees}
+                    onChange={e => setCompetitorAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm w-16 tabular-nums"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Live row count */}
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-sm text-gray-600">
-            <span className="font-medium">Estimated rows:</span>{' '}
-            <span className="text-gray-500">{estimatedRows.prospects.toLocaleString()} prospects</span>
-            {' · '}
-            <span className="text-gray-500">{estimatedRows.partners.toLocaleString()} partners</span>
-            {' · '}
-            <span className="text-gray-500">{estimatedRows.vendors.toLocaleString()} vendors</span>
-            {competitorCount > 0 && (
-              <>{' · '}<span className="text-gray-500">{estimatedRows.competitors.toLocaleString()} competitors</span></>
-            )}
-            {' · '}
-            <span className="font-semibold text-gray-900">{estimatedRows.total.toLocaleString()} total</span>
-          </p>
+        <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+          <span className="font-medium text-gray-900">Est. rows:</span>
+          <span>{estimatedRows.prospects.toLocaleString()} prospects</span>
+          <span>{estimatedRows.partners.toLocaleString()} partners</span>
+          <span>{estimatedRows.vendors.toLocaleString()} vendors</span>
+          {competitorCount > 0 && <span>{estimatedRows.competitors.toLocaleString()} competitors</span>}
+          <span className="font-semibold text-gray-900">{estimatedRows.total.toLocaleString()} total</span>
         </div>
       </div>
 
@@ -536,7 +537,7 @@ export default function GeneratorPage() {
                   value={col.name}
                   onChange={e => updateCustomColumn(i, { name: e.target.value })}
                   placeholder="Column name"
-                  className="border border-gray-300 rounded px-2 py-1 text-xs w-40"
+                  className="border border-gray-300 rounded px-2 py-1 text-xs flex-1 min-w-[120px]"
                 />
                 <select
                   value={col.type}
@@ -551,7 +552,7 @@ export default function GeneratorPage() {
                     value={col.options?.join(', ') ?? ''}
                     onChange={e => updateCustomColumn(i, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                     placeholder="Option 1, Option 2, ..."
-                    className="border border-gray-300 rounded px-2 py-1 text-xs w-52"
+                    className="border border-gray-300 rounded px-2 py-1 text-xs w-full sm:w-52"
                   />
                 )}
                 <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer select-none">
@@ -602,21 +603,23 @@ export default function GeneratorPage() {
           </label>
 
           {overlapEnabled && (
-            <div className="space-y-4 pl-5">
+            <div className="space-y-4 pl-4 sm:pl-5">
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Source conferences</p>
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {conferences.map(c => (
-                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <label key={c.id} className="flex items-start gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
                         checked={sourceConferenceIds.has(c.id)}
                         onChange={() => toggleSourceConference(c.id)}
-                        className="rounded"
+                        className="rounded mt-0.5 flex-shrink-0"
                       />
-                      <span className="text-gray-800">{c.name}</span>
-                      <span className="text-xs text-gray-400">
-                        ({c.attendeeCount} attendees: {c.prospectCount}P / {c.partnerCount}Pa / {c.vendorCount}V)
+                      <span>
+                        <span className="text-gray-800">{c.name}</span>
+                        <span className="text-xs text-gray-400 block sm:inline sm:ml-1">
+                          ({c.attendeeCount} attendees: {c.prospectCount}P / {c.partnerCount}Pa / {c.vendorCount}V)
+                        </span>
                       </span>
                     </label>
                   ))}
@@ -632,7 +635,7 @@ export default function GeneratorPage() {
                     { label: 'Vendors', value: vendorOverlapPct, set: setVendorOverlapPct },
                   ].map(({ label, value, set }) => (
                     <div key={label} className="flex items-center gap-3">
-                      <span className="text-sm text-gray-700 w-20">{label}</span>
+                      <span className="text-sm text-gray-700 w-16 flex-shrink-0">{label}</span>
                       <input
                         type="range"
                         min={0}
@@ -640,21 +643,18 @@ export default function GeneratorPage() {
                         step={5}
                         value={value}
                         onChange={e => set(Number(e.target.value))}
-                        className="flex-1 max-w-xs"
+                        className="flex-1"
                       />
-                      <span className="text-sm font-medium text-gray-900 tabular-nums w-10">{value}%</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums w-10 text-right">{value}%</span>
                     </div>
                   ))}
                 </div>
                 <p className="text-xs text-gray-400 mt-2">Returning attendees keep their original assigned rep.</p>
               </div>
 
-              {/* Live overlap preview */}
               {sourceConferenceIds.size > 0 && (
                 <div className="text-sm text-gray-600">
-                  <span className="font-medium text-gray-900">
-                    ~{estimatedRows.total} total rows
-                  </span>
+                  <span className="font-medium text-gray-900">~{estimatedRows.total} total rows</span>
                   {' · '}returning attendees deducted from new company generation
                 </div>
               )}
@@ -669,7 +669,7 @@ export default function GeneratorPage() {
         <button
           onClick={generate}
           disabled={generating || !conferenceName.trim()}
-          className="px-5 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2"
+          className="w-full sm:w-auto px-5 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-700 disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {generating ? (
             <>
@@ -682,7 +682,7 @@ export default function GeneratorPage() {
           ) : 'Generate & Download'}
         </button>
         {genError && <p className="mt-3 text-sm text-red-600">{genError}</p>}
-        {genSuccess && <p className="mt-3 text-sm text-green-700 font-medium">✓ {genSuccess}</p>}
+        {genSuccess && <p className="mt-3 text-sm text-green-700 font-medium break-words">✓ {genSuccess}</p>}
       </div>
     </div>
   );
