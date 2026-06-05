@@ -1779,69 +1779,25 @@ export default function ConferenceDetailPage() {
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+
+              {/* Row 1: Conference name + status badge */}
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
-                <div className="flex items-center gap-6 border-l border-gray-200 pl-3 overflow-x-auto flex-nowrap hide-scrollbar">
-                  <PreConferenceReview
-                    conferenceId={conference.id}
-                    conferenceName={conference.name}
-                    targetsReadOnly={conferenceStage === 'closed'}
-                  />
-                  <PostConferenceReview
-                    conferenceId={conference.id}
-                    conferenceName={conference.name}
-                  />
-                  <ConferenceEffectivenessModal
-                    conferenceId={conference.id}
-                    conferenceName={conference.name}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowBudgetModal(true)}
-                    className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    Budget vs. Actual
-                  </button>
-                  {capabilities?.capabilities?.crm_export && (
-                    <button
-                      type="button"
-                      onClick={() => setShowCrmExport(true)}
-                      className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      Export CRM Files
-                    </button>
-                  )}
-                  {isInternalAttendee && (
-                    <>
-                      <div className="flex-shrink-0 self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)', margin: '0 4px' }} />
-                      <button
-                        type="button"
-                        onClick={() => setShowDebrief(true)}
-                        className="flex items-center gap-1.5 text-sm font-medium text-brand-primary hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                      >
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
-                        </svg>
-                        Field Report
-                      </button>
-                    </>
-                  )}
-                </div>
+                {conferenceStage && (
+                  <ConferenceStageBadge stage={conferenceStage} daysRemaining={stageDaysRemaining} />
+                )}
+                {!!conference.is_historical && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border border-amber-400 bg-amber-100 text-amber-900">
+                    Historical Conference
+                  </span>
+                )}
               </div>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
+
+              {/* Row 2: Dates · Location · Website */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-2">
                 <span className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   {formatDate(conference.start_date)}
@@ -1850,7 +1806,7 @@ export default function ConferenceDetailPage() {
                     : ''}
                 </span>
                 <span className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
@@ -1876,33 +1832,10 @@ export default function ConferenceDetailPage() {
                     </a>
                   </span>
                 )}
-                {conference.is_historical && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border border-amber-400 bg-amber-100 text-amber-900">
-                    Historical Conference
-                  </span>
-                )}
-                {conferenceStage && (
-                  <ConferenceStageBadge stage={conferenceStage} daysRemaining={stageDaysRemaining} />
-                )}
-                {conference.attendees.length === 0 ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-300">
-                    <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
-                    </svg>
-                    Awaiting Attendee Upload
-                  </span>
-                ) : (
-                  <div className="inline-flex items-center gap-2 flex-wrap">
-                    <span className="badge-blue">
-                      {conference.attendees.length} attendees
-                    </span>
-                    {!conference.is_historical && conference.conference_strategy_type_display_name && (
-                      <span className="badge-blue">
-                        {conference.conference_strategy_type_display_name}
-                      </span>
-                    )}
-                  </div>
-                )}
+              </div>
+
+              {/* Row 3: Metadata pills */}
+              <div className="flex flex-wrap items-center gap-2 mt-3">
                 {conference.conference_type && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -1913,6 +1846,19 @@ export default function ConferenceDetailPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4" />
                     </svg>
                     {conference.conference_type}
+                  </span>
+                )}
+                {!conference.is_historical && conference.conference_strategy_type_display_name && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 2l0 2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 20l0 2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M20 12l2 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2 12l2 0" />
+                    </svg>
+                    {conference.conference_strategy_type_display_name}
                   </span>
                 )}
                 {conference.sponsorship_level && conference.sponsorship_level.toLowerCase() !== 'none' && (
@@ -1928,16 +1874,6 @@ export default function ConferenceDetailPage() {
                     {conference.sponsorship_level}
                   </span>
                 )}
-                {conference.booth_present ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-300">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4m0 1a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1zm0 5l16 0m-5 -5l0 16m-6 -16l0 16" />
-                    </svg>
-                    Booth
-                    {conference.booth_number ? ` #${conference.booth_number}` : ''}
-                    {(conference.booth_width || conference.booth_length) ? ` · ${conference.booth_width ?? '?'}×${conference.booth_length ?? '?'} ft` : ''}
-                  </span>
-                ) : null}
                 {conference.global_agenda_uploaded_at ? (
                   <button
                     type="button"
@@ -1945,27 +1881,142 @@ export default function ConferenceDetailPage() {
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-800 border border-green-300 hover:bg-green-100 transition-colors cursor-pointer"
                   >
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.5 17h.5" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 15l2 2l4 -4" />
                     </svg>
                     Agenda Uploaded
                   </button>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-300">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.5 17h.5" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 12l4 4m0 -4l-4 4" />
                     </svg>
                     No Agenda
                   </span>
                 )}
+                {conference.attendees.length === 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-300">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
+                    </svg>
+                    Awaiting Attendee Upload
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21v-2a4 4 0 0 0 -3 -3.85" />
+                    </svg>
+                    {conference.attendees.length} attendees
+                  </span>
+                )}
+                {conference.booth_present ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-300">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4m0 1a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1zm0 5l16 0m-5 -5l0 16m-6 -16l0 16" />
+                    </svg>
+                    Booth{conference.booth_number ? ` #${conference.booth_number}` : ''}{(conference.booth_width || conference.booth_length) ? ` · ${conference.booth_width ?? '?'}×${conference.booth_length ?? '?'} ft` : ''}
+                  </span>
+                ) : null}
               </div>
+
+              {/* Row 4 + 5: Internal Attendees */}
+              <div className="mt-3">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {conference.internal_attendees?.split(',').filter(Boolean).map((user) => {
+                    const parts = user.trim().split(/\s+/);
+                    const initials = parts.length >= 2
+                      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                      : parts[0].substring(0, 2).toUpperCase();
+                    return (
+                      <span
+                        key={user}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
+                        title={user.trim()}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <span className="sm:hidden">{initials}</span>
+                        <span className="hidden sm:inline">{user.trim()}</span>
+                      </span>
+                    );
+                  })}
+                  {!conference.internal_attendees?.trim() && (
+                    <span className="text-xs text-gray-400">None listed</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 6: Action nav */}
+              <div className="flex items-center gap-5 mt-3 overflow-x-auto flex-nowrap hide-scrollbar">
+                <PreConferenceReview
+                  conferenceId={conference.id}
+                  conferenceName={conference.name}
+                  targetsReadOnly={conferenceStage === 'closed'}
+                />
+                <PostConferenceReview
+                  conferenceId={conference.id}
+                  conferenceName={conference.name}
+                />
+                <ConferenceEffectivenessModal
+                  conferenceId={conference.id}
+                  conferenceName={conference.name}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowBudgetModal(true)}
+                  className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Budget vs. Actual
+                </button>
+                {capabilities?.capabilities?.crm_export && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCrmExport(true)}
+                    className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Export CRM Files
+                  </button>
+                )}
+                {isInternalAttendee && (
+                  <>
+                    <div className="flex-shrink-0 self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowDebrief(true)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-brand-primary hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
+                      </svg>
+                      Field Report
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Banners */}
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
               )}
-              {conference.is_historical && (
+              {!!conference.is_historical && (
                 <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
                   This conference has a Calendar Recommendation Score.{' '}
                   <button
@@ -2064,36 +2115,9 @@ export default function ConferenceDetailPage() {
                   )}
                 </div>
               )}
-              <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-                <div>
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {conference.internal_attendees?.split(',').filter(Boolean).map((user) => {
-                      const parts = user.trim().split(/\s+/);
-                      const initials = parts.length >= 2
-                        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-                        : parts[0].substring(0, 2).toUpperCase();
-                      return (
-                        <span
-                          key={user}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
-                          title={user.trim()}
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          <span className="sm:hidden">{initials}</span>
-                          <span className="hidden sm:inline">{user.trim()}</span>
-                        </span>
-                      );
-                    })}
-                    {!conference.internal_attendees?.trim() && (
-                      <span className="text-xs text-gray-400">None listed</span>
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
+
+            {/* Right: Edit + Reopen */}
             <div className="flex flex-col gap-2 sm:ml-4 flex-shrink-0 items-stretch">
               <button
                 onClick={() => setIsEditing(true)}
