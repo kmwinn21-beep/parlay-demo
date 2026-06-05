@@ -1910,7 +1910,7 @@ export default function ConferenceDetailPage() {
                       style={{ color: '#185FA5' }}
                       className="hover:underline"
                     >
-                      {conference.website.replace(/^https?:\/\//, '')}
+                      {conference.name} Website
                     </a>
                   </span>
                 )}
