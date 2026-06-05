@@ -1790,8 +1790,10 @@ export default function ConferenceDetailPage() {
           </div>
         ) : (
           <div>
-            {/* Top row: report nav + Edit at far right */}
-            <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar">
+            {/* Top row: report nav (scrollable) + Field Report pinned at right */}
+            <div className="flex items-center relative">
+              {/* Scrollable buttons */}
+              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-2">
               <PreConferenceReview
                 conferenceId={conference.id}
                 conferenceName={conference.name}
@@ -1827,9 +1829,11 @@ export default function ConferenceDetailPage() {
                   Export CRM Files
                 </button>
               )}
+              </div>
+              {/* Pinned right: divider + Field Report */}
               {isInternalAttendee && (
-                <>
-                  <div className="flex-shrink-0 self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
+                <div className="flex items-center gap-3 flex-shrink-0 bg-white pl-2">
+                  <div className="self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
                   <button
                     type="button"
                     onClick={() => setShowDebrief(true)}
@@ -1844,7 +1848,7 @@ export default function ConferenceDetailPage() {
                     </svg>
                     Field Report
                   </button>
-                </>
+                </div>
               )}
             </div>
 
