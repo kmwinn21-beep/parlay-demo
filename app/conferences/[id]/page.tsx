@@ -467,12 +467,23 @@ export default function ConferenceDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...extra }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         toast.error(data.error || 'Failed to update stage.');
         return;
       }
-      await fetchConference();
+      // Immediately reflect the new override in local state so the stage badge
+      // updates before the full re-fetch completes.
+      if (data.stage) {
+        const overrideActions = ['close_now', 'reopen', 'set_override'];
+        const clearActions = ['clear_override'];
+        if (overrideActions.includes(action)) {
+          setConference(prev => prev ? { ...prev, stage_override: data.stage } : prev);
+        } else if (clearActions.includes(action)) {
+          setConference(prev => prev ? { ...prev, stage_override: null } : prev);
+        }
+      }
+      fetchConference();
       toast.success('Conference stage updated.');
     } catch {
       toast.error('Failed to update stage.');
