@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOpsAdmin } from '@/lib/opsAuth';
-import { createClient } from '@libsql/client';
-import { db, dbReady } from '@/lib/db';
+import { getDb } from '@/lib/getDb';
 import { generateDummyData, type GeneratorParams } from '@/lib/dummy-data/generate-attendees';
 import { exportToXlsx } from '@/lib/dummy-data/export-xlsx';
 import { companyPools } from '@/lib/dummy-data/company-pools';
@@ -37,19 +36,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Open tenant DB if overlap is needed
-  let tenantClient: ReturnType<typeof createClient> | undefined;
-  if (body.overlap?.enabled && body.overlap.sourceConferenceIds.length > 0) {
-    await dbReady;
-    const accountRow = await db.execute({
-      sql: `SELECT turso_db_url, turso_auth_token FROM accounts WHERE id = ?`,
-      args: [accountId],
-    });
-    if (accountRow.rows[0]?.turso_db_url) {
-      tenantClient = createClient({
-        url: String(accountRow.rows[0].turso_db_url),
-        authToken: String(accountRow.rows[0].turso_auth_token),
-      });
-    }
+  let tenantClient: Awaited<ReturnType<typeof getDb>> | undefined;
+  if (body.overlap?.enabled && body.overlap.sourceConferenceIds?.length > 0) {
+    tenantClient = await getDb(accountId);
   }
 
   try {
