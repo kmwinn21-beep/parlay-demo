@@ -180,6 +180,8 @@ export async function DELETE(
     // Delete the conference and its links
     await db.batch(
       [
+        // NULL out follow_ups.meeting_id before deleting meetings (no CASCADE on that FK)
+        { sql: 'UPDATE follow_ups SET meeting_id = NULL WHERE conference_id = ?', args: [params.id] },
         { sql: 'DELETE FROM conference_attendees WHERE conference_id = ?', args: [params.id] },
         { sql: 'DELETE FROM conference_attendee_details WHERE conference_id = ?', args: [params.id] },
         { sql: 'DELETE FROM meetings WHERE conference_id = ?', args: [params.id] },
@@ -202,6 +204,8 @@ export async function DELETE(
         const placeholders = chunk.map(() => '?').join(', ');
         await db.batch(
           [
+            // contact_conference_history.attendee_id has no CASCADE
+            { sql: `DELETE FROM contact_conference_history WHERE attendee_id IN (${placeholders})`, args: chunk },
             { sql: `DELETE FROM entity_notes WHERE entity_type = 'attendee' AND entity_id IN (${placeholders})`, args: chunk },
             { sql: `DELETE FROM attendees WHERE id IN (${placeholders})`, args: chunk },
           ],
