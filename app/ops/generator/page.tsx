@@ -109,9 +109,10 @@ export default function GeneratorPage() {
       const repsData = await repsRes.json();
       if (repsData.error) throw new Error(repsData.error);
 
-      setReps(repsData);
-      setSelectedRepNames(new Set(repsData.map((r: RepItem) => r.name)));
-      setCompanyName(repsData.length > 0 ? 'Account loaded' : 'Account loaded (no reps)');
+      const repsList: RepItem[] = Array.isArray(repsData) ? repsData : (repsData.reps ?? []);
+      setReps(repsList);
+      setSelectedRepNames(new Set(repsList.map((r: RepItem) => r.name)));
+      setCompanyName(repsList.length > 0 ? 'Account loaded' : 'Account loaded (no reps)');
 
       if (confsRes.ok) {
         const confsData = await confsRes.json();
