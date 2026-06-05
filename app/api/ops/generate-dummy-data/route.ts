@@ -24,32 +24,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
   }
 
-  // Validate pool sizes
-  const pool = companyPools[vertical as Vertical];
-  if (!pool) {
+  // Validate vertical
+  if (!companyPools[vertical as Vertical]) {
     return NextResponse.json({ error: `Unknown vertical: ${vertical}` }, { status: 400 });
   }
-  const maxProspects = pool.prospects.length;
-  const maxPartners = pool.partners.length;
-  const maxVendors = pool.vendors.length;
 
-  if (prospects.companyCount > maxProspects) {
-    return NextResponse.json({
-      error: `Prospect count ${prospects.companyCount} exceeds pool size of ${maxProspects} for vertical "${vertical}".`,
-      maxAvailable: { prospects: maxProspects, partners: maxPartners, vendors: maxVendors },
-    }, { status: 422 });
-  }
-  if (partners.companyCount > maxPartners) {
-    return NextResponse.json({
-      error: `Partner count ${partners.companyCount} exceeds pool size of ${maxPartners} for vertical "${vertical}".`,
-      maxAvailable: { prospects: maxProspects, partners: maxPartners, vendors: maxVendors },
-    }, { status: 422 });
-  }
-  if (vendors.companyCount > maxVendors) {
-    return NextResponse.json({
-      error: `Vendor count ${vendors.companyCount} exceeds pool size of ${maxVendors} for vertical "${vertical}".`,
-      maxAvailable: { prospects: maxProspects, partners: maxPartners, vendors: maxVendors },
-    }, { status: 422 });
+  const MAX_COMPANIES = 2000;
+  if (prospects.companyCount > MAX_COMPANIES || partners.companyCount > MAX_COMPANIES || vendors.companyCount > MAX_COMPANIES) {
+    return NextResponse.json({ error: `Company count cannot exceed ${MAX_COMPANIES}.` }, { status: 422 });
   }
 
   // Open tenant DB if overlap is needed

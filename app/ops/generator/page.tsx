@@ -78,6 +78,8 @@ export default function GeneratorPage() {
   const [genError, setGenError] = useState('');
   const [genSuccess, setGenSuccess] = useState('');
 
+  const MAX_COMPANIES = 2000;
+  // poolMax kept for display info only — generator fills beyond pool with synthetic names
   const maxCounts = useMemo(() => poolMax(vertical), [vertical]);
 
   const estimatedRows = useMemo(() => {
@@ -158,18 +160,6 @@ export default function GeneratorPage() {
   // ── Generate & download ──────────────────────────────────────────────────
   const generate = async () => {
     if (!conferenceName.trim()) { setGenError('Conference name is required.'); return; }
-    if (prospectCount > maxCounts.prospects) {
-      setGenError(`Prospect count exceeds pool size of ${maxCounts.prospects} for ${VERTICAL_LABELS[vertical]}.`);
-      return;
-    }
-    if (partnerCount > maxCounts.partners) {
-      setGenError(`Partner count exceeds pool size of ${maxCounts.partners} for ${VERTICAL_LABELS[vertical]}.`);
-      return;
-    }
-    if (vendorCount > maxCounts.vendors) {
-      setGenError(`Vendor count exceeds pool size of ${maxCounts.vendors} for ${VERTICAL_LABELS[vertical]}.`);
-      return;
-    }
 
     setGenerating(true);
     setGenError('');
@@ -308,12 +298,12 @@ export default function GeneratorPage() {
               <input
                 type="number"
                 min={1}
-                max={maxCounts.prospects}
+                max={MAX_COMPANIES}
                 value={prospectCount}
-                onChange={e => setProspectCount(Math.min(maxCounts.prospects, Math.max(1, Number(e.target.value))))}
+                onChange={e => setProspectCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
                 className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
               />
-              <span className="text-xs text-gray-400">companies (max {maxCounts.prospects})</span>
+              <span className="text-xs text-gray-400">companies</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Attendees/company</span>
@@ -344,12 +334,12 @@ export default function GeneratorPage() {
               <input
                 type="number"
                 min={1}
-                max={maxCounts.partners}
+                max={MAX_COMPANIES}
                 value={partnerCount}
-                onChange={e => setPartnerCount(Math.min(maxCounts.partners, Math.max(1, Number(e.target.value))))}
+                onChange={e => setPartnerCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
                 className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
               />
-              <span className="text-xs text-gray-400">companies (max {maxCounts.partners})</span>
+              <span className="text-xs text-gray-400">companies</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Attendees/company</span>
@@ -371,12 +361,12 @@ export default function GeneratorPage() {
               <input
                 type="number"
                 min={1}
-                max={maxCounts.vendors}
+                max={MAX_COMPANIES}
                 value={vendorCount}
-                onChange={e => setVendorCount(Math.min(maxCounts.vendors, Math.max(1, Number(e.target.value))))}
+                onChange={e => setVendorCount(Math.min(MAX_COMPANIES, Math.max(1, Number(e.target.value))))}
                 className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
               />
-              <span className="text-xs text-gray-400">companies (max {maxCounts.vendors})</span>
+              <span className="text-xs text-gray-400">companies</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Attendees/company</span>

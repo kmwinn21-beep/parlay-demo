@@ -1,4 +1,5 @@
 import { companyPools, type Vertical, type CompanyRole } from './company-pools';
+import { buildCompanyList } from './company-name-generator';
 import { generateUniqueName } from './name-pools';
 import { functions, pickTitle, type Seniority } from './title-pools';
 import type { Client } from '@libsql/client';
@@ -332,10 +333,9 @@ export async function generateDummyData(
   }
 
   // ── Prospects ───────────────────────────────────────────────────────────────
-  const prospectPool = shuffle([...companyPools[vertical].prospects]);
   const returningProspectCount = returningProspects.length;
   const newProspectCompanies = Math.ceil(prospects.companyCount * (1 - (overlap?.prospectOverlapPct ?? 0) / 100));
-  const prospectCompanies = prospectPool.slice(0, Math.min(newProspectCompanies, prospectPool.length));
+  const prospectCompanies = buildCompanyList(vertical, 'prospects', newProspectCompanies, shuffle);
   const prospectRepDist = distributeWeighted(prospectCompanies.length, repList.length);
 
   let repIdx = 0;
@@ -356,9 +356,8 @@ export async function generateDummyData(
   const prospectRows = allRows.length;
 
   // ── Partners ────────────────────────────────────────────────────────────────
-  const partnerPool = shuffle([...companyPools[vertical].partners]);
   const newPartnerCompanies = Math.ceil(partners.companyCount * (1 - (overlap?.partnerOverlapPct ?? 0) / 100));
-  const partnerCompanies = partnerPool.slice(0, Math.min(newPartnerCompanies, partnerPool.length));
+  const partnerCompanies = buildCompanyList(vertical, 'partners', newPartnerCompanies, shuffle);
   const partnerRepDist = distributeWeighted(partnerCompanies.length, repList.length);
 
   repIdx = 0; companyIdx = 0;
@@ -377,9 +376,8 @@ export async function generateDummyData(
   const partnerRows = allRows.length - prospectRows;
 
   // ── Vendors ─────────────────────────────────────────────────────────────────
-  const vendorPool = shuffle([...companyPools[vertical].vendors]);
   const newVendorCompanies = Math.ceil(vendors.companyCount * (1 - (overlap?.vendorOverlapPct ?? 0) / 100));
-  const vendorCompanies = vendorPool.slice(0, Math.min(newVendorCompanies, vendorPool.length));
+  const vendorCompanies = buildCompanyList(vertical, 'vendors', newVendorCompanies, shuffle);
   const vendorRepDist = distributeWeighted(vendorCompanies.length, repList.length);
 
   repIdx = 0; companyIdx = 0;
