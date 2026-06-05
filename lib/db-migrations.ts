@@ -1165,4 +1165,10 @@ export const migrations: string[] = [
      VALUES ('company_type', 'Partner', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'partner')`,
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
      VALUES ('company_type', 'Vendor', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'vendor')`,
+  // 418 — ensure 'Competitor' company_type option exists on all tenant DBs.
+  // Competitor was only seeded via an earlier migration in this array which may have failed
+  // silently on some tenant DBs (e.g. parlay-infor). It is not covered by migrateTenantDb
+  // baseSeeds, so we re-seed it here with INSERT OR IGNORE to be safe.
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, action_key, color)
+     VALUES ('company_type', 'Competitor', 999, 1, 'competitor', '#dc2626')`,
 ];
