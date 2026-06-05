@@ -1818,6 +1818,25 @@ export default function ConferenceDetailPage() {
                       Export CRM Files
                     </button>
                   )}
+                  {isInternalAttendee && (
+                    <>
+                      <div className="flex-shrink-0 self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)', margin: '0 4px' }} />
+                      <button
+                        type="button"
+                        onClick={() => setShowDebrief(true)}
+                        className="flex items-center gap-1.5 text-sm font-medium text-brand-primary hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                      >
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
+                        </svg>
+                        Field Report
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
@@ -1837,6 +1856,26 @@ export default function ConferenceDetailPage() {
                   </svg>
                   {conference.location}
                 </span>
+                {conference.website && (
+                  <span className="flex items-center gap-2 text-sm">
+                    <svg className="w-4 h-4 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 15h16.8" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.5 3a17 17 0 0 0 0 18" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12.5 3a17 17 0 0 1 0 18" />
+                    </svg>
+                    <a
+                      href={conference.website.startsWith('http') ? conference.website : `https://${conference.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#185FA5' }}
+                      className="hover:underline"
+                    >
+                      {conference.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  </span>
+                )}
                 {conference.is_historical && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border border-amber-400 bg-amber-100 text-amber-900">
                     Historical Conference
@@ -1863,6 +1902,64 @@ export default function ConferenceDetailPage() {
                       </span>
                     )}
                   </div>
+                )}
+                {conference.conference_type && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21l18 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 21l0 -10.15" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21l0 -10.15" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4" />
+                    </svg>
+                    {conference.conference_type}
+                  </span>
+                )}
+                {conference.sponsorship_level && conference.sponsorship_level.toLowerCase() !== 'none' && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-800 border border-green-300">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 21l8 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 4l10 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 4v8a5 5 0 0 1 -10 0v-8" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                    </svg>
+                    {conference.sponsorship_level}
+                  </span>
+                )}
+                {conference.booth_present ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-300">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4m0 1a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1zm0 5l16 0m-5 -5l0 16m-6 -16l0 16" />
+                    </svg>
+                    Booth
+                    {conference.booth_number ? ` #${conference.booth_number}` : ''}
+                    {(conference.booth_width || conference.booth_length) ? ` · ${conference.booth_width ?? '?'}×${conference.booth_length ?? '?'} ft` : ''}
+                  </span>
+                ) : null}
+                {conference.global_agenda_uploaded_at ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('agenda')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-800 border border-green-300 hover:bg-green-100 transition-colors cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.5 17h.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5" />
+                    </svg>
+                    Agenda Uploaded
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-300">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.5 17h.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5" />
+                    </svg>
+                    No Agenda
+                  </span>
                 )}
               </div>
               {conference.notes && (
@@ -1997,18 +2094,7 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 sm:ml-4 flex-shrink-0 items-start">
-              {isInternalAttendee && (
-                <button
-                  onClick={() => setShowDebrief(true)}
-                  className="btn-primary flex items-center gap-2 text-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Field Report
-                </button>
-              )}
+            <div className="flex flex-col gap-2 sm:ml-4 flex-shrink-0 items-stretch">
               <button
                 onClick={() => setIsEditing(true)}
                 className="btn-secondary flex items-center gap-2 text-sm"
@@ -2018,6 +2104,20 @@ export default function ConferenceDetailPage() {
                 </svg>
                 Edit
               </button>
+              {conferenceStage === 'closed' && (
+                <button
+                  type="button"
+                  disabled={stageActionLoading}
+                  onClick={() => applyStageAction('reopen')}
+                  className="flex items-center justify-center gap-2 text-sm px-3 py-1.5 rounded font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                  </svg>
+                  Reopen
+                </button>
+              )}
             </div>
           </div>
         )}
