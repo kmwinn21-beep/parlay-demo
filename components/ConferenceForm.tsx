@@ -43,6 +43,20 @@ export function ConferenceForm() {
   const [conferenceMode, setConferenceMode] = useState<ConferenceMode>('new');
   const [selectedSeries, setSelectedSeries] = useState<SeriesOption | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
+  const [industryOptions, setIndustryOptions] = useState<{ id: number; value: string }[]>([]);
+  const [industrySearch, setIndustrySearch] = useState('');
+  const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false);
+  const [selectedIndustryFocus, setSelectedIndustryFocus] = useState('');
+  const industryDropdownRef = useRef<HTMLDivElement>(null);
+  const [conferenceTypeInput, setConferenceTypeInput] = useState('');
+  const [websiteInput, setWebsiteInput] = useState('');
+  useEffect(() => {
+    fetch('/api/config?category=industry')
+      .then((r) => r.json())
+      .then((rows) => setIndustryOptions((rows ?? []).map((r: { id: number; value: string }) => ({ id: Number(r.id), value: String(r.value) }))))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch('/api/config?category=conference_strategy_type&form=conference_form')
       .then((r) => r.json())
@@ -54,6 +68,9 @@ export function ConferenceForm() {
     function handleClickOutside(e: MouseEvent) {
       if (internalDropdownRef.current && !internalDropdownRef.current.contains(e.target as Node)) {
         setInternalDropdownOpen(false);
+      }
+      if (industryDropdownRef.current && !industryDropdownRef.current.contains(e.target as Node)) {
+        setIndustryDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -91,6 +108,25 @@ export function ConferenceForm() {
     }
   };
 
+  const createIndustryOption = async (value: string) => {
+    try {
+      const res = await fetch('/api/config/industry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as { id: number; value: string };
+      const newOpt = { id: Number(created.id), value: String(created.value) };
+      setIndustryOptions((prev) => [...prev.filter(o => o.value !== newOpt.value), newOpt]);
+      setSelectedIndustryFocus(newOpt.value);
+      setIndustrySearch('');
+      setIndustryDropdownOpen(false);
+    } catch {
+      toast.error('Failed to create industry option.');
+    }
+  };
+
   const handleMappingConfirmed = (mapping: ColumnMapping) => {
     setConfirmedMapping(mapping);
     setFile(pendingFile);
@@ -112,6 +148,9 @@ export function ConferenceForm() {
       if (selectedSeries) formData.append('series_id', selectedSeries.id);
       if (selectedSeasonId) formData.append('season_id', selectedSeasonId);
       formData.append('is_historical', conferenceMode === 'historical' ? '1' : '0');
+      if (selectedIndustryFocus) formData.append('industry_focus', selectedIndustryFocus);
+      if (conferenceTypeInput) formData.append('conference_type', conferenceTypeInput);
+      if (websiteInput) formData.append('website', websiteInput);
 
       if (file) {
         formData.append('file', file);
@@ -177,9 +216,87 @@ export function ConferenceForm() {
           <SeriesSeasonCombobox
             seriesId={selectedSeries?.id ?? null}
             seasonId={selectedSeasonId}
-            onSeriesChange={(s) => { setSelectedSeries(s); if (!s) setSelectedSeasonId(null); }}
+            onSeriesChange={(s) => {
+              setSelectedSeries(s);
+              if (!s) setSelectedSeasonId(null);
+              if (s?.industry_focus) setSelectedIndustryFocus(s.industry_focus);
+              if (s?.conference_type) setConferenceTypeInput(s.conference_type);
+            }}
             onSeasonChange={setSelectedSeasonId}
           />
+
+          <div className="md:col-span-2" ref={industryDropdownRef}>
+            <label className="label flex items-center gap-2">
+              Industry Focus
+              {selectedSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={industryDropdownOpen ? industrySearch : selectedIndustryFocus}
+                onFocus={() => { setIndustryDropdownOpen(true); setIndustrySearch(selectedIndustryFocus); }}
+                onChange={(e) => { setIndustrySearch(e.target.value); setSelectedIndustryFocus(e.target.value); }}
+                placeholder="Search or add industry..."
+                className="input-field pr-8"
+                autoComplete="off"
+              />
+              {selectedIndustryFocus && !industryDropdownOpen && (
+                <button type="button" onClick={() => { setSelectedIndustryFocus(''); setIndustrySearch(''); }} className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              )}
+              {industryDropdownOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                  {industryOptions
+                    .filter((o) => !industrySearch || o.value.toLowerCase().includes(industrySearch.toLowerCase()))
+                    .map((opt) => (
+                      <button key={opt.id} type="button" onClick={() => { setSelectedIndustryFocus(opt.value); setIndustryDropdownOpen(false); setIndustrySearch(''); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                        {opt.value}
+                      </button>
+                    ))}
+                  {industrySearch && !industryOptions.some((o) => o.value.toLowerCase() === industrySearch.toLowerCase()) && (
+                    <button type="button" onClick={() => void createIndustryOption(industrySearch)} className="w-full text-left px-3 py-2 text-sm text-brand-secondary hover:bg-blue-50 flex items-center gap-2 font-medium">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                      Create &ldquo;{industrySearch}&rdquo;
+                    </button>
+                  )}
+                  {industryOptions.length === 0 && !industrySearch && (
+                    <div className="px-3 py-2 text-sm text-gray-400">No industry options configured. Type to create one.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="label flex items-center gap-2">
+              Conference Type
+              {selectedSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
+            </label>
+            <input
+              type="text"
+              value={conferenceTypeInput}
+              onChange={(e) => setConferenceTypeInput(e.target.value)}
+              className="input-field"
+              placeholder="e.g., Trade Show, Summit, Forum..."
+            />
+          </div>
+
+          <div>
+            <label className="label">Website</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
+              </div>
+              <input
+                type="url"
+                value={websiteInput}
+                onChange={(e) => setWebsiteInput(e.target.value)}
+                className="input-field pl-9"
+                placeholder="https://example.com"
+              />
+            </div>
+          </div>
 
           <div>
             <label className="label">Start Date *</label>

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const db = await getDb(accountId);
 
   const seriesRes = await db.execute({
-    sql: `SELECT id, display_name, series_key, created_at FROM conference_series WHERE account_id = ? ORDER BY display_name`,
+    sql: `SELECT id, display_name, series_key, industry_focus, conference_type, created_at FROM conference_series WHERE account_id = ? ORDER BY display_name`,
     args: [accountId],
   });
 
@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
     id: String(row.id),
     display_name: String(row.display_name),
     series_key: String(row.series_key),
+    industry_focus: row.industry_focus ? String(row.industry_focus) : null,
+    conference_type: row.conference_type ? String(row.conference_type) : null,
     seasons: seasonsBySeries.get(String(row.id)) ?? [],
   }));
 

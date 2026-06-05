@@ -132,6 +132,9 @@ interface Conference {
   stage_override_reason?: string | null;
   series_id?: string | null;
   season_id?: string | null;
+  industry_focus?: string | null;
+  conference_type?: string | null;
+  website?: string | null;
   global_agenda_uploaded_at?: string | null;
   global_agenda_uploaded_by_name?: string | null;
   created_at: string;
@@ -363,6 +366,10 @@ export default function ConferenceDetailPage() {
   const internalDropdownRef = useRef<HTMLDivElement>(null);
   const [editSeries, setEditSeries] = useState<SeriesOption | null>(null);
   const [editSeasonId, setEditSeasonId] = useState<string | null>(null);
+  const [industryOptions, setIndustryOptions] = useState<{ id: number; value: string }[]>([]);
+  const [editIndustrySearch, setEditIndustrySearch] = useState('');
+  const [editIndustryDropdownOpen, setEditIndustryDropdownOpen] = useState(false);
+  const editIndustryDropdownRef = useRef<HTMLDivElement>(null);
 
   // Resizable column widths
   const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
@@ -623,6 +630,9 @@ export default function ConferenceDetailPage() {
         conference_strategy_type_id: data.conference_strategy_type_id ?? null,
         series_id: data.series_id ?? null,
         season_id: data.season_id ?? null,
+        industry_focus: data.industry_focus ?? null,
+        conference_type: data.conference_type ?? null,
+        website: data.website ?? null,
       });
       setEditSeasonId(data.season_id ?? null);
       setEditInternalAttendees(
@@ -663,9 +673,19 @@ export default function ConferenceDetailPage() {
       if (internalDropdownRef.current && !internalDropdownRef.current.contains(e.target as Node)) {
         setInternalDropdownOpen(false);
       }
+      if (editIndustryDropdownRef.current && !editIndustryDropdownRef.current.contains(e.target as Node)) {
+        setEditIndustryDropdownOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/config?category=industry')
+      .then((r) => r.json())
+      .then((rows) => setIndustryOptions((rows ?? []).map((r: { id: number; value: string }) => ({ id: Number(r.id), value: String(r.value) }))))
+      .catch(() => {});
   }, []);
 
   const loadCompanies = useCallback(async () => {
@@ -719,6 +739,23 @@ export default function ConferenceDetailPage() {
       markStepComplete('preconf_visited');
     }
   }, [onboardingTrack, onboardingProgress, markStepComplete]);
+
+  const createIndustryOption = async (value: string, onSuccess: (val: string) => void) => {
+    try {
+      const res = await fetch('/api/config/industry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as { id: number; value: string };
+      const newOpt = { id: Number(created.id), value: String(created.value) };
+      setIndustryOptions((prev) => [...prev.filter((o) => o.value !== newOpt.value), newOpt]);
+      onSuccess(newOpt.value);
+    } catch {
+      toast.error('Failed to create industry option.');
+    }
+  };
 
   const handleSave = async () => {
     if (!editData.name || !editData.start_date || !editData.end_date || !editData.location) {
@@ -1332,9 +1369,88 @@ export default function ConferenceDetailPage() {
                 <SeriesSeasonCombobox
                   seriesId={editSeries?.id ?? editData.series_id ?? null}
                   seasonId={editSeasonId}
-                  onSeriesChange={(s) => { setEditSeries(s); setEditData((p) => ({ ...p, series_id: s?.id ?? null })); if (!s) { setEditSeasonId(null); setEditData((p2) => ({ ...p2, season_id: null })); } }}
+                  onSeriesChange={(s) => {
+                    setEditSeries(s);
+                    setEditData((p) => ({ ...p, series_id: s?.id ?? null }));
+                    if (!s) { setEditSeasonId(null); setEditData((p2) => ({ ...p2, season_id: null })); }
+                    if (s?.industry_focus) setEditData((p) => ({ ...p, industry_focus: s.industry_focus ?? null }));
+                    if (s?.conference_type) setEditData((p) => ({ ...p, conference_type: s.conference_type ?? null }));
+                  }}
                   onSeasonChange={(sid) => { setEditSeasonId(sid); setEditData((p) => ({ ...p, season_id: sid })); }}
                 />
+              </div>
+
+              <div className="md:col-span-2" ref={editIndustryDropdownRef}>
+                <label className="label flex items-center gap-2">
+                  Industry Focus
+                  {editSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={editIndustryDropdownOpen ? editIndustrySearch : (editData.industry_focus ?? '')}
+                    onFocus={() => { setEditIndustryDropdownOpen(true); setEditIndustrySearch(editData.industry_focus ?? ''); }}
+                    onChange={(e) => { setEditIndustrySearch(e.target.value); setEditData((p) => ({ ...p, industry_focus: e.target.value || null })); }}
+                    placeholder="Search or add industry..."
+                    className="input-field pr-8"
+                    autoComplete="off"
+                  />
+                  {editData.industry_focus && !editIndustryDropdownOpen && (
+                    <button type="button" onClick={() => setEditData((p) => ({ ...p, industry_focus: null }))} className="absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                  {editIndustryDropdownOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                      {industryOptions
+                        .filter((o) => !editIndustrySearch || o.value.toLowerCase().includes(editIndustrySearch.toLowerCase()))
+                        .map((opt) => (
+                          <button key={opt.id} type="button" onClick={() => { setEditData((p) => ({ ...p, industry_focus: opt.value })); setEditIndustryDropdownOpen(false); setEditIndustrySearch(''); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                            {opt.value}
+                          </button>
+                        ))}
+                      {editIndustrySearch && !industryOptions.some((o) => o.value.toLowerCase() === editIndustrySearch.toLowerCase()) && (
+                        <button type="button" onClick={() => void createIndustryOption(editIndustrySearch, (val) => { setEditData((p) => ({ ...p, industry_focus: val })); setEditIndustryDropdownOpen(false); setEditIndustrySearch(''); })} className="w-full text-left px-3 py-2 text-sm text-brand-secondary hover:bg-blue-50 flex items-center gap-2 font-medium">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                          Create &ldquo;{editIndustrySearch}&rdquo;
+                        </button>
+                      )}
+                      {industryOptions.length === 0 && !editIndustrySearch && (
+                        <div className="px-3 py-2 text-sm text-gray-400">No industry options configured. Type to create one.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="label flex items-center gap-2">
+                  Conference Type
+                  {editSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
+                </label>
+                <input
+                  type="text"
+                  value={editData.conference_type ?? ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, conference_type: e.target.value || null }))}
+                  className="input-field"
+                  placeholder="e.g., Trade Show, Summit, Forum..."
+                />
+              </div>
+
+              <div>
+                <label className="label">Website</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
+                  </div>
+                  <input
+                    type="url"
+                    value={editData.website ?? ''}
+                    onChange={(e) => setEditData((p) => ({ ...p, website: e.target.value || null }))}
+                    className="input-field pl-9"
+                    placeholder="https://example.com"
+                  />
+                </div>
               </div>
 
               <div className="md:col-span-2">

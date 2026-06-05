@@ -14,6 +14,8 @@ export interface SeriesOption {
   display_name: string;
   series_key: string;
   seasons: Season[];
+  industry_focus?: string | null;
+  conference_type?: string | null;
 }
 
 interface Props {
