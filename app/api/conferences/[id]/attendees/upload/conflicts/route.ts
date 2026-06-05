@@ -52,10 +52,13 @@ export async function POST(
       getConfigOptionValues('company_type', db),
       getConfigOptionValues('function', db),
     ]);
+    console.log('[conflicts] companyTypeOptions:', companyTypeOptions);
     if (companyTypeOptions.length > 0) {
       for (const p of valid) {
         if (p.company_type) {
+          const originalValue = p.company_type;
           p.company_type = matchConfigOption(p.company_type, companyTypeOptions) ?? undefined;
+          console.log('[conflicts] company_type normalized:', { raw: originalValue, result: p.company_type });
         }
       }
     }
@@ -130,6 +133,7 @@ export async function POST(
       // Aggregate all file rows for this company to get the best proposed values
       const coRows = valid.filter(q => q.company?.trim() === coName);
       const proposedType = coRows.find(q => q.company_type?.trim())?.company_type?.trim() ?? null;
+      console.log('[conflicts] company hit:', { name: coName, matchedId: existing.id, proposedType, existingType: existing.company_type });
       const proposedWebsite = coRows.find(q => q.website?.trim())?.website?.trim() ?? null;
       const rawWse = coRows.find(q => q.wse?.trim())?.wse?.trim() ?? null;
       const proposedWse = rawWse ? (parseInt(rawWse, 10) || null) : null;
@@ -189,6 +193,7 @@ export async function POST(
       checkAt('function', existing.function, p.function?.trim());
     }
 
+    console.log('[conflicts] returning conflicts:', JSON.stringify(conflicts));
     return NextResponse.json({ conflicts });
   } catch (error) {
     console.error('POST upload/conflicts error:', error);
