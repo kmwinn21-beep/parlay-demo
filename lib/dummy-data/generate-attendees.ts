@@ -17,6 +17,8 @@ export interface GeneratorParams {
   prospects: { companyCount: number; attendeesPerCompany: 2 | 3 | 4 };
   partners: { companyCount: number; attendeesPerCompany: number };
   vendors: { companyCount: number; attendeesPerCompany: number };
+  competitors?: { companyCount: number; attendeesPerCompany: number };
+  keywords?: string[];
   reps: string[];
   customColumns: CustomColumnDef[];
   overlap?: {
@@ -35,6 +37,7 @@ export interface GeneratorResult {
     prospectRows: number;
     partnerRows: number;
     vendorRows: number;
+    competitorRows: number;
     returningAttendees: number;
     newAttendees: number;
   };
@@ -247,8 +250,8 @@ export async function generateDummyData(
   db?: Client,
 ): Promise<GeneratorResult> {
   const {
-    conferenceName, vertical, prospects, partners, vendors,
-    reps, customColumns, overlap,
+    conferenceName, vertical, prospects, partners, vendors, competitors,
+    keywords, reps, customColumns, overlap,
   } = params;
 
   const usedEmails = new Set<string>();
@@ -290,7 +293,7 @@ export async function generateDummyData(
   // ── Helper: generate one company's attendees ───────────────────────────────
   function generateCompanyAttendees(
     companyName: string,
-    companyType: 'Prospect' | 'Partner' | 'Vendor',
+    companyType: 'Prospect' | 'Partner' | 'Vendor' | 'Competitor',
     attendeesPerCompany: number,
     repName: string,
     fnOverride?: string,
@@ -308,6 +311,7 @@ export async function generateDummyData(
           ? ['csuite', 'vp', 'director']
           : ['csuite', 'vp', 'director', 'manager'])
         : shuffle(['vp', 'director', 'manager', 'director'] as Seniority[]).slice(0, attendeesPerCompany);
+
 
     const fnAssignments =
       companyType === 'Prospect'
@@ -335,7 +339,7 @@ export async function generateDummyData(
   // ── Prospects ───────────────────────────────────────────────────────────────
   const returningProspectCount = returningProspects.length;
   const newProspectCompanies = Math.ceil(prospects.companyCount * (1 - (overlap?.prospectOverlapPct ?? 0) / 100));
-  const prospectCompanies = buildCompanyList(vertical, 'prospects', newProspectCompanies, shuffle);
+  const prospectCompanies = buildCompanyList(vertical, 'prospects', newProspectCompanies, shuffle, keywords);
   const prospectRepDist = distributeWeighted(prospectCompanies.length, repList.length);
 
   let repIdx = 0;
@@ -357,7 +361,7 @@ export async function generateDummyData(
 
   // ── Partners ────────────────────────────────────────────────────────────────
   const newPartnerCompanies = Math.ceil(partners.companyCount * (1 - (overlap?.partnerOverlapPct ?? 0) / 100));
-  const partnerCompanies = buildCompanyList(vertical, 'partners', newPartnerCompanies, shuffle);
+  const partnerCompanies = buildCompanyList(vertical, 'partners', newPartnerCompanies, shuffle, keywords);
   const partnerRepDist = distributeWeighted(partnerCompanies.length, repList.length);
 
   repIdx = 0; companyIdx = 0;
@@ -377,7 +381,7 @@ export async function generateDummyData(
 
   // ── Vendors ─────────────────────────────────────────────────────────────────
   const newVendorCompanies = Math.ceil(vendors.companyCount * (1 - (overlap?.vendorOverlapPct ?? 0) / 100));
-  const vendorCompanies = buildCompanyList(vertical, 'vendors', newVendorCompanies, shuffle);
+  const vendorCompanies = buildCompanyList(vertical, 'vendors', newVendorCompanies, shuffle, keywords);
   const vendorRepDist = distributeWeighted(vendorCompanies.length, repList.length);
 
   repIdx = 0; companyIdx = 0;
@@ -395,6 +399,23 @@ export async function generateDummyData(
 
   const vendorRows = allRows.length - prospectRows - partnerRows;
 
+  // ── Competitors ──────────────────────────────────────────────────────────────
+  if (competitors && competitors.companyCount > 0) {
+    const competitorCompanies = buildCompanyList(vertical, 'competitors', competitors.companyCount, shuffle, keywords);
+    const competitorRepDist = distributeWeighted(competitorCompanies.length, repList.length);
+
+    repIdx = 0; companyIdx = 0;
+    for (const companyName of competitorCompanies) {
+      while (repIdx < competitorRepDist.length - 1 && companyIdx >= competitorRepDist.slice(0, repIdx + 1).reduce((s, v) => s + v, 0)) {
+        repIdx++;
+      }
+      generateCompanyAttendees(companyName, 'Competitor', competitors.attendeesPerCompany, repList[repIdx % repList.length]);
+      companyIdx++;
+    }
+  }
+
+  const competitorRows = allRows.length - prospectRows - partnerRows - vendorRows;
+
   return {
     rows: allRows,
     stats: {
@@ -402,6 +423,7 @@ export async function generateDummyData(
       prospectRows,
       partnerRows,
       vendorRows,
+      competitorRows,
       returningAttendees: returningCount,
       newAttendees: allRows.length - returningCount,
     },

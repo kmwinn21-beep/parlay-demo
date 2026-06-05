@@ -109,4 +109,4 @@ export const companyPools = {
 };
 
 export type Vertical = keyof typeof companyPools;
-export type CompanyRole = 'prospects' | 'partners' | 'vendors';
+export type CompanyRole = 'prospects' | 'partners' | 'vendors' | 'competitors';

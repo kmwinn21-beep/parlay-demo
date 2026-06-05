@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { accountId, vertical, prospects, partners, vendors } = body;
+  const { accountId, vertical, prospects, partners, vendors, competitors } = body;
 
   if (!accountId || typeof accountId !== 'string') {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
   }
 
   const MAX_COMPANIES = 2000;
-  if (prospects.companyCount > MAX_COMPANIES || partners.companyCount > MAX_COMPANIES || vendors.companyCount > MAX_COMPANIES) {
+  const counts = [prospects.companyCount, partners.companyCount, vendors.companyCount];
+  if (competitors?.companyCount) counts.push(competitors.companyCount);
+  if (counts.some(c => c > MAX_COMPANIES)) {
     return NextResponse.json({ error: `Company count cannot exceed ${MAX_COMPANIES}.` }, { status: 422 });
   }
 

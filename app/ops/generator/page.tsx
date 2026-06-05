@@ -49,6 +49,7 @@ export default function GeneratorPage() {
   // ── Step 2: Conference details ───────────────────────────────────────────
   const [conferenceName, setConferenceName] = useState('');
   const [vertical, setVertical] = useState<Vertical>('healthcare');
+  const [keywordsRaw, setKeywordsRaw] = useState('');
 
   // ── Step 3: Company counts ───────────────────────────────────────────────
   const [prospectCount, setProspectCount] = useState(20);
@@ -57,6 +58,8 @@ export default function GeneratorPage() {
   const [partnerAttendees, setPartnerAttendees] = useState(2);
   const [vendorCount, setVendorCount] = useState(10);
   const [vendorAttendees, setVendorAttendees] = useState(2);
+  const [competitorCount, setCompetitorCount] = useState(0);
+  const [competitorAttendees, setCompetitorAttendees] = useState(2);
 
   // ── Step 4: Reps ─────────────────────────────────────────────────────────
   const [selectedRepNames, setSelectedRepNames] = useState<Set<string>>(new Set());
@@ -86,8 +89,9 @@ export default function GeneratorPage() {
     const p = prospectCount * prospectAttendees;
     const pa = partnerCount * partnerAttendees;
     const v = vendorCount * vendorAttendees;
-    return { prospects: p, partners: pa, vendors: v, total: p + pa + v };
-  }, [prospectCount, prospectAttendees, partnerCount, partnerAttendees, vendorCount, vendorAttendees]);
+    const c = competitorCount * competitorAttendees;
+    return { prospects: p, partners: pa, vendors: v, competitors: c, total: p + pa + v + c };
+  }, [prospectCount, prospectAttendees, partnerCount, partnerAttendees, vendorCount, vendorAttendees, competitorCount, competitorAttendees]);
 
   const accountLoaded = !!companyName;
 
@@ -166,13 +170,16 @@ export default function GeneratorPage() {
     setGenSuccess('');
 
     try {
+      const keywords = keywordsRaw.split(',').map(s => s.trim()).filter(Boolean);
       const body = {
         accountId: accountId.trim(),
         conferenceName: conferenceName.trim(),
         vertical,
+        keywords: keywords.length > 0 ? keywords : undefined,
         prospects: { companyCount: prospectCount, attendeesPerCompany: prospectAttendees },
         partners: { companyCount: partnerCount, attendeesPerCompany: partnerAttendees },
         vendors: { companyCount: vendorCount, attendeesPerCompany: vendorAttendees },
+        competitors: competitorCount > 0 ? { companyCount: competitorCount, attendeesPerCompany: competitorAttendees } : undefined,
         reps: Array.from(selectedRepNames),
         customColumns: customColumns.filter(c => c.name.trim()),
         overlap: overlapEnabled ? {
@@ -207,8 +214,14 @@ export default function GeneratorPage() {
       URL.revokeObjectURL(url);
 
       if (stats) {
+        const parts = [
+          `${stats.prospectRows} prospects`,
+          `${stats.partnerRows} partners`,
+          `${stats.vendorRows} vendors`,
+          ...(stats.competitorRows > 0 ? [`${stats.competitorRows} competitors`] : []),
+        ];
         setGenSuccess(
-          `${filename} downloaded · ${stats.totalRows} rows · ${stats.returningAttendees} returning · ${stats.newAttendees} new`
+          `${filename} downloaded · ${stats.totalRows} rows (${parts.join(', ')}) · ${stats.returningAttendees} returning · ${stats.newAttendees} new`
         );
       } else {
         setGenSuccess(`${filename} downloaded`);
@@ -282,6 +295,18 @@ export default function GeneratorPage() {
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+              Industry Keywords <span className="normal-case font-normal text-gray-400">(optional — used as company name suffixes)</span>
+            </label>
+            <input
+              type="text"
+              value={keywordsRaw}
+              onChange={e => setKeywordsRaw(e.target.value)}
+              placeholder="e.g. Hotels, Resorts, Hospitality, Properties"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-96"
+            />
           </div>
         </div>
       </div>
@@ -380,6 +405,35 @@ export default function GeneratorPage() {
               />
             </div>
           </div>
+
+          {/* Competitors */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-sm font-medium text-gray-700 w-20">Competitors</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={MAX_COMPANIES}
+                value={competitorCount}
+                onChange={e => setCompetitorCount(Math.min(MAX_COMPANIES, Math.max(0, Number(e.target.value))))}
+                className="border border-gray-300 rounded px-2 py-1 text-sm w-20 tabular-nums"
+              />
+              <span className="text-xs text-gray-400">companies</span>
+            </div>
+            {competitorCount > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Attendees/company</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={competitorAttendees}
+                  onChange={e => setCompetitorAttendees(Math.min(8, Math.max(1, Number(e.target.value))))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-16 tabular-nums"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Live row count */}
@@ -391,6 +445,9 @@ export default function GeneratorPage() {
             <span className="text-gray-500">{estimatedRows.partners.toLocaleString()} partners</span>
             {' · '}
             <span className="text-gray-500">{estimatedRows.vendors.toLocaleString()} vendors</span>
+            {competitorCount > 0 && (
+              <>{' · '}<span className="text-gray-500">{estimatedRows.competitors.toLocaleString()} competitors</span></>
+            )}
             {' · '}
             <span className="font-semibold text-gray-900">{estimatedRows.total.toLocaleString()} total</span>
           </p>
