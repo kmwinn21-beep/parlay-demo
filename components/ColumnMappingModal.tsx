@@ -68,7 +68,7 @@ export function ColumnMappingModal({
               <tr>
                 <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-2 pr-4 w-44">System Field</th>
                 <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-2 pr-4">Your Column</th>
-                <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-2">Sample Data</th>
+                <th className="hidden sm:table-cell text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-2">Sample Data</th>
               </tr>
             </thead>
             <tbody>
@@ -87,7 +87,7 @@ export function ColumnMappingModal({
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5 leading-snug">{description}</div>
                     </td>
-                    <td className="py-2 pr-4 align-top">
+                    <td className="py-2 pr-4 sm:pr-4 align-top">
                       <select
                         value={selected ?? ''}
                         onChange={e => setField(key, e.target.value)}
@@ -98,8 +98,14 @@ export function ColumnMappingModal({
                           <option key={h} value={h}>{h}</option>
                         ))}
                       </select>
+                      {/* Sample data shown below dropdown on mobile only */}
+                      {sample && (
+                        <span className="sm:hidden text-xs text-gray-500 block mt-1 truncate" title={sample}>
+                          {sample}
+                        </span>
+                      )}
                     </td>
-                    <td className="py-2 align-top">
+                    <td className="hidden sm:table-cell py-2 align-top">
                       <span className="text-xs text-gray-500 block max-w-[180px] truncate" title={sample}>
                         {sample || <span className="text-gray-300">—</span>}
                       </span>
