@@ -1126,4 +1126,30 @@ export const migrations: string[] = [
   )`,
   `ALTER TABLE conferences ADD COLUMN global_agenda_uploaded_at TEXT`,
   `ALTER TABLE conferences ADD COLUMN global_agenda_uploaded_by_name TEXT`,
+  // 404
+  `ALTER TABLE conference_series ADD COLUMN industry_focus TEXT`,
+  // 405
+  `ALTER TABLE conference_series ADD COLUMN conference_type TEXT`,
+  // 406
+  `ALTER TABLE conferences ADD COLUMN industry_focus TEXT`,
+  // 407
+  `ALTER TABLE conferences ADD COLUMN conference_type TEXT`,
+  // 408
+  `ALTER TABLE conferences ADD COLUMN website TEXT`,
+  // 409
+  `ALTER TABLE conferences ADD COLUMN sponsorship_level TEXT`,
+  // 410
+  `ALTER TABLE conferences ADD COLUMN booth_present INTEGER NOT NULL DEFAULT 0`,
+  // 411
+  `ALTER TABLE conferences ADD COLUMN booth_width INTEGER`,
+  // 412
+  `ALTER TABLE conferences ADD COLUMN booth_height INTEGER`,
+  // 413 — seed system sponsorship levels
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key, is_system, color) VALUES
+    ('sponsorship_level', 'None',         0, 'none',     1, '#B4B2A9'),
+    ('sponsorship_level', 'Bronze',       1, 'bronze',   1, '#BA7517'),
+    ('sponsorship_level', 'Silver',       2, 'silver',   1, '#888780'),
+    ('sponsorship_level', 'Gold',         3, 'gold',     1, '#EF9F27'),
+    ('sponsorship_level', 'Platinum',     4, 'platinum', 1, '#185FA5'),
+    ('sponsorship_level', 'Title Sponsor',5, 'title',    1, '#534AB7')`,
 ];
