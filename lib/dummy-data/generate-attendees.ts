@@ -296,7 +296,7 @@ export async function generateDummyData(
     fnOverride?: string,
   ) {
     const domain = domainFromCompany(companyName);
-    const units = randInt(100, 5000);
+    const units = companyType === 'Prospect' ? randInt(100, 5000) : '';
     const primaryFn = fnOverride ?? pick(functions as unknown as string[]);
     const secondaryFn = pick(functions.filter(f => f !== primaryFn) as unknown as string[]);
 
