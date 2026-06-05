@@ -163,11 +163,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   try {
     const conferenceId = Number(params.id);
-    const { image_base64, media_type, append, url } = await request.json() as {
+    const { image_base64, media_type, append, url, scope } = await request.json() as {
       image_base64?: string;
       media_type?: string;
       append?: boolean;
       url?: string;
+      scope?: 'global' | 'personal';
     };
 
     if (!image_base64 && !url) {
@@ -323,6 +324,45 @@ Rules:
       return NextResponse.json({ error: `No agenda items detected in ${sourceLabel}` }, { status: 422 });
     }
 
+    if (scope === 'personal') {
+      // Delete existing personal agenda items for this user on this conference first (if not appending)
+      if (!append) {
+        await db.execute({
+          sql: `DELETE FROM conference_my_agenda_items WHERE conference_id = ? AND user_email = ? AND source_type = 'agenda' AND agenda_item_id IS NULL`,
+          args: [conferenceId, authResult.email],
+        });
+      }
+      const personalInserts: { sql: string; args: (string | number | null)[] }[] = [];
+      for (const day of days) {
+        let dayLabel = String(day.day_label ?? 'Day 1').trim();
+        if (conferenceYear && /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(dayLabel) && !/\b\d{4}\b/.test(dayLabel)) {
+          dayLabel = `${dayLabel}, ${conferenceYear}`;
+        }
+        const items = Array.isArray(day.items) ? day.items : [];
+        for (const item of items) {
+          const title = String(item.title ?? '').trim();
+          if (!title) continue;
+          personalInserts.push({
+            sql: `INSERT INTO conference_my_agenda_items
+                    (conference_id, user_email, source_type, agenda_item_id, day_label, start_time, end_time, session_type, title, description, location)
+                  VALUES (?, ?, 'agenda', null, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [conferenceId, authResult.email, dayLabel, item.start_time ?? null, item.end_time ?? null, item.session_type ?? null, title, item.description ?? null, item.location ?? null],
+          });
+        }
+      }
+      if (personalInserts.length > 0) {
+        await db.batch(personalInserts, 'write');
+      }
+      // Upsert preference = 'personal'
+      await db.execute({
+        sql: `INSERT INTO user_agenda_preferences (user_email, conference_id, preference, updated_at)
+              VALUES (?, ?, 'personal', datetime('now'))
+              ON CONFLICT(user_email, conference_id) DO UPDATE SET preference = 'personal', updated_at = datetime('now')`,
+        args: [authResult.email, conferenceId],
+      });
+      return NextResponse.json({ count: personalInserts.length });
+    }
+
     if (!append) {
       await db.execute({
         sql: 'DELETE FROM conference_agenda_items WHERE conference_id = ?',
@@ -364,6 +404,17 @@ Rules:
     if (insertStatements.length > 0) {
       await db.batch(insertStatements, 'write');
     }
+
+    // Write global agenda metadata
+    await db.execute({
+      sql: `UPDATE conferences SET global_agenda_uploaded_at = datetime('now'), global_agenda_uploaded_by_name = ? WHERE id = ?`,
+      args: [authResult.email, conferenceId],
+    });
+    // Notify users who have explicitly chosen 'personal' preference
+    await db.execute({
+      sql: `UPDATE user_agenda_preferences SET pending_global_notification = 1 WHERE conference_id = ? AND preference = 'personal'`,
+      args: [conferenceId],
+    });
 
     return NextResponse.json({ count: insertStatements.length });
   } catch (error) {
