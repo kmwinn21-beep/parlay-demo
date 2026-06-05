@@ -114,25 +114,6 @@ function parseDayToISO(label: string): string {
   return label;
 }
 
-function relativeTime(iso: string | null): string {
-  if (!iso) return '';
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 60000) return 'just now';
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
-  return `${Math.floor(ms / 86400000)}d ago`;
-}
-
-interface AgendaStatus {
-  source: 'global' | 'personal' | 'none';
-  preference: 'auto' | 'personal' | 'global';
-  pendingNotification: boolean;
-  globalExists: boolean;
-  globalUploadedAt: string | null;
-  globalUploadedByName: string | null;
-  personalExists: boolean;
-}
-
 const SESSION_TYPE_COLORS: Record<string, string> = {
   keynote: 'bg-purple-100 text-purple-700', workshop: 'bg-blue-100 text-blue-700',
   panel: 'bg-amber-100 text-amber-700', break: 'bg-gray-100 text-gray-500',
@@ -212,13 +193,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
   const [drawerDraft, setDrawerDraft] = useState('');
   const [drawerSaving, setDrawerSaving] = useState(false);
   const [drawerDiscardPrompt, setDrawerDiscardPrompt] = useState(false);
-  // Agenda status & sharing
-  const [agendaStatus, setAgendaStatus] = useState<AgendaStatus | null>(null);
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-  const [previewDays, setPreviewDays] = useState<AgendaDay[]>([]);
-  const [previewMeta, setPreviewMeta] = useState<{ uploadedAt: string | null; uploadedByName: string | null }>({ uploadedAt: null, uploadedByName: null });
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [confirmationBanner, setConfirmationBanner] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -249,10 +223,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
         setNoteContents(noteMap);
         setSavedNoteContents(savedMap);
         setKeyToMyItemId(idMap);
-      }
-      const statusRes = await fetch(`/api/conferences/${conferenceId}/agenda/status`);
-      if (statusRes.ok) {
-        setAgendaStatus(await statusRes.json() as AgendaStatus);
       }
     } finally { setLoading(false); }
   }, [conferenceId]);
@@ -298,38 +268,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
       setSavingNotes(prev => { const s = new Set(prev); s.delete(key); return s; });
     }
   }, [conferenceId, keyToMyItemId]);
-
-  const handleOpenPreview = useCallback(async () => {
-    setPreviewLoading(true);
-    setPreviewModalOpen(true);
-    try {
-      const res = await fetch(`/api/conferences/${conferenceId}/agenda/global/preview`);
-      if (res.ok) {
-        const data = await res.json() as { exists: boolean; days: AgendaDay[] | null; uploadedAt?: string; uploadedByName?: string | null };
-        setPreviewDays(data.days ?? []);
-        setPreviewMeta({ uploadedAt: data.uploadedAt ?? null, uploadedByName: data.uploadedByName ?? null });
-      }
-    } catch { /**/ }
-    finally { setPreviewLoading(false); }
-  }, [conferenceId]);
-
-  const handleSetPreference = useCallback(async (pref: 'personal' | 'global') => {
-    const res = await fetch(`/api/conferences/${conferenceId}/agenda/preference`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preference: pref }),
-    });
-    if (res.ok) {
-      const data = await res.json() as AgendaStatus;
-      setAgendaStatus(data);
-      if (pref === 'global') {
-        setPreviewModalOpen(false);
-        const byName = data.globalUploadedByName ?? 'your team';
-        setConfirmationBanner(`Now using shared team agenda · uploaded by ${byName}`);
-        setTimeout(() => setConfirmationBanner(null), 5000);
-        await fetchAll();
-      }
-    }
-  }, [conferenceId, fetchAll]);
 
   function buildDisplayItems(): DisplayItem[] {
     const items: DisplayItem[] = [];
@@ -391,31 +329,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
   return (
     <>
     <div className="space-y-3">
-      {/* Confirmation banner */}
-      {confirmationBanner && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700 flex items-center justify-between gap-2">
-          <span>✓ {confirmationBanner}</span>
-          <button onClick={() => setConfirmationBanner(null)} className="text-green-400 hover:text-green-600 shrink-0">✕</button>
-        </div>
-      )}
-
-      {/* Condensed shared agenda notification */}
-      {agendaStatus?.pendingNotification && (
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: '#FAEEDA' }}>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs" style={{ color: '#B45309' }}>⚠</span>
-            <span className="text-xs font-medium" style={{ color: '#B45309' }}>Shared agenda available</span>
-          </div>
-          <button
-            onClick={() => void handleOpenPreview()}
-            className="text-xs font-medium underline"
-            style={{ color: '#B45309' }}
-          >
-            Review →
-          </button>
-        </div>
-      )}
-
       {/* My Agenda */}
       {view === 'my' && (
         displayItems.length === 0 ? (
@@ -767,55 +680,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
             placeholder="Add session notes…"
             className="flex-1 p-4 resize-none border-0 outline-none text-sm text-gray-700 placeholder:text-gray-400 bg-white"
           />
-        </div>
-      </div>,
-      document.body
-    )}
-
-    {/* Shared Agenda Preview Modal */}
-    {previewModalOpen && typeof document !== 'undefined' && createPortal(
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/50" onClick={() => setPreviewModalOpen(false)} />
-        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
-          <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-            <div>
-              <h2 className="font-semibold text-gray-900 text-sm">Shared agenda preview</h2>
-              {previewMeta.uploadedByName && (
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Uploaded by {previewMeta.uploadedByName} · {relativeTime(previewMeta.uploadedAt)} · {conferenceName}
-                </p>
-              )}
-            </div>
-            <button onClick={() => setPreviewModalOpen(false)} className="text-gray-400 hover:text-gray-700 ml-4 shrink-0">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-            {previewLoading ? (
-              <div className="flex items-center justify-center py-8 text-gray-400">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent mr-2" />
-                Loading…
-              </div>
-            ) : previewDays.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-8">No agenda items found.</p>
-            ) : (
-              previewDays.map(day => (
-                <div key={day.day_label} className="rounded-lg border border-brand-primary/30 overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs font-semibold text-brand-primary">{day.day_label}</span>
-                    <span className="text-xs text-gray-400">{day.items.length} sessions</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 flex-shrink-0">
-            <p style={{ fontSize: 11 }} className="text-gray-400">Switching replaces your personal agenda.</p>
-            <div className="flex items-center gap-2 ml-4 shrink-0">
-              <button onClick={() => setPreviewModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors">Keep mine</button>
-              <button onClick={() => void handleSetPreference('global')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors">Use shared agenda</button>
-            </div>
-          </div>
         </div>
       </div>,
       document.body

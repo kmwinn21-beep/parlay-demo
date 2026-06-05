@@ -92,16 +92,6 @@ interface Props {
   userEmail: string;
 }
 
-interface AgendaStatus {
-  source: 'global' | 'personal' | 'none';
-  preference: 'auto' | 'personal' | 'global';
-  pendingNotification: boolean;
-  globalExists: boolean;
-  globalUploadedAt: string | null;
-  globalUploadedByName: string | null;
-  personalExists: boolean;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 async function fileToBase64(file: File): Promise<string> {
@@ -143,15 +133,6 @@ function parseDayToISO(label: string): string {
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   } catch { /* fall through */ }
   return label;
-}
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return '';
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 60000) return 'just now';
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
-  return `${Math.floor(ms / 86400000)}d ago`;
 }
 
 const SESSION_TYPE_COLORS: Record<string, string> = {
@@ -233,19 +214,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   // Meeting notetaker modal
   const [notetakerMeetingId, setNotetakerMeetingId] = useState<number | null>(null);
 
-  // Agenda status & sharing
-  const [agendaStatus, setAgendaStatus] = useState<AgendaStatus | null>(null);
-  const [pendingUploadTrigger, setPendingUploadTrigger] = useState<'camera' | 'file' | 'url' | null>(null);
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-  const [previewDays, setPreviewDays] = useState<AgendaDay[]>([]);
-  const [previewMeta, setPreviewMeta] = useState<{ uploadedAt: string | null; uploadedByName: string | null }>({ uploadedAt: null, uploadedByName: null });
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [confirmationBanner, setConfirmationBanner] = useState<string | null>(null);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const pendingScopeRef = useRef<'global' | 'personal'>('personal');
 
   // ── Data fetching ────────────────────────────────────────────────────────────
 
@@ -306,25 +276,14 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
     }
   }, [conferenceId]);
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/conferences/${conferenceId}/agenda/status`);
-      if (res.ok) {
-        const data = await res.json() as AgendaStatus;
-        setAgendaStatus(data);
-      }
-    } catch { /* silent */ }
-  }, [conferenceId]);
-
   useEffect(() => {
     void fetchAgenda();
     void fetchMyAgenda();
-    void fetchStatus();
-  }, [fetchAgenda, fetchMyAgenda, fetchStatus]);
+  }, [fetchAgenda, fetchMyAgenda]);
 
   // ── Scan handlers ────────────────────────────────────────────────────────────
 
-  const handleFile = useCallback(async (file: File, scope: 'global' | 'personal' = 'global') => {
+  const handleFile = useCallback(async (file: File) => {
     setScanError(null);
     const isPdf = file.type === 'application/pdf';
     const maxBytes = isPdf ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
@@ -339,19 +298,18 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
       const res = await fetch(`/api/conferences/${conferenceId}/agenda`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64, media_type, scope }),
+        body: JSON.stringify({ image_base64, media_type }),
       });
       const data = await res.json() as { count?: number; error?: string };
       if (!res.ok) { setScanError(data.error ?? 'Failed to scan agenda'); return; }
       await fetchAgenda();
-      await fetchStatus();
     } catch { setScanError('Failed to scan file. Please try again.'); }
     finally { setScanning(false); }
-  }, [conferenceId, fetchAgenda, fetchStatus]);
+  }, [conferenceId, fetchAgenda]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) void handleFile(file, pendingScopeRef.current);
+    if (file) void handleFile(file);
     e.target.value = '';
   }, [handleFile]);
 
@@ -374,56 +332,18 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
     setUrlInput('');
     setScanError(null);
     setScanning(true);
-    const scope = pendingScopeRef.current;
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/agenda`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed, scope }),
+        body: JSON.stringify({ url: trimmed }),
       });
       const data = await res.json() as { count?: number; error?: string };
       if (!res.ok) { setScanError(data.error ?? 'Failed to import agenda from URL.'); return; }
       await fetchAgenda();
-      await fetchStatus();
     } catch { setScanError('Failed to connect. Please try again.'); }
     finally { setScanning(false); }
-  }, [conferenceId, fetchAgenda, fetchStatus, urlInput]);
-
-  const handleOpenPreview = useCallback(async () => {
-    setPreviewLoading(true);
-    setPreviewModalOpen(true);
-    try {
-      const res = await fetch(`/api/conferences/${conferenceId}/agenda/global/preview`);
-      if (res.ok) {
-        const data = await res.json() as { exists: boolean; days: AgendaDay[] | null; uploadedAt?: string; uploadedByName?: string | null };
-        setPreviewDays(data.days ?? []);
-        setPreviewMeta({ uploadedAt: data.uploadedAt ?? null, uploadedByName: data.uploadedByName ?? null });
-      }
-    } catch { /* silent */ }
-    finally { setPreviewLoading(false); }
-  }, [conferenceId]);
-
-  const handleSetPreference = useCallback(async (pref: 'personal' | 'global') => {
-    const res = await fetch(`/api/conferences/${conferenceId}/agenda/preference`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preference: pref }),
-    });
-    if (res.ok) {
-      const data = await res.json() as AgendaStatus;
-      setAgendaStatus(data);
-      if (pref === 'global') {
-        setPreviewModalOpen(false);
-        setBannerDismissed(true);
-        const byName = data.globalUploadedByName ?? 'your team';
-        setConfirmationBanner(`Now using shared team agenda · uploaded by ${byName}`);
-        setTimeout(() => setConfirmationBanner(null), 5000);
-        await fetchAgenda();
-      } else {
-        setBannerDismissed(true);
-      }
-    }
-  }, [conferenceId, fetchAgenda]);
+  }, [conferenceId, fetchAgenda, urlInput]);
 
   // ── My Agenda handlers ───────────────────────────────────────────────────────
 
@@ -861,25 +781,20 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         <div className="space-y-3 min-w-0">
           {/* Column header */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-brand-primary font-serif">Full Agenda</h3>
-              {agendaStatus?.pendingNotification && (
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#EF9F27', border: '1.5px solid white', flexShrink: 0 }} />
-              )}
-            </div>
+            <h3 className="text-base font-bold text-brand-primary font-serif">Full Agenda</h3>
             {days.length > 0 && !scanning && (
               <div className="flex items-center gap-2">
-                <button onClick={() => setPendingUploadTrigger('camera')} className="text-xs inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => cameraRef.current?.click()} className="text-xs inline-flex items-center gap-1.5  text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   Re-scan
                 </button>
-                <button onClick={() => setPendingUploadTrigger('file')} className="text-xs inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
+                <button onClick={() => fileRef.current?.click()} className="text-xs inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-secondary transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                   Upload Image / PDF
                 </button>
                 <button
-                  onClick={() => setPendingUploadTrigger('url')}
-                  className={`inline-flex items-center gap-1.5 text-sm transition-colors ${pendingUploadTrigger === 'url' ? 'text-brand-secondary font-medium' : 'text-gray-500 hover:text-brand-secondary'}`}
+                  onClick={() => { setUrlPanelOpen(prev => !prev); setUrlError(null); setScanError(null); }}
+                  className={`inline-flex items-center gap-1.5 text-sm transition-colors ${urlPanelOpen ? 'text-brand-secondary font-medium' : 'text-gray-500 hover:text-brand-secondary'}`}
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -898,11 +813,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               </div>
             )}
           </div>
-          {agendaStatus?.globalExists && agendaStatus.globalUploadedByName && (
-            <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: -4 }}>
-              Uploaded by {agendaStatus.globalUploadedByName} · {relativeTime(agendaStatus.globalUploadedAt)}
-            </p>
-          )}
 
           {/* Inline URL panel — shown when agenda already exists */}
           {urlPanelOpen && days.length > 0 && (
@@ -946,48 +856,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             </div>
           )}
 
-          {/* Scope prompt */}
-          {pendingUploadTrigger && (
-            <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
-              <p className="text-sm font-medium text-gray-800">Upload as:</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    pendingScopeRef.current = 'global';
-                    const trigger = pendingUploadTrigger;
-                    setPendingUploadTrigger(null);
-                    if (trigger === 'camera') cameraRef.current?.click();
-                    else if (trigger === 'file') fileRef.current?.click();
-                    else if (trigger === 'url') { setUrlPanelOpen(true); setScanError(null); }
-                  }}
-                  className="btn-primary text-sm inline-flex items-center gap-1.5"
-                >
-                  Shared agenda — visible to all reps
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    pendingScopeRef.current = 'personal';
-                    const trigger = pendingUploadTrigger;
-                    setPendingUploadTrigger(null);
-                    if (trigger === 'camera') cameraRef.current?.click();
-                    else if (trigger === 'file') fileRef.current?.click();
-                    else if (trigger === 'url') { setUrlPanelOpen(true); setScanError(null); }
-                  }}
-                  className="btn-secondary text-sm inline-flex items-center gap-1.5"
-                >
-                  My agenda — visible to me only
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingUploadTrigger(null)}
-                  className="text-sm text-gray-400 hover:text-gray-600"
-                >Cancel</button>
-              </div>
-            </div>
-          )}
-
           {days.length === 0 && !scanning ? (
             /* Empty state — tabbed Upload File / From Link */
             <div className="rounded-xl border-2 border-dashed border-gray-200 overflow-hidden">
@@ -1002,8 +870,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setPendingUploadTrigger('url'); setScanError(null); }}
-                  className={`flex-1 py-2.5 text-xs font-medium transition-colors ${pendingUploadTrigger === 'url' ? 'bg-white text-gray-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                  onClick={() => { setUrlPanelOpen(true); setScanError(null); }}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-colors ${urlPanelOpen ? 'bg-white text-gray-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
                 >
                   From Link
                 </button>
@@ -1019,11 +887,11 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
                       <p className="text-sm mt-1 text-gray-400">Upload a photo, screenshot, or PDF of the conference agenda</p>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2">
-                      <button onClick={() => setPendingUploadTrigger('camera')} className="btn-secondary text-sm inline-flex items-center gap-1.5">
+                      <button onClick={() => cameraRef.current?.click()} className="btn-secondary text-sm inline-flex items-center gap-1.5">
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                         Take Photo
                       </button>
-                      <button onClick={() => setPendingUploadTrigger('file')} className="btn-primary text-sm inline-flex items-center gap-1.5">
+                      <button onClick={() => fileRef.current?.click()} className="btn-primary text-sm inline-flex items-center gap-1.5">
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                         Upload
                       </button>
@@ -1099,65 +967,13 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         {/* ── RIGHT: My Agenda ──────────────────────────────────────────── */}
         <div className="space-y-3 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <h3 className="text-base font-bold text-brand-primary font-serif">My Agenda</h3>
-              {agendaStatus?.globalExists && agendaStatus.preference === 'personal' && bannerDismissed && (
-                <button
-                  onClick={() => void handleOpenPreview()}
-                  style={{ fontSize: 11, color: '#0D9488' }}
-                  className="hover:underline whitespace-nowrap"
-                >
-                  Team version available →
-                </button>
-              )}
-            </div>
+            <h3 className="text-base font-bold text-brand-primary font-serif">My Agenda</h3>
             {hasMyAgenda && (
               <span className="text-xs text-gray-400">
                 {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
               </span>
             )}
           </div>
-
-          {/* Confirmation banner */}
-          {confirmationBanner && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 flex items-center justify-between gap-2">
-              <span>✓ {confirmationBanner}</span>
-              <button onClick={() => setConfirmationBanner(null)} className="text-green-400 hover:text-green-600 shrink-0">✕</button>
-            </div>
-          )}
-
-          {/* Shared agenda notification banner */}
-          {agendaStatus?.pendingNotification && !bannerDismissed && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 space-y-2">
-              <div className="flex items-start gap-2">
-                <span className="text-amber-500 shrink-0">⚠</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-amber-800">A shared team agenda has been uploaded</p>
-                  {agendaStatus.globalUploadedByName && (
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      Uploaded by {agendaStatus.globalUploadedByName} · {relativeTime(agendaStatus.globalUploadedAt)}
-                    </p>
-                  )}
-                  <p className="text-xs text-amber-700 mt-1">Your personal agenda is still active.</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 pl-6">
-                <button
-                  onClick={() => void handleOpenPreview()}
-                  className="text-xs font-medium text-amber-700 hover:text-amber-900 underline"
-                >
-                  Preview shared agenda
-                </button>
-                <span className="text-amber-300">·</span>
-                <button
-                  onClick={() => void handleSetPreference('personal')}
-                  className="text-xs text-amber-600 hover:text-amber-800"
-                >
-                  Keep my agenda
-                </button>
-              </div>
-            </div>
-          )}
 
           {!hasMyAgenda ? (
             <div className="rounded-xl border border-dashed border-gray-200 px-6 py-12 text-center">
@@ -1321,70 +1137,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         document.body
       )}
       <MeetingNotesDrawer meetingId={notetakerMeetingId} onClose={() => setNotetakerMeetingId(null)} />
-
-      {/* Shared Agenda Preview Modal */}
-      {previewModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setPreviewModalOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
-            {/* Header */}
-            <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-              <div>
-                <h2 className="font-semibold text-gray-900">Shared agenda preview</h2>
-                {previewMeta.uploadedByName && (
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Uploaded by {previewMeta.uploadedByName} · {relativeTime(previewMeta.uploadedAt)} · {conferenceName}
-                  </p>
-                )}
-              </div>
-              <button onClick={() => setPreviewModalOpen(false)} className="text-gray-400 hover:text-gray-700 ml-4 shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-              {previewLoading ? (
-                <div className="flex items-center justify-center py-8 text-gray-400">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent mr-2" />
-                  Loading…
-                </div>
-              ) : previewDays.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">No agenda items found.</p>
-              ) : (
-                previewDays.map(day => (
-                  <div key={day.day_label} className="rounded-lg border border-brand-primary/30 bg-white overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-sm font-semibold text-brand-primary">{day.day_label}</span>
-                      <span className="text-xs text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 flex-shrink-0">
-              <p style={{ fontSize: 11 }} className="text-gray-400">Switching replaces your personal agenda. This can&apos;t be undone.</p>
-              <div className="flex items-center gap-2 ml-4 shrink-0">
-                <button
-                  onClick={() => setPreviewModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors"
-                >
-                  Keep mine
-                </button>
-                <button
-                  onClick={() => void handleSetPreference('global')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors"
-                >
-                  Use shared agenda
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
