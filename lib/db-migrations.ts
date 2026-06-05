@@ -1171,4 +1171,8 @@ export const migrations: string[] = [
   // baseSeeds, so we re-seed it here with INSERT OR IGNORE to be safe.
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, action_key, color)
      VALUES ('company_type', 'Competitor', 999, 1, 'competitor', '#dc2626')`,
+  // 419 — force-correct the Competitor row in case the INSERT OR IGNORE above was skipped
+  // (row already existed) but had stale/missing values from the earlier migration.
+  `UPDATE config_options SET is_system = 1, action_key = 'competitor', color = '#dc2626'
+     WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor'`,
 ];
